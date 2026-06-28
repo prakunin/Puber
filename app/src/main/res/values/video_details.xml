@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="video_details_label_season">Сезон</string>
+
+    <string name="duration_days_hours_minutes">%1$d д %2$d ч %3$d мин</string>
+    <string name="duration_days_hours">%1$d д %2$d ч</string>
+    <string name="duration_days_minutes">%1$d д %2$d мин</string>
+    <string name="duration_days_only">%1$d д</string>
+    <string name="duration_hours_minutes">%1$d ч %2$d мин</string>
+    <string name="duration_hours_only">%1$d ч</string>
+    <string name="duration_minutes_only">%1$d мин</string>
+    <string name="duration_zero">0 мин</string>
+
+    <string name="video_details_label_seasons">Сезонов: %s</string>
+    <string name="video_details_label_duration">Длительность: %s</string>
+
+    <string name="video_details_button_watch_movie">Смотреть фильм</string>
+    <string name="video_details_button_watch_series">Смотреть сериал</string>
+    <string name="video_details_button_trailer">Трейлер</string>
+    <string name="video_details_button_select_season">Выбрать сезон</string>
+    <string name="video_details_button_add_to_watchlist">Буду смотреть</string>
+    <string name="video_details_button_add_to_bookmarks">В закладки</string>
+    <string name="video_details_button_mark_watched">Отметить просмотренным</string>
+    <string name="video_details_watchlist_added">Добавлено в «Я смотрю»</string>
+    <string name="video_details_watchlist_removed">Удалено из «Я смотрю»</string>
+    <string name="video_details_watched_added">Отмечено просмотренным</string>
+    <string name="video_details_watch_later_added">Добавлено в «Буду смотреть»</string>
+    <string name="video_details_watch_later_removed">Удалено из «Буду смотреть»</string>
+    <string name="video_details_bookmark_added_to_folder">Добавлено в «%1$s»</string>
+    <string name="video_details_bookmark_removed_from_folder">Удалено из «%1$s»</string>
+    <string name="video_details_watched_removed">Отметка просмотра снята</string>
+    <string name="video_details_info_title">Подробнее</string>
+    <string name="video_details_info_original_title">Оригинальное название</string>
+    <string name="video_details_info_year">Год</string>
+    <string name="video_details_info_seasons">Сезонов</string>
+    <string name="video_details_info_duration">Длительность</string>
+    <string name="video_details_info_genres">Жанры</string>
+    <string name="video_details_info_country">Страна</string>
+    <string name="video_details_info_age_rating">Возраст</string>
+    <string name="video_details_info_translation">Перевод</string>
+    <string name="video_details_info_audio_tracks">Аудиодорожки</string>
+    <string name="video_details_info_subtitles">Субтитры</string>
+    <string name="video_details_info_director">Режиссёр</string>
+    <string name="video_details_info_cast">В ролях</string>
+    <string name="video_details_info_quality">Качество</string>
+    <string name="video_details_info_sound">Звук</string>
+    <string name="video_details_info_sound_surround">Объёмный звук</string>
+    <string name="video_details_similar_title">Похожее</string>
+</resources>

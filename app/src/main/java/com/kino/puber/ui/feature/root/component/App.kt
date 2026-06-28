@@ -1,0 +1,77 @@
+package com.kino.puber.ui.feature.root.component
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.tv.material3.Surface
+import com.kino.puber.core.session.SessionEvent
+import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.core.ui.model.VideoItemTypeMapper
+import com.kino.puber.core.ui.model.VideoItemUIMapper
+import com.kino.puber.core.ui.navigation.AppLauncher
+import com.kino.puber.core.ui.navigation.AppLauncherImpl
+import com.kino.puber.core.ui.navigation.Screens
+import com.kino.puber.core.ui.navigation.component.FlowComponent
+import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.core.ui.navigation.AppRouter
+import com.kino.puber.ui.ScreensImpl
+import com.kino.puber.core.di.LocalPuberKoinScope
+import org.koin.core.module.Module
+import org.koin.core.module.dsl.scopedOf
+import org.koin.core.qualifier.named
+import org.koin.core.scope.ScopeID
+import org.koin.dsl.module
+import org.koin.mp.KoinPlatform.getKoin
+
+private fun buildFlowModule(
+    scopeId: ScopeID,
+    appLauncher: AppLauncher,
+): Module = module {
+    scope(named(scopeId)) {
+        scoped<AppLauncher> { appLauncher }
+        scoped<Screens> { ScreensImpl }
+        scoped { VideoItemUIMapper(get(), get()) }
+        scopedOf(::VideoItemTypeMapper)
+    }
+}
+
+private const val ScopeRoot = "Root"
+
+@Composable
+private fun SessionExpiredHandler() {
+    val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
+    val sessionEventBus = getKoin().get<SessionEventBus>()
+    LaunchedEffect(Unit) {
+        sessionEventBus.events.collect { event ->
+            when (event) {
+                SessionEvent.Unauthorized -> router.newRootScreen(router.screens.auth())
+            }
+        }
+    }
+}
+
+@Composable
+fun App() {
+    val appLauncher = AppLauncherImpl.rememberAppLauncher()
+    PuberTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = RectangleShape
+        ) {
+            FlowComponent(
+                scopeName = ScopeRoot,
+                screen = LauncherScreen(),
+                moduleFactory = { scopeId, parentScope ->
+                    buildFlowModule(
+                        scopeId,
+                        appLauncher = appLauncher,
+                    )
+                },
+            ) {
+                SessionExpiredHandler()
+            }
+        }
+    }
+}

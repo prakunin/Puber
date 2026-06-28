@@ -1,0 +1,243 @@
+package com.kino.puber.ui.feature.main.component
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Badge
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Icon
+import androidx.tv.material3.NavigationDrawerItem
+import androidx.tv.material3.NavigationDrawerScope
+import androidx.tv.material3.Text
+import com.kino.puber.core.model.NavigationMode
+import com.kino.puber.core.ui.navigation.TabRouter
+import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
+import com.kino.puber.core.ui.navigation.component.PuberCurrentTab
+import com.kino.puber.core.ui.navigation.component.TabComponent
+import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
+import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
+import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
+import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
+import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
+import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.ui.feature.main.model.MainTab
+import com.kino.puber.ui.feature.main.model.MainViewState
+import com.kino.puber.ui.feature.main.toptabs.TopTabMainContent
+import com.kino.puber.ui.feature.main.vm.MainVM
+import com.kino.puber.core.di.puberViewModel
+
+@Composable
+internal fun MainScreenComponent() {
+    val vm = puberViewModel<MainVM>()
+    val state by vm.collectViewState()
+    val onAction: (UIAction) -> Unit = remember { vm::onAction }
+    when (state.navigationMode) {
+        NavigationMode.SideDrawer -> DrawerMainContent(
+            state = state,
+            onAction = onAction,
+            tabRouter = vm.tabRouter,
+            tabAppRouterHolder = vm.tabAppRouterHolder,
+        )
+        NavigationMode.TopTabs -> TopTabMainContent(
+            state = state,
+            onAction = onAction,
+            tabRouter = vm.tabRouter,
+            tabAppRouterHolder = vm.tabAppRouterHolder,
+            onSearchClick = vm::onSearchClick,
+            onSettingsClick = vm::onSettingsClick,
+        )
+    }
+}
+
+@Composable
+private fun DrawerMainContent(
+    state: MainViewState,
+    onAction: (UIAction) -> Unit,
+    tabRouter: TabRouter,
+    tabAppRouterHolder: TabAppRouterHolder,
+) {
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val mainContentFocus = rememberFocusRequesterOnLaunch()
+    SideEffect { drawerState.contentFocusRequester = mainContentFocus }
+
+    CompositionLocalProvider(LocalDrawerState provides drawerState) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            scrimBrush = Brush.horizontalGradient(
+                listOf(
+                    MaterialTheme.colorScheme.scrim, Color.Transparent
+                )
+            ),
+            drawerContent = {
+                MainSideMenuContent(
+                    state = state,
+                    onAction = onAction,
+                    drawerState = drawerState,
+                    mainContentFocus = mainContentFocus,
+                )
+            },
+            content = { MainScreenContentBody(mainContentFocus, tabRouter, tabAppRouterHolder) },
+        )
+    }
+}
+
+@Composable
+private fun NavigationDrawerScope.MainSideMenuContent(
+    state: MainViewState,
+    drawerState: DrawerState,
+    mainContentFocus: FocusRequester,
+    onAction: (UIAction) -> Unit
+) {
+
+    val fallbackFocusItem = remember { FocusRequester() }
+    val backgroundColor = animateColorAsState(
+        targetValue = if (drawerState.isOpen) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+    )
+
+    BackHandler(enabled = drawerState.isOpen.not()) {
+        drawerState.setValue(DrawerValue.Open)
+    }
+
+    Column(
+        Modifier
+            .background(backgroundColor.value)
+            .fillMaxHeight()
+            .padding(horizontal = 4.dp)
+            .verticalScroll(rememberScrollState())
+            .focusRestorer(fallbackFocusItem)
+            .focusGroup(),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        Spacer(Modifier.height(16.dp))
+        state.tabs.forEach { tab ->
+            MainSideMenuItem(
+                tabFocusRequester = fallbackFocusItem,
+                tab = tab,
+                onAction = onAction,
+                drawerState = drawerState,
+                mainContentFocus = mainContentFocus,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+private val DrawerState.isOpen: Boolean
+    get() = currentValue == DrawerValue.Open
+
+@Composable
+private fun NavigationDrawerScope.MainSideMenuItem(
+    tab: MainTab,
+    drawerState: DrawerState,
+    tabFocusRequester: FocusRequester,
+    mainContentFocus: FocusRequester,
+    onAction: (UIAction) -> Unit
+) {
+    val modifier = Modifier.height(40.dp)
+        .onFocusChanged { focusState ->
+            if (focusState.isFocused) {
+                onAction(CommonAction.ItemSelected(tab))
+            }
+        }.run {
+            if (tab.isSelected) {
+                focusRequester(tabFocusRequester)
+            } else {
+                this
+            }
+        }
+
+    NavigationDrawerItem(
+        modifier = modifier,
+        selected = tab.isSelected,
+        onClick = {
+            drawerState.setValue(DrawerValue.Closed)
+            mainContentFocus.requestFocus()
+        },
+        leadingContent = {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = null,
+            )
+        },
+        trailingContent = mainSideMenuItemBadge(tab),
+    ) {
+        Text(text = tab.label)
+    }
+}
+
+@Composable
+private fun mainSideMenuItemBadge(tab: MainTab): @Composable (() -> Unit)? {
+    return if (tab.badge > 0) {
+        {
+            Badge {
+                Text(
+                    text = tab.badge.toString(),
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+        }
+    } else {
+        null
+    }
+}
+
+@Composable
+private fun MainScreenContentBody(
+    focusRequester: FocusRequester,
+    tabRouter: TabRouter,
+    tabAppRouterHolder: TabAppRouterHolder,
+) {
+    val closeDrawerWidth = 60.dp
+    // Re-request focus on content after navigation return (push/pop).
+    // MainScreenContentBody stays in composition during tab switches,
+    // so this only fires on push/pop — safe for tab switching.
+    LaunchedEffect(Unit) {
+        delay(100)
+        focusRequester.requestFocus()
+    }
+    TabComponent(
+        tabRouter = tabRouter,
+        tabAppRouterHolder = tabAppRouterHolder,
+    ) {
+        Box(
+            Modifier
+                .padding(start = closeDrawerWidth)
+                .focusRequester(focusRequester)
+                .focusRestorer()
+                .focusGroup()
+        ) {
+            PuberCurrentTab()
+        }
+    }
+}

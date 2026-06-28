@@ -1,0 +1,56 @@
+package com.kino.puber.ui.feature.home.component
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import com.kino.puber.core.di.DIScope
+import com.kino.puber.core.ui.model.VideoItemUIMapper
+import com.kino.puber.core.ui.navigation.PuberScreen
+import com.kino.puber.core.ui.uikit.component.LifecycleAction
+import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.domain.interactor.home.HomeInteractor
+import com.kino.puber.ui.feature.home.model.HomeUIMapper
+import com.kino.puber.ui.feature.home.vm.HomeVM
+import kotlinx.parcelize.Parcelize
+import com.kino.puber.core.di.puberViewModel
+import org.koin.core.module.dsl.scopedOf
+import org.koin.core.module.dsl.viewModelOf
+import org.koin.core.qualifier.named
+import org.koin.core.scope.Scope
+import org.koin.core.scope.ScopeID
+import org.koin.dsl.module
+
+@Parcelize
+internal class HomeScreen : PuberScreen {
+
+    @Suppress("unused")
+    private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
+        scope(named(scopeId)) {
+            scopedOf(::HomeInteractor)
+            scoped { VideoItemUIMapper(get(), get()) }
+            scoped { HomeUIMapper(get(), get()) }
+            viewModelOf(::HomeVM)
+        }
+    }
+
+    @Composable
+    override fun Content() = DIScope(scopeName = key, moduleFactory = ::buildModule) {
+        val vm = puberViewModel<HomeVM>()
+        val state by vm.collectViewState()
+        val onAction = remember(vm) { vm::onAction }
+
+        LifecycleAction(
+            event = Lifecycle.Event.ON_RESUME,
+            onAction = onAction,
+            action = CommonAction.OnResume,
+        )
+
+        HomeScreenContent(
+            state = state,
+            onAction = onAction,
+            onHeroClick = vm::onHeroClick,
+            onCollectionClick = vm::onCollectionClick,
+        )
+    }
+}

@@ -1,0 +1,7 @@
+<resources>
+    <string name="error_button_retry">Повторить</string>
+    <string name="empty_state">Пусто</string>
+    <string name="show_all">Показать\nвсе</string>
+    <string name="under_development">В разработке</string>
+    <string name="video_item_watched">Просмотрено</string>
+</resources>
