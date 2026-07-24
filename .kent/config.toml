@@ -3,11 +3,15 @@
 
 [shell]
 postprocessing_mode = "all"
-postprocess_hook = ".kent/hooks/shell-postprocess-hook"
+postprocess_hook = "~/.kent/hooks/gradle-worktree-warning"
 
 [worktrees]
+# Applies to project-local/manual worktrees. Kent-managed task worktrees are owned under Kent's persistence root.
 base_dir = ".kent/worktrees"
 setup_script = ".kent/worktrees/setup.sh"
+
+[workflow]
+subagents = true
 
 [subagents."android-codebase-analyst"]
 system_prompt_file = "subagents/android-codebase-analyst.md"
@@ -29,6 +33,8 @@ patch = false
 system_prompt_file = "subagents/android-codebase-analyst.md"
 thinking_level = "medium"
 model_verbosity = "low"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."project-researcher".tools]
 patch = false
@@ -40,18 +46,20 @@ thinking_level = "medium"
 [subagents."build-doctor"]
 system_prompt_file = "subagents/gradle-build-doctor.md"
 thinking_level = "medium"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."implementation-worker"]
-system_prompt_file = "subagents/feature-step-worker.md"
+system_prompt_file = "subagents/implementation-worker.md"
 thinking_level = "medium"
-
-[subagents."feature-orchestrator"]
-system_prompt_file = "subagents/feature-parallel-orchestrator.md"
-thinking_level = "high"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."compose-reviewer"]
 system_prompt_file = "subagents/compose-reviewer.md"
 thinking_level = "high"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."compose-reviewer".tools]
 patch = false
@@ -59,36 +67,17 @@ patch = false
 [subagents."domain-model-reviewer"]
 system_prompt_file = "subagents/domain-model-reviewer.md"
 thinking_level = "high"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."domain-model-reviewer".tools]
 patch = false
 
-[subagents."feature-parallel-orchestrator"]
-system_prompt_file = "subagents/feature-parallel-orchestrator.md"
-thinking_level = "high"
-
-[subagents."feature-step-worker"]
-system_prompt_file = "subagents/feature-step-worker.md"
-thinking_level = "medium"
-
 [subagents."quality-reviewer"]
 system_prompt_file = "subagents/quality-reviewer.md"
 thinking_level = "high"
+agent_callable = true
+workflow_subagent = true
 
 [subagents."quality-reviewer".tools]
 patch = false
-
-[subagents."compliance_reviewer"]
-description = "Agent for reviewing code, plans, documents, diffs, or other scopes only for compliance with applicable specifications and AGENTS.md rules. Cannot edit files."
-model = "gpt-5.5"
-thinking_level = "high"
-model_verbosity = "low"
-system_prompt_file = "subagents/compliance_reviewer.md"
-
-[subagents."compliance_reviewer".tools]
-shell = true
-patch = false
-edit = false
-
-[subagents."compliance_reviewer".skills]
-planning = false

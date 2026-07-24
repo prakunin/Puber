@@ -8,7 +8,9 @@ command, phase, or plan step.
 
 ## State
 
-- Feature artifacts: `.todo/<feature>/meta.json`, `design.md`, `layouts.md`, `spec.md`, `plan.md`
+- Feature artifacts: `.todo/<feature>/meta.json`, `design.md`, `layouts.md`, `spec.md`, `plan.md`.
+- Kent task/node state is the lifecycle authority. `meta.json` stores identity and source/artifact metadata only;
+  `plan.md` checkboxes track implementation-step progress.
 - Feature target is explicit: command arguments, Kent workflow task context, or a `.todo/<feature>` path/name.
 - There is no implicit global feature pointer.
 - MCP raw artifacts: `.todo/<feature-or-task>/mcp/`
@@ -19,16 +21,13 @@ command, phase, or plan step.
 
 Kent commands live under `.kent/commands/` and are invoked as `/prompt:<name>`.
 
-Legacy `.claude/` files may remain as historical reference, but active Kent sessions should use `.kent/commands/` and
-this skill.
-
 ## Project Basics
 
 - Single Android project with modules `:app` and `:baselineprofile`; feature/runtime code belongs in `:app`.
 - Package root: `com.kino.puber`.
 - Product flavors: `dev` and `prod`.
 - Main compile check: `./gradlew :app:compileDevDebugKotlin` in the main checkout.
-- In Kent worktrees, use `./tools/agentw :app:compileDevDebugKotlin`.
+- In project-local and Kent-managed task worktrees, use `./tools/agentw :app:compileDevDebugKotlin`.
 - Versions live in `gradle/libs.versions.toml`; do not hardcode dependency versions.
 - Static analysis: Detekt config under `config/detekt/`.
 
@@ -77,26 +76,29 @@ Kent may not expose MCP as first-class native tools. Use project-local wrappers:
 .kent/adapters/mcp/mcp-call.sh <server.tool> [arguments]
 ```
 
-Workflow commands should pass `--raw-dir <dir>` when collecting external source data. Mutating calls require
-`--allow-mutate` and explicit user approval.
+Source-ingestion commands should pass `--raw-dir <dir>` when collecting
+external source data. Runtime Smoke is the exception: do not persist
+unfiltered logs or unexpected authenticated UI output, and run the declared
+mobile evidence audit before reporting. Mutating calls require `--allow-mutate`
+and explicit user approval.
 
 ## Subagents
 
 Use configured Kent roles:
 
 ```bash
-kent run --agent android-codebase-analyst --workspace "$PWD" "<prompt>"
-kent run --agent gradle-build-doctor --workspace "$PWD" "<prompt>"
+kent run --agent project-researcher --workspace "$PWD" "<prompt>"
+kent run --agent build-doctor --workspace "$PWD" "<prompt>"
 kent run --agent compose-reviewer --workspace "$PWD" "<prompt>"
 kent run --agent domain-model-reviewer --workspace "$PWD" "<prompt>"
 ```
 
-Use subagents for broad search, noisy diagnostics, implementation slices, and read-only review.
+Use subagents for broad read-only search, noisy diagnostics, and review. The active implementation or fix session
+remains the single writer. Do not run parallel implementation writers.
 
 ## Safety
 
 - Do not create or update global feature pointer files such as `.todo/.current`.
-- Do not modify `.claude/` during Kent migration follow-up work unless explicitly requested.
 - Do not commit or push unless explicitly requested.
 - Keep local paths, tokens, MCP configs, raw MCP outputs, and call logs out of git.
 - Mark plan steps complete only after verification succeeds.

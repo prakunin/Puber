@@ -3,7 +3,10 @@
     "id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
     "name": "Puber Release",
     "description": "Prepare the next Puber release, create the version bump PR, monitor CI, then publish the release tag after approval.",
-    "version": 53
+    "version": 160,
+    "execution_target_policy": {
+      "mode": "head"
+    }
   },
   "nodes": [
     {
@@ -79,9 +82,18 @@
     {
       "id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
-      "key": "blocked",
+      "key": "wont_do",
       "kind": "terminal",
-      "display_name": "Blocked"
+      "display_name": "Won't Do"
+    },
+    {
+      "id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "key": "waiting_pr",
+      "kind": "agent",
+      "display_name": "Waiting PR",
+      "subagent_role": "default",
+      "completion_mode": "shell_command"
     },
     {
       "id": "node-0ebf8742-e371-440f-97e2-fc3834a09906",
@@ -112,17 +124,17 @@
       "id": "group-56664f3b-6775-49a3-ae9e-add3a2147898",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Release preparation is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "prepare cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-5dbd9798-10f9-431c-9e7b-24d3f3beb4f5",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-77c2b3c6-04e4-4e03-a964-2aa5c47259c8",
-      "transition_id": "done",
-      "display_name": "Done",
-      "description": "Compliance passed; create or update the release PR."
+      "transition_id": "ship_pr",
+      "display_name": "Ship PR",
+      "description": "Compliance passed; create or update the task PR before any terminal completion."
     },
     {
       "id": "group-59b9cc45-ff33-41ef-8b2f-16aaa02c6316",
@@ -130,15 +142,15 @@
       "source_node_id": "node-77c2b3c6-04e4-4e03-a964-2aa5c47259c8",
       "transition_id": "needs_changes",
       "display_name": "Needs Changes",
-      "description": "Compliance found release-preparation violations; user approval required before fixes."
+      "description": "Compliance found release-preparation violations; continue to fixes without manual approval."
     },
     {
       "id": "group-17cc1920-c194-4013-bfd8-0eaaa8df78f7",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-77c2b3c6-04e4-4e03-a964-2aa5c47259c8",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Compliance review is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "compliance cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-924268b7-ec8c-4dfc-8c41-9a2030ad9fd2",
@@ -152,17 +164,17 @@
       "id": "group-986d01ca-05b8-473d-bf17-9bfa81b5669a",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-b72f177e-2ffe-4bf9-a018-ba65361119fa",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Release PR creation or update is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "ship_pr cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-0583145f-ec64-45d3-a77f-3fbcb06990d6",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-8497fa66-4fc6-457d-8c0b-7e1da150bd26",
-      "transition_id": "publish",
-      "display_name": "Publish",
-      "description": "Release PR checks passed; user approval required before tag publication. Approve only after the PR is merged into master."
+      "transition_id": "waiting_pr",
+      "display_name": "Waiting PR",
+      "description": "Release PR CI passed or was intentionally skipped; wait until the PR is merged before tag publication."
     },
     {
       "id": "group-c9c24869-2449-482e-b2aa-fe13a359295f",
@@ -170,15 +182,15 @@
       "source_node_id": "node-8497fa66-4fc6-457d-8c0b-7e1da150bd26",
       "transition_id": "needs_changes",
       "display_name": "Needs Changes",
-      "description": "Release PR checks failed; user approval required before fixes."
+      "description": "Release PR checks failed; continue to fixes without manual approval."
     },
     {
       "id": "group-a16f76de-f9fb-4dda-b276-120863bf1005",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-8497fa66-4fc6-457d-8c0b-7e1da150bd26",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Release PR CI monitoring is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "ci_monitor cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-2d2a3e16-2d20-4774-81c4-1f116cd43f40",
@@ -192,25 +204,25 @@
       "id": "group-e3ddd61b-3b97-4e7e-ad1a-4b1b47d4e3e1",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-feeb41cd-253b-401b-add9-888b0237abe9",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Release tag publication is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "publish cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-901a4611-3b31-4a54-804e-6294786e30e2",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-f5349410-9178-4fb1-a909-0b5dad73cfe4",
-      "transition_id": "done",
-      "display_name": "Done",
-      "description": "Release tag publication and monitoring completed; run conservative cleanup."
+      "transition_id": "release_published",
+      "display_name": "Release Published",
+      "description": "Release tag/publication was completed and monitored; cleanup can finish the task."
     },
     {
       "id": "group-008b5b03-50eb-4276-a01a-f34c75ce4be6",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "source_node_id": "node-f5349410-9178-4fb1-a909-0b5dad73cfe4",
-      "transition_id": "blocked",
-      "display_name": "Blocked",
-      "description": "Release automation monitoring is blocked."
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "monitor cannot safely continue until the user or external system resolves the blocker; remain in the same stage."
     },
     {
       "id": "group-79b1b062-9b8f-4598-8a9f-2ff1b3fdf1ec",
@@ -219,6 +231,54 @@
       "transition_id": "done",
       "display_name": "Done",
       "description": "Cleanup report is ready; finish the release task."
+    },
+    {
+      "id": "group-e21a073b-10f2-402b-94e5-8b1239288c6a",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-b72f177e-2ffe-4bf9-a018-ba65361119fa",
+      "transition_id": "needs_changes",
+      "display_name": "Needs Changes",
+      "description": "Release PR creation/update hit a recoverable branch, rebase, conflict, push, or metadata issue; user approval required before recovery work."
+    },
+    {
+      "id": "group-a7e0dff6-2d65-45b5-a937-fa2ae9db916c",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "transition_id": "pr_merged",
+      "display_name": "Pr Merged",
+      "description": "Release PR is merged; publish the approved tag after human approval."
+    },
+    {
+      "id": "group-def5967b-a961-4139-b2ac-fea582269726",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "transition_id": "needs_changes",
+      "display_name": "Needs Changes",
+      "description": "Release PR needs task-scoped changes before it can be merged."
+    },
+    {
+      "id": "group-668bcce6-ceef-498a-a66f-c0bcbb9b9f0e",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "transition_id": "needs_user_action",
+      "display_name": "Needs User Action",
+      "description": "Release PR is still waiting on a human or external process; remain in Waiting PR."
+    },
+    {
+      "id": "group-eeb67e0b-9098-4591-acf4-f5bd1d23fa30",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "transition_id": "close_without_merge",
+      "display_name": "Close Without Merge",
+      "description": "User explicitly canceled the release PR without merge; cleanup can finish."
+    },
+    {
+      "id": "group-c2158ca7-1390-49c6-b7be-149f04b70e56",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "source_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
+      "transition_id": "wont_do",
+      "display_name": "Wont Do",
+      "description": "Latest user comment explicitly cancels this task or declares it not planned; finish without treating it as a recoverable blocker."
     }
   ],
   "edges": [
@@ -233,7 +293,7 @@
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Run the Puber one-flow release process.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. Treat the task body as release intent. Default to next minor release from origin/master. Use patch only when explicitly requested; use major only when explicitly requested. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent.\n\nFetch origin/master and tags, compute the target version, create or reuse release/<version>, update app/build.gradle.kts currentVersion, commit the bump, and verify with focused compile checks. If local release signing secrets are unavailable, record that production packaging could not be locally proven, but do not block the version-bump PR solely for missing local signing secrets. Do not create or push a release tag in this node.\n\nComplete with compliance when the version bump branch is ready and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with blocked and provide blocker_reason if the release cannot be prepared safely."
+      "prompt_template": "Run the Puber one-flow release process.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. Treat the task body as release intent. Default to next minor release from origin/master. Use patch only when explicitly requested; use major only when explicitly requested. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent.\n\nFetch origin/master and tags, compute the target version, create or reuse release/<version>, update app/build.gradle.kts currentVersion, commit the bump, and verify with focused compile checks. If local release signing secrets are unavailable, record that production packaging could not be locally proven, but do not block the version-bump PR solely for missing local signing secrets. Do not create or push a release tag in this node.\n\nComplete with compliance when the version bump branch is ready and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with needs_user_action and provide blocker_reason if the release cannot be prepared safely."
     },
     {
       "id": "edge-94356a5f-0d82-4353-a5bd-cf00d8c420fb",
@@ -246,11 +306,11 @@
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Run mandatory Puber Compliance Review for the prepared release.\n\nRead .kent/commands/compliance-review.md, .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Reviewed scope: release {{.Params.release_version}} ({{.Params.release_type}}) on branch {{.Params.release_branch}} in workspace {{.Params.workspace_path}}, commit {{.Params.version_bump_commit}}, intended tag {{.Params.release_tag}}, verification {{.Params.verification_summary}}. Review only compliance with release rules, task requirements, AGENTS.md, and workflow contract. Do not edit files.\n\nComplete with done and provide compliance_report when no compliance violations are found. Complete with needs_changes and provide workspace_path plus compliance_report when release preparation must be fixed. Complete with blocked and provide blocker_reason if required sources are missing or contradictory.",
+      "prompt_template": "Run mandatory Puber Compliance Review for the prepared release.\n\nRead .kent/commands/compliance-review.md, .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Reviewed scope: release {{.Params.release_version}} ({{.Params.release_type}}) on branch {{.Params.release_branch}} in workspace {{.Params.workspace_path}}, commit {{.Params.version_bump_commit}}, intended tag {{.Params.release_tag}}, verification {{.Params.verification_summary}}. Review only compliance with release rules, task requirements, AGENTS.md, and workflow contract. Do not edit files.\n\nComplete with ship_pr and provide compliance_report when no compliance violations are found. Complete with needs_changes and provide workspace_path plus compliance_report when release preparation must be fixed. Complete with needs_user_action for temporary external waits; provide blocker_reason. Complete with needs_user_action only if required sources are contradictory or continuing would be unsafe; provide blocker_reason.",
       "parameters": [
         {
           "key": "release_version",
-          "description": "Prepared release version, for example 1.4.0."
+          "description": "Release version prepared by this workflow."
         },
         {
           "key": "release_type",
@@ -262,11 +322,11 @@
         },
         {
           "key": "release_tag",
-          "description": "Release tag that should be created after the PR is merged, for example v1.4.0."
+          "description": "Release tag to create or publish after PR merge."
         },
         {
           "key": "workspace_path",
-          "description": "Path to the worktree or checkout containing the release bump."
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
         },
         {
           "key": "version_bump_commit",
@@ -282,17 +342,18 @@
       "id": "edge-9fd4165c-01fa-4291-b134-eb11981b5896",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-56664f3b-6775-49a3-ae9e-add3a2147898",
-      "key": "prepare_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "prepare_needs_user_action",
+      "target_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why release preparation cannot continue, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -300,18 +361,18 @@
       "id": "edge-05335457-6fbd-4556-9bc8-1a0ddfa17f52",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-5dbd9798-10f9-431c-9e7b-24d3f3beb4f5",
-      "key": "compliance_done",
+      "key": "compliance_ship_pr",
       "target_node_id": "node-b72f177e-2ffe-4bf9-a018-ba65361119fa",
       "requires_approval": false,
       "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Create or update the Puber release version-bump PR.\n\nRead .kent/project-contract.md, .kent/commands/ship-pr.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Compliance result: {{.Params.compliance_report}}. Release context from preparation: version {{.Params.compliance.release_version}}, type {{.Params.compliance.release_type}}, branch {{.Params.compliance.release_branch}}, tag {{.Params.compliance.release_tag}}, workspace {{.Params.compliance.workspace_path}}.\n\nCommit only release-task changes if anything remains uncommitted, push {{.Params.compliance.release_branch}} to origin, and create or update a GitHub PR for the version bump. Do not merge the PR. Do not push directly to master. Do not create or push a release tag in this node.\n\nComplete with monitor_ci when a PR exists and provide pr_url, branch_name, workspace_path, release_version, and release_tag. Complete with blocked if PR creation/update cannot be completed safely and provide blocker_reason.",
+      "prompt_template": "Create or update the Puber release version-bump PR.\n\nRead .kent/project-contract.md, .kent/commands/ship-pr.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Compliance result: {{.Params.compliance_report}}. Release context from preparation: version {{.Params.compliance.release_version}}, type {{.Params.compliance.release_type}}, branch {{.Params.compliance.release_branch}}, tag {{.Params.compliance.release_tag}}, workspace {{.Params.compliance.workspace_path}}.\n\nCommit only release-task changes if anything remains uncommitted, push {{.Params.compliance.release_branch}} to origin, and create or update a GitHub PR for the version bump. Do not merge the PR. Do not push directly to master. Do not create or push a release tag in this node.\n\nComplete with monitor_ci when a PR exists and provide pr_url, branch_name, workspace_path, release_version, and release_tag. Complete with needs_changes when PR creation/update is needs_user_action by recoverable branch, rebase, conflict, push, or PR metadata state; provide workspace_path, release_version, release_type, release_branch, release_tag, and blocker_reason. Complete with needs_user_action only if PR creation/update cannot continue safely without changing release scope, credentials, or project policy; provide blocker_reason.",
       "parameters": [
         {
           "key": "compliance_report",
-          "description": "Compliance review report, including rule sources checked and any findings."
+          "description": "Compliance review report or summary."
         }
       ]
     },
@@ -321,20 +382,20 @@
       "transition_group_id": "group-59b9cc45-ff33-41ef-8b2f-16aaa02c6316",
       "key": "compliance_fix",
       "target_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
-      "requires_approval": true,
+      "requires_approval": false,
       "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Fix Puber release preparation compliance violations only.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and .kent/commands/compliance-review.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Apply only the minimum changes required by {{.Params.compliance_report}} in workspace {{.Params.workspace_path}}. Verify narrowly, then complete with compliance and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with blocked and provide blocker_reason if unsafe or missing input.",
+      "prompt_template": "Fix Puber release preparation compliance violations only.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, and .kent/commands/compliance-review.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Apply only the minimum changes required by {{.Params.compliance_report}} in workspace {{.Params.workspace_path}}. Verify narrowly, then complete with compliance and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with needs_user_action and provide blocker_reason if unsafe or missing input.",
       "parameters": [
         {
           "key": "workspace_path",
-          "description": "Path to the worktree or checkout containing the release bump."
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
         },
         {
           "key": "compliance_report",
-          "description": "Compliance review report, including rule sources checked and any findings."
+          "description": "Compliance review report or summary."
         }
       ]
     },
@@ -342,17 +403,18 @@
       "id": "edge-97bb2c4a-612b-4884-b9c4-e9693cfa6f18",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-17cc1920-c194-4013-bfd8-0eaaa8df78f7",
-      "key": "compliance_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "compliance_needs_user_action",
+      "target_node_id": "node-77c2b3c6-04e4-4e03-a964-2aa5c47259c8",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why compliance review cannot complete, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -367,19 +429,19 @@
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Monitor the Puber release PR checks.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Inspect PR {{.Params.pr_url}} for release {{.Params.release_version}} / tag {{.Params.release_tag}} on branch {{.Params.branch_name}}. Use GitHub CLI when available. Do not merge the PR. Do not push new commits from this node.\n\nComplete with publish when checks pass or are intentionally absent; this transition requires user approval before tag publication. Provide pr_url, release_version, release_tag, branch_name, workspace_path, and ci_report. Complete with needs_changes if checks failed due to release changes and provide workspace_path plus ci_report. Complete with blocked and provide blocker_reason if checks cannot be inspected and risk cannot be accepted.",
+      "prompt_template": "Monitor the Puber release PR checks.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Inspect PR {{.Params.pr_url}} for release {{.Params.release_version}} / tag {{.Params.release_tag}} on branch {{.Params.branch_name}}. Use GitHub CLI when available. Do not merge the PR. Do not push new commits from this node.\n\nComplete with publish when checks pass or are intentionally absent; this transition requires user approval before tag publication. Provide pr_url, release_version, release_tag, branch_name, workspace_path, and ci_report. Complete with needs_changes if checks failed due to release changes and provide workspace_path plus ci_report. Complete with needs_user_action for temporary external waits; provide blocker_reason. Complete with needs_user_action only if checks cannot be inspected and retrying would be unsafe or misleading; provide blocker_reason.",
       "parameters": [
         {
           "key": "pr_url",
-          "description": "URL of the release pull request."
+          "description": "URL of the created, updated, or monitored pull request."
         },
         {
           "key": "branch_name",
-          "description": "Name of the pushed release branch."
+          "description": "Name of the task or release branch associated with the pull request."
         },
         {
           "key": "workspace_path",
-          "description": "Path to the worktree or checkout used for PR creation."
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
         },
         {
           "key": "release_version",
@@ -387,7 +449,7 @@
         },
         {
           "key": "release_tag",
-          "description": "Release tag to create after the PR is merged."
+          "description": "Release tag to create or publish after PR merge."
         }
       ]
     },
@@ -395,17 +457,18 @@
       "id": "edge-c7370c49-63ec-4d62-9b7c-36f1cd0e4ed1",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-986d01ca-05b8-473d-bf17-9bfa81b5669a",
-      "key": "pr_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "ship_pr_needs_user_action",
+      "target_node_id": "node-b72f177e-2ffe-4bf9-a018-ba65361119fa",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why release PR creation/update cannot complete, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -413,18 +476,26 @@
       "id": "edge-6c5fd08a-c3b0-49d6-824c-7f4289599b53",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-0583145f-ec64-45d3-a77f-3fbcb06990d6",
-      "key": "approve_publish",
-      "target_node_id": "node-feeb41cd-253b-401b-add9-888b0237abe9",
-      "requires_approval": true,
-      "context_mode": "compact_and_continue_session",
+      "key": "ci_waiting_pr",
+      "target_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "requires_approval": false,
+      "context_mode": "new_session",
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Publish the approved Puber release tag.\n\nRead .kent/project-contract.md, .kent/commands/release-tag.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Before creating any tag, fetch origin/master and verify that PR {{.Params.pr_url}} is merged and origin/master contains currentVersion {{.Params.release_version}}. If the PR is not merged or master does not contain the version bump, complete blocked with blocker_reason. Verify {{.Params.release_tag}} does not exist locally/remotely unless it already points to the intended master commit. Create and push {{.Params.release_tag}} on the verified origin/master commit. Do not merge PRs and do not push directly to master.\n\nComplete with monitor and provide release_version, release_tag, target_commit, pr_url, and tag_push_status. Complete with blocked and provide blocker_reason if publication is unsafe.",
+      "prompt_template": "Hold this Puber release until the release pull request is actually merged.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, release PR {{.Params.pr_url}}, branch {{.Params.branch_name}}, release version {{.Params.release_version}}, release tag {{.Params.release_tag}}, workspace {{.Params.workspace_path}}, and CI report {{.Params.ci_report}}.\n\nUse `gh pr view --json state,mergedAt,mergeCommit,headRefName,baseRefName,url` when available. Do not merge the PR. Do not create or push the release tag from this node. Do not clean up while the PR is still open.\n\nComplete with pr_merged only when GitHub reports state=MERGED; provide pr_url, branch_name, release_version, release_tag, workspace_path, and merge_report. Complete with needs_changes when release PR review comments, merge conflicts, or post-CI regressions can be fixed within release-preparation scope; provide workspace_path, release_version, release_tag, and pr_report. Complete with needs_user_action when the PR is still open, waiting for human review/approval/merge, or needs_user_action by an external process; add a task comment with the current PR status and exact human action, then provide pr_url, branch_name, release_version, release_tag, workspace_path, and waiting_reason. Complete with close_without_merge only if the latest user comment explicitly says to cancel this release PR; provide pr_url, branch_name, workspace_path, and cleanup_reason.",
       "parameters": [
         {
           "key": "pr_url",
-          "description": "URL of the release pull request."
+          "description": "URL of the created, updated, or monitored pull request."
+        },
+        {
+          "key": "branch_name",
+          "description": "Name of the task or release branch associated with the pull request."
+        },
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
         },
         {
           "key": "release_version",
@@ -432,15 +503,7 @@
         },
         {
           "key": "release_tag",
-          "description": "Release tag to create after the PR is merged."
-        },
-        {
-          "key": "branch_name",
-          "description": "Name of the pushed release branch."
-        },
-        {
-          "key": "workspace_path",
-          "description": "Path to the worktree or checkout containing the release bump."
+          "description": "Release tag to create or publish after PR merge."
         },
         {
           "key": "ci_report",
@@ -454,16 +517,16 @@
       "transition_group_id": "group-c9c24869-2449-482e-b2aa-fe13a359295f",
       "key": "ci_fix",
       "target_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
-      "requires_approval": true,
+      "requires_approval": false,
       "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Fix Puber release PR CI failures only.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Apply only the minimum changes required by CI report {{.Params.ci_report}} in workspace {{.Params.workspace_path}}. Verify narrowly, then complete with compliance and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with blocked and provide blocker_reason if unsafe or missing input.",
+      "prompt_template": "Fix Puber release PR CI failures only.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Apply only the minimum changes required by CI report {{.Params.ci_report}} in workspace {{.Params.workspace_path}}. Verify narrowly, then complete with compliance and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with needs_user_action and provide blocker_reason if unsafe or missing input.",
       "parameters": [
         {
           "key": "workspace_path",
-          "description": "Path to the worktree or checkout containing the release bump."
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
         },
         {
           "key": "ci_report",
@@ -475,17 +538,18 @@
       "id": "edge-e02a752c-4e67-4b1c-b06b-37995e9816f8",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-a16f76de-f9fb-4dda-b276-120863bf1005",
-      "key": "ci_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "ci_monitor_needs_user_action",
+      "target_node_id": "node-8497fa66-4fc6-457d-8c0b-7e1da150bd26",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why release PR CI monitoring cannot complete, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -500,15 +564,15 @@
       "context_source": {
         "kind": "immediate_source"
       },
-      "prompt_template": "Monitor Puber release automation after tag publication.\n\nRead .kent/project-contract.md and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Check available GitHub/CI/release automation for {{.Params.release_tag}} when configured. If no automation is configured, report that monitoring is skipped. Complete with done if green or intentionally skipped; complete with blocked and provide blocker_reason if automation fails or cannot be inspected.",
+      "prompt_template": "Monitor Puber release automation after tag publication.\n\nRead .kent/project-contract.md and .kent/commands/release-tag.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance, but do not block solely because that file is absent. Check available GitHub/CI/release automation for {{.Params.release_tag}} when configured. If no automation is configured, report that monitoring is skipped. Complete with release_published if green or intentionally skipped. Complete with needs_user_action for temporary external waits; provide blocker_reason. Complete with needs_user_action only if automation fails or cannot be inspected after retry would be misleading; provide blocker_reason.",
       "parameters": [
         {
           "key": "release_version",
-          "description": "Published release version."
+          "description": "Release version prepared by this workflow."
         },
         {
           "key": "release_tag",
-          "description": "Pushed release tag."
+          "description": "Release tag to create or publish after PR merge."
         },
         {
           "key": "target_commit",
@@ -516,7 +580,7 @@
         },
         {
           "key": "pr_url",
-          "description": "URL of the merged release pull request."
+          "description": "URL of the created, updated, or monitored pull request."
         },
         {
           "key": "tag_push_status",
@@ -528,17 +592,18 @@
       "id": "edge-76cb7cc9-afdb-471b-9c30-0575d769d0fa",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-e3ddd61b-3b97-4e7e-ad1a-4b1b47d4e3e1",
-      "key": "publish_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "publish_needs_user_action",
+      "target_node_id": "node-feeb41cd-253b-401b-add9-888b0237abe9",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why release tag publication cannot complete, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -546,7 +611,7 @@
       "id": "edge-f6e61b45-54eb-4c42-86e7-6d28ef4f7a4b",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-901a4611-3b31-4a54-804e-6294786e30e2",
-      "key": "release_done",
+      "key": "release_release_published",
       "target_node_id": "node-a0bedfe2-b399-456f-a0be-61ca70704811",
       "requires_approval": false,
       "context_mode": "new_session",
@@ -565,17 +630,18 @@
       "id": "edge-2a57cb62-d880-4e73-a460-bf834dcb2b64",
       "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
       "transition_group_id": "group-008b5b03-50eb-4276-a01a-f34c75ce4be6",
-      "key": "monitor_blocked",
-      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
-      "requires_approval": false,
-      "context_mode": "new_session",
+      "key": "monitor_needs_user_action",
+      "target_node_id": "node-f5349410-9178-4fb1-a909-0b5dad73cfe4",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
       "context_source": {
         "kind": "immediate_source"
       },
+      "prompt_template": "Resume this Puber workflow stage after a user-visible blocker was resolved or explicit permission was granted.\n\nRead AGENTS.md, .kent/project-contract.md, the latest task comments, and the previous blocker reason: {{.Params.blocker_reason}}.\n\nDo not restart from backlog, do not discard existing .todo/worktree/PR context, and do not broaden scope. Continue only within the current stage. If the blocker is still present, add or update a task comment with the exact next action, then complete with needs_user_action and provide blocker_reason again. Never use a terminal state for a recoverable blocker. If the task was explicitly canceled, use a close/no-PR path only when that transition exists and the latest user comment clearly asks for it.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the blocker still exists, add/update a task comment with the exact next action and complete with needs_user_action again, providing blocker_reason.",
       "parameters": [
         {
           "key": "blocker_reason",
-          "description": "Why release automation monitoring cannot complete, in the task language when practical."
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
         }
       ]
     },
@@ -596,6 +662,203 @@
           "description": "Summary of cleanup performed or deliberately skipped."
         }
       ]
+    },
+    {
+      "id": "edge-6018e22d-2198-45ed-a4b3-bdfe93775e78",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-e21a073b-10f2-402b-94e5-8b1239288c6a",
+      "key": "pr_fix",
+      "target_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "prompt_template": "Fix recoverable Puber release PR creation/update issues only.\n\nRead .kent/project-contract.md, .kent/commands/release-branch.md, .kent/commands/release-tag.md, .kent/commands/ship-pr.md, and AGENTS.md first. If .kent/commands/release.md exists, use it as supplementary unified guidance. Previous PR blocker: {{.Params.blocker_reason}}. Release context: version {{.Params.release_version}}, type {{.Params.release_type}}, branch {{.Params.release_branch}}, tag {{.Params.release_tag}}, workspace {{.Params.workspace_path}}.\n\nApply only the minimum changes needed to make the release branch/PR shippable, such as rebasing, resolving conflicts, fixing branch metadata, or repairing the version-bump commit. Do not create or push a release tag. Verify narrowly, then complete with compliance and provide release_version, release_type, release_branch, release_tag, workspace_path, version_bump_commit, and verification_summary. Complete with needs_user_action only if recovery is unsafe or requires user credentials/policy changes.\n\nFor any needs_user_action transition, provide blocker_reason with the exact next user or external action needed.",
+      "parameters": [
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
+        },
+        {
+          "key": "release_version",
+          "description": "Release version prepared by this workflow."
+        },
+        {
+          "key": "release_type",
+          "description": "Version bump type: minor by default, patch or major only when explicitly requested."
+        },
+        {
+          "key": "release_branch",
+          "description": "Release branch containing the version bump."
+        },
+        {
+          "key": "release_tag",
+          "description": "Release tag to create or publish after PR merge."
+        },
+        {
+          "key": "blocker_reason",
+          "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
+        }
+      ]
+    },
+    {
+      "id": "edge-b4ae17cc-edc6-47e2-b9ea-c4b00cd07600",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-a7e0dff6-2d65-45b5-a937-fa2ae9db916c",
+      "key": "publish_after_merge",
+      "target_node_id": "node-feeb41cd-253b-401b-add9-888b0237abe9",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "prompt_template": "Publish the approved Puber release tag after the release PR was confirmed merged.\n\nRead AGENTS.md, .kent/project-contract.md, latest task comments, release version {{.Params.release_version}}, release tag {{.Params.release_tag}}, PR {{.Params.pr_url}}, and merge report {{.Params.merge_report}}. This transition is intentionally approval-gated. Before tagging, verify the PR state is still MERGED and the tag does not already point to a conflicting commit. Do not change the release scope. Complete with monitor when the tag is published or already correct and provide release_version, release_tag, target_commit, pr_url, and tag_push_status. Complete with needs_user_action for temporary external waits; provide blocker_reason. Complete with needs_user_action if explicit user input or permission is required.",
+      "parameters": [
+        {
+          "key": "pr_url",
+          "description": "URL of the created, updated, or monitored pull request."
+        },
+        {
+          "key": "branch_name",
+          "description": "Name of the task or release branch associated with the pull request."
+        },
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
+        },
+        {
+          "key": "release_version",
+          "description": "Release version prepared by this workflow."
+        },
+        {
+          "key": "release_tag",
+          "description": "Release tag to create or publish after PR merge."
+        },
+        {
+          "key": "merge_report",
+          "description": "GitHub PR state, mergedAt, mergeCommit, and cleanup or release notes."
+        }
+      ]
+    },
+    {
+      "id": "edge-dcac956d-47aa-4a43-87e4-ccae167e11e3",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-def5967b-a961-4139-b2ac-fea582269726",
+      "key": "pr_feedback",
+      "target_node_id": "node-86293208-dd6b-4ff6-89d4-d6567a8b4e55",
+      "requires_approval": false,
+      "context_mode": "compact_and_continue_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "prompt_template": "Repair the Puber release PR only.\n\nRead AGENTS.md, .kent/project-contract.md, latest task comments, workspace {{.Params.workspace_path}}, release version {{.Params.release_version}}, release tag {{.Params.release_tag}}, and PR feedback report {{.Params.pr_report}}. Apply only release-preparation-scope fixes for review comments, merge conflicts, or post-CI regressions. Do not force-push unless the latest user comment explicitly permits force-push for this exact PR/branch. Verify narrowly, then return through compliance, PR update, CI, and waiting_pr. Complete with needs_user_action if explicit user input or permission is required.\n\nFor any needs_user_action transition, provide blocker_reason with the exact next user or external action needed.",
+      "parameters": [
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
+        },
+        {
+          "key": "release_version",
+          "description": "Release version prepared by this workflow."
+        },
+        {
+          "key": "release_tag",
+          "description": "Release tag to create or publish after PR merge."
+        },
+        {
+          "key": "pr_report",
+          "description": "PR creation, review, conflict, or post-CI regression report."
+        }
+      ]
+    },
+    {
+      "id": "edge-37f43543-3ab7-4f60-bcf1-5ae7e8a2bcac",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-668bcce6-ceef-498a-a66f-c0bcbb9b9f0e",
+      "key": "waiting_pr_needs_user_action",
+      "target_node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+      "requires_approval": true,
+      "context_mode": "compact_and_continue_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "prompt_template": "Re-check the Puber release pull request after the user resolved the external wait or approved another check.\n\nRead AGENTS.md, .kent/project-contract.md, latest task comments, PR {{.Params.pr_url}}, branch {{.Params.branch_name}}, release version {{.Params.release_version}}, release tag {{.Params.release_tag}}, workspace {{.Params.workspace_path}}, and previous waiting reason {{.Params.waiting_reason}}. Do not merge, tag, push, publish, or clean up unless the PR is confirmed merged and the next publish transition is explicitly approved.\n\nComplete with pr_merged only when GitHub reports state=MERGED. Complete with needs_changes for release-scope PR review/conflict/regression fixes. Complete with needs_user_action again if the PR is still waiting externally. Complete with close_without_merge only on explicit latest user instruction.\n\nApproval by itself is only permission to re-check this stage; it is not proof that the blocker was resolved. Before taking any non-wait transition, verify a new human task comment, task body update, or external proof that specifically resolves the previous blocker. If that proof is absent or the PR/release PR is still waiting externally, add/update a task comment with the exact next action and complete with needs_user_action again, providing waiting_reason.",
+      "parameters": [
+        {
+          "key": "pr_url",
+          "description": "URL of the created, updated, or monitored pull request."
+        },
+        {
+          "key": "branch_name",
+          "description": "Name of the task or release branch associated with the pull request."
+        },
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
+        },
+        {
+          "key": "release_version",
+          "description": "Release version prepared by this workflow."
+        },
+        {
+          "key": "release_tag",
+          "description": "Release tag to create or publish after PR merge."
+        },
+        {
+          "key": "waiting_reason",
+          "description": "Why the PR cannot advance yet and the exact user or external action needed."
+        }
+      ]
+    },
+    {
+      "id": "edge-bd3ab2d8-ced1-43b2-b740-ada232876991",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-eeb67e0b-9098-4591-acf4-f5bd1d23fa30",
+      "key": "release_cancel_cleanup",
+      "target_node_id": "node-a0bedfe2-b399-456f-a0be-61ca70704811",
+      "requires_approval": true,
+      "context_mode": "new_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "prompt_template": "Run conservative Puber release cleanup after the user explicitly canceled the release PR without merge.\n\nRead AGENTS.md, .kent/project-contract.md, .kent/commands/cleanup-task.md, PR {{.Params.pr_url}}, branch {{.Params.branch_name}}, workspace {{.Params.workspace_path}}, and cleanup reason {{.Params.cleanup_reason}}. Do not delete any worktree containing unpushed commits, uncommitted user changes, or unclear ownership. Complete with done and provide cleanup_report.",
+      "parameters": [
+        {
+          "key": "pr_url",
+          "description": "URL of the created, updated, or monitored pull request."
+        },
+        {
+          "key": "branch_name",
+          "description": "Name of the task or release branch associated with the pull request."
+        },
+        {
+          "key": "workspace_path",
+          "description": "Path to the task workspace or worktree relevant to this workflow transition."
+        },
+        {
+          "key": "cleanup_reason",
+          "description": "Explicit user instruction or reason for cleanup without merge."
+        }
+      ]
+    },
+    {
+      "id": "edge-9228ca82-9ab5-4dfe-b073-21ebe5d0b65f",
+      "workflow_id": "workflow-42287243-1486-45e6-8f8d-3ecddba896be",
+      "transition_group_id": "group-c2158ca7-1390-49c6-b7be-149f04b70e56",
+      "key": "prepare_wont_do",
+      "target_node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2",
+      "requires_approval": true,
+      "context_mode": "new_session",
+      "context_source": {
+        "kind": "immediate_source"
+      },
+      "parameters": [
+        {
+          "key": "closure_reason",
+          "description": "Explicit latest user instruction explaining why this task should be closed as not planned or canceled."
+        }
+      ]
     }
   ],
   "derived_wiring": {
@@ -608,7 +871,7 @@
         "possible_provision_fields": [
           {
             "name": "release_version",
-            "description": "Prepared release version, for example 1.4.0."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_type",
@@ -620,11 +883,11 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag that should be created after the PR is merged, for example v1.4.0."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "version_bump_commit",
@@ -636,7 +899,11 @@
           },
           {
             "name": "blocker_reason",
-            "description": "Why release preparation cannot continue, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
+          },
+          {
+            "name": "closure_reason",
+            "description": "Explicit latest user instruction explaining why this task should be closed as not planned or canceled."
           }
         ]
       },
@@ -645,15 +912,15 @@
         "possible_provision_fields": [
           {
             "name": "compliance_report",
-            "description": "Compliance review report, including rule sources checked and any findings."
+            "description": "Compliance review report or summary."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "blocker_reason",
-            "description": "Why compliance review cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -662,15 +929,15 @@
         "possible_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "branch_name",
-            "description": "Name of the pushed release branch."
+            "description": "Name of the task or release branch associated with the pull request."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout used for PR creation."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -678,11 +945,19 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "blocker_reason",
-            "description": "Why release PR creation/update cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
+          },
+          {
+            "name": "release_type",
+            "description": "Version bump type: minor by default, patch or major only when explicitly requested."
+          },
+          {
+            "name": "release_branch",
+            "description": "Release branch containing the version bump."
           }
         ]
       },
@@ -691,7 +966,15 @@
         "possible_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -699,15 +982,7 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
-          },
-          {
-            "name": "branch_name",
-            "description": "Name of the pushed release branch."
-          },
-          {
-            "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "ci_report",
@@ -715,7 +990,7 @@
           },
           {
             "name": "blocker_reason",
-            "description": "Why release PR CI monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -724,11 +999,11 @@
         "possible_provision_fields": [
           {
             "name": "release_version",
-            "description": "Published release version."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_tag",
-            "description": "Pushed release tag."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "target_commit",
@@ -736,7 +1011,7 @@
           },
           {
             "name": "pr_url",
-            "description": "URL of the merged release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "tag_push_status",
@@ -744,7 +1019,7 @@
           },
           {
             "name": "blocker_reason",
-            "description": "Why release tag publication cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -757,7 +1032,7 @@
           },
           {
             "name": "blocker_reason",
-            "description": "Why release automation monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -774,6 +1049,47 @@
         "node_id": "node-a19c6feb-2c82-4c67-960a-31ee75b785d2"
       },
       {
+        "node_id": "node-c0d75fb3-8a2c-4109-b0b0-89afb43ace0a",
+        "possible_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "merge_report",
+            "description": "GitHub PR state, mergedAt, mergeCommit, and cleanup or release notes."
+          },
+          {
+            "name": "pr_report",
+            "description": "PR creation, review, conflict, or post-CI regression report."
+          },
+          {
+            "name": "waiting_reason",
+            "description": "Why the PR cannot advance yet and the exact user or external action needed."
+          },
+          {
+            "name": "cleanup_reason",
+            "description": "Explicit user instruction or reason for cleanup without merge."
+          }
+        ]
+      },
+      {
         "node_id": "node-0ebf8742-e371-440f-97e2-fc3834a09906"
       }
     ],
@@ -786,7 +1102,7 @@
         "required_provision_fields": [
           {
             "name": "release_version",
-            "description": "Prepared release version, for example 1.4.0."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_type",
@@ -798,11 +1114,11 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag that should be created after the PR is merged, for example v1.4.0."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "version_bump_commit",
@@ -819,7 +1135,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release preparation cannot continue, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -828,7 +1144,7 @@
         "required_provision_fields": [
           {
             "name": "compliance_report",
-            "description": "Compliance review report, including rule sources checked and any findings."
+            "description": "Compliance review report or summary."
           }
         ]
       },
@@ -837,11 +1153,11 @@
         "required_provision_fields": [
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "compliance_report",
-            "description": "Compliance review report, including rule sources checked and any findings."
+            "description": "Compliance review report or summary."
           }
         ]
       },
@@ -850,7 +1166,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why compliance review cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -859,15 +1175,15 @@
         "required_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "branch_name",
-            "description": "Name of the pushed release branch."
+            "description": "Name of the task or release branch associated with the pull request."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout used for PR creation."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -875,7 +1191,7 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
+            "description": "Release tag to create or publish after PR merge."
           }
         ]
       },
@@ -884,7 +1200,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release PR creation/update cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -893,7 +1209,15 @@
         "required_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -901,15 +1225,7 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
-          },
-          {
-            "name": "branch_name",
-            "description": "Name of the pushed release branch."
-          },
-          {
-            "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "ci_report",
@@ -922,7 +1238,7 @@
         "required_provision_fields": [
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "ci_report",
@@ -935,7 +1251,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release PR CI monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -944,11 +1260,11 @@
         "required_provision_fields": [
           {
             "name": "release_version",
-            "description": "Published release version."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_tag",
-            "description": "Pushed release tag."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "target_commit",
@@ -956,7 +1272,7 @@
           },
           {
             "name": "pr_url",
-            "description": "URL of the merged release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "tag_push_status",
@@ -969,7 +1285,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release tag publication cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -987,7 +1303,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release automation monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -997,6 +1313,144 @@
           {
             "name": "cleanup_report",
             "description": "Summary of cleanup performed or deliberately skipped."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-e21a073b-10f2-402b-94e5-8b1239288c6a",
+        "required_provision_fields": [
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_type",
+            "description": "Version bump type: minor by default, patch or major only when explicitly requested."
+          },
+          {
+            "name": "release_branch",
+            "description": "Release branch containing the version bump."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "blocker_reason",
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-a7e0dff6-2d65-45b5-a937-fa2ae9db916c",
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "merge_report",
+            "description": "GitHub PR state, mergedAt, mergeCommit, and cleanup or release notes."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-def5967b-a961-4139-b2ac-fea582269726",
+        "required_provision_fields": [
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "pr_report",
+            "description": "PR creation, review, conflict, or post-CI regression report."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-668bcce6-ceef-498a-a66f-c0bcbb9b9f0e",
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "waiting_reason",
+            "description": "Why the PR cannot advance yet and the exact user or external action needed."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-eeb67e0b-9098-4591-acf4-f5bd1d23fa30",
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "cleanup_reason",
+            "description": "Explicit user instruction or reason for cleanup without merge."
+          }
+        ]
+      },
+      {
+        "transition_group_id": "group-c2158ca7-1390-49c6-b7be-149f04b70e56",
+        "required_provision_fields": [
+          {
+            "name": "closure_reason",
+            "description": "Explicit latest user instruction explaining why this task should be closed as not planned or canceled."
           }
         ]
       }
@@ -1047,7 +1501,7 @@
         "required_provision_fields": [
           {
             "name": "release_version",
-            "description": "Prepared release version, for example 1.4.0."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_type",
@@ -1059,11 +1513,11 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag that should be created after the PR is merged, for example v1.4.0."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "version_bump_commit",
@@ -1087,7 +1541,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release preparation cannot continue, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1103,7 +1557,7 @@
         "required_provision_fields": [
           {
             "name": "compliance_report",
-            "description": "Compliance review report, including rule sources checked and any findings."
+            "description": "Compliance review report or summary."
           }
         ]
       },
@@ -1124,11 +1578,11 @@
         "required_provision_fields": [
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "compliance_report",
-            "description": "Compliance review report, including rule sources checked and any findings."
+            "description": "Compliance review report or summary."
           }
         ]
       },
@@ -1144,7 +1598,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why compliance review cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1180,15 +1634,15 @@
         "required_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "branch_name",
-            "description": "Name of the pushed release branch."
+            "description": "Name of the task or release branch associated with the pull request."
           },
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout used for PR creation."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -1196,7 +1650,7 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
+            "description": "Release tag to create or publish after PR merge."
           }
         ]
       },
@@ -1212,7 +1666,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release PR creation/update cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1225,16 +1679,6 @@
             "field": "pr_url"
           },
           {
-            "name": "release_version",
-            "source": "transition_output",
-            "field": "release_version"
-          },
-          {
-            "name": "release_tag",
-            "source": "transition_output",
-            "field": "release_tag"
-          },
-          {
             "name": "branch_name",
             "source": "transition_output",
             "field": "branch_name"
@@ -1245,6 +1689,16 @@
             "field": "workspace_path"
           },
           {
+            "name": "release_version",
+            "source": "transition_output",
+            "field": "release_version"
+          },
+          {
+            "name": "release_tag",
+            "source": "transition_output",
+            "field": "release_tag"
+          },
+          {
             "name": "ci_report",
             "source": "transition_output",
             "field": "ci_report"
@@ -1253,7 +1707,15 @@
         "required_provision_fields": [
           {
             "name": "pr_url",
-            "description": "URL of the release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "release_version",
@@ -1261,15 +1723,7 @@
           },
           {
             "name": "release_tag",
-            "description": "Release tag to create after the PR is merged."
-          },
-          {
-            "name": "branch_name",
-            "description": "Name of the pushed release branch."
-          },
-          {
-            "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "ci_report",
@@ -1294,7 +1748,7 @@
         "required_provision_fields": [
           {
             "name": "workspace_path",
-            "description": "Path to the worktree or checkout containing the release bump."
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
           },
           {
             "name": "ci_report",
@@ -1314,7 +1768,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release PR CI monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1350,11 +1804,11 @@
         "required_provision_fields": [
           {
             "name": "release_version",
-            "description": "Published release version."
+            "description": "Release version prepared by this workflow."
           },
           {
             "name": "release_tag",
-            "description": "Pushed release tag."
+            "description": "Release tag to create or publish after PR merge."
           },
           {
             "name": "target_commit",
@@ -1362,7 +1816,7 @@
           },
           {
             "name": "pr_url",
-            "description": "URL of the merged release pull request."
+            "description": "URL of the created, updated, or monitored pull request."
           },
           {
             "name": "tag_push_status",
@@ -1382,7 +1836,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release tag publication cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1414,7 +1868,7 @@
         "required_provision_fields": [
           {
             "name": "blocker_reason",
-            "description": "Why release automation monitoring cannot complete, in the task language when practical."
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
           }
         ]
       },
@@ -1431,6 +1885,291 @@
           {
             "name": "cleanup_report",
             "description": "Summary of cleanup performed or deliberately skipped."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-6018e22d-2198-45ed-a4b3-bdfe93775e78",
+        "input_bindings": [
+          {
+            "name": "workspace_path",
+            "source": "transition_output",
+            "field": "workspace_path"
+          },
+          {
+            "name": "release_version",
+            "source": "transition_output",
+            "field": "release_version"
+          },
+          {
+            "name": "release_type",
+            "source": "transition_output",
+            "field": "release_type"
+          },
+          {
+            "name": "release_branch",
+            "source": "transition_output",
+            "field": "release_branch"
+          },
+          {
+            "name": "release_tag",
+            "source": "transition_output",
+            "field": "release_tag"
+          },
+          {
+            "name": "blocker_reason",
+            "source": "transition_output",
+            "field": "blocker_reason"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_type",
+            "description": "Version bump type: minor by default, patch or major only when explicitly requested."
+          },
+          {
+            "name": "release_branch",
+            "description": "Release branch containing the version bump."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "blocker_reason",
+            "description": "Short human-readable blocker explanation in the task language when practical; include the missing access/input/check and the exact next user action needed."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-b4ae17cc-edc6-47e2-b9ea-c4b00cd07600",
+        "input_bindings": [
+          {
+            "name": "pr_url",
+            "source": "transition_output",
+            "field": "pr_url"
+          },
+          {
+            "name": "branch_name",
+            "source": "transition_output",
+            "field": "branch_name"
+          },
+          {
+            "name": "workspace_path",
+            "source": "transition_output",
+            "field": "workspace_path"
+          },
+          {
+            "name": "release_version",
+            "source": "transition_output",
+            "field": "release_version"
+          },
+          {
+            "name": "release_tag",
+            "source": "transition_output",
+            "field": "release_tag"
+          },
+          {
+            "name": "merge_report",
+            "source": "transition_output",
+            "field": "merge_report"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "merge_report",
+            "description": "GitHub PR state, mergedAt, mergeCommit, and cleanup or release notes."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-dcac956d-47aa-4a43-87e4-ccae167e11e3",
+        "input_bindings": [
+          {
+            "name": "workspace_path",
+            "source": "transition_output",
+            "field": "workspace_path"
+          },
+          {
+            "name": "release_version",
+            "source": "transition_output",
+            "field": "release_version"
+          },
+          {
+            "name": "release_tag",
+            "source": "transition_output",
+            "field": "release_tag"
+          },
+          {
+            "name": "pr_report",
+            "source": "transition_output",
+            "field": "pr_report"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "pr_report",
+            "description": "PR creation, review, conflict, or post-CI regression report."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-37f43543-3ab7-4f60-bcf1-5ae7e8a2bcac",
+        "input_bindings": [
+          {
+            "name": "pr_url",
+            "source": "transition_output",
+            "field": "pr_url"
+          },
+          {
+            "name": "branch_name",
+            "source": "transition_output",
+            "field": "branch_name"
+          },
+          {
+            "name": "workspace_path",
+            "source": "transition_output",
+            "field": "workspace_path"
+          },
+          {
+            "name": "release_version",
+            "source": "transition_output",
+            "field": "release_version"
+          },
+          {
+            "name": "release_tag",
+            "source": "transition_output",
+            "field": "release_tag"
+          },
+          {
+            "name": "waiting_reason",
+            "source": "transition_output",
+            "field": "waiting_reason"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "release_version",
+            "description": "Release version prepared by this workflow."
+          },
+          {
+            "name": "release_tag",
+            "description": "Release tag to create or publish after PR merge."
+          },
+          {
+            "name": "waiting_reason",
+            "description": "Why the PR cannot advance yet and the exact user or external action needed."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-bd3ab2d8-ced1-43b2-b740-ada232876991",
+        "input_bindings": [
+          {
+            "name": "pr_url",
+            "source": "transition_output",
+            "field": "pr_url"
+          },
+          {
+            "name": "branch_name",
+            "source": "transition_output",
+            "field": "branch_name"
+          },
+          {
+            "name": "workspace_path",
+            "source": "transition_output",
+            "field": "workspace_path"
+          },
+          {
+            "name": "cleanup_reason",
+            "source": "transition_output",
+            "field": "cleanup_reason"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "pr_url",
+            "description": "URL of the created, updated, or monitored pull request."
+          },
+          {
+            "name": "branch_name",
+            "description": "Name of the task or release branch associated with the pull request."
+          },
+          {
+            "name": "workspace_path",
+            "description": "Path to the task workspace or worktree relevant to this workflow transition."
+          },
+          {
+            "name": "cleanup_reason",
+            "description": "Explicit user instruction or reason for cleanup without merge."
+          }
+        ]
+      },
+      {
+        "edge_id": "edge-9228ca82-9ab5-4dfe-b073-21ebe5d0b65f",
+        "input_bindings": [
+          {
+            "name": "closure_reason",
+            "source": "transition_output",
+            "field": "closure_reason"
+          }
+        ],
+        "required_provision_fields": [
+          {
+            "name": "closure_reason",
+            "description": "Explicit latest user instruction explaining why this task should be closed as not planned or canceled."
           }
         ]
       }

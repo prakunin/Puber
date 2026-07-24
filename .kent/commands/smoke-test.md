@@ -15,12 +15,22 @@ Runs smoke test for a feature via MCP mobile.
 ## Parameters
 - feature: feature name (required)
 
+## Evidence Safety
+
+- Store only the minimum evidence required for the Smoke decision.
+- Never persist full `adb logcat`, network payloads, authentication headers, or
+  a raw UI dump/screenshot from an unexpected authenticated or sensitive state.
+- Establish the expected non-sensitive screen with assertions before
+  requesting a full UI tree.
+- Run `.kent/adapters/mobile/mobile-evidence-audit.sh
+  <evidence-dir> <package-name>` before reporting success or a blocker.
+
 ## What it does
 
 1. Reads the MCP Mobile Testing section in `AGENTS.md` to understand the process
 2. **Acquire an emulator resource lock before touching any emulator/device**
-   - Physical devices, including a real TV, are forbidden unless the task/user explicitly names or allows that physical
-     device. Never rely on adb's default target selection.
+   - Physical devices, including a real TV, are forbidden unless the task/user explicitly provides permission and an
+     explicit serial for that physical device. Never rely on adb's default target selection.
    - Prefer already-running healthy emulators. Discover them with:
      ```bash
      EMULATORS=($(.kent/adapters/mobile/emulator-resource-lock.sh adb-emulators))
@@ -49,7 +59,7 @@ Runs smoke test for a feature via MCP mobile.
      .kent/adapters/mobile/emulator-resource-lock.sh release "$LOCK_RESOURCE" "$LOCK_TOKEN"
      ```
    - Before any install, launch, log, or shell command, verify `DEVICE_SERIAL` is non-empty and pass `adb -s
-     "$DEVICE_SERIAL"`. If `DEVICE_SERIAL` is empty, complete with `blocked` instead of running adb.
+     "$DEVICE_SERIAL"`. If `DEVICE_SERIAL` is empty, complete with `needs_user_action` instead of running adb.
    - If all running emulators are busy, inspect lock owners with:
      ```bash
      .kent/adapters/mobile/emulator-resource-lock.sh status <emulator-serial>
@@ -57,7 +67,8 @@ Runs smoke test for a feature via MCP mobile.
    - Start a second emulator only when the task/user explicitly allows parallel device usage and a suitable AVD/host
      capacity is available. If a second emulator is used, acquire a distinct lock name such as
      `emulator-5556` or `avd-<name>-<port>` before starting or using it.
-   - If no device can be safely acquired, complete the workflow with `blocked` and explain who/what holds the resource.
+   - If no device can be safely acquired, complete the workflow with `needs_user_action` and explain who/what holds the
+     resource.
 3. **Always builds and installs a fresh `devDebug` APK immediately before device testing**
    - Do this even if the user says the app is already running; stale APKs can hide or misattribute regressions.
    - Do not use Gradle `install*` tasks for smoke tests; they may invoke adb without the selected serial.
@@ -73,7 +84,36 @@ Runs smoke test for a feature via MCP mobile.
      adb -s "$DEVICE_SERIAL" shell am force-stop com.kino.puber.stage
      adb -s "$DEVICE_SERIAL" shell am start -n com.kino.puber.stage/com.kino.puber.MainActivity
      ```
-4. Connects to device via MCP mobile
+4. **Binds Mobile MCP to the locked serial**
+   - List devices and confirm `DEVICE_SERIAL` is present:
+     ```bash
+     .kent/adapters/mcp/mcp-call.sh mobile.device \
+       action=list \
+       --output json \
+       --raw-dir <raw-dir>
+     ```
+   - Select the exact locked serial:
+     ```bash
+     .kent/adapters/mcp/mcp-call.sh mobile.device \
+       action=set \
+       platform=android \
+       deviceId="$DEVICE_SERIAL" \
+       --allow-mutate \
+       --output json \
+       --raw-dir <raw-dir>
+     .kent/adapters/mcp/mcp-call.sh mobile.device \
+       action=get_target \
+       --output json \
+       --raw-dir <raw-dir>
+     ```
+   - Confirm that the list contains `DEVICE_SERIAL`, `action=set` acknowledges
+     that exact serial, and `action=get_target` reports the same Android target.
+     Do not require an undocumented display marker such as `ACTIVE`; Mobile MCP
+     versions may omit it.
+   - Pass `deviceId="$DEVICE_SERIAL"` to every target-specific Mobile MCP call.
+   - If Mobile MCP cannot confirm the locked serial through those documented
+     responses, complete with `needs_user_action`; never switch to an implicit
+     target.
 5. **Launches app via adb**:
    ```bash
    test -n "$DEVICE_SERIAL"
@@ -82,23 +122,30 @@ Runs smoke test for a feature via MCP mobile.
    Note: `com.kino.puber.stage` is the dev flavor package. For prod builds use `com.kino.puber`.
 6. Navigates to feature
 7. Goes through main screens
-8. Outputs report
+8. Audits the evidence directory and outputs a sanitized report
 9. Releases the mobile resource lock
 
 ## Testing Strategy
 
-### Use `get_ui` as the primary tool for screen inspection:
+### Use assertions before full screen inspection:
+- Call Mobile MCP only through `.kent/adapters/mcp/mcp-call.sh` and pass the
+  locked `deviceId` to every target-specific call.
+- Use `assert_visible` to establish the expected non-sensitive state first.
 - **`get_ui`** — main tool for reading screen state, verifying content, and finding focus/tap targets
 - **`get_ui(showAll: true)`** — when you need to see non-interactive elements too
-- **`assert_visible`** for quick "is element on screen?" checks
 - **`screenshot`** only for visual bug evidence or when user explicitly asks
 - **NEVER use `screenshot` to read screen state** — always use `get_ui` instead
+- If an unexpected authenticated/account state appears, do not persist its
+  full UI tree or screenshot. Record a redacted blocker and use
+  `needs_user_action`.
 
 ### Speed optimizations:
 - **`tap(hints: true)`** — get state change info without extra get_ui
 - **`wait_for_element`** instead of `wait(ms)` for loading/animations
 - **`find_and_tap`** for fuzzy element matching when exact text is unknown
-- **`get_logs(package: "com.kino.puber.stage", level: "E")`** for error-only logs
+- **`get_logs(package: "com.kino.puber.stage", level: "E")`** for a
+  task-specific error signal; summarize and redact instead of persisting raw
+  output
 
 ### Screen verification checklist:
 - Loading → Content transition (use `wait_for_element`)
@@ -115,9 +162,16 @@ Runs smoke test for a feature via MCP mobile.
 
 ## On Issues
 - Asks if unclear where to navigate
-- Takes screenshot for visual evidence (only for bugs)
+- Takes a screenshot only for a visual bug on a known non-sensitive screen
 - Saves artifacts to build/test-artifacts/ on errors
-- Checks `get_logs(package: "com.kino.puber.stage", level: "E")` for crashes
+- Keeps only package-scoped crash/ANR/liveness summaries
+- Never saves full `adb logcat` output
+- If a task requires a launch-time log boundary, validates the exact
+  device-side command and parser first. Android shell `date` and `logcat`
+  option forms are not GNU-portable; command or parsing failure must not be
+  treated as an empty passing signal result.
+- Runs `.kent/adapters/mobile/mobile-evidence-audit.sh
+  <evidence-dir> <package-name>` before reporting
 
 ## Example Report
 

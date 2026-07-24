@@ -16,6 +16,8 @@ import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
+import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.CoroutineContext
 
 internal class SectionVM(
     paginator: Paginator.Store<Item>,
@@ -25,7 +27,9 @@ internal class SectionVM(
     private val mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
-) : PagingVM<Item, SectionState>(paginator, router, errorHandler) {
+    private val contentListRefreshCoordinator: ContentListRefreshCoordinator,
+    pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
+) : PagingVM<Item, SectionState>(paginator, router, errorHandler, pagingCoroutineContext) {
 
     // Collect state without back dispatcher — for use outside LazyColumn items
     @Composable
@@ -40,7 +44,19 @@ internal class SectionVM(
 
     override val initialViewState = SectionState.Loading
 
-    override fun onStart() = init()
+    override fun onStart() {
+        val refreshRequests = contentListRefreshCoordinator.refreshRequests()
+        init()
+        launch {
+            refreshRequests.collect {
+                refreshFirstPage()
+            }
+        }
+    }
+
+    fun refreshFirstPage() {
+        resetPaging()
+    }
 
     override fun onLoadFirstPage() {
         currentPage = 0
@@ -117,6 +133,8 @@ internal class SectionVM(
                 saved = saved,
             ).onSuccess { actualSaved ->
                 updateSavedItem(item.id, actualSaved)
+                interactor.invalidateFirstPageCache()
+                contentListRefreshCoordinator.requestRefresh()
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it

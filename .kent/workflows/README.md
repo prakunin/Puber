@@ -19,74 +19,131 @@ Kent Desktop workflow graph
 
 ## Puber Workflow Set
 
-- `Puber Feature Delivery` (default): plan -> implement loop -> audit -> fix loop -> optional smoke -> compliance ->
-  create/update PR -> monitor CI -> cleanup.
+- `Puber Engineering Delivery v5` (default): the current profile-schema-3
+  delivery workflow,
+  one Plan session, default operational orchestration, deterministic compile
+  plus independent global standards/spec reviews, direct Join/Gate,
+  conditional TV Smoke, final Compliance Review, PR/CI/waiting, and
+  conservative cleanup. It uses `ask-on-first-execution`. The full
+  managed-worktree canary `PUB-25` completed before default promotion.
+- `Puber Feature Delivery` (legacy rollback): plan -> implement loop ->
+  parallel read-only audit and deterministic compile verification -> join ->
+  verification result -> fix loop or optional smoke -> compliance ->
+  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
 - `Puber Refactor With Audit`: plan/audit -> implement loop -> read-only review -> fix loop -> compliance ->
-  create/update PR -> monitor CI -> cleanup.
-- `Puber Bugfix Investigation`: reproduce/diagnose -> approved fix or report-only -> verify/fix loop -> compliance ->
-  create/update PR when changes exist -> monitor CI -> cleanup.
-- `Puber Dependency Update`: update Gradle versions/tooling -> fallout verification -> approved fixes -> compliance ->
-  create/update PR -> monitor CI -> cleanup.
-- `Puber Test Coverage`: coverage gap plan -> approved test implementation loop -> review/fix loop -> compliance ->
-  create/update PR -> monitor CI -> cleanup.
-- `Puber Smoke Test`: focused device smoke test -> optional approved fix -> rerun smoke -> compliance ->
-  create/update PR when changes exist -> monitor CI -> cleanup.
+  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
+- `Puber Bugfix Investigation`: reproduce/diagnose -> fix or report-only -> verify/fix loop -> compliance ->
+  create/update PR when changes exist -> monitor CI -> waiting PR -> cleanup -> done.
+- `Puber Dependency Update`: update Gradle versions/tooling -> fallout verification -> fixes -> compliance ->
+  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
+- `Puber Test Coverage`: coverage gap plan -> test implementation loop -> review/fix loop -> compliance ->
+  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
 - `Puber Release`: default next minor release from `origin/master` -> version bump branch/PR -> CI -> approved tag
-  publication after the PR is merged -> optional automation monitor -> cleanup. Patch/major releases require explicit
-  task wording.
+  publication after the PR is merged -> optional automation monitor -> cleanup -> done. Patch/major releases require
+  explicit task wording.
+`Puber Engineering Delivery v5` is the project default. Legacy Feature
+Delivery remains linked because it owns real task history and provides a
+rollback reference. Auxiliary workflows are linked only for explicit task
+creation when the work type is known.
 
-Only `Puber Feature Delivery` should be the project default. The other workflows are linked to the project for explicit
-task creation when the work type is known.
+### Full Delivery v5 Canary Scope
 
-Legacy split release workflows (`Puber Release Preparation` and `Puber Release Publication`) are superseded by
-`Puber Release` and must not be linked to the project for new tasks.
+`PUB-25` completed Full Delivery v5 from source revision
+`29c5a6520636688027dba5dc66792db3040b73a7`. It passed Final Compliance Review through the global
+`compliance_reviewer`, PR preparation, CI monitoring only after the PR exists,
+and waiting for GitHub to report an actual merge. The workflow did not merge
+the PR itself. The resulting audited master baseline is
+`b885f45e66fa6595bd94cdfd3f2f986c5f3905be`.
+
+## Revision Preflight
+
+Before starting a default Delivery v5 task from a selected revision, verify
+that it descends from the audited project adapter baseline and still carries
+the same workflow profile contract:
+
+```bash
+~/.kent/bin/kent-preflight-revision \
+  --project /Users/rovkinmax/dev/android/Puber \
+  --ref origin/master \
+  --baseline-ref b885f45e66fa6595bd94cdfd3f2f986c5f3905be
+```
+
+Use the exact selected task ref in place of `origin/master` when starting from
+another branch or commit.
 
 ## Authoring Rules
 
 - Use `default` as node assignee unless Kent workflow validation can see project-local roles.
 - Delegate to project roles inside prompts, for example `kent run --agent implementation-worker ...`.
+- Keep workflow-level fan-out read-only. The feature verification workflow runs
+  audit and deterministic compilation in parallel, joins both reports, and
+  sends any required code changes through the existing single-writer Fix node.
+- Each branch must provide one stable join contract. Kent `2.2.0` runtime rejects mutually exclusive output field sets
+  as missing aggregate fields even when draft and execution validation pass.
+- Every fan-out branch must transition directly to its join. Kent `2.2.0` drops parallel branch lineage on an
+  intermediate node, leaving the task active with no placement after both branches complete.
 - Project role aliases are configured in `.kent/config.toml`; for example `project-researcher` maps to
   `subagents/android-codebase-analyst.md`, even though there is no `subagents/project-researcher.md` file.
 - After adding or changing subagent roles in `.kent/config.toml`, restart Kent service/GUI before expecting execution
   validation or new workflow tasks to see the role.
-- Every edge to `blocked` must require `blocker_reason`.
-- Every successful work-product path must pass through `compliance` before `cleanup`. Compliance Review is not a
-  replacement for audit/review/verify/smoke; it only checks adherence to AGENTS.md, project contracts, specs, plans,
-  human-approved design decisions, and workflow transition contracts.
+- Do not model recoverable blockers as terminal states. Use `needs_user_action` back to the same node with
+  `blocker_reason` and human approval.
+- Every successful code-producing PR delivery path must pass through
+  `compliance` before PR preparation. Report-only Canary/Smoke Lab experiments
+  are exempt. Compliance Review is not a replacement for
+  audit/review/verify/smoke; it only checks adherence to AGENTS.md, project
+  contracts, specs, plans, human-approved design decisions, and workflow
+  transition contracts.
 - Code-producing workflows must create or update a PR after compliance passes. `ship_pr` may skip PR only for explicit
-  no-diff/report-only/smoke-only cases and must explain that through `pr_report`.
+  no-diff/report-only/smoke-only cases and must explain that through `pr_report`. That `no_pr` path must require user
+  approval before cleanup because it finishes without a merged PR.
 - `ci_monitor` never merges PRs and never pushes new commits. CI failures go back to fix/review/compliance before another
   PR/CI pass.
+- `done` is terminal and must mean delivered: PR merged and cleanup completed, release published and cleanup completed,
+  user-approved no-diff/report-only cleanup completed, or explicit `wont_do`.
+- `waiting_pr` is the normal post-CI state for PR workflows. It may only advance to cleanup after GitHub reports
+  `state=MERGED`, or to release publication after the release PR is merged and the publish transition is approved.
+- `wont_do` is terminal and approval-gated. Use it only for explicit user cancellation or "not planned"; do not use it as
+  a recoverable blocker.
+- Recoverable external waits should use `needs_user_action` back to the same node with human approval. Recoverable
+  PR/branch/CI fallout should use `needs_changes` back to `fix` or `prepare` without a manual approval, except
+  `ship_pr -> needs_changes`, which remains approval-gated because it can involve rebase/force-push policy.
 - Smoke workflows must acquire a shared mobile resource lock through
   `.kent/adapters/mobile/emulator-resource-lock.sh` before installing, launching, or controlling an emulator/device. When
   multiple `adb` emulators are already running, agents should acquire any free emulator-specific lock and pass that serial
   to `adb -s`. Starting another emulator is allowed only when the task/user explicitly permits parallel device usage and
   the agent acquires a distinct lock for that emulator. Physical devices must not be used unless the task/user explicitly
-  names or allows that physical device; agents must never rely on adb's default target selection. Smoke workflows must
-  build APKs and install with explicit `adb -s "$DEVICE_SERIAL"`; Gradle `install*` tasks are forbidden for smoke tests.
-- Every successful terminal path should pass through `cleanup`, but cleanup is conservative by default.
+  provides permission and an explicit serial for that physical device; agents must never rely on adb's default target
+  selection. Smoke workflows must build APKs and install with explicit `adb -s "$DEVICE_SERIAL"`; Gradle `install*` tasks
+  are forbidden for smoke tests.
+- Every successful terminal path should pass through `cleanup`, but cleanup is conservative by default. Cleanup after a PR
+  path must verify the PR through GitHub state rather than git ancestry alone because squash merges are allowed.
 - Pass explicit `workspace_path` and `plan_path`; never rely on `.todo/.current`.
 - Keep prompts project-neutral where possible: "run the project feature planning command" rather than naming another
   repository's skill path, Jira project, module graph, or release process.
 
-## Portability Next Step
+## Shared Generator
 
-Snapshots are not enough for reuse across repositories because Kent workflow graphs live in the Kent DB. The next
-practical extraction should be a global Kent workflow template/generator that creates project-local graph instances from a
-stable contract:
+Snapshots are not enough for reuse across repositories because Kent workflow
+graphs live in the Kent DB. `kent-engineering-kit/scripts/generate-workflow`
+now creates versioned project-local graph instances from a stable contract:
 
 - Global: graph families, transition parameter contract, naming rules, and safe cleanup/release gates.
 - Project-local: `.kent/project-contract.md`, command files, adapters, worktree setup, and subagent alias mapping.
 
-That keeps reusable orchestration global while preserving project-specific build commands, release policy, MCP adapters,
-and architecture rules.
+That keeps reusable orchestration global while preserving project-specific
+build commands, release policy, MCP adapters, and architecture rules.
 
 ## Workflow Smoke Test Checklist
 
 Before making a workflow default for the project:
 
 - Create a dummy task that reaches planning and emits `workspace_path`/`plan_path`.
-- Exercise a blocked path and verify `blocker_reason` is visible.
+- Exercise a `needs_user_action` self-loop and verify `blocker_reason` is visible.
+- Exercise a `waiting_pr` path and verify an unmerged PR waits instead of reaching `done`.
 - Exercise an implementation continuation path and verify params are re-emitted.
 - Exercise cleanup in conservative mode and verify `cleanup_report`.
 - Validate with `kent workflow validate "<workflow>" --mode execution`.
+- Reapply the same taskless experimental graph while iterating. Once tasks
+  reference it, preserve that graph and use another experimental label for
+  semantic changes.

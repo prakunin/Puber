@@ -192,7 +192,8 @@ All exact versions are in `gradle/libs.versions.toml` — always read from there
 
 - For build errors use: `./gradlew :app:compileDevDebugKotlin 2>&1 | grep -E "e: |error:|FAILURE|What went wrong" -A3` — catches Kotlin compiler errors, Java errors, and Gradle failures in one pass
 - App module has flavors: use `:app:compileDevDebugKotlin` (NOT `:app:compileDebugKotlin`)
-- In Kent worktrees, use `./tools/agentw :app:compileDevDebugKotlin` instead of direct `./gradlew` so Gradle state is isolated under `~/.gradle-agents`.
+- In both project-local and Kent-managed task worktrees, use `./tools/agentw :app:compileDevDebugKotlin` instead of
+  direct `./gradlew` so Gradle state is isolated under `~/.gradle-agents`.
 
 ## Kent Workflow
 
@@ -204,11 +205,15 @@ Active Kent infrastructure lives under `.kent/`:
 - MCP bridge: `.kent/adapters/mcp/`
 - worktree setup: `.kent/worktrees/setup.sh`
 
-Legacy `.claude/` files may remain as historical reference. Do not update `.claude/` unless explicitly requested.
-
 Kent commands are invoked as `/prompt:<name>`, for example `/prompt:feature-start` or `/prompt:refactor-start`.
 
-Kent worktrees must be created under `.kent/worktrees/`. Do not create sibling worktrees such as `../Puber-<task>`.
+- Project-local/manual worktrees must be created under `.kent/worktrees/`; do not create sibling worktrees such as
+  `../Puber-<task>`.
+- Kent-managed workflow task worktrees are owned by Kent and may live under
+  `~/.kent/worktrees/workspace-.../<TASK-ID>`. Do not move or recreate them manually.
+- `.kent/worktrees/setup.sh` and `tools/agentw` use `tools/configure-worktree-sdk` to write an ignored
+  `local.properties` containing only `sdk.dir`; they must not copy `PUBER_CLIENT_SECRET`, `TMDB_READ_ACCESS_TOKEN`, or
+  other project secrets into task worktrees.
 
 MCP access is through wrapper scripts, not native `mcp__...` tool names:
 
@@ -228,15 +233,6 @@ Commands in `.kent/commands/`, recipes in `.kent/skills/puber-android-workflow/r
 3. **Review** — `/prompt:feature-review` → `/prompt:feature-fix` (maker-checker, up to 3 iterations)
 
 Standalone commands (plan AND execute in one go): `/prompt:refactor-start`, `/prompt:migration-start`
-
-### Parallel execution
-
-Plan steps tagged with `parallel-group: <letter>` are executed simultaneously by worker agents:
-- `/prompt:feature-plan` identifies independent steps (no shared files, no mutual dependencies) and assigns group letters
-- `/prompt:feature-implement` detects groups → delegates to `feature-parallel-orchestrator` agent
-- Orchestrator prepares self-contained prompts → launches `feature-step-worker` agents in parallel → compiles after all finish
-- Workers do NOT compile (other agents edit code simultaneously) — orchestrator compiles once and fixes errors
-- Shared files (strings.xml, PuberApp.kt, ScreensImpl.kt) are handled via "Needs external change" reports — orchestrator merges them after workers complete
 
 ### Auto-detection (no /slash-command needed)
 
@@ -264,8 +260,8 @@ The agent recognizes intent from natural language, but feature target selection 
 ### Shared Device Coordination
 
 Before touching an emulator/device, acquire a shared lock so parallel Kent sessions do not install over each other or
-fight for focus. Physical devices, including a real TV, are forbidden unless the task/user explicitly names or allows that
-physical device. Never rely on adb's default target selection.
+fight for focus. Physical devices, including a real TV, are forbidden unless the task/user explicitly provides permission
+and an explicit serial for that physical device. Never rely on adb's default target selection.
 
 ```bash
 EMULATORS=($(.kent/adapters/mobile/emulator-resource-lock.sh adb-emulators))
@@ -297,6 +293,16 @@ second emulator only when the task/user explicitly allows parallel device usage 
 available; use a distinct lock name for that emulator. Use a physical device only with explicit user permission and an
 explicit serial.
 
+Bind Mobile MCP to the same serial with
+`.kent/adapters/mcp/mcp-call.sh mobile.device action=set
+deviceId="$DEVICE_SERIAL" platform=android --allow-mutate`. Pass the same
+explicit `deviceId` to every target-specific Mobile MCP call. Confirm the
+target through documented serial presence, exact selection acknowledgement,
+and the selected-target query; do not require an undocumented `ACTIVE` label.
+If a runtime test needs a device-side timestamp or log boundary, validate the
+exact command syntax before using it as evidence. If the bridge cannot confirm
+the locked serial, block instead of switching targets.
+
 **Tool priority (cheap → expensive):**
 1. `assert_visible` / `assert_not_exists` — check element presence
 2. `analyze_screen` — screen structure without screenshot
@@ -304,6 +310,12 @@ explicit serial.
 4. `screenshot` — visual bugs only. Always `maxWidth: 800, maxHeight: 1400`
 
 **Key tips:** `tap(hints: true)` saves a separate get_ui call, `wait_for_element` instead of `wait(ms)`, `get_logs(package: "com.kino.puber.stage")` for filtering.
+
+Runtime evidence must be least-privilege. Never persist full device logs,
+network payloads, authentication headers, or an unexpected authenticated UI
+tree/screenshot. Keep only scoped crash/ANR/liveness summaries and run
+`.kent/adapters/mobile/mobile-evidence-audit.sh <evidence-dir> <package-name>`
+before reporting Smoke.
 
 ### Before ANY Device Testing (MANDATORY)
 
