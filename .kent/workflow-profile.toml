@@ -4,7 +4,7 @@ project_name = "Puber"
 workflow_prefix = "Puber"
 delivery_profile = "team"
 platforms = ["android-tv"]
-required_adapters = ["mobile_resource_lock", "mobile_evidence_audit"]
+required_adapters = ["mcp_policy", "mobile_resource_lock", "mobile_evidence_audit"]
 source_control = "github"
 issue_tracker = "none"
 release_topology = "tag-after-merged-release-pr"
@@ -20,6 +20,8 @@ release = "ask-on-first-execution"
 
 [policies]
 smoke = "conditional"
+writer_sessions = "fresh_per_slice"
+pr_merge_strategy = "auto"
 
 [capabilities]
 managed_worktrees = true
@@ -35,8 +37,6 @@ verify = ".kent/scripts/workflow-verify-report"
 smoke = ""
 
 [procedures]
-plan = ".kent/commands/feature-start.md"
-implement = ".kent/commands/feature-implement.md"
 fix = ""
 compliance = ".kent/commands/compliance-review.md"
 smoke_decision = ".kent/commands/smoke-policy.md"
@@ -46,18 +46,51 @@ ci = ""
 waiting_pr = ""
 cleanup = ".kent/commands/cleanup-task.md"
 
+[work_kinds.feature]
+description = "User-facing behavior, screens, flows, or business capabilities."
+plan = ".kent/commands/feature-start.md"
+implement = ".kent/commands/feature-implement.md"
+
+[work_kinds.bugfix]
+description = "Restore intended behavior for a reproducible defect."
+plan = ".kent/commands/bugfix-start.md"
+implement = ".kent/commands/bugfix-implement.md"
+
+[work_kinds.refactor]
+description = "Improve code structure without intended behavior changes."
+plan = ".kent/commands/refactor-start.md"
+implement = ".kent/commands/refactor-start.md"
+
+[work_kinds.migration]
+description = "Move contracts, frameworks, modules, or data in dependency order."
+plan = ".kent/commands/migration-start.md"
+implement = ".kent/commands/migration-start.md"
+
+[work_kinds.dependency]
+description = "Audit or update dependency versions and build-tool artifacts."
+plan = ".kent/commands/dependency-update.md"
+implement = ".kent/commands/dependency-update.md"
+
+[work_kinds.test]
+description = "Add or improve automated test coverage without product scope."
+plan = ".kent/commands/test-coverage.md"
+implement = ".kent/commands/test-coverage.md"
+
 [adapters]
+mcp_policy = ".kent/adapters/mcp/policy"
 mobile_resource_lock = ".kent/adapters/mobile/emulator-resource-lock.sh"
 mobile_evidence_audit = ".kent/adapters/mobile/mobile-evidence-audit.sh"
 
 [roles]
 orchestrator = "default"
+gate = "workflow-gate"
 researcher = "project-researcher"
 implementation = "implementation-worker"
+fix = "fix-worker"
 build_doctor = "build-doctor"
 standards_review = "standards-reviewer"
 spec_review = "spec-reviewer"
 compliance = "compliance_reviewer"
-qa = "default"
-release = "default"
-ci = "default"
+qa = "runtime-smoke-tester"
+release = "delivery-operator"
+ci = "ci-monitor"

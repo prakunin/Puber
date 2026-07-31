@@ -25,6 +25,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.ui.feature.history.model.HistoryPresentation
 
 internal class MainUIMapper(
     private val resources: ResourceProvider,
@@ -32,10 +33,12 @@ internal class MainUIMapper(
     private val navPrefs: NavigationPreferencesRepository,
 ) {
 
-    fun buildViewState(): MainViewState {
+    fun buildViewState(previousSelectedTab: TabType? = null): MainViewState {
         val mode = navPrefs.getNavigationMode()
         val tabs = navPrefs.getVisibleTabs(mode)
-        val defaultSelected = getDefaultSelectedTab(mode)
+        val selectedTab = previousSelectedTab
+            ?.takeIf(tabs::contains)
+            ?: getDefaultSelectedTab(mode)
         return MainViewState(
             navigationMode = mode,
             tabs = tabs.map { type ->
@@ -43,11 +46,11 @@ internal class MainUIMapper(
                     type = type,
                     label = resources.getString(type.title),
                     icon = type.icon,
-                    isSelected = type == defaultSelected,
+                    isSelected = type == selectedTab,
                     badge = if (type == TabType.Favourites) 20 else 0 // TODO добавить счетчик
                 )
             },
-            selectedTab = defaultSelected,
+            selectedTab = selectedTab,
         )
     }
 
@@ -65,7 +68,8 @@ internal class MainUIMapper(
                 TabType.History -> PhosphorIcons.Duotone.ClockCounterClockwise
                 TabType.Movies -> PhosphorIcons.Duotone.FilmSlate
                 TabType.Series -> PhosphorIcons.Duotone.TelevisionSimple
-                TabType.Cartoons -> PhosphorIcons.Duotone.Ghost
+                TabType.Cartoons,
+                TabType.Anime -> PhosphorIcons.Duotone.Ghost
                 TabType.For4k -> resources.getImageVector(R.drawable.for_4k)
                 TabType.Concerts -> PhosphorIcons.Duotone.MicrophoneStage
                 TabType.DocMovies -> PhosphorIcons.Duotone.FilmReel
@@ -84,15 +88,19 @@ internal class MainUIMapper(
         )
     }
 
-    fun buildTabContent(type: TabType, refreshVersion: Int = 0): PuberTab {
+    fun buildTabContent(
+        type: TabType,
+        navigationMode: NavigationMode,
+        refreshVersion: Int = 0,
+    ): PuberTab {
         return PuberTab(
-            screen = tabScreen(type),
+            screen = tabScreen(type, navigationMode),
             tag = type,
             instanceKey = refreshVersion.takeIf { it > 0 }?.let { "refresh_$it" }.orEmpty(),
         )
     }
 
-    private fun tabScreen(type: TabType): PuberScreen {
+    private fun tabScreen(type: TabType, navigationMode: NavigationMode): PuberScreen {
         return when (type) {
             TabType.Home -> screens.home()
             TabType.Search -> screens.search()
@@ -100,13 +108,19 @@ internal class MainUIMapper(
             TabType.Movies,
             TabType.Series,
             TabType.Cartoons,
+            TabType.Anime,
             TabType.For4k,
             TabType.Concerts,
             TabType.DocMovies,
             TabType.DocSeries,
             TabType.TvShows -> screens.contentList(type)
             TabType.Bookmarks -> screens.bookmarks()
-            TabType.History -> screens.underDevelopment()
+            TabType.History -> screens.history(
+                presentation = when (navigationMode) {
+                    NavigationMode.TopTabs -> HistoryPresentation.TopTabs
+                    NavigationMode.SideDrawer -> HistoryPresentation.SideDrawer
+                },
+            )
             TabType.Collections -> screens.collections()
             TabType.SportTV -> screens.underDevelopment()
             TabType.Settings -> screens.deviceSettings()

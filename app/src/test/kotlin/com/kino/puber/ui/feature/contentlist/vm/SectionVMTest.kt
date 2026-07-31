@@ -6,12 +6,16 @@ import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.data.api.models.ANIME_GENRE_ID
+import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
+import com.kino.puber.ui.feature.contentlist.model.SectionState
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -120,6 +124,40 @@ class SectionVMTest {
         siblingPaginator.close()
     }
 
+    @Test
+    fun firstPage_publishesInteractorItemsWithoutAdditionalFiltering() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>()
+        val mapper = mockk<VideoItemUIMapper>()
+        val coordinator = ContentListRefreshCoordinator()
+        val item = Item(
+            id = 25,
+            title = "Interactor result",
+            type = ItemType.MOVIE,
+            genres = listOf(Genre(ANIME_GENRE_ID, "Anime")),
+        )
+        val mappedItem = videoItem(25)
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item)
+        every { mapper.mapShortItemList(listOf(item)) } returns listOf(mappedItem)
+        val vm = createVM(
+            paginator = paginator,
+            config = config("anime"),
+            interactor = interactor,
+            coordinator = coordinator,
+            pagingCoroutineContext = dispatcher,
+            mapper = mapper,
+        )
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SectionState.Content(listOf(mappedItem)), vm.testStateValue)
+        verify(exactly = 1) { mapper.mapShortItemList(listOf(item)) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
     private fun createVM(
         paginator: Paginator.Store<Item>,
         config: SectionConfig,
@@ -127,12 +165,13 @@ class SectionVMTest {
         coordinator: ContentListRefreshCoordinator,
         pagingCoroutineContext: CoroutineContext,
         savedItemInteractor: SavedItemInteractor = mockk(relaxed = true),
+        mapper: VideoItemUIMapper = mockk(relaxed = true),
     ) = SectionVM(
         paginator = paginator,
         config = config,
         interactor = interactor,
         savedItemInteractor = savedItemInteractor,
-        mapper = mockk<VideoItemUIMapper>(relaxed = true),
+        mapper = mapper,
         router = mockk<AppRouter>(relaxed = true),
         errorHandler = mockk<ErrorHandler> { every { proceed(any()) } returns { } },
         contentListRefreshCoordinator = coordinator,
@@ -144,12 +183,27 @@ class SectionVMTest {
         coroutineContext = coroutineContext,
     )
 
-    private fun config(id: String) = SectionConfig(id = id, title = id)
+    private fun config(id: String) = SectionConfig(
+        id = id,
+        title = id,
+    )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
 
-    private fun emptyPage() = PaginatedResponse<Item>(
+    private fun emptyPage(
+        current: Int = 1,
+        total: Int = 1,
+    ) = PaginatedResponse<Item>(
         items = emptyList(),
-        pagination = Pagination(current = 1, perpage = 50, total = 1),
+        pagination = Pagination(current = current, perpage = 50, total = total),
+    )
+
+    private fun page(
+        item: Item,
+        current: Int = 1,
+        total: Int = 1,
+    ) = PaginatedResponse(
+        items = listOf(item),
+        pagination = Pagination(current = current, perpage = 50, total = total),
     )
 }

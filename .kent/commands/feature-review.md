@@ -34,12 +34,17 @@ Compares the current implementation with the cached design screens and spec. Rep
 - If screen-name given, only load files related to that screen
 
 **IDE static analysis** (skip if in worktree — path contains `.kent/worktrees/`):
-- Call `.kent/adapters/mcp/mcp-call.sh jetbrains.get_file_problems` on each loaded source file (with `errorsOnly: false`)
+- Call `~/.kent/bin/kent-mcp-call jetbrains.get_file_problems` on each loaded
+  source file with `errorsOnly=false`.
 - Collect results — include errors/warnings in the review report as a separate "IDE issues" section
 - If MCP unavailable → skip, note "IDE analysis skipped" in report
 
-### Step 2b: Parallel review agents (optional, for large features)
-If the feature has both screen and data-layer steps completed (3+ files to review), launch review agents in parallel:
+### Step 2b: Parallel review agents (standalone review only)
+When this procedure runs inside a generated Kent Delivery workflow, do not launch nested final reviewers. The workflow
+Standards and Specification fan-out owns independent final review, and Compliance owns the final delivery attestation.
+
+For standalone/manual review only, if the feature has both screen and data-layer steps completed (3+ files to review),
+launch review agents in parallel:
 - `kent run --agent=compose-reviewer --workspace "$PWD" "<bounded Compose review prompt>"` — review all
   screen/component files
 - `kent run --agent=domain-model-reviewer --workspace "$PWD" "<bounded domain review prompt>"` — audit
@@ -47,7 +52,7 @@ If the feature has both screen and data-layer steps completed (3+ files to revie
 
 These agents are independent — launch them simultaneously. Merge their findings into the final report.
 
-For small features (1-2 screens), review inline without subagents — the overhead isn't worth it.
+For small standalone features (1-2 screens), review inline without subagents — the overhead isn't worth it.
 
 ### Step 3: Compare
 

@@ -1,37 +1,40 @@
 package com.kino.puber.ui.feature.main.vm
 
+import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.core.model.NavigationMode
+import com.kino.puber.data.preferences.ContentPreferences
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.flow.collect
 
 internal class MainVM(
     router: AppRouter,
     private val mainUIMapper: MainUIMapper,
     internal val tabRouter: TabRouter,
+    private val navigationPreferencesRepository: NavigationPreferencesRepository,
 ) : PuberVM<MainViewState>(router) {
     override val initialViewState = MainViewState()
     internal val tabAppRouterHolder = TabAppRouterHolder(router.screens)
     private val tabRefreshVersions = mutableMapOf<TabType, Int>()
-    private val staleTabDisposeVersions = mutableMapOf<TabType, Int>()
+    private var observedContentPreferences: ContentPreferences? = null
 
     override fun onStart() {
         val state = mainUIMapper.buildViewState()
+        observedContentPreferences = navigationPreferencesRepository.contentPreferences.value
         updateViewState(state)
-        val startTab = if (state.navigationMode == NavigationMode.TopTabs) {
-            TabType.Home
-        } else {
-            TabType.Favourites
+        tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
+        launch {
+            navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }
-        tabRouter.openTab(buildTabContent(startTab))
     }
 
     override fun onAction(action: UIAction) {
@@ -46,33 +49,46 @@ internal class MainVM(
         updateViewState<MainViewState> {
             mainUIMapper.updateSelectedTab(state = this, item)
         }
-        tabRouter.openTab(buildTabContent(item.type))
+        tabRouter.openTab(buildTabContent(item.type, stateValue.navigationMode))
     }
 
     private fun onTabRefresh(item: MainTab) {
-        val staleTab = buildTabContent(item.type)
         tabRefreshVersions[item.type] = (tabRefreshVersions[item.type] ?: 0) + 1
-        val refreshedTab = buildTabContent(item.type)
+        val refreshedTab = buildTabContent(item.type, stateValue.navigationMode)
         updateViewState<MainViewState> {
             mainUIMapper.updateSelectedTab(state = this, item)
         }
         tabRouter.openTab(refreshedTab)
-        disposeStaleTabAfterRefresh(type = item.type, tab = staleTab)
     }
 
-    private fun buildTabContent(type: TabType) = mainUIMapper.buildTabContent(
+    private fun buildTabContent(
+        type: TabType,
+        navigationMode: NavigationMode,
+    ) = mainUIMapper.buildTabContent(
         type = type,
+        navigationMode = navigationMode,
         refreshVersion = tabRefreshVersions[type] ?: 0,
     )
 
-    private fun disposeStaleTabAfterRefresh(type: TabType, tab: com.kino.puber.core.ui.navigation.PuberTab) {
-        val version = (staleTabDisposeVersions[type] ?: 0) + 1
-        staleTabDisposeVersions[type] = version
-        launch {
-            kotlinx.coroutines.delay(STALE_TAB_DISPOSE_DELAY_MS)
-            if (staleTabDisposeVersions[type] == version) {
-                tabAppRouterHolder.dispose(tab.key)
+    private fun onContentPreferencesChanged(preferences: ContentPreferences) {
+        val previousPreferences = observedContentPreferences
+        if (preferences == previousPreferences) return
+        observedContentPreferences = preferences
+
+        val previousState = stateValue
+        val updatedState = mainUIMapper.buildViewState(previousState.selectedTab)
+        val showAnimeChanged = previousPreferences?.showAnime != preferences.showAnime
+        if (showAnimeChanged) {
+            ANIME_FILTERED_TABS.forEach { tab ->
+                tabRefreshVersions[tab] = (tabRefreshVersions[tab] ?: 0) + 1
             }
+        }
+        updateViewState(updatedState)
+
+        val selectedTabChanged = updatedState.selectedTab != previousState.selectedTab
+        val selectedTabNeedsRefresh = showAnimeChanged && updatedState.selectedTab in ANIME_FILTERED_TABS
+        if (selectedTabChanged || selectedTabNeedsRefresh) {
+            tabRouter.openTab(buildTabContent(updatedState.selectedTab, updatedState.navigationMode))
         }
     }
 
@@ -90,6 +106,11 @@ internal class MainVM(
     }
 
     private companion object {
-        const val STALE_TAB_DISPOSE_DELAY_MS = 500L
+        val ANIME_FILTERED_TABS = setOf(
+            TabType.Home,
+            TabType.Movies,
+            TabType.Series,
+            TabType.Cartoons,
+        )
     }
 }

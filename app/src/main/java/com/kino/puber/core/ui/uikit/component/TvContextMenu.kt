@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -45,6 +47,11 @@ private const val LONG_SELECT_REPEAT_THRESHOLD = 1
 
 private val ContextMenuWidth = 520.dp
 
+internal val LocalTvContextMenuLongSelectState =
+    compositionLocalOf<TvContextMenuLongSelectState> {
+        error("TvContextMenuLongSelectState must be provided by PuberTheme")
+    }
+
 @Composable
 internal fun TvContextMenuDialog(
     title: String,
@@ -52,6 +59,7 @@ internal fun TvContextMenuDialog(
     onAction: (TvContextMenuAction) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    supportingText: String? = null,
 ) {
     if (actions.isEmpty()) return
 
@@ -78,7 +86,11 @@ internal fun TvContextMenuDialog(
         }
     }
 
-    TvDialogOverlay(onDismiss = onDismiss) { dismiss ->
+    val longSelectState = LocalTvContextMenuLongSelectState.current
+    TvDialogOverlay(
+        onDismiss = onDismiss,
+        modifier = Modifier.consumeContextMenuLongSelectGesture(longSelectState),
+    ) { dismiss ->
         Card(
             modifier = modifier.width(ContextMenuWidth),
         ) {
@@ -86,41 +98,79 @@ internal fun TvContextMenuDialog(
                 modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                ContextMenuHeader(
+                    title = title,
+                    supportingText = supportingText,
                 )
-                actions.forEachIndexed { index, action ->
-                    TvSafeButton(
-                        text = action.title,
-                        onClick = {
-                            dismiss()
-                            onAction(action)
-                        },
-                        enabled = action.enabled,
-                        primary = index == 0,
-                        modifier = if (index == initialFocusActionIndex) {
-                            Modifier.focusRequester(actionFocusRequester)
-                        } else {
-                            Modifier
-                        },
-                    )
-                }
-                TvSafeButton(
-                    text = stringResource(R.string.context_menu_close),
-                    onClick = dismiss,
-                    modifier = if (initialFocusActionIndex < 0) {
-                        Modifier.focusRequester(closeFocusRequester)
-                    } else {
-                        Modifier
+                ContextMenuActions(
+                    actions = actions,
+                    initialFocusActionIndex = initialFocusActionIndex,
+                    actionFocusRequester = actionFocusRequester,
+                    closeFocusRequester = closeFocusRequester,
+                    onAction = { action ->
+                        dismiss()
+                        onAction(action)
                     },
+                    onClose = dismiss,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun ContextMenuHeader(
+    title: String,
+    supportingText: String?,
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+    if (!supportingText.isNullOrBlank()) {
+        Text(
+            text = supportingText,
+            modifier = Modifier.focusProperties { canFocus = false },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ContextMenuActions(
+    actions: List<TvContextMenuAction>,
+    initialFocusActionIndex: Int,
+    actionFocusRequester: FocusRequester,
+    closeFocusRequester: FocusRequester,
+    onAction: (TvContextMenuAction) -> Unit,
+    onClose: () -> Unit,
+) {
+    actions.forEachIndexed { index, action ->
+        TvSafeButton(
+            text = action.title,
+            onClick = { onAction(action) },
+            enabled = action.enabled,
+            primary = index == 0,
+            modifier = if (index == initialFocusActionIndex) {
+                Modifier.focusRequester(actionFocusRequester)
+            } else {
+                Modifier
+            },
+        )
+    }
+    TvSafeButton(
+        text = stringResource(R.string.context_menu_close),
+        onClick = onClose,
+        modifier = if (initialFocusActionIndex < 0) {
+            Modifier.focusRequester(closeFocusRequester)
+        } else {
+            Modifier
+        },
+    )
 }
 
 @Composable
@@ -249,7 +299,7 @@ internal fun Modifier.onTvContextMenuKey(
     enabled: Boolean = true,
     onOpen: () -> Unit,
 ): Modifier {
-    val longSelectState = remember { TvContextMenuLongSelectState() }
+    val longSelectState = LocalTvContextMenuLongSelectState.current
     val focusRestorer = LocalTvDialogFocusRestorer.current
     val openWithFocusSave = {
         focusRestorer?.onDialogOpening()
@@ -276,10 +326,25 @@ internal fun Modifier.onTvContextMenuKey(
                 true
             }
 
-            event.type == KeyEventType.KeyUp && event.key.isSelectKey() -> {
+            event.type == KeyEventType.KeyUp && event.key.isSelectKey() ->
                 longSelectState.onSelectKeyUp()
-            }
 
+            else -> false
+        }
+    }
+}
+
+private fun Modifier.consumeContextMenuLongSelectGesture(
+    longSelectState: TvContextMenuLongSelectState,
+): Modifier {
+    return onPreviewKeyEvent { event ->
+        if (!event.key.isSelectKey()) {
+            return@onPreviewKeyEvent false
+        }
+        when (event.type) {
+            KeyEventType.KeyDown ->
+                longSelectState.consumeSelectRepeatIfTracking(event.nativeKeyEvent.repeatCount)
+            KeyEventType.KeyUp -> longSelectState.consumeSelectKeyUpIfTracking()
             else -> false
         }
     }
@@ -310,6 +375,14 @@ internal class TvContextMenuLongSelectState(
         } else {
             false
         }
+    }
+
+    fun consumeSelectRepeatIfTracking(repeatCount: Int): Boolean {
+        return suppressSelectUp && repeatCount >= repeatThreshold
+    }
+
+    fun consumeSelectKeyUpIfTracking(): Boolean {
+        return suppressSelectUp && onSelectKeyUp()
     }
 }
 

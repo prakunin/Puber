@@ -6,16 +6,21 @@ import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
+import com.kino.puber.data.api.models.isAnime
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import kotlin.time.Duration.Companion.minutes
 
 internal class ContentListInteractor(
     private val api: KinoPubApiClient,
+    private val navigationPreferencesRepository: NavigationPreferencesRepository,
 ) {
 
     private val detailedItemsCache: TypedTtlCache<String, Item> = TypedTtlCacheImpl()
 
     suspend fun loadPage(config: SectionConfig, page: Int): PaginatedResponse<Item> {
+        val showAnime = navigationPreferencesRepository.contentPreferences.value.showAnime
         if (page == 1) {
             val cacheKey = listOf(
                 KinoPubConfig.CURRENT_API_DOMAIN,
@@ -25,10 +30,60 @@ internal class ContentListInteractor(
                 config.sort,
                 config.quality,
                 config.genre.orEmpty(),
+                config.animeFilterMode,
+                showAnime,
             ).joinToString(separator = "_")
-            return firstPageCache.getOrPut(cacheKey) { fetchPage(config, page) }
+            return firstPageCache.getOrPut(cacheKey) {
+                fetchFilteredPage(config, page, showAnime)
+            }
         }
-        return fetchPage(config, page)
+        return fetchFilteredPage(config, page, showAnime)
+    }
+
+    private suspend fun fetchFilteredPage(
+        config: SectionConfig,
+        requestedPage: Int,
+        showAnime: Boolean,
+    ): PaginatedResponse<Item> {
+        val filterMode = config.animeFilterMode
+        if (filterMode == AnimeFilterMode.None ||
+            filterMode == AnimeFilterMode.FollowPreference && showAnime
+        ) {
+            return fetchPage(config, requestedPage)
+        }
+
+        var currentRequestedPage = requestedPage
+        var response = fetchPage(config, currentRequestedPage)
+        val targetSize = response.pagination.perpage.coerceAtLeast(response.items.size)
+        val visibleItems = linkedMapOf<Int, Item>()
+        while (true) {
+            check(response.pagination.current == currentRequestedPage) {
+                "Content pagination current ${response.pagination.current} " +
+                    "did not match requested page $currentRequestedPage"
+            }
+            response.items
+                .asSequence()
+                .filter { item ->
+                    when (filterMode) {
+                        AnimeFilterMode.None -> true
+                        AnimeFilterMode.FollowPreference,
+                        AnimeFilterMode.Exclude -> item.isAnime().not()
+                        AnimeFilterMode.Only -> item.isAnime()
+                    }
+                }
+                .forEach { item ->
+                    visibleItems.putIfAbsent(item.id, item)
+                }
+
+            if (visibleItems.size >= targetSize ||
+                response.pagination.current >= response.pagination.total ||
+                targetSize == 0
+            ) {
+                return response.copy(items = visibleItems.values.toList())
+            }
+            currentRequestedPage = response.pagination.current + 1
+            response = fetchPage(config, currentRequestedPage)
+        }
     }
 
     private suspend fun fetchPage(config: SectionConfig, page: Int): PaginatedResponse<Item> {

@@ -35,6 +35,7 @@ import com.kino.puber.core.ui.uikit.component.LocalTvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.TopTabContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.TvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.modifier.LocalAutoFocusOnLaunchEnabled
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.main.model.MainAction
@@ -147,7 +148,7 @@ internal fun TopTabMainContent(
                         .focusRequester(tabRowFocus),
                 )
 
-                CompositionLocalProvider(LocalAutoFocusOnLaunchEnabled provides false) {
+                TopTabContentFocusProvider(isContentFocused) {
                     TopTabContentBox(
                         contentFocus = contentFocus,
                         tabRowFocus = tabRowFocus,
@@ -175,6 +176,16 @@ internal fun TopTabMainContent(
         }
     }
 }
+
+@Composable
+private fun TopTabContentFocusProvider(
+    isContentFocused: Boolean,
+    content: @Composable () -> Unit,
+) = CompositionLocalProvider(
+    LocalAutoFocusOnLaunchEnabled provides false,
+    LocalContentFocusActive provides isContentFocused,
+    content = content,
+)
 
 @Composable
 private fun RefreshContentFocusEffect(

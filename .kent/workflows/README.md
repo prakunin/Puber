@@ -19,53 +19,42 @@ Kent Desktop workflow graph
 
 ## Puber Workflow Set
 
-- `Puber Engineering Delivery v5` (default): the current profile-schema-3
-  delivery workflow,
-  one Plan session, default operational orchestration, deterministic compile
-  plus independent global standards/spec reviews, direct Join/Gate,
-  conditional TV Smoke, final Compliance Review, PR/CI/waiting, and
-  conservative cleanup. It uses `ask-on-first-execution`. The full
-  managed-worktree canary `PUB-25` completed before default promotion.
-- `Puber Feature Delivery` (legacy rollback): plan -> implement loop ->
-  parallel read-only audit and deterministic compile verification -> join ->
-  verification result -> fix loop or optional smoke -> compliance ->
-  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
-- `Puber Refactor With Audit`: plan/audit -> implement loop -> read-only review -> fix loop -> compliance ->
-  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
-- `Puber Bugfix Investigation`: reproduce/diagnose -> fix or report-only -> verify/fix loop -> compliance ->
-  create/update PR when changes exist -> monitor CI -> waiting PR -> cleanup -> done.
-- `Puber Dependency Update`: update Gradle versions/tooling -> fallout verification -> fixes -> compliance ->
-  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
-- `Puber Test Coverage`: coverage gap plan -> test implementation loop -> review/fix loop -> compliance ->
-  create/update PR -> monitor CI -> waiting PR -> cleanup -> done.
-- `Puber Release`: default next minor release from `origin/master` -> version bump branch/PR -> CI -> approved tag
-  publication after the PR is merged -> optional automation monitor -> cleanup -> done. Patch/major releases require
-  explicit task wording.
-`Puber Engineering Delivery v5` is the project default. Legacy Feature
-Delivery remains linked because it owns real task history and provides a
-rollback reference. Auxiliary workflows are linked only for explicit task
-creation when the work type is known.
+- `Puber Engineering Delivery v9` (default): common delivery for
+  `feature`, `bugfix`, `refactor`, `migration`, `dependency`, and `test`.
+  Plan selects one `work_kind`, Implement preserves it across bounded slices,
+  and the common verification, Smoke, compliance, PR/CI, waiting, and cleanup
+  tail handles delivery.
+- `Puber Release`: default next minor release from `origin/master` through
+  version-bump PR, CI, approved tag publication, optional automation
+  monitoring, and cleanup. Patch/major releases require explicit wording.
 
-### Full Delivery v5 Canary Scope
+Covered specialized workflows and earlier Delivery versions are retired.
+Completed and canceled task history is not a retention requirement.
 
-`PUB-25` completed Full Delivery v5 from source revision
-`29c5a6520636688027dba5dc66792db3040b73a7`. It passed Final Compliance Review through the global
-`compliance_reviewer`, PR preparation, CI monitoring only after the PR exists,
-and waiting for GitHub to report an actual merge. The workflow did not merge
-the PR itself. The resulting audited master baseline is
-`b885f45e66fa6595bd94cdfd3f2f986c5f3905be`.
+Before retiring any workflow, read current Kent-owned state instead of relying
+on task IDs or status captured in this repository:
+
+```bash
+kent workflow list --project /Users/rovkinmax/dev/android/Puber --json
+kent task list --project /Users/rovkinmax/dev/android/Puber --json
+```
+
+Group tasks by the current workflow ID. Recreate every current Backlog task in
+the replacement graph with its title, body, source URL, labels, and relevant
+comments, then record the old-to-new short-ID mapping. Running,
+approval-waiting, or otherwise active tasks must finish or be explicitly
+canceled before deletion. Completed and canceled history may be discarded.
+Do not move task records between incompatible graphs.
 
 ## Revision Preflight
 
-Before starting a default Delivery v5 task from a selected revision, verify
-that it descends from the audited project adapter baseline and still carries
-the same workflow profile contract:
+Before starting a task from a selected revision, verify that the revision
+contains a complete and valid project adapter:
 
 ```bash
 ~/.kent/bin/kent-preflight-revision \
   --project /Users/rovkinmax/dev/android/Puber \
-  --ref origin/master \
-  --baseline-ref b885f45e66fa6595bd94cdfd3f2f986c5f3905be
+  --ref origin/master
 ```
 
 Use the exact selected task ref in place of `origin/master` when starting from
@@ -73,8 +62,10 @@ another branch or commit.
 
 ## Authoring Rules
 
-- Use `default` as node assignee unless Kent workflow validation can see project-local roles.
-- Delegate to project roles inside prompts, for example `kent run --agent implementation-worker ...`.
+- Assign operational nodes directly from `.kent/workflow-profile.toml`.
+  `default` is reserved for Plan orchestration.
+- `[workflow] subagents = true` controls nested delegation only. It does not
+  route direct workflow-node roles.
 - Keep workflow-level fan-out read-only. The feature verification workflow runs
   audit and deterministic compilation in parallel, joins both reports, and
   sends any required code changes through the existing single-writer Fix node.
@@ -118,7 +109,8 @@ another branch or commit.
   are forbidden for smoke tests.
 - Every successful terminal path should pass through `cleanup`, but cleanup is conservative by default. Cleanup after a PR
   path must verify the PR through GitHub state rather than git ancestry alone because squash merges are allowed.
-- Pass explicit `workspace_path` and `plan_path`; never rely on `.todo/.current`.
+- Pass explicit `workspace_path`, `plan_path`, and `work_kind`; never rely on
+  `.todo/.current`.
 - Keep prompts project-neutral where possible: "run the project feature planning command" rather than naming another
   repository's skill path, Jira project, module graph, or release process.
 
@@ -147,3 +139,7 @@ Before making a workflow default for the project:
 - Reapply the same taskless experimental graph while iterating. Once tasks
   reference it, preserve that graph and use another experimental label for
   semantic changes.
+- Before deleting an obsolete workflow, preview deletion and classify attached
+  tasks. Recreate Backlog tasks under the replacement graph; completed and
+  canceled history may be discarded. Active or approval-waiting tasks must
+  finish or be explicitly canceled first.

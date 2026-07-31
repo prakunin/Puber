@@ -3,18 +3,22 @@ package com.kino.puber.ui.feature.home.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
+import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
@@ -40,6 +44,7 @@ class HomeVMTest {
     private lateinit var screens: Screens
     private lateinit var interactor: HomeInteractor
     private lateinit var mapper: HomeUIMapper
+    private lateinit var videoItemMapper: VideoItemUIMapper
     private lateinit var apiDomainInteractor: ApiDomainInteractor
     private lateinit var savedItemInteractor: SavedItemInteractor
     private lateinit var errorHandler: ErrorHandler
@@ -51,6 +56,7 @@ class HomeVMTest {
         every { router.screens } returns screens
         interactor = mockk(relaxed = true)
         mapper = mockk(relaxed = true)
+        videoItemMapper = mockk(relaxed = true)
         apiDomainInteractor = mockk(relaxed = true)
         savedItemInteractor = mockk(relaxed = true)
         errorHandler = mockk { every { proceed(any()) } returns { } }
@@ -68,7 +74,7 @@ class HomeVMTest {
         coEvery { interactor.getCollections() } returns Result.success(emptyList())
         every { mapper.mapItemSection(any(), any()) } returns null
         every { mapper.mapCollectionSection(any()) } returns null
-        every { mapper.mapHeroItems(any()) } returns emptyList()
+        every { videoItemMapper.mapHeroItems(any()) } returns emptyList()
     }
 
     @Test
@@ -136,10 +142,27 @@ class HomeVMTest {
         coVerify(exactly = 2) { interactor.getWatchingItems() }
     }
 
+    @Test
+    fun filteredHotFeedsHeroAndHotSectionWhilePersonalWatchingItemsRemainUnchanged() {
+        val filteredHotItem = item(1)
+        val personalWatchingItem = item(2)
+        coEvery { interactor.getHotItems("movie", any()) } returns Result.success(listOf(filteredHotItem))
+        coEvery { interactor.getWatchingItems() } returns Result.success(listOf(personalWatchingItem))
+        val vm = createVM()
+
+        vm.testOnStart()
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        verify { videoItemMapper.mapHeroItems(listOf(filteredHotItem)) }
+        verify { mapper.mapItemSection(listOf(filteredHotItem), HomeSectionType.Hot) }
+        verify { mapper.mapItemSection(listOf(personalWatchingItem), HomeSectionType.ContinueWatching) }
+    }
+
     private fun createVM() = HomeVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
+        videoItemMapper = videoItemMapper,
         apiDomainInteractor = apiDomainInteractor,
         savedItemInteractor = savedItemInteractor,
         resources = FakeResourceProvider(),
@@ -151,5 +174,11 @@ class HomeVMTest {
         title = "Item $id",
         imageUrl = "",
         bigImageUrl = "",
+    )
+
+    private fun item(id: Int) = Item(
+        id = id,
+        title = "Item $id",
+        type = ItemType.MOVIE,
     )
 }

@@ -8,14 +8,18 @@ project internals from another repository.
 
 Puber workflow commands must use explicit task artifacts. Do not infer a feature from `.todo/.current`.
 
-- Planning produces `workspace_path` and `plan_path`.
-- Implementation preserves and re-emits `workspace_path` and `plan_path` until all steps are complete.
+- Planning produces `workspace_path`, `plan_path`, and `work_kind`. `workspace_path` is
+  always the repository or managed-worktree root; `.todo/<feature>` is an
+  artifact directory and belongs in `plan_path` or another explicit artifact
+  field.
+- Implementation preserves and re-emits `workspace_path`, `plan_path`, and `work_kind` until all steps are complete.
 - Audit/review produces `audit_report` or `review_report`.
-- Current Delivery v5 and future generated workflows use `standards_status`
+- Generated Delivery workflows use `standards_status`
   and `standards_report` for early Standards Review.
 - Verification produces `verification_report` or a concise verification summary.
 - Final Compliance Review produces `compliance_report`.
-- PR creation produces `pr_url`, `branch_name`, and `workspace_path`; no-diff/report-only PR skips produce `pr_report`.
+- PR creation produces `pr_url`, `branch_name`, `workspace_path`, and the
+  resolved `merge_strategy`; no-diff/report-only PR skips produce `pr_report`.
 - PR/CI monitoring produces `ci_report`.
 - Waiting PR produces `blocker_reason` while the PR is open,
   `merge_report` after GitHub reports `state=MERGED`, or `pr_report` when PR
@@ -43,6 +47,8 @@ Puber workflow commands must use explicit task artifacts. Do not infer a feature
 - `feature_fix_command`: `.kent/commands/feature-fix.md`
 - `refactor_start_command`: `.kent/commands/refactor-start.md`
 - `migration_start_command`: `.kent/commands/migration-start.md`
+- `bugfix_start_command`: `.kent/commands/bugfix-start.md`
+- `bugfix_implement_command`: `.kent/commands/bugfix-implement.md`
 - `smoke_command`: `.kent/commands/smoke-test.md`
 - `mobile_resource_lock_adapter`:
   `.kent/adapters/mobile/emulator-resource-lock.sh`
@@ -57,25 +63,41 @@ Puber workflow commands must use explicit task artifacts. Do not infer a feature
 Commands that operate on feature artifacts accept an explicit feature name, `.todo/<feature>` path, or workflow-provided
 workspace path.
 
-The Feature Delivery `plan` node owns bootstrap, optional design ingestion, spec creation, and implementation planning in
-one Kent session. `feature-start.md` may load `feature-design.md`, `feature-spec.md`, and `feature-plan.md` as procedure
-modules, but must not invoke nested `/prompt:*` flows or start child sessions for those phases.
-The generated `Puber Engineering Delivery v5` Plan node follows the same
-single-session procedure through `.kent/workflow-profile.toml`. Its
+The generated Engineering Delivery Plan node selects one profile-owned
+`work_kind` and performs planning in one Kent session. Feature planning may
+load `feature-design.md`, `feature-spec.md`, and `feature-plan.md` as procedure
+modules, but must not invoke nested `/prompt:*` flows or start child sessions.
+Its
 post-verification Gate follows `.kent/commands/smoke-policy.md` and records an
 explicit `smoke_required` or `delivery_ready` decision.
+Plan checkboxes track writer-owned implementation and deterministic checks
+only. Runtime Smoke and other workflow-owned stages are recorded separately as
+downstream scope and do not block Implement from advancing to verification.
 
 ## Agent Contract
 
-Workflow nodes should generally use the `default` assignee for Kent Desktop validation portability. Prompts may delegate
-to project-local capability roles:
+Generated Delivery nodes use direct profile roles:
+
+- Plan uses `default`; Gate uses global `workflow-gate`.
+- Implement uses project-local `implementation-worker`; Fix uses
+  project-local `fix-worker`.
+- Smoke uses global `runtime-smoke-tester` with the Puber Android TV procedure.
+- PR preparation and Cleanup use global `delivery-operator`.
+- CI and Waiting PR use global `ci-monitor`.
 
 - `.kent/config.toml` enables `[workflow] subagents = true`.
-- Canonical delegated roles are explicitly marked `agent_callable = true` and `workflow_subagent = true`; do not rely on
-  Kent defaults for workflow delegation eligibility.
+- That setting controls nested delegation only; direct workflow-node roles do
+  not depend on it.
+- Nested research and build-diagnosis roles remain explicitly marked
+  `agent_callable = true` and `workflow_subagent = true`.
+- Role prompts define behavior only. Model, reasoning, verbosity, tools, and delegation eligibility are owned by Kent
+  configuration; role-prompt frontmatter must not declare `model` or `tools`.
+- Generated Delivery Standards, Specification, and Compliance nodes own final review. Implementation and Fix procedures
+  must not launch nested final reviewers that duplicate those graph stages.
 
 - `project-researcher`: Puber codebase research, alias for `android-codebase-analyst`.
 - `implementation-worker`: bounded feature step implementation.
+- `fix-worker`: bounded repair of verified task-scoped findings.
 - `quality-reviewer`: read-only quality audit.
 - `build-doctor`: Gradle diagnostics, alias for `gradle-build-doctor`.
 - `compose-reviewer`: Compose-specific review.
@@ -85,6 +107,24 @@ to project-local capability roles:
 
 - Main compile check: `./gradlew :app:compileDevDebugKotlin`.
 - Kent worktree compile check: `./tools/agentw :app:compileDevDebugKotlin`.
+- The task fixed point or Kent-resolved execution commit is the immutable
+  task-delta baseline. Current `origin/master` is a separate moving integration
+  target. Target-only commits added after task start are not PUB task
+  regressions unless merge/rebase evidence proves a conflict or delivered-tree
+  loss. Do not copy unrelated target files into Fix merely to update an old
+  worktree.
+- Detekt findings are task-scoped only when comparison with that pinned task
+  baseline proves a new or worsened violation. A failing full
+  repository Detekt run and a touched path are not sufficient evidence.
+  For metric rules, worsening means the same rule, path, and declaration has a
+  larger measured value. For non-metric rules, it means a new normalized
+  declaration signature or increased occurrence count. Line shifts do not
+  count, and a lower total finding count does not waive an individual
+  regression.
+  Pre-existing findings are reported as baseline debt, not assigned to the
+  feature writer. If an explicit absolute-clean rule conflicts with the
+  baseline repository state, report `blocked` and request a policy decision;
+  do not start broad cleanup.
 - Main checkout may use direct Gradle.
 - Project-local worktrees under `.kent/worktrees/` and Kent-managed task worktrees under
   `~/.kent/worktrees/workspace-.../<TASK-ID>` must use `./tools/agentw` to isolate Gradle state.
@@ -106,23 +146,44 @@ to project-local capability roles:
 - Smoke agents must build with `:app:assembleDevDebug` and install with explicit
   `adb -s "$DEVICE_SERIAL" install -r app/build/outputs/apk/dev/debug/app-dev-debug.apk`; Gradle `install*` tasks are
   forbidden for smoke tests because they may target a physical device.
-- Mobile MCP must select the acquired serial and receive the same explicit
-  `deviceId` on every target-specific UI/input/system call. Targeting failure
-  routes through `needs_user_action`.
-- Confirm Mobile MCP targeting from documented response fields: serial
-  discovery, exact selection acknowledgement, and the selected target query.
-  Do not require an undocumented display marker such as `ACTIVE`.
+- Mobile MCP must discover the acquired serial and receive
+  `platform=android` plus the same explicit `deviceId` on every target-specific
+  UI/input/system call. Do not use process-local target selection.
+- If the inventory does not contain the locked serial, or a required operation
+  cannot address it explicitly, route through `needs_user_action` or use the
+  exact `adb -s` operation when the smoke procedure defines one.
 - Device-side timestamp and log-boundary syntax is not portable. Validate the
   exact command before using it as an evidence gate. Command or parsing failure
   is a Smoke blocker until a verified alternative is used, never an empty
   passing signal result.
 - Runtime evidence must be scoped and sanitized. Full device logs, network
-  payloads, auth headers, and unexpected authenticated UI dumps are forbidden.
+  payloads, auth headers, and broad/raw UI dumps are forbidden. Scoped
+  screenshots from the dev/stage package may be retained in the ignored
+  evidence directory without another user question.
+  Bounded inspection and safe navigation of an already-authenticated app UI on
+  the locked test emulator are allowed without another user question.
+  Runtime covers rendering, focus/navigation, integration, restoration, and
+  liveness. Passing deterministic tests may cover non-observable defaults,
+  classification, filtering, paging, and state transitions unless explicit
+  end-to-end acceptance requires otherwise. Required evidence summaries,
+  reports, and checklists must be non-empty.
+  Account-, server-, playback-progress-, or otherwise externally observable
+  actions remain forbidden unless the task body or a durable task comment
+  explicitly authorizes them.
   `.kent/adapters/mobile/mobile-evidence-audit.sh` must pass before completion.
 
 ## Source Adapters
 
-- MCP access goes through `.kent/adapters/mcp/mcp-call.sh`.
+- MCP access goes through `~/.kent/bin/kent-mcp-call` and
+  `~/.kent/bin/kent-mcp-list`; do not call raw `mcporter`.
+- `.kent/adapters/mcp/policy` classifies Puber-specific tools. Unknown tools
+  inherit the global fail-closed mutation policy.
+- Mobile MCP is stateless. Discover devices with `mobile.device action=list`,
+  then pass `platform=android` and the exact locked `deviceId` to every
+  target-specific call. Do not use process-local target selection.
+- Known-safe persisted responses must redirect command stdout and be consumed
+  through the exact successful `rawOutputPath` from
+  `.todo/_mcp-log/mcporter-calls.jsonl`.
 - Figma, JetBrains, Serena, Firebase, and mobile MCP are optional and must degrade gracefully when unavailable.
 - Puber currently has no project-local Jira adapter. Workflow prompts must not assume Jira availability.
 
@@ -164,12 +225,29 @@ recoverable blocker.
 
 `done` is reserved for delivered work, not "agent finished." For PR-producing workflows:
 
+- `.kent/workflow-profile.toml` uses `pr_merge_strategy = "auto"`. Resolve it
+  from GitHub repository-enabled methods, `master` branch protection/rulesets,
+  and merge-queue policy. Continue only when exactly one method remains; do not
+  guess from the PR UI.
+- Supported explicit policies are `merge`, `squash`, and `rebase`. The selected
+  method must remain enabled and compatible with the target branch.
+- Generic `mergeable=MERGEABLE` or `mergeStateStatus=CLEAN` proves only that
+  the final tree can merge. For rebase delivery, GitHub GraphQL
+  `canBeRebased=true` is separately required. A clean merge-tree or proof that
+  `master` is already an ancestor does not replace the replay check.
+- Diagnose conflicting rebase signals only in an isolated temporary clone or
+  branch with a forced replay onto fresh `origin/master`; do not mutate the
+  task branch while investigating.
 - `ci_monitor` routes successful or intentionally skipped checks to `waiting_pr`.
 - `waiting_pr` checks the pull request through GitHub. It must not merge, push, tag, or clean up.
 - If the PR is still open, `waiting_pr` writes a task comment with the current PR status and takes the approval-gated
   `needs_user_action` self-loop.
 - If the PR has review comments, conflicts, or post-CI regressions that fit the task scope, `waiting_pr` takes
   `needs_changes` back to `fix` or `prepare`.
+- History rewriting or force-pushing requires exact user authorization naming
+  the task branch and repair. Preserve the old remote head in a local backup,
+  verify the authorized final-tree invariant, and use force-with-lease pinned
+  to the expected remote head. Any mismatch returns `needs_user_action`.
 - If GitHub reports `state=MERGED`, `waiting_pr` advances to cleanup for normal workflows.
 - Release workflows route `waiting_pr -> pr_merged -> publish` with human approval before tag publication.
 - `close_without_merge` is approval-gated and valid only when the latest user comment explicitly says to close, cancel, or
@@ -192,11 +270,10 @@ Use `Puber Release` for human-facing release tasks.
 
 Use generic workflow graph keys and project-prefixed live workflow names:
 
-- Current generated default: `Puber Engineering Delivery v5`.
+- Generated default: `Puber Engineering Delivery v9`.
 - Temporary Canary and Smoke Lab names are reserved for bounded future
   experiments and should be removed after their evidence is incorporated.
-- Live workflow names: `Puber Feature Delivery`, `Puber Refactor With Audit`, `Puber Bugfix Investigation`,
-  `Puber Dependency Update`, `Puber Test Coverage`, `Puber Release`.
+- Live workflow names: `Puber Engineering Delivery v9` and `Puber Release`.
 - Node keys include `plan`, `implement`, `verification_dispatch`,
   `deterministic_verify`, `standards_review`, `spec_review`,
   `verification_join`, `verification_gate`, `fix`, `smoke`, `compliance`,
@@ -206,10 +283,10 @@ Use generic workflow graph keys and project-prefixed live workflow names:
   `needs_user_action`, `smoke_required`, `delivery_ready`, `ship_pr`,
   `monitor_ci`, `waiting_pr`, `pr_merged`, `close_without_merge`, `no_pr`,
   `done`, and `wont_do`.
-- Portable params: `workspace_path`, `plan_path`, `review_context`,
+- Portable params: `workspace_path`, `plan_path`, `work_kind`, `review_context`,
   `fix_context`, `verification_status`, `verification_report`,
   `standards_status`, `standards_report`, `spec_status`, `review_report`,
   `compliance_report`, `smoke_rationale`, `smoke_scope`, `blocker_reason`,
   `pr_url`, `branch_name`, `pr_report`, `ci_report`, `merge_report`,
-  `closure_reason`, and `cleanup_report`. Legacy workflow families also use
-  `audit_report`, `cleanup_reason`, and the release-specific parameters.
+  `closure_reason`, and `cleanup_report`. Release uses its dedicated
+  parameters.

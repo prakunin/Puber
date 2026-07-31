@@ -2,10 +2,10 @@ package com.kino.puber.core.ui.model
 
 import com.kino.puber.R
 import com.kino.puber.core.system.ResourceProvider
+import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
-import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.repository.PlayerPreferencesRepository
@@ -44,11 +44,30 @@ class VideoItemUIMapper(
         )
     }
 
-    fun mapHistoryItem(history: History): VideoItemUIState {
-        val progress = history.video?.watching?.let { w ->
-            if (w.duration > 0) w.time.toFloat() / w.duration.toFloat() else null
+    fun mapHeroItems(items: List<Item>): List<HeroItemState> {
+        return items.map { item ->
+            val widePosterUrls = mapPosterUrls(item.posters?.wide)
+            val bigPosterUrls = mapPosterUrls(item.posters?.big)
+            val heroPosterUrls = (widePosterUrls + bigPosterUrls).distinct()
+            HeroItemState(
+                id = item.id,
+                title = item.title,
+                wideImageUrl = heroPosterUrls.firstOrNull().orEmpty(),
+                fallbackImageUrl = heroPosterUrls.drop(1).firstOrNull().orEmpty(),
+                fallbackImageUrls = heroPosterUrls.drop(2),
+                year = item.year?.toString().orEmpty(),
+                ratings = buildRatings(item),
+                genres = item.genres?.joinToString(", ") { it.title }.orEmpty(),
+                country = item.countries?.joinToString(", ") { it.title }.orEmpty(),
+                duration = if (item.type.isSeriesLike()) {
+                    item.seasons?.size?.let {
+                        resources.getString(R.string.video_details_label_seasons, it)
+                    }.orEmpty()
+                } else {
+                    buildMovieDuration(item)
+                },
+            )
         }
-        return mapShortItem(history.item).copy(progressPercent = progress)
     }
 
     fun mapDetailedItem(item: Item): VideoDetailsUIState {
@@ -100,7 +119,11 @@ class VideoItemUIMapper(
     fun buildDuration(item: Item): String {
         return item.seasons?.let { seasons ->
             resources.getString(R.string.video_details_label_seasons, seasons.size)
-        } ?: resources.getString(
+        } ?: buildMovieDuration(item)
+    }
+
+    private fun buildMovieDuration(item: Item): String {
+        return resources.getString(
             R.string.video_details_label_duration,
             item.duration?.total?.formatDurationWithResources().orEmpty(),
         )
