@@ -4,20 +4,26 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -72,6 +78,7 @@ fun FlowComponent(
     screen: PuberScreen = LoadingScreen,
     composableScope: CoroutineScope = rememberCoroutineScope(),
     moduleFactory: (scopeId: ScopeID, parentScope: Scope) -> Module = { _, _ -> module {} },
+    remoteKeyHandler: ((android.view.KeyEvent, AppRouter, PuberScreen) -> Boolean)? = null,
     content: @Composable () -> Unit = {},
 ) = DIScope(
     moduleFactory = { scopeId, parentScope ->
@@ -86,14 +93,75 @@ fun FlowComponent(
 ) {
     val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
 
+    FlowNavigator(
+        scopeName = scopeName,
+        screen = screen,
+        router = router,
+        remoteKeyHandler = remoteKeyHandler,
+    )
+    content()
+}
+
+@Composable
+private fun FlowNavigator(
+    scopeName: String,
+    screen: PuberScreen,
+    router: AppRouter,
+    remoteKeyHandler: ((android.view.KeyEvent, AppRouter, PuberScreen) -> Boolean)?,
+) {
+    val contentFocusRequester = remember { FocusRequester() }
+    val rootAnchorCaptureRegistry = remember { RootAnchorCaptureRegistry() }
+    var rootFocusRestoreVersion by remember { mutableIntStateOf(0) }
+
     Navigator(
         screen = screen,
         onBackPressed = { onBackPressed(router) },
-    ) {
-        CurrentScreen("currentScreen$scopeName")
-        FlowCommandRunner(router)
+    ) { navigator ->
+        val currentScreenKey = screenCompositionKey(
+            prefix = "currentScreen$scopeName",
+            screenKey = navigator.lastItem.key,
+        )
+        CompositionLocalProvider(
+            LocalRootFocusRestoreVersion provides rootFocusRestoreVersion,
+            LocalRootAnchorCaptureRegistry provides rootAnchorCaptureRegistry,
+            LocalRootAnchorFocusRestored provides { rootAnchorCaptureRegistry.markFocusRestored(currentScreenKey) },
+            LocalRootAnchorRestoreCompletion provides rootAnchorCaptureRegistry.restoreCompletion,
+            LocalRootAnchorRestorePending provides rootAnchorCaptureRegistry.restorePending,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onKeyEvent { event ->
+                        remoteKeyHandler?.invoke(
+                            event.nativeKeyEvent,
+                            router,
+                            navigator.lastItem as PuberScreen,
+                        ) ?: false
+                    },
+            ) {
+                Box(
+                    Modifier
+                        .focusRequester(contentFocusRequester)
+                        .focusRestorer()
+                        .focusGroup()
+                ) {
+                    CurrentScreen("currentScreen$scopeName")
+                }
+            }
+        }
+        FlowCommandRunner(
+            router = router,
+            contentFocusRequester = contentFocusRequester,
+            onBeforeNavigate = { rootAnchorCaptureRegistry.capture(currentScreenKey) },
+            rootAnchorCaptureRegistry = rootAnchorCaptureRegistry,
+        )
+        RootFlowReturnEffect(
+            stackSize = navigator.items.size,
+            currentScreenKey = currentScreenKey,
+            rootAnchorCaptureRegistry = rootAnchorCaptureRegistry,
+            onReturned = { rootFocusRestoreVersion++ },
+        )
     }
-    content()
 }
 
 private fun onBackPressed(router: AppRouter): Boolean {
@@ -105,7 +173,12 @@ private fun onBackPressed(router: AppRouter): Boolean {
 }
 
 @Composable
-private fun FlowCommandRunner(router: AppRouter) {
+private fun FlowCommandRunner(
+    router: AppRouter,
+    contentFocusRequester: FocusRequester,
+    onBeforeNavigate: () -> Unit,
+    rootAnchorCaptureRegistry: RootAnchorCaptureRegistry,
+) {
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
     val activityNavigator = remember(context) { ActivityNavigator(context) }
@@ -119,15 +192,31 @@ private fun FlowCommandRunner(router: AppRouter) {
                 activityNavigator.navigateTo(event.screen as PuberScreenActivity)
             } else {
                 when (event) {
-                    is Command.NavigateTo -> navigator.puberPush(event.screen)
+                    is Command.NavigateTo -> {
+                        onBeforeNavigate()
+                        contentFocusRequester.saveFocusedChild()
+                        navigator.puberPush(event.screen)
+                    }
                     is Command.NavigateForResult -> {
+                        onBeforeNavigate()
+                        contentFocusRequester.saveFocusedChild()
                         router.setOnceResultListener(event.requestCode, event.listener)
                         navigator.puberPush(event.screen)
                     }
 
                     is Command.Replace -> navigator.puberReplace(event.screen)
-                    is Command.NewRoot -> navigator.puberReplaceAll(*event.screens.toTypedArray())
-                    is Command.BackTo -> onBackTo(navigator, event)
+                    is Command.NewRoot -> {
+                        navigator.puberReplaceAll(*event.screens.toTypedArray())
+                        rootAnchorCaptureRegistry.reconcilePendingRestore(
+                            rootScreenCompositionKey(scopeName, event.screen?.key),
+                        )
+                    }
+                    is Command.BackTo -> {
+                        onBackTo(navigator, event)
+                        rootAnchorCaptureRegistry.reconcilePendingRestore(
+                            rootScreenCompositionKey(scopeName, event.screen.key),
+                        )
+                    }
                     Command.FinishFlow -> navigator.parent?.let { parentNavigator ->
                         onBackEventNavigator(
                             navigator = parentNavigator,
@@ -141,6 +230,25 @@ private fun FlowCommandRunner(router: AppRouter) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RootFlowReturnEffect(
+    stackSize: Int,
+    currentScreenKey: String,
+    rootAnchorCaptureRegistry: RootAnchorCaptureRegistry,
+    onReturned: () -> Unit,
+) {
+    var lastStackSize by remember { mutableIntStateOf(stackSize) }
+    LaunchedEffect(stackSize) {
+        val returned = stackSize < lastStackSize
+        lastStackSize = stackSize
+        if (returned) {
+            withFrameNanos { }
+            rootAnchorCaptureRegistry.reconcilePendingRestore(currentScreenKey)
+            onReturned()
         }
     }
 }
@@ -184,12 +292,157 @@ private class ActivityNavigator(private val context: Context) {
 }
 
 val LocalScreenKey: ProvidableCompositionLocal<ScreenKey?> = staticCompositionLocalOf { null }
+internal val LocalRootFocusRestoreVersion = staticCompositionLocalOf { 0 }
+internal val LocalRootAnchorFocusRestored = staticCompositionLocalOf<() -> Unit> { {} }
+internal val LocalRootAnchorRestoreCompletion = staticCompositionLocalOf {
+    RootAnchorRestoreCompletion()
+}
+internal val LocalRootAnchorRestorePending = staticCompositionLocalOf { false }
+private val LocalRootAnchorCaptureRegistry =
+    staticCompositionLocalOf<RootAnchorCaptureRegistry?> { null }
+
+internal data class RootAnchorRestoreCompletion(
+    val screenKey: String? = null,
+    val version: Int = 0,
+)
+
+internal data class LazyAnchor(
+    val index: Int,
+    val offset: Int,
+)
+
+internal class RootAnchorCaptureRegistry {
+    private val captures = mutableMapOf<String, AnchorCapture>()
+    private var pendingRestoreFrames by mutableStateOf<List<PendingRestoreFrame>>(emptyList())
+    val restorePending: Boolean
+        get() = pendingRestoreFrames.isNotEmpty()
+    val focusRestored: Boolean
+        get() = pendingRestoreFrames.lastOrNull()?.focusRestored == true
+    var restoreCompletion by mutableStateOf(RootAnchorRestoreCompletion())
+        private set
+
+    fun register(key: String, capture: () -> LazyAnchor): () -> Unit {
+        val registration = AnchorCapture(capture)
+        captures[key] = registration
+        return {
+            if (captures[key] === registration) {
+                captures.remove(key)
+            }
+        }
+    }
+
+    fun capture(key: String): Boolean {
+        val anchor = captures[key]?.capture?.invoke() ?: return false
+        pendingRestoreFrames += PendingRestoreFrame(
+            screenKey = key,
+            anchor = anchor,
+        )
+        return true
+    }
+
+    fun reconcilePendingRestore(currentScreenKey: String?) {
+        val matchingFrameIndex = currentScreenKey?.let { screenKey ->
+            pendingRestoreFrames.indexOfLast { it.screenKey == screenKey }
+        } ?: -1
+        pendingRestoreFrames = if (matchingFrameIndex >= 0) {
+            pendingRestoreFrames.take(matchingFrameIndex + 1)
+        } else {
+            emptyList()
+        }
+    }
+
+    fun savedAnchor(key: String): LazyAnchor? =
+        pendingRestoreFrames.lastOrNull()
+            ?.takeIf { it.screenKey == key }
+            ?.anchor
+
+    fun markFocusRestored(key: String) {
+        val frame = pendingRestoreFrames.lastOrNull() ?: return
+        if (frame.screenKey != key || frame.focusRestored) return
+        pendingRestoreFrames = pendingRestoreFrames.dropLast(1) +
+            frame.copy(focusRestored = true)
+    }
+
+    fun completeRestore(key: String) {
+        if (pendingRestoreFrames.lastOrNull()?.screenKey != key) return
+        pendingRestoreFrames = pendingRestoreFrames.dropLast(1)
+        restoreCompletion = RootAnchorRestoreCompletion(
+            screenKey = key,
+            version = restoreCompletion.version + 1,
+        )
+    }
+
+    private class AnchorCapture(
+        val capture: () -> LazyAnchor,
+    )
+
+    private data class PendingRestoreFrame(
+        val screenKey: String,
+        val anchor: LazyAnchor,
+        val focusRestored: Boolean = false,
+    )
+}
+
+@Composable
+internal fun PreserveLazyListAnchorOnRootReturn(lazyListState: LazyListState) {
+    val restoreVersion = LocalRootFocusRestoreVersion.current
+    val captureRegistry = LocalRootAnchorCaptureRegistry.current
+    val screenKey = LocalScreenKey.current
+    val focusRestored = captureRegistry?.focusRestored == true
+    DisposableEffect(screenKey, lazyListState, captureRegistry) {
+        val unregister = if (screenKey != null) {
+            captureRegistry?.register(screenKey) {
+                LazyAnchor(
+                    index = lazyListState.firstVisibleItemIndex,
+                    offset = lazyListState.firstVisibleItemScrollOffset,
+                )
+            }
+        } else {
+            null
+        }
+        onDispose {
+            unregister?.invoke()
+        }
+    }
+    LaunchedEffect(restoreVersion, focusRestored) {
+        if (restoreVersion == 0 || !focusRestored) return@LaunchedEffect
+
+        val registry = captureRegistry
+        val savedAnchor = screenKey?.let(registry::savedAnchor)
+            ?: return@LaunchedEffect
+        lazyListState.awaitRestoredFocusScrollSettled()
+        repeat(ROOT_RETURN_ANCHOR_SETTLE_FRAMES) {
+            withFrameNanos { }
+            if (
+                lazyListState.firstVisibleItemIndex != savedAnchor.index ||
+                lazyListState.firstVisibleItemScrollOffset != savedAnchor.offset
+            ) {
+                lazyListState.scrollToItem(savedAnchor.index, savedAnchor.offset)
+            }
+        }
+        registry.completeRestore(screenKey)
+    }
+}
+
+private suspend fun LazyListState.awaitRestoredFocusScrollSettled() {
+    var consecutiveIdleFrames = 0
+    repeat(ROOT_RETURN_FOCUS_SETTLE_MAX_FRAMES) { frame ->
+        withFrameNanos { }
+        consecutiveIdleFrames = if (isScrollInProgress) 0 else consecutiveIdleFrames + 1
+        if (
+            frame >= ROOT_RETURN_FOCUS_SETTLE_MIN_FRAMES &&
+            consecutiveIdleFrames >= ROOT_RETURN_FOCUS_SETTLE_IDLE_FRAMES
+        ) {
+            return
+        }
+    }
+}
 
 @Composable
 private fun CurrentScreen(key: String) {
     val navigator = LocalNavigator.currentOrThrow
     val currentScreen = navigator.lastItem
-    val screenKey = key + currentScreen.key
+    val screenKey = screenCompositionKey(key, currentScreen.key)
 
     CompositionLocalProvider(
         LocalScreenKey provides screenKey,
@@ -200,6 +453,16 @@ private fun CurrentScreen(key: String) {
         }
     }
 }
+
+private fun screenCompositionKey(prefix: String, screenKey: ScreenKey): String = prefix + screenKey
+
+private fun rootScreenCompositionKey(scopeName: String, screenKey: ScreenKey?): String? =
+    screenKey?.let {
+        screenCompositionKey(
+            prefix = "currentScreen$scopeName",
+            screenKey = it,
+        )
+    }
 
 @Parcelize
 object LoadingScreen : PuberScreen {
@@ -238,41 +501,87 @@ internal fun TabFlowComponent(
             }
         },
     ) {
-        val contentFocusRequester = remember { FocusRequester() }
-        Navigator(
-            screen = rootScreen,
-            onBackPressed = null,
-            key = tabFlowNavigatorKey(navigationSlotKey),
-        ) { navigator ->
-            LaunchedEffect(contentInstanceKey) {
-                replaceTabRootIfChanged(
-                    navigator = navigator,
-                    rootScreen = rootScreen,
-                    contentInstanceKey = contentInstanceKey,
-                    tabSession = tabSession,
-                )
-            }
-            TabBackHandler(navigator, tabRouter)
-            Box(
-                Modifier
-                    .focusRequester(contentFocusRequester)
-                    .focusRestorer()
-                    .focusGroup()
-            ) {
-                CurrentScreen("currentTab$scopeName")
-            }
-            TabFlowCommandRunner(navigator, tabRouter, rootRouter, contentFocusRequester)
+        TabFlowNavigator(
+            scopeName = scopeName,
+            navigationSlotKey = navigationSlotKey,
+            contentInstanceKey = contentInstanceKey,
+            rootScreen = rootScreen,
+            tabSession = tabSession,
+            tabRouter = tabRouter,
+            rootRouter = rootRouter,
+        )
+    }
+}
 
-            val stackSize = navigator.items.size
-            var lastStackSize by remember { mutableIntStateOf(stackSize) }
-            LaunchedEffect(stackSize) {
-                if (stackSize < lastStackSize) {
-                    yield()
-                    runCatching { contentFocusRequester.requestFocus() }
-                }
-                lastStackSize = stackSize
+@Composable
+private fun TabFlowNavigator(
+    scopeName: String,
+    navigationSlotKey: ScreenKey,
+    contentInstanceKey: ScreenKey,
+    rootScreen: TabRootScreen,
+    tabSession: TabFlowSession,
+    tabRouter: AppRouter,
+    rootRouter: AppRouter?,
+) {
+    val contentFocusRequester = remember { FocusRequester() }
+    val rootAnchorCaptureRegistry = LocalRootAnchorCaptureRegistry.current
+    Navigator(
+        screen = rootScreen,
+        onBackPressed = null,
+        key = tabFlowNavigatorKey(navigationSlotKey),
+    ) { navigator ->
+        val currentScreenKey = screenCompositionKey(
+            prefix = "currentTab$scopeName",
+            screenKey = navigator.lastItem.key,
+        )
+        LaunchedEffect(contentInstanceKey) {
+            replaceTabRootIfChanged(
+                navigator = navigator,
+                rootScreen = rootScreen,
+                contentInstanceKey = contentInstanceKey,
+                tabSession = tabSession,
+            )
+        }
+        TabBackHandler(navigator, tabRouter)
+        Box(
+            Modifier
+                .focusRequester(contentFocusRequester)
+                .focusRestorer()
+                .focusGroup()
+        ) {
+            CurrentScreen("currentTab$scopeName")
+        }
+        TabFlowCommandRunner(
+            navigator = navigator,
+            router = tabRouter,
+            rootRouter = rootRouter,
+            contentFocusRequester = contentFocusRequester,
+            onBeforeRootNavigate = {
+                rootAnchorCaptureRegistry?.capture(currentScreenKey)
+            },
+        )
+
+        RestoreTabContentFocusEffect(
+            stackSize = navigator.items.size,
+            contentFocusRequester = contentFocusRequester,
+        )
+    }
+}
+
+@Composable
+private fun RestoreTabContentFocusEffect(
+    stackSize: Int,
+    contentFocusRequester: FocusRequester,
+) {
+    var lastStackSize by remember { mutableIntStateOf(stackSize) }
+    LaunchedEffect(stackSize) {
+        if (stackSize < lastStackSize) {
+            yield()
+            if (!contentFocusRequester.restoreFocusedChild()) {
+                runCatching { contentFocusRequester.requestFocus() }
             }
         }
+        lastStackSize = stackSize
     }
 }
 
@@ -317,6 +626,11 @@ internal fun replaceTabRootIfChanged(
     return true
 }
 
+private const val ROOT_RETURN_ANCHOR_SETTLE_FRAMES = 3
+private const val ROOT_RETURN_FOCUS_SETTLE_IDLE_FRAMES = 2
+private const val ROOT_RETURN_FOCUS_SETTLE_MIN_FRAMES = 2
+private const val ROOT_RETURN_FOCUS_SETTLE_MAX_FRAMES = 12
+
 @Composable
 private fun TabBackHandler(navigator: Navigator, router: AppRouter) {
     // navigator.canPop is Voyager's Stack<Screen> property (size > 1),
@@ -334,6 +648,7 @@ private fun TabFlowCommandRunner(
     router: AppRouter,
     rootRouter: AppRouter?,
     contentFocusRequester: FocusRequester,
+    onBeforeRootNavigate: () -> Unit,
 ) {
     val context = LocalContext.current
     val activityNavigator = remember(context) { ActivityNavigator(context) }
@@ -346,6 +661,9 @@ private fun TabFlowCommandRunner(
             } else {
                 when (event) {
                     is Command.NavigateTo -> {
+                        if (event.screen is RootPuberScreen && rootRouter != null) {
+                            onBeforeRootNavigate()
+                        }
                         contentFocusRequester.saveFocusedChild()
                         if (event.screen is RootPuberScreen && rootRouter != null) {
                             rootRouter.navigateTo(event.screen)
@@ -354,6 +672,9 @@ private fun TabFlowCommandRunner(
                         }
                     }
                     is Command.NavigateForResult -> {
+                        if (event.screen is RootPuberScreen && rootRouter != null) {
+                            onBeforeRootNavigate()
+                        }
                         contentFocusRequester.saveFocusedChild()
                         onTabNavigateForResult(
                             event = event,
