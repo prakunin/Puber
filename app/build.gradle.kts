@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.androidx.baselineprofile)
 }
 
-val currentVersion = "1.7.0"
+val currentVersion = "1.7.1"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
@@ -52,6 +52,22 @@ fun getTmdbReadAccessToken(): String {
     return ""
 }
 
+/**
+ * Default API mirror for a fresh install. A domain saved in the app always wins over it.
+ */
+fun getApiDomainOverride(): String {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        val localProperties = Properties()
+        localProperties.load(FileInputStream(localPropertiesFile))
+        val domain = localProperties.getProperty("PUBER_API_DOMAIN")
+        if (!domain.isNullOrEmpty()) return domain
+    }
+    val envDomain = System.getenv("PUBER_API_DOMAIN")
+    if (!envDomain.isNullOrEmpty()) return envDomain
+    return ""
+}
+
 fun envOrNull(name: String): String? {
     return System.getenv(name)?.takeIf { it.isNotBlank() }
 }
@@ -70,6 +86,7 @@ android {
         // Add CLIENT_SECRET to BuildConfig
         buildConfigField("String", "CLIENT_SECRET", "\"${getClientSecret()}\"")
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${getTmdbReadAccessToken()}\"")
+        buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"${getApiDomainOverride()}\"")
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")

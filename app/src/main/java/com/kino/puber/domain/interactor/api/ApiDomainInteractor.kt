@@ -1,5 +1,6 @@
 package com.kino.puber.domain.interactor.api
 
+import com.kino.puber.BuildConfig
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
@@ -55,7 +56,12 @@ internal class ApiDomainInteractor(
         .build()
 
     fun initialize() {
-        KinoPubConfig.setDomainOverride(preferences.getApiDomain().toValidDomainOrNull())
+        KinoPubConfig.setDomainOverride(
+            resolveStartupDomain(
+                savedDomain = preferences.getApiDomain(),
+                buildDomain = BuildConfig.API_DOMAIN_OVERRIDE,
+            )
+        )
     }
 
     fun getState(): ApiDomainState {
@@ -124,11 +130,6 @@ internal class ApiDomainInteractor(
         return getState()
     }
 
-    private fun String?.toValidDomainOrNull(): String? {
-        val normalized = normalizeDomain(this.orEmpty())
-        return normalized.takeIf { it.isNotEmpty() && it.isValidHostname() }
-    }
-
     private fun clearDomainSensitiveCaches() {
         itemDetailsRepository.clear()
         genreInteractor.clearCache()
@@ -183,7 +184,7 @@ internal class ApiDomainInteractor(
             (containsKey(API_ERROR_FIELD) || containsKey(API_MESSAGE_FIELD))
     }
 
-    private companion object {
+    internal companion object {
         private const val MAX_HOSTNAME_LENGTH = 253
         private const val MIN_DOMAIN_PARTS = 2
         private const val MAX_LABEL_LENGTH = 63
@@ -197,6 +198,15 @@ internal class ApiDomainInteractor(
         private const val API_STATUS_FIELD = "status"
         private const val API_ERROR_FIELD = "error"
         private const val API_MESSAGE_FIELD = "message"
+
+        fun resolveStartupDomain(savedDomain: String?, buildDomain: String?): String? {
+            return savedDomain.toValidDomainOrNull() ?: buildDomain.toValidDomainOrNull()
+        }
+
+        fun String?.toValidDomainOrNull(): String? {
+            val normalized = normalizeDomain(this.orEmpty())
+            return normalized.takeIf { it.isNotEmpty() && it.isValidHostname() }
+        }
 
         fun normalizeDomain(input: String): String {
             return input
