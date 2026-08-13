@@ -5,6 +5,8 @@ import com.kino.puber.data.repository.StoredPayload
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
@@ -232,6 +234,81 @@ class CachedFeedTest {
         assertNull(store.read("k"))
         val emissions = subject.load("k") { "second" }.toList()
         assertEquals(listOf(Cached.Value("second", isStale = false)), emissions)
+    }
+
+    /**
+     * The interleaving these three tests care about: a load is running, something invalidates the key
+     * underneath it, and the loader then completes holding a payload that predates the invalidation.
+     * That write must not land — otherwise the entry comes back with a fresh timestamp and the next
+     * read believes it.
+     *
+     * The in-flight cache reissues the loader once its own entry is invalidated, so the retry is held
+     * open for the whole test: the only write that can be observed here is the superseded one.
+     */
+    private suspend fun TestScope.runSupersededLoad(subject: CachedFeed<String>, supersede: suspend () -> Unit) {
+        val firstLoaderStarted = CompletableDeferred<Unit>()
+        val releaseFirstLoader = CompletableDeferred<Unit>()
+        val retryNeverFinishes = CompletableDeferred<Unit>()
+        var loaderCalls = 0
+        val loading = async {
+            subject.load("k") {
+                loaderCalls += 1
+                if (loaderCalls == 1) {
+                    firstLoaderStarted.complete(Unit)
+                    releaseFirstLoader.await()
+                    "superseded"
+                } else {
+                    retryNeverFinishes.await()
+                    "retried"
+                }
+            }.toList()
+        }
+        firstLoaderStarted.await()
+
+        supersede()
+        releaseFirstLoader.complete(Unit)
+        runCurrent()
+
+        loading.cancel()
+    }
+
+    @Test
+    fun invalidatingDuringALoadKeepsThatLoadsResultOutOfTheStore() = runTest {
+        val subject = feed()
+
+        runSupersededLoad(subject) { subject.invalidate("k") }
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun invalidatingTheNamespaceDuringALoadKeepsThatLoadsResultOutOfTheStore() = runTest {
+        val subject = CachedFeed(
+            store = store,
+            serializer = String.serializer(),
+            ttl = 10.minutes,
+            keyPrefix = "k",
+            clock = { now },
+        )
+
+        runSupersededLoad(subject) { subject.invalidateNamespace() }
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun markingStaleDuringALoadKeepsThatLoadFromRefreshingTheTimestamp() = runTest {
+        val subject = feed()
+        subject.load("k") { "first" }.toList()
+        now += 11.minutes.inWholeMilliseconds
+
+        runSupersededLoad(subject) { subject.markStale("k") }
+
+        // The superseded write would have replaced the payload and stamped it with the current
+        // clock, quietly undoing the markStale that raced it.
+        assertEquals("\"first\"", store.read("k")?.payload)
+        val age = now - (store.read("k")?.updatedAt ?: 0L)
+        assertTrue(age > 10.minutes.inWholeMilliseconds) { "the entry was made fresh again, age was $age" }
     }
 
     @Test

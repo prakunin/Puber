@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -60,6 +61,21 @@ class CachedFeed<V : Any>(
      */
     private val seenGeneration = AtomicLong(store.generation)
 
+    /**
+     * How many times each key, and the namespace as a whole, has been superseded.
+     *
+     * The store's generation only moves on a full wipe, so it says nothing about a single key being
+     * invalidated. Without a per-key counter, an [invalidate] that lands while a load is out has no
+     * effect on that load: the loader finishes with a payload from before the invalidation and writes
+     * it back stamped with the current clock, and the next read takes it for fresh. The user toggling
+     * a bookmark against a title whose details are being revalidated in the background is exactly
+     * that sequence.
+     */
+    private val keyEpochs = ConcurrentHashMap<String, Long>()
+    private val namespaceEpoch = AtomicLong(0L)
+
+    private data class Epoch(val key: Long, val namespace: Long)
+
     fun load(
         key: String,
         force: Boolean = false,
@@ -79,12 +95,18 @@ class CachedFeed<V : Any>(
         }
         try {
             val fresh = inFlight.getOrPut(key) {
+                // Captured where the fetch begins, so it answers "was this key invalidated while I
+                // was away?". A retry the in-flight cache issues after an invalidation runs this
+                // lambda again and captures the new epoch, so legitimate reloads still write.
+                val epoch = epochOf(key)
                 loader().also { value ->
-                    store.write(
-                        key = key,
-                        payload = json.encodeToString(serializer, value),
-                        updatedAt = clock(),
-                    )
+                    if (epochOf(key) == epoch) {
+                        store.write(
+                            key = key,
+                            payload = json.encodeToString(serializer, value),
+                            updatedAt = clock(),
+                        )
+                    }
                 }
             }
             emit(Cached.Value(fresh, isStale = false))
@@ -104,20 +126,40 @@ class CachedFeed<V : Any>(
      * slightly stale screen for a spinner.
      */
     suspend fun markStale(key: String) {
+        supersedeKey(key)
         inFlight.remove(key)
         store.touch(key = key, updatedAt = clock() - ttl.inWholeMilliseconds - 1)
     }
 
     /** Drops the entry, so the next [load] has nothing to emit before the network answers. */
     suspend fun invalidate(key: String) {
+        supersedeKey(key)
         inFlight.remove(key)
         store.remove(key)
     }
 
     /** Drops every entry in this feed's namespace. */
     suspend fun invalidateNamespace() {
+        supersedeNamespace()
         inFlight.clear()
         store.removeByPrefix(keyPrefix)
+    }
+
+    private fun epochOf(key: String): Epoch = Epoch(
+        key = keyEpochs[key] ?: 0L,
+        namespace = namespaceEpoch.get(),
+    )
+
+    private fun supersedeKey(key: String) {
+        keyEpochs.merge(key, 1L, Long::plus)
+    }
+
+    private fun supersedeNamespace() {
+        // The namespace counter, rather than a bump of every key, because the key an in-flight load
+        // is working on need not have an entry in the map yet — and a key epoch it never saw could
+        // not supersede it.
+        namespaceEpoch.incrementAndGet()
+        keyEpochs.clear()
     }
 
     /**
