@@ -14,6 +14,7 @@ import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
 import com.kino.puber.domain.interactor.details.MovieBookmarkUpdate
@@ -34,6 +35,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -72,10 +74,10 @@ class DetailsVMTest {
             every { proceedInvoke(any(), any()) } returns Unit
         }
 
-        coEvery { interactor.getItemDetails(42) } returns testItem
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(testItem, isStale = false))
         coEvery { interactor.refreshItemDetails(42) } returns refreshedItem
         coEvery { interactor.isInWatchLaterFolder(any()) } returns false
-        coEvery { interactor.getSimilarItems(42) } returns listOf(similarItem)
+        every { interactor.observeSimilarItems(42) } returns flowOf(Cached.Value(listOf(similarItem), isStale = false))
         every { mapper.map(any(), any()) } returns content()
         every { mapper.mapSimilarItems(any()) } returns listOf(videoItem(id = 100))
     }
@@ -185,7 +187,7 @@ class DetailsVMTest {
 
         listener.captured(ContentChangeSet.single(42, ContentChangeType.Watched))
 
-        coVerify(exactly = 1) { interactor.refreshItemDetails(42) }
+        verify(exactly = 1) { interactor.observeItemDetails(42, force = true) }
     }
 
     @Test
@@ -219,7 +221,7 @@ class DetailsVMTest {
         listener.captured(ContentChangeSet.single(100, ContentChangeType.Bookmark))
 
         coVerify(exactly = 0) { interactor.refreshItemDetails(any()) }
-        coVerify(exactly = 2) { interactor.getSimilarItems(42) }
+        verify(exactly = 2) { interactor.observeSimilarItems(42) }
     }
 
     @Test
@@ -247,7 +249,7 @@ class DetailsVMTest {
     @Test
     fun movieBookmarkToggle_success_returnsBookmarkChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieBookmarked(42, bookmarked = true) } returns MovieBookmarkUpdate(
             isBookmarked = true,
             folderTitle = "Watch later",
@@ -263,7 +265,7 @@ class DetailsVMTest {
     @Test
     fun movieWatchedToggle_success_returnsWatchedChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } returns MovieWatchedUpdate(
             isWatched = true,
         )
@@ -343,7 +345,7 @@ class DetailsVMTest {
     fun backWaitsForPendingMutationAndReturnsItsChange() {
         val releaseMutation = CompletableDeferred<Unit>()
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } coAnswers {
             releaseMutation.await()
             MovieWatchedUpdate(isWatched = true)
@@ -361,7 +363,7 @@ class DetailsVMTest {
     @Test
     fun failedMutationThenBackReturnsEmptyChanges() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } throws IllegalStateException("failed")
         val vm = startedVM()
 
@@ -419,7 +421,7 @@ class DetailsVMTest {
     @Test
     fun movieBookmarkAddWriteSuccess_refreshFailure_keepsRequestedStateAndReturnsChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieBookmarked(42, bookmarked = true) } returns MovieBookmarkUpdate(
             isBookmarked = true,
             folderTitle = "Watch later",
@@ -437,7 +439,7 @@ class DetailsVMTest {
     @Test
     fun movieBookmarkRemoveWriteSuccess_refreshFailure_keepsRequestedStateAndReturnsChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         every { mapper.map(movie, any()) } returns content(isInWatchlist = true)
         coEvery { interactor.setMovieBookmarked(42, bookmarked = false) } returns MovieBookmarkUpdate(
             isBookmarked = false,
@@ -456,7 +458,7 @@ class DetailsVMTest {
     @Test
     fun movieBookmarkWriteSuccess_membershipReadFailure_keepsRequestedStateAndReturnsChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieBookmarked(42, bookmarked = true) } returns MovieBookmarkUpdate(
             isBookmarked = true,
             folderTitle = "Watch later",
@@ -476,7 +478,7 @@ class DetailsVMTest {
     fun movieBookmarkRemove_successfulRefreshAppliesRemainingFolderState() {
         val movie = movieItem()
         val refreshed = movie.copy(title = "Refreshed")
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         every { mapper.map(movie, any()) } returns content(isInWatchlist = true)
         coEvery { interactor.setMovieBookmarked(42, bookmarked = false) } returns MovieBookmarkUpdate(
             isBookmarked = false,
@@ -496,7 +498,7 @@ class DetailsVMTest {
     @Test
     fun movieWatchedWriteSuccess_refreshFailure_keepsConfirmedStateAndReturnsChange() {
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } returns MovieWatchedUpdate(isWatched = true)
         coEvery { interactor.refreshItemDetails(42) } throws IllegalStateException("refresh failed")
         val vm = startedVM()
@@ -559,7 +561,7 @@ class DetailsVMTest {
         val releaseFirst = CompletableDeferred<Unit>()
         val order = mutableListOf<String>()
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } coAnswers {
             order += "start-true"
             releaseFirst.await()
@@ -588,7 +590,7 @@ class DetailsVMTest {
     fun repeatedBackWhileMutationPending_isConsumedAndSendsExactlyOneResult() {
         val releaseMutation = CompletableDeferred<Unit>()
         val movie = movieItem()
-        coEvery { interactor.getItemDetails(42) } returns movie
+        every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(movie, isStale = false))
         coEvery { interactor.setMovieWatched(42, watched = true) } coAnswers {
             releaseMutation.await()
             MovieWatchedUpdate(isWatched = true)

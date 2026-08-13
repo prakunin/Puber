@@ -6,6 +6,7 @@ import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -15,6 +16,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
@@ -60,39 +62,72 @@ internal class DetailsVM(
         loadData()
     }
 
+    private var rendered = false
+    private var watchlistTouched = false
+
     private fun loadData(forceRefresh: Boolean = false) {
         launch {
-            val item = if (forceRefresh) {
-                interactor.refreshItemDetails(params.itemId)
-            } else {
-                interactor.getItemDetails(params.itemId)
+            interactor.observeItemDetails(params.itemId, force = forceRefresh).collect { cached ->
+                when (cached) {
+                    is Cached.Value -> renderItem(cached.value)
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh item details")
+                }
             }
-            currentItem = item
-            val mapped = mapDetails(
+        }
+    }
+
+    /**
+     * Draws the item at once and settles the watchlist flag behind it.
+     *
+     * The flag the item carries is right for a series and can be a false negative for a movie, but
+     * the authoritative answer costs a request. Holding the screen for it is what made an already
+     * cached title still show a spinner, so it is patched in instead.
+     */
+    private fun renderItem(item: Item) {
+        currentItem = item
+        val seeded = interactor.seededWatchlistFlag(item)
+        if (rendered) {
+            updateCurrentItem(
                 item = item,
-                isInWatchlist = interactor.isInWatchLaterFolder(item),
+                isInWatchlist = (stateValue as? DetailsScreenState.Content)?.isInWatchlist ?: seeded,
             )
-            updateViewState(
-                mapped.copy(
-                    seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
-                ),
-            )
-            loadSimilarItems()
+            return
+        }
+        rendered = true
+        val mapped = mapDetails(item = item, isInWatchlist = seeded)
+        updateViewState(
+            mapped.copy(
+                seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
+            ),
+        )
+        loadSimilarItems()
+        resolveWatchlistFlag(item)
+    }
+
+    private fun resolveWatchlistFlag(item: Item) {
+        launch {
+            val resolved = runCatching { interactor.isInWatchLaterFolder(item) }.getOrNull() ?: return@launch
+            // The user may have pressed the button while the lookup was in the air. Their action is
+            // the newer fact.
+            if (watchlistTouched) return@launch
+            updateViewState<DetailsScreenState.Content> {
+                copy(isInWatchlist = resolved)
+            }
         }
     }
 
     private fun loadSimilarItems() {
         launch {
-            runCatching { interactor.getSimilarItems(params.itemId) }
-                .onSuccess { items ->
-                    updateViewState<DetailsScreenState.Content> {
-                        copy(
-                            similarItems = mapper.mapSimilarItems(
-                                items.filterNot { item -> item.id == params.itemId }
-                            )
+            interactor.observeSimilarItems(params.itemId).collect { cached ->
+                if (cached !is Cached.Value) return@collect
+                updateViewState<DetailsScreenState.Content> {
+                    copy(
+                        similarItems = mapper.mapSimilarItems(
+                            cached.value.filterNot { item -> item.id == params.itemId }
                         )
-                    }
+                    )
                 }
+            }
         }
     }
 
@@ -253,6 +288,7 @@ internal class DetailsVM(
     }
 
     private fun onWatchlistToggle() {
+        watchlistTouched = true
         val previous = (stateValue as? DetailsScreenState.Content)?.isInWatchlist ?: return
         val desired = !previous
         updateViewState<DetailsScreenState.Content> {
@@ -411,6 +447,7 @@ internal class DetailsVM(
         if (changes == null || changes.isEmpty) return
         contentChanges = contentChanges.merge(changes)
         if (changes.affectsItem(params.itemId)) {
+            rendered = false
             loadData(forceRefresh = true)
             return
         }

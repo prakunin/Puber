@@ -5,10 +5,12 @@ import com.kino.puber.data.api.models.BookmarkFolder
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 
 internal class DetailsInteractor(
     private val api: KinoPubApiClient,
@@ -16,6 +18,14 @@ internal class DetailsInteractor(
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
     private val watchStateRepository: WatchStateRepository,
 ) {
+
+    fun observeItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
+        return itemDetailsRepository.observeItemDetails(id, force = force)
+    }
+
+    fun observeSimilarItems(id: Int): Flow<Cached<List<Item>>> {
+        return itemDetailsRepository.observeSimilarItems(id)
+    }
 
     suspend fun getItemDetails(id: Int): Item {
         return itemDetailsRepository.getItemDetails(id)
@@ -27,6 +37,18 @@ internal class DetailsInteractor(
 
     suspend fun getSimilarItems(id: Int): List<Item> {
         return api.getSimilarItems(id).getOrThrow().items.orEmpty()
+    }
+
+    /**
+     * What the item payload itself says about the watchlist, with no second request.
+     *
+     * Enough to draw the screen with. For a movie whose payload lists no bookmarks this can be a
+     * false negative — [isInWatchLaterFolder] is the authoritative answer, and the caller patches it
+     * in once it arrives rather than holding the screen for it.
+     */
+    fun seededWatchlistFlag(item: Item): Boolean {
+        if (item.type.isSeriesLike()) return item.inWatchlist ?: false
+        return item.bookmarks.orEmpty().isNotEmpty()
     }
 
     suspend fun isInWatchLaterFolder(item: Item): Boolean {

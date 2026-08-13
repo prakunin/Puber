@@ -62,6 +62,28 @@ class DetailsInteractorTest {
     }
 
     @Test
+    fun seededWatchlistFlag_forSeries_readsInWatchlistWithoutAnyLookup() = runTest {
+        val notSaved = Item(id = 42, title = "Series", type = ItemType.SERIAL, inWatchlist = false)
+        val saved = notSaved.copy(inWatchlist = true)
+
+        assertEquals(false, interactor.seededWatchlistFlag(notSaved))
+        assertEquals(true, interactor.seededWatchlistFlag(saved))
+        coVerify(exactly = 0) { api.getItemBookmarkFolders(any()) }
+    }
+
+    @Test
+    fun seededWatchlistFlag_forMovie_isTrueOnlyWhenBookmarksAreAlreadyOnThePayload() = runTest {
+        val withoutBookmarks = movie(bookmarks = emptyList())
+        val withBookmarks = movie(bookmarks = listOf(Bookmark(id = 7, title = "Any folder")))
+
+        assertEquals(false, interactor.seededWatchlistFlag(withoutBookmarks))
+        assertEquals(true, interactor.seededWatchlistFlag(withBookmarks))
+        // Unlike isInWatchLaterFolder, an empty bookmarks list is not a reason to make a live call —
+        // the caller is expected to patch the answer in later instead of waiting for it here.
+        coVerify(exactly = 0) { api.getItemBookmarkFolders(any()) }
+    }
+
+    @Test
     fun getSimilarItems_returnsApiItems() = runTest {
         val similar = Item(id = 100, title = "Similar", type = ItemType.MOVIE)
         coEvery { api.getSimilarItems(42) } returns Result.success(
