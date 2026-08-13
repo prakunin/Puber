@@ -12,9 +12,11 @@ import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
+import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
+import com.kino.puber.ui.feature.home.model.HomeAction
 import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -155,7 +158,6 @@ class HomeVMIncrementalPublishTest {
         // before any of that resume's own flows have answered, drops the screen down to whichever
         // row happens to answer first and re-grows it from there — moving focus off whatever row
         // the user was already on. Rows must only ever be replaced in place, never zeroed out.
-        fun stateFor(type: HomeSectionType) = HomeSectionState(title = type.name, items = emptyList(), type = type)
         every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
             stateFor(HomeSectionType.ContinueWatching)
         every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns stateFor(HomeSectionType.Hot)
@@ -198,6 +200,76 @@ class HomeVMIncrementalPublishTest {
     }
 
     @Test
+    fun aDomainChangeDropsTheRowsThatBelongedToThePreviousCatalogue() = runTest {
+        // The other direction of the rule above. Preserving rows across a load is right for a
+        // resume, where the catalogue is the same one; it is wrong for a domain switch, where the
+        // rows describe a catalogue the app is no longer talking to. A section whose new request
+        // has not answered — or never will — must not keep drawing the old domain's content.
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns stateFor(HomeSectionType.Hot)
+        every { mapper.mapItemSection(any(), HomeSectionType.Fresh) } returns stateFor(HomeSectionType.Fresh)
+        every { mapper.mapCollectionSection(any()) } returns stateFor(HomeSectionType.Collections)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(2)), false))
+        every { interactor.observeFreshItems() } returns flowOf(Cached.Value(listOf(item(3)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(4, (vm.testStateValue as HomeViewState.Content).sections.size)
+
+        // The next load resolves onto a different domain, and only the watching row answers it.
+        coEvery { apiDomainInteractor.autoResolveWorkingDomain() } returns ApiDomainAutoResolveResult.Success(
+            state = ApiDomainState(domain = "other.example", customDomain = null),
+            changed = true,
+        )
+        val neverCompletes = CompletableDeferred<Unit>()
+        val stillGated = flow<Cached<List<Item>>> { neverCompletes.await() }
+        every { interactor.observeHotItems() } returns stillGated
+        every { interactor.observeFreshItems() } returns stillGated
+        every { interactor.observePopularMovies() } returns stillGated
+        every { interactor.observePopularSeries() } returns stillGated
+        every { interactor.observeWatchLaterItems() } returns stillGated
+        every { interactor.observeBookmarkItems() } returns stillGated
+        every { interactor.observeCollections() } returns flow { neverCompletes.await() }
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(4)), false))
+
+        vm.onAction(CommonAction.OnResume)
+        runCurrent()
+
+        val types = (vm.testStateValue as HomeViewState.Content).sections.map { it.type }
+        assertEquals(listOf(HomeSectionType.ContinueWatching), types)
+    }
+
+    @Test
+    fun savingADomainByHandAlsoDropsTheRowsFromThePreviousCatalogue() = runTest {
+        // The explicit switches take a different route to the same place: they apply the domain
+        // themselves, so the auto-resolve inside the reload that follows reports changed = false and
+        // cannot be what clears the rows.
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns stateFor(HomeSectionType.Hot)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(2)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, (vm.testStateValue as HomeViewState.Content).sections.size)
+
+        coEvery { apiDomainInteractor.saveCustomDomain("other.example") } returns ApiDomainUpdateResult.Success(
+            ApiDomainState(domain = "other.example", customDomain = "other.example")
+        )
+        val neverCompletes = CompletableDeferred<Unit>()
+        every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+
+        vm.onAction(HomeAction.SaveApiDomain("other.example"))
+        runCurrent()
+
+        val types = (vm.testStateValue as HomeViewState.Content).sections.map { it.type }
+        assertEquals(listOf(HomeSectionType.ContinueWatching), types)
+    }
+
+    @Test
     fun aFailedRefreshOfOneSectionKeepsTheContentItAlreadyPublished() = runTest {
         every { interactor.observeWatchingItems(any()) } returns flowOf(
             Cached.Value(listOf(item(1)), isStale = true),
@@ -210,6 +282,9 @@ class HomeVMIncrementalPublishTest {
         assertTrue(vm.testStateValue is HomeViewState.Content)
         verify { mapper.mapItemSection(listOf(item(1)), HomeSectionType.ContinueWatching) }
     }
+
+    private fun stateFor(type: HomeSectionType) =
+        HomeSectionState(title = type.name, items = emptyList(), type = type)
 
     private fun failing() = flow<Cached<List<Item>>> { throw IllegalStateException("offline") }
 

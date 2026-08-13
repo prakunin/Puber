@@ -61,9 +61,10 @@ internal class HomeVM(
      *
      * A watched mark landing changes how a card is *drawn*, not what the server would return, so it
      * is re-mapped from this instead of costing another round of section requests. Sections also
-     * arrive independently now, so this is what a partial screen is published from. This is never
-     * cleared between loads: a refresh overwrites each row in place as its own value arrives, rather
-     * than dropping the whole screen to whatever the first section to answer happens to be.
+     * arrive independently now, so this is what a partial screen is published from. An ordinary
+     * refresh never clears this: it overwrites each row in place as its own value arrives, rather
+     * than dropping the whole screen to whatever the first section to answer happens to be. Only a
+     * domain switch clears it — see [clearRowsFromPreviousCatalogue].
      */
     private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
     private var loadedCollections: List<KCollection>? = null
@@ -176,6 +177,7 @@ internal class HomeVM(
                 }
 
                 is ApiDomainAutoResolveResult.Success -> if (result.changed) {
+                    clearRowsFromPreviousCatalogue()
                     showMessage(resources.getString(R.string.api_domain_auto_switched, result.state.domain))
                 }
             }
@@ -271,6 +273,24 @@ internal class HomeVM(
         )
     }
 
+    /**
+     * Forgets every row, because the catalogue they came from is no longer the one the app talks to.
+     *
+     * The counterpart to the preservation documented on [loadedSections], and deliberately narrower:
+     * carrying rows across a load is what stops a resume from collapsing the screen and moving focus,
+     * but a domain switch genuinely replaced the catalogue. Kept here, a row whose new request is
+     * still in flight would sit next to the new domain's rows, and a row whose new request fails
+     * would show the old domain's content for as long as the screen lives.
+     *
+     * Called on exactly the paths where [ApiDomainInteractor] wiped its domain-sensitive caches: the
+     * auto-resolve that reports `changed`, and the three explicit switches, which have already
+     * applied the new domain by the time they reload and so see `changed = false` afterwards.
+     */
+    private fun clearRowsFromPreviousCatalogue() {
+        loadedSections.clear()
+        loadedCollections = null
+    }
+
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */
     private fun publishSections() {
         val mapped = listOfNotNull(
@@ -320,6 +340,7 @@ internal class HomeVM(
                 ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
                 ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
                 is ApiDomainUpdateResult.Success -> {
+                    clearRowsFromPreviousCatalogue()
                     closeApiDomainDialog()
                     showMessage(resources.getString(R.string.api_domain_saved, result.state.domain))
                     loadHome()
@@ -341,6 +362,7 @@ internal class HomeVM(
                 }
 
                 is ApiDomainDetectionResult.Success -> {
+                    clearRowsFromPreviousCatalogue()
                     closeApiDomainDialog()
                     showMessage(resources.getString(R.string.api_domain_detected, result.state.domain))
                     loadHome()
@@ -352,6 +374,7 @@ internal class HomeVM(
     private fun resetApiDomain() {
         launch {
             apiDomainInteractor.resetToDefault()
+            clearRowsFromPreviousCatalogue()
             closeApiDomainDialog()
             showMessage(resources.getString(R.string.api_domain_reset_done))
             loadHome()
