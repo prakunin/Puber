@@ -23,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -139,6 +140,8 @@ class SectionVMTest {
         )
         val mappedItem = videoItem(25)
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item)
+        every { interactor.displaySettingsChanges } returns emptyFlow()
+        every { interactor.watchStateChanges } returns emptyFlow()
         every { mapper.mapShortItemList(listOf(item)) } returns listOf(mappedItem)
         val vm = createVM(
             paginator = paginator,
@@ -156,6 +159,119 @@ class SectionVMTest {
         verify(exactly = 1) { mapper.mapShortItemList(listOf(item)) }
         vm.testCancelScope()
         paginator.close()
+    }
+
+    @Test
+    fun aPageEmptiedByFilteringIsNotTheEndOfTheList() = runTest {
+        // Hiding watched titles can blank a whole server page. Reading that as end-of-list left the
+        // section showing "empty" with nothing that would ever ask for the pages behind it.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val visible = item(id = 7)
+        coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage(current = 1, total = 3)
+        coEvery { interactor.loadPage(any(), page = 2) } returns page(visible, current = 2, total = 3)
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = 2) }
+        assertEquals(listOf(visible), (paginatorState(paginator) as Paginator.State.Data<*>).data)
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun blankPagesAreNotWalkedInOneBurst() = runTest {
+        // Every step already costs the interactor several server pages, so one burst has a ceiling
+        // even while the server keeps reporting more.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            emptyPage(current = secondArg<Int>(), total = 100)
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        // Runs everything that is due now, which stops short of the paused continuation.
+        testScheduler.runCurrent()
+
+        coVerify(atMost = maxEmptyPageChainUnderTest + 1) { interactor.loadPage(any(), any()) }
+        assertEquals(Paginator.State.Empty, paginatorState(paginator))
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun aWalkThatSpentItsBudgetResumesWhereItStopped() = runTest {
+        // An empty row is hidden, so there is no retry to press and no way into "show all": a run
+        // of watched titles longer than one budget would leave the section blank for good, even
+        // with unwatched titles on the pages behind it.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val visible = item(id = 7)
+        val firstPageWithSomethingLeft = maxEmptyPageChainUnderTest + 2
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            if (requested < firstPageWithSomethingLeft) {
+                emptyPage(current = requested, total = 100)
+            } else {
+                page(visible, current = requested, total = 100)
+            }
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        testScheduler.runCurrent()
+        assertEquals(Paginator.State.Empty, paginatorState(paginator))
+
+        testScheduler.advanceUntilIdle()
+
+        // Picked up on the page after the one the budget ran out on, rather than starting over.
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = firstPageWithSomethingLeft) }
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = 1) }
+        assertEquals(listOf(visible), (paginatorState(paginator) as Paginator.State.Data<*>).data)
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun aPausedWalkIsDroppedWhenPagingRestarts() = runTest {
+        // The pause is where a restart has to be able to take the walk out. Two walks waking up
+        // side by side would read the same pages twice and interleave what they publish.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val pagesRead = mutableListOf<Int>()
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            pagesRead += requested
+            emptyPage(current = requested, total = 100)
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+        vm.testOnStart()
+        testScheduler.runCurrent()
+
+        vm.refreshFirstPage()
+        testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(walkResumePauseUnderTest + 1)
+        testScheduler.runCurrent()
+
+        // The page the first walk was paused on is read once — by the restarted walk alone.
+        val firstResumedPage = maxEmptyPageChainUnderTest + 2
+        assertEquals(1, pagesRead.count { it == firstResumedPage })
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /** The store publishes through [Paginator.Store.render], which replays the current state. */
+    private fun paginatorState(paginator: Paginator.Store<Item>): Paginator.State {
+        lateinit var current: Paginator.State
+        paginator.render = { current = it }
+        return current
     }
 
     private fun createVM(
@@ -189,6 +305,14 @@ class SectionVMTest {
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
+
+    private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
+
+    /** Mirrors SectionVM.MAX_EMPTY_PAGE_CHAIN. */
+    private val maxEmptyPageChainUnderTest = 3
+
+    /** Mirrors SectionVM.WALK_RESUME_PAUSE, in milliseconds. */
+    private val walkResumePauseUnderTest = 500L
 
     private fun emptyPage(
         current: Int = 1,

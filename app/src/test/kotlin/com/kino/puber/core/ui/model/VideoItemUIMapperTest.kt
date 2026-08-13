@@ -9,6 +9,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Posters
 import com.kino.puber.data.api.models.Season
+import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -56,11 +57,19 @@ class VideoItemUIMapperTest {
     }
 
     @Test
-    fun mapShortItem_isWatched_true_whenSeriesWatchedAndNewNull() {
-        // new=null means API didn't report new episodes (all watched)
-        val item = testItem(type = ItemType.SERIAL, watched = 10, new = null)
+    fun mapShortItem_isWatched_true_whenEveryEpisodeOfASeriesWasWatched() {
+        // Without `new` the episode count is the only thing left that can settle it.
+        val item = testItem(type = ItemType.SERIAL, watched = 10, new = null, total = 10)
         val result = mapper.mapShortItem(item)
         assertEquals(true, result.isWatched)
+    }
+
+    @Test
+    fun mapShortItem_isWatched_false_forAPartlyWatchedSeriesWithoutNew() {
+        // `watched` counts episodes: 3 of 10 says the account started, not that it finished.
+        val item = testItem(type = ItemType.SERIAL, watched = 3, new = null, total = 10)
+        val result = mapper.mapShortItem(item)
+        assertEquals(false, result.isWatched)
     }
 
     @Test
@@ -68,6 +77,60 @@ class VideoItemUIMapperTest {
         val item = testItem(type = ItemType.SERIAL, watched = 0, new = 0)
         val result = mapper.mapShortItem(item)
         assertEquals(false, result.isWatched)
+    }
+
+    // endregion
+
+    // region watch progress mapping
+
+    @Test
+    fun mapShortItem_progress_forPartiallyWatchedSeries() {
+        val item = testItem(type = ItemType.SERIAL, watched = 3, new = 7, total = 10)
+        assertEquals(0.3f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_forFullyWatchedSeries() {
+        val item = testItem(type = ItemType.SERIAL, watched = 10, new = 0, total = 10)
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_forUntouchedSeries() {
+        val item = testItem(type = ItemType.SERIAL, watched = 0, new = 10, total = 10)
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_whenSeriesTotalIsMissing() {
+        val item = testItem(type = ItemType.SERIAL, watched = 3, new = 7, total = null)
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_forPartiallyWatchedMovie() {
+        val item = testItem(
+            type = ItemType.MOVIE,
+            watched = 0,
+            watching = WatchingInfo(time = 30, duration = 120),
+        )
+        assertEquals(0.25f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_whenMovieHasNoWatchingInfo() {
+        val item = testItem(type = ItemType.MOVIE, watched = 0)
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_whenMovieIsWatched() {
+        val item = testItem(
+            type = ItemType.MOVIE,
+            watched = 1,
+            watching = WatchingInfo(time = 120, duration = 120),
+        )
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
     }
 
     // endregion
@@ -229,6 +292,8 @@ class VideoItemUIMapperTest {
         ratingPercentage: Int? = null,
         watched: Int? = null,
         new: Int? = null,
+        total: Int? = null,
+        watching: WatchingInfo? = null,
         subscribed: Boolean? = null,
         inWatchlist: Boolean? = null,
         bookmarks: List<Bookmark>? = null,
@@ -247,6 +312,8 @@ class VideoItemUIMapperTest {
         ratingPercentage = ratingPercentage,
         watched = watched,
         new = new,
+        total = total,
+        watching = watching,
         subscribed = subscribed,
         inWatchlist = inWatchlist,
         bookmarks = bookmarks,

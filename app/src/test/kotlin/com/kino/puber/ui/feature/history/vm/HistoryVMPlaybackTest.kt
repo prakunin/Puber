@@ -25,6 +25,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.every
@@ -70,7 +71,7 @@ class HistoryVMPlaybackTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = router,
             errorHandler = errorHandler,

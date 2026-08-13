@@ -517,8 +517,6 @@ internal fun HistoryRuntimeStore.acceptReconciliation(
     }
 }
 
-private const val FIRST_PAGE = 1
-
 internal fun HistoryRuntimeStore.failReconciliation(
     operationId: Long,
     reconciliation: HistoryReconciliationContext,

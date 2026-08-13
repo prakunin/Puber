@@ -6,6 +6,7 @@ import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.domain.interactor.history.HistorySemanticKey
 import com.kino.puber.domain.interactor.history.rowKeyOrNull
 import com.kino.puber.domain.interactor.history.semanticKeyOrNull
+import com.kino.puber.data.repository.WatchCompletionPolicy
 
 internal class HistoryUIMapper(
     private val videoItemUIMapper: VideoItemUIMapper,
@@ -24,8 +25,9 @@ internal class HistoryUIMapper(
                 .takeIf { it > 0 }
                 ?.let { duration -> watching.time.toFloat() / duration.toFloat() }
         }
-        val isWatched = media.watched?.let { it == WATCHED_STATUS }
-            ?: (media.watching?.status == WATCHED_STATUS)
+        // The history endpoint states a position, not a verdict, so the same policy the catalogue
+        // index uses decides here too — otherwise a title reads as finished on one screen only.
+        val isWatched = WatchCompletionPolicy.isFinished(media.watching?.time, media.watching?.duration)
         val seasonNumber = (semanticKey as? HistorySemanticKey.Episode)?.seasonNumber
         val episodeNumber = (semanticKey as? HistorySemanticKey.Episode)?.episodeNumber
         val videoNumber = (semanticKey as? HistorySemanticKey.Movie)?.videoNumber
@@ -64,9 +66,5 @@ internal class HistoryUIMapper(
                 episodeNumber = episodeNumber,
             )
         }
-    }
-
-    private companion object {
-        const val WATCHED_STATUS = 1
     }
 }

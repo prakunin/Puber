@@ -43,18 +43,18 @@ internal data class HistoryEntryResponse(
 ) {
     fun toModel(): History {
         val duration = media.duration.takeIf { it > 0 }
-        val watched = duration?.let { time >= it } == true
+        // `watched` and `status` stay unset: this endpoint reports a position and a length, never a
+        // verdict. Deciding "finished" here would hand every consumer a guess dressed as a server
+        // fact — that call belongs to WatchCompletionPolicy, reading the position kept below.
         return History(
             item = item.toModel(),
             video = Video(
                 id = media.id,
                 number = media.number.takeIf { it > 0 },
                 duration = duration,
-                watched = watched.toStatus(),
                 watching = WatchingInfo(
                     time = time.coerceAtLeast(0),
                     duration = duration ?: 0,
-                    status = watched.toStatus(),
                     updatedAt = lastSeen.toString(),
                 ),
             ),
@@ -91,4 +91,3 @@ internal data class HistoryMediaResponse(
     val duration: Int,
 )
 
-private fun Boolean.toStatus(): Int = if (this) 1 else 0

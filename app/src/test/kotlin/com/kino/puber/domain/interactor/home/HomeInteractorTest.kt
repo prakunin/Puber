@@ -267,5 +267,7 @@ class HomeInteractorTest {
         showCartoonsTab = false,
         showAnimeTab = false,
         showAnime = true,
+        hideWatched = false,
+        showWatchedIndicators = true,
     )
 }

@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.showall.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -19,7 +20,9 @@ import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
+import kotlin.time.Duration.Companion.milliseconds
 
 internal class ShowAllVM(
     paginator: Paginator.Store<Item>,
@@ -32,6 +35,8 @@ internal class ShowAllVM(
 ) : PagingVM<Item, ShowAllViewState>(paginator, router, errorHandler) {
 
     private var currentPage = 0
+    private var emptyPageChain = 0
+    private var publishedAnyItems = false
     private var cachedInput: List<Item>? = null
     private var cachedOutput: List<VideoItemUIState> = emptyList()
     private var contentChanges = ContentChangeSet.empty()
@@ -40,24 +45,79 @@ internal class ShowAllVM(
 
     override val initialViewState = ShowAllViewState.Loading
 
-    override fun onStart() = init()
-
-    override fun onLoadFirstPage() {
-        currentPage = 0
-        pagingLaunch(errorHandlerGeneral) {
-            val response = interactor.loadPage(config, page = 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            replace(response.items)
+    override fun onStart() {
+        init()
+        launch {
+            interactor.displaySettingsChanges.collect {
+                interactor.invalidateFirstPageCache()
+                resetPaging()
+            }
+        }
+        launch {
+            interactor.watchStateChanges.collect {
+                interactor.invalidateFirstPageCache()
+                resetPaging()
+            }
         }
     }
 
+    override fun onLoadFirstPage() {
+        currentPage = 0
+        emptyPageChain = 0
+        publishedAnyItems = false
+        pagingLaunch(errorHandlerGeneral) { loadPage(page = 1, isFirstPage = true) }
+    }
+
     override fun onLoadNextPage(key: Item?) {
+        pagingLaunch(errorHandlerPaging) { loadPage(page = currentPage + 1, isFirstPage = false) }
+    }
+
+    /**
+     * Hiding watched titles can empty a whole server page. The paginator is told to keep walking
+     * rather than reading the blank page as the end of the list, but only so far — one load must
+     * not walk the catalogue in a single burst. What is left over is picked up by
+     * [resumeWalkAfterPause].
+     */
+    private suspend fun loadPage(page: Int, isFirstPage: Boolean) {
+        val response = interactor.loadPage(config, page)
+        currentPage = response.pagination.current
+        val serverHasMore = currentPage < response.pagination.total
+        emptyPageChain = if (response.items.isEmpty()) emptyPageChain + 1 else 0
+        val keepWalking = serverHasMore && emptyPageChain in 1..MAX_EMPTY_PAGE_CHAIN
+        val budgetIsSpent = response.items.isEmpty() && serverHasMore && !keepWalking
+        isFullDataNext = !serverHasMore
+        if (response.items.isNotEmpty()) publishedAnyItems = true
+        // A walk that gave up without ever finding anything belongs on the empty state, not on a
+        // content row holding nothing.
+        if (isFirstPage || (!publishedAnyItems && !keepWalking)) {
+            replace(response.items, hasMorePages = keepWalking)
+        } else {
+            setNextPage(response.items, hasMorePages = keepWalking)
+        }
+        if (budgetIsSpent) resumeWalkAfterPause()
+    }
+
+    /**
+     * Picks the walk up again where the page budget ran out.
+     *
+     * That budget bounds one burst of requests, not the list. A run of watched titles longer than
+     * the budget would otherwise strand the screen on the empty state: it offers a retry, and retry
+     * starts over from page one and walks into the same wall.
+     *
+     * The pause is what keeps this from being the same burst by another name — it hands the screen
+     * back its dispatcher between rounds and gives the cancellation a place to land. A restart or a
+     * closed screen drops the walk with the rest of the paging work.
+     */
+    private fun resumeWalkAfterPause() {
+        val resumeFrom = currentPage + 1
+        log(
+            "Show all ${config.id}: nothing to show in $emptyPageChain pages, " +
+                "resuming from page $resumeFrom"
+        )
         pagingLaunch(errorHandlerPaging) {
-            val response = interactor.loadPage(config, page = currentPage + 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            setNextPage(response.items)
+            delay(WALK_RESUME_PAUSE)
+            emptyPageChain = 0
+            loadPage(page = resumeFrom, isFirstPage = false)
         }
     }
 
@@ -212,5 +272,13 @@ internal class ShowAllVM(
             if (activeJobs.isEmpty()) return
             activeJobs.joinAll()
         }
+    }
+
+    private companion object {
+        /** How many blank pages in a row one load will walk past before it pauses. */
+        const val MAX_EMPTY_PAGE_CHAIN = 3
+
+        /** How long the walk waits before spending the next round of that budget. */
+        val WALK_RESUME_PAUSE = 500.milliseconds
     }
 }

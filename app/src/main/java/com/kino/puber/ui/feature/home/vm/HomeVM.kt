@@ -18,6 +18,7 @@ import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.KCollection
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
@@ -25,6 +26,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
+import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.ui.feature.collections.detail.CollectionDetailScreen
 import com.kino.puber.ui.feature.home.model.HomeAction
 import com.kino.puber.ui.feature.home.model.HomeSectionType
@@ -38,6 +40,7 @@ internal class HomeVM(
     private val videoItemMapper: VideoItemUIMapper,
     private val apiDomainInteractor: ApiDomainInteractor,
     private val savedItemInteractor: SavedItemInteractor,
+    private val cardDisplayChanges: CardDisplayChanges,
     private val resources: ResourceProvider,
     override val errorHandler: ErrorHandler,
 ) : PuberVM<HomeViewState>(router) {
@@ -50,6 +53,14 @@ internal class HomeVM(
     override val initialViewState: HomeViewState = HomeViewState.Loading()
     private var loadHomeJob: Job? = null
 
+    /**
+     * The sections exactly as the server sent them.
+     *
+     * A watched mark landing changes how a card is *drawn*, not what the server would return, so it
+     * is re-mapped from this instead of costing another round of section requests.
+     */
+    private var loadedSections: HomeSections? = null
+
     override fun dispatchError(error: ErrorEntity) {
         if (stateValue is HomeViewState.Content) {
             showMessage(error.message)
@@ -60,6 +71,14 @@ internal class HomeVM(
 
     override fun onStart() {
         loadHome()
+        launch {
+            cardDisplayChanges.changes.collect { remapLoadedSections() }
+        }
+    }
+
+    private fun remapLoadedSections() {
+        if (stateValue !is HomeViewState.Content) return
+        loadedSections?.let(::publishSections)
     }
 
     override fun onAction(action: UIAction) {
@@ -178,21 +197,36 @@ internal class HomeVM(
         val freshItems = (freshMoviesDeferred.await().orEmpty() + freshSeriesDeferred.await().orEmpty())
             .sortedByDescending { it.updatedAt.orEmpty() }
 
-        val sections = listOfNotNull(
-            watchingDeferred.await()?.let { mapper.mapItemSection(it, HomeSectionType.ContinueWatching) },
-            mapper.mapItemSection(freshItems, HomeSectionType.Fresh),
-            popularMoviesDeferred.await()?.let { mapper.mapItemSection(it, HomeSectionType.PopularMovies) },
-            popularSeriesDeferred.await()?.let { mapper.mapItemSection(it, HomeSectionType.PopularSeries) },
-            watchLaterDeferred.await()?.let { mapper.mapItemSection(it, HomeSectionType.WatchLater) },
-            bookmarksDeferred.await()?.let { mapper.mapItemSection(it, HomeSectionType.Bookmarks) },
-            collectionsDeferred.await()?.let { mapper.mapCollectionSection(it) },
-            mapper.mapItemSection(hotItems, HomeSectionType.Hot),
+        val sections = HomeSections(
+            hotItems = hotItems,
+            itemSections = listOfNotNull(
+                watchingDeferred.await()?.let { HomeSectionType.ContinueWatching to it },
+                HomeSectionType.Fresh to freshItems,
+                popularMoviesDeferred.await()?.let { HomeSectionType.PopularMovies to it },
+                popularSeriesDeferred.await()?.let { HomeSectionType.PopularSeries to it },
+                watchLaterDeferred.await()?.let { HomeSectionType.WatchLater to it },
+                bookmarksDeferred.await()?.let { HomeSectionType.Bookmarks to it },
+                HomeSectionType.Hot to hotItems,
+            ),
+            collections = collectionsDeferred.await(),
+        )
+        loadedSections = sections
+        publishSections(sections)
+    }
+
+    /** Maps what the server returned into cards, against whatever the index and settings say now. */
+    private fun publishSections(sections: HomeSections) {
+        val mapped = listOfNotNull(
+            *sections.itemSections
+                .map { (type, items) -> mapper.mapItemSection(items, type) }
+                .toTypedArray(),
+            sections.collections?.let { mapper.mapCollectionSection(it) },
         ).sortedBy { it.type.ordinal }
 
         updateViewState(
             HomeViewState.Content(
-                heroItems = videoItemMapper.mapHeroItems(hotItems.take(HERO_ITEMS_COUNT)),
-                sections = sections,
+                heroItems = videoItemMapper.mapHeroItems(sections.hotItems.take(HERO_ITEMS_COUNT)),
+                sections = mapped,
                 apiDomainDialog = currentDialogState(),
             )
         )
@@ -321,3 +355,13 @@ internal class HomeVM(
         )
     }
 }
+
+/**
+ * One home load, kept as the server sent it. Cards are derived from this, so a change in the local
+ * watch-state index or in the display settings is a re-map rather than another round of requests.
+ */
+private class HomeSections(
+    val hotItems: List<Item>,
+    val itemSections: List<Pair<HomeSectionType, List<Item>>>,
+    val collections: List<KCollection>?,
+)

@@ -8,6 +8,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -23,7 +24,7 @@ class HistoryInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
-    private val interactor = HistoryInteractor(api, itemDetailsRepository)
+    private val interactor = HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())
 
     @Test
     fun getPage_returnsVerifiedPaginatedResponse() = runTest {

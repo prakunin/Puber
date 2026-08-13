@@ -6,12 +6,25 @@ import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
+import kotlinx.coroutines.flow.Flow
 
 internal class HistoryInteractor(
     private val api: KinoPubApiClient,
     private val itemDetailsRepository: ItemDetailsRepository,
+    navigationPreferencesRepository: NavigationPreferencesRepository,
 ) {
+
+    /**
+     * Emits when a setting that decides what a card shows is flipped.
+     *
+     * History rows carry their own playback position, so the catalogue index says nothing new here —
+     * but the marks themselves can be switched off, and moving between screens does not pause the
+     * activity, so coming back from the settings screen brings no resume with it.
+     */
+    val displaySettingsChanges: Flow<Unit> = navigationPreferencesRepository.displaySettingsChanges
+
     suspend fun getPage(page: Int): PaginatedResponse<History> {
         return api.getHistoryData(page).getOrThrow()
     }

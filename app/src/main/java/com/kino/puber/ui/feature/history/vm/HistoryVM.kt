@@ -27,7 +27,7 @@ import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.coroutines.CancellationException
 import kotlin.math.min
 
-private const val FIRST_PAGE = 1
+internal const val FIRST_PAGE = 1
 
 internal val HistoryRowComparator = EquallyFunction<History> { oldItem, newItem ->
     oldItem.rowKeyOrNull()?.let { it == newItem.rowKeyOrNull() } ?: false
@@ -50,6 +50,7 @@ internal class HistoryVM(
     override val initialViewState: HistoryViewState = HistoryViewState.Loading
 
     private val runtime = HistoryRuntimeStore()
+    private val pageLoader = HistoryPageLoader(interactor)
     private val contentPublicationLock = Any()
 
     @VisibleForTesting
@@ -62,7 +63,10 @@ internal class HistoryVM(
     @VisibleForTesting
     internal var testBeforeFocusPublicationLockAcquire: (() -> Unit)? = null
 
-    override fun onStart() = init()
+    override fun onStart() {
+        init()
+        launch { interactor.displaySettingsChanges.collect { requestResumeRefresh() } }
+    }
 
     override fun onAction(action: UIAction) {
         if (action.isBlockedDuringDeletionFlow() && runtime.isDeletionFlowActive()) return
@@ -91,7 +95,7 @@ internal class HistoryVM(
         val request = runtime.beginFirstPage() ?: return
         pagingLaunch {
             try {
-                val result = loadHistoryPageDepth(request.loadedPageDepth)
+                val result = pageLoader.loadDepth(request.loadedPageDepth)
                 val accepted = runtime.acceptFirstPage(
                     operationId = request.operationId,
                     result = result,
@@ -116,7 +120,10 @@ internal class HistoryVM(
         val request = runtime.currentNextPageRequest() ?: return
         pagingLaunch {
             try {
-                val result = loadNextRenderablePage(runtime.snapshot().currentPage)
+                val result = pageLoader.loadNextRenderable(
+                    startPage = runtime.snapshot().currentPage,
+                    alreadyOnScreen = runtime.snapshot().stableHistory,
+                )
                 val accepted = runtime.acceptNextPage(
                     operationId = request.operationId,
                     result = result,
@@ -364,7 +371,7 @@ internal class HistoryVM(
     private fun deleteExactMedia(item: HistoryItemUIState) {
         val content = stateValue as? HistoryViewState.Content ?: return
         val currentItem = content.items.firstOrNull { it.rowKey == item.rowKey } ?: return
-        val reconciliation = createReconciliationContext(content, currentItem) ?: return
+        val reconciliation = createReconciliationContext(content, currentItem, currentPageDepth()) ?: return
         startDeletion(
             item = currentItem,
             reconciliation = reconciliation,
@@ -492,7 +499,7 @@ internal class HistoryVM(
         reconciliation: HistoryReconciliationContext,
     ) {
         try {
-            val result = loadHistoryPageDepth(reconciliation.loadedPageDepth)
+            val result = pageLoader.loadDepth(reconciliation.loadedPageDepth)
             val requestedFocusKey = resolveHistoryFocusKey(
                 items = mapper.map(result.items),
                 reconciliation = reconciliation,
@@ -539,62 +546,6 @@ internal class HistoryVM(
         }
     }
 
-    private suspend fun loadHistoryPageDepth(loadedPageDepth: Int): HistoryPageDepthResult {
-        val traversal = HistoryTraversal()
-        val items = mutableListOf<History>()
-        val requestedDepth = loadedPageDepth.coerceAtLeast(FIRST_PAGE)
-        var page = FIRST_PAGE
-        var current = FIRST_PAGE
-        var totalPages = FIRST_PAGE
-        var boundedDepth = FIRST_PAGE
-
-        do {
-            val response = interactor.getPage(page)
-            check(response.pagination.current == page) {
-                "History pagination did not match the requested page"
-            }
-            items += traversal.filterFirstOccurrences(response.items)
-            current = response.pagination.current
-            totalPages = response.pagination.total
-            boundedDepth = min(
-                requestedDepth,
-                totalPages.coerceAtLeast(FIRST_PAGE),
-            )
-            page++
-        } while (
-            page <= boundedDepth ||
-                (items.isEmpty() && current < totalPages)
-        )
-
-        return HistoryPageDepthResult(
-            items = items,
-            currentPage = current,
-            totalPages = totalPages,
-        )
-    }
-
-    private suspend fun loadNextRenderablePage(startPage: Int): HistoryNextPageResult {
-        val traversal = HistoryTraversal(runtime.snapshot().stableHistory)
-        var currentPage = startPage
-        var totalPages = startPage + 1
-        var items: List<History>
-        do {
-            val requestedPage = currentPage + 1
-            val response = interactor.getPage(page = requestedPage)
-            check(response.pagination.current == requestedPage) {
-                "History pagination did not match the requested next page"
-            }
-            items = traversal.filterFirstOccurrences(response.items)
-            currentPage = response.pagination.current
-            totalPages = response.pagination.total
-        } while (items.isEmpty() && currentPage < totalPages)
-        return HistoryNextPageResult(
-            items = items,
-            currentPage = currentPage,
-            totalPages = totalPages,
-        )
-    }
-
     private fun handleFirstPageFailure(
         operationId: Long,
         error: ErrorEntity,
@@ -610,6 +561,8 @@ internal class HistoryVM(
         )
         showMessage(error.message)
     }
+
+    private fun currentPageDepth(): Int = runtime.snapshot().currentPage.coerceAtLeast(FIRST_PAGE)
 
     private fun runDeferredRefreshIfReady() {
         if (stateValue !is HistoryViewState.Content) return
@@ -627,7 +580,7 @@ internal class HistoryVM(
             ?.items
             ?.firstOrNull { it.rowKey == queued.rowKey }
         val reconciliation = currentItem
-            ?.let { createReconciliationContext(latestContent, it) }
+            ?.let { createReconciliationContext(latestContent, it, currentPageDepth()) }
         if (currentItem == null || reconciliation == null) {
             if (runtime.dropQueuedDeletion(queued.rowKey)) {
                 updateDeleteExactMediaAvailability()
@@ -636,20 +589,6 @@ internal class HistoryVM(
             return
         }
         startDeletion(currentItem, reconciliation)
-    }
-
-    private fun createReconciliationContext(
-        content: HistoryViewState.Content,
-        item: HistoryItemUIState,
-    ): HistoryReconciliationContext? {
-        val oldIndex = content.items.indexOfFirst { it.rowKey == item.rowKey }
-        if (oldIndex < 0) return null
-        return HistoryReconciliationContext(
-            oldIndex = oldIndex,
-            nextKey = content.items.getOrNull(oldIndex + 1)?.rowKey,
-            previousKey = content.items.getOrNull(oldIndex - 1)?.rowKey,
-            loadedPageDepth = runtime.snapshot().currentPage.coerceAtLeast(FIRST_PAGE),
-        )
     }
 
     private fun updateDeleteExactMediaAvailability() {
@@ -665,24 +604,25 @@ internal class HistoryVM(
         }
     }
 
-    private fun mergeStableHistory(
-        oldItems: List<History>,
-        newItems: List<History>,
-    ): List<History> {
-        val merged = oldItems.toMutableList()
-        newItems.forEach { newItem ->
-            val index = merged.indexOfFirst { oldItem ->
-                HistoryRowComparator.isItemTheSame(oldItem, newItem)
-            }
-            if (index >= 0) {
-                merged[index] = newItem
-            } else {
-                merged += newItem
-            }
-        }
-        return merged
-    }
+}
 
+/**
+ * Where the row sits in the list right now, so a delete can put the focus somewhere sensible and a
+ * failure can put the row back where it was.
+ */
+private fun createReconciliationContext(
+    content: HistoryViewState.Content,
+    item: HistoryItemUIState,
+    loadedPageDepth: Int,
+): HistoryReconciliationContext? {
+    val oldIndex = content.items.indexOfFirst { it.rowKey == item.rowKey }
+    if (oldIndex < 0) return null
+    return HistoryReconciliationContext(
+        oldIndex = oldIndex,
+        nextKey = content.items.getOrNull(oldIndex + 1)?.rowKey,
+        previousKey = content.items.getOrNull(oldIndex - 1)?.rowKey,
+        loadedPageDepth = loadedPageDepth,
+    )
 }
 
 private fun Screens.historyDetails(item: HistoryItemUIState): PuberScreen {

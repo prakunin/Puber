@@ -11,17 +11,23 @@ import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.bookmarks.BookmarkInteractor
+import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.ui.feature.bookmarks.model.BookmarksViewState
 
 internal class BookmarksVM(
     router: AppRouter,
     private val interactor: BookmarkInteractor,
     private val mapper: VideoItemUIMapper,
+    private val cardDisplayChanges: CardDisplayChanges,
     override val errorHandler: ErrorHandler,
 ) : PuberVM<BookmarksViewState>(router) {
 
     override val initialViewState: BookmarksViewState = BookmarksViewState.Loading
+
+    /** The selected folder's items as the server sent them, kept so cards can be re-mapped. */
+    private var loadedItems: List<Item>? = null
 
     override fun dispatchError(error: ErrorEntity) {
         when (val state = stateValue) {
@@ -37,6 +43,22 @@ internal class BookmarksVM(
 
     override fun onStart() {
         loadBookmarks()
+        launch {
+            cardDisplayChanges.changes.collect { remapLoadedItems() }
+        }
+    }
+
+    /**
+     * Re-maps the folder on screen from what was already fetched. A watched mark changes how a card
+     * is drawn, not which items the folder holds, so it is not worth another request — and a reload
+     * from the top would drop the user back on the first folder.
+     */
+    private fun remapLoadedItems() {
+        if (stateValue !is BookmarksViewState.Content) return
+        val items = loadedItems ?: return
+        updateViewState<BookmarksViewState.Content> {
+            copy(items = mapper.mapShortItemList(items).markSaved())
+        }
     }
 
     override fun onAction(action: UIAction) {
@@ -98,6 +120,7 @@ internal class BookmarksVM(
             } else {
                 emptyList()
             }
+            loadedItems = items
             updateViewState(
                 BookmarksViewState.Content(
                     folders = folders,
@@ -112,6 +135,7 @@ internal class BookmarksVM(
     private fun loadFolderItems(folderId: Int) {
         launch {
             val response = interactor.getBookmarkItems(folderId, page = 1)
+            loadedItems = response.items
             updateViewState<BookmarksViewState.Content> {
                 copy(
                     items = mapper.mapShortItemList(response.items).markSaved(),

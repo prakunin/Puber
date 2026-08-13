@@ -23,6 +23,7 @@ import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -73,7 +74,7 @@ class HistoryVMDeletionSchedulingTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = router,
             errorHandler = errorHandler,
@@ -179,7 +180,7 @@ class HistoryVMDeletionSchedulingTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = blockingMapper,
             router = router,
             errorHandler = errorHandler,

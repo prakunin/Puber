@@ -23,6 +23,7 @@ import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -196,6 +197,37 @@ class ShowAllVMTest {
         paginator.close()
     }
 
+    @Test
+    fun aWalkThatSpentItsBudgetResumesWhereItStopped() = runBlocking {
+        // Retry on the empty state starts over from page one and walks into the same wall, so a run
+        // of watched titles longer than one budget would strand the screen there for good.
+        val visible = Item(id = 7, title = "Item 7", type = ItemType.MOVIE)
+        val firstPageWithSomethingLeft = MAX_EMPTY_PAGE_CHAIN_UNDER_TEST + 2
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            if (requested < firstPageWithSomethingLeft) {
+                emptyPage(current = requested, total = 100)
+            } else {
+                page(visible, current = requested, total = 100)
+            }
+        }
+        val paginator = Paginator.Store<Item> { old, new -> old.id == new.id }
+        val vm = createVM(paginator = paginator)
+
+        vm.testOnStart()
+        withTimeout(5_000) {
+            while (vm.testStateValue !is ShowAllViewState.Content) {
+                delay(10)
+            }
+        }
+
+        // Picked up on the page after the one the budget ran out on, rather than starting over.
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = firstPageWithSomethingLeft) }
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = 1) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
     private fun createVM(
         config: SectionConfig = SectionConfig(id = "popular", title = "Popular"),
         paginator: Paginator.Store<Item> = Paginator.Store { old, new -> old.id == new.id },
@@ -221,4 +253,12 @@ class ShowAllVMTest {
         items = listOf(item),
         pagination = Pagination(current = current, perpage = 50, total = total),
     )
+
+    private fun emptyPage(current: Int, total: Int) = PaginatedResponse<Item>(
+        items = emptyList(),
+        pagination = Pagination(current = current, perpage = 50, total = total),
+    )
 }
+
+/** Mirrors ShowAllVM.MAX_EMPTY_PAGE_CHAIN. */
+private const val MAX_EMPTY_PAGE_CHAIN_UNDER_TEST = 3

@@ -21,12 +21,16 @@ import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -100,6 +104,22 @@ class HomeVMTest {
     }
 
     @Test
+    fun watchStateSettling_remapsTheCardsWithoutAskingTheServerAgain() = runTest {
+        // A watched mark changes how a card is drawn, not what the server would return. Reloading
+        // every section for it would cost a round of requests per mark.
+        createVM().also { it.testOnStart() }
+        verify(exactly = 1) { mapper.mapItemSection(any(), HomeSectionType.Fresh) }
+
+        displayChanges.emit(Unit)
+        runCurrent()
+
+        // Mapped again from what was already loaded, with nothing asked of the server.
+        verify(exactly = 2) { mapper.mapItemSection(any(), HomeSectionType.Fresh) }
+        coVerify(exactly = 1) { apiDomainInteractor.autoResolveWorkingDomain() }
+        coVerify(exactly = 1) { interactor.getWatchingItems() }
+    }
+
+    @Test
     fun returnedChanges_refreshContentStateSilently() {
         val screen = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
@@ -158,6 +178,11 @@ class HomeVMTest {
         verify { mapper.mapItemSection(listOf(personalWatchingItem), HomeSectionType.ContinueWatching) }
     }
 
+    private val displayChanges = MutableSharedFlow<Unit>()
+    private val cardDisplayChanges = mockk<CardDisplayChanges> {
+        every { changes } returns this@HomeVMTest.displayChanges
+    }
+
     private fun createVM() = HomeVM(
         router = router,
         interactor = interactor,
@@ -165,6 +190,7 @@ class HomeVMTest {
         videoItemMapper = videoItemMapper,
         apiDomainInteractor = apiDomainInteractor,
         savedItemInteractor = savedItemInteractor,
+        cardDisplayChanges = cardDisplayChanges,
         resources = FakeResourceProvider(),
         errorHandler = errorHandler,
     )

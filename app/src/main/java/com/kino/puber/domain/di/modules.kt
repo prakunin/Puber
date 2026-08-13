@@ -12,6 +12,8 @@ import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.update.AppUpdateInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
+import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -25,4 +27,6 @@ val interactorModule = module {
     singleOf(::WatchLaterBookmarkInteractor)
     singleOf(::SavedItemInteractor)
     singleOf(::ApiDomainInteractor)
+    single { WatchStateSyncInteractor(api = get(), repository = get()) }
+    singleOf(::CardDisplayChanges)
 }

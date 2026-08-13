@@ -12,6 +12,8 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
@@ -22,9 +24,14 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -33,16 +40,31 @@ class ContentListInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
     private val contentPreferences = MutableStateFlow(defaultContentPreferences())
+    private val displaySettingsChanges = MutableSharedFlow<Unit>()
     private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository> {
         every { contentPreferences } returns this@ContentListInteractorTest.contentPreferences
+        every { displaySettingsChanges } returns this@ContentListInteractorTest.displaySettingsChanges
     }
-    private val interactor = ContentListInteractor(api, navigationPreferencesRepository)
+    /** Item ids the local watch-state index reports as finished, on top of the items' own fields. */
+    private val indexedAsWatched = mutableSetOf<Int>()
+    private val settledWatchStateChanges = MutableSharedFlow<Long>()
+    private val watchStateRepository = mockk<WatchStateRepository> {
+        every { isFullyWatched(any()) } answers {
+            val item = firstArg<Item>()
+            item.isFullyWatched() || item.id in indexedAsWatched
+        }
+        every { version } returns MutableStateFlow(0L)
+        every { settledChanges } returns this@ContentListInteractorTest.settledWatchStateChanges
+    }
+    private val interactor =
+        ContentListInteractor(api, navigationPreferencesRepository, watchStateRepository)
 
     @BeforeEach
     fun setup() {
         mockkObject(KinoPubConfig)
         every { KinoPubConfig.CURRENT_API_DOMAIN } returns "unit.test"
         contentPreferences.value = defaultContentPreferences()
+        indexedAsWatched.clear()
         interactor.invalidateFirstPageCache()
     }
 
@@ -419,6 +441,186 @@ class ContentListInteractorTest {
         coVerify(exactly = 3) { api.getItems("movie", "updated", 1, null, null) }
     }
 
+    // region hide watched
+
+    @Test
+    fun hideWatchedDisabled_keepsWatchedItemsWithOneServerCall() = runTest {
+        val config = config(AnimeFilterMode.None)
+        val response = page(
+            item(id = 1, title = "Watched", watched = 1),
+            item(id = 2, title = "Fresh"),
+        )
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(response)
+
+        assertEquals(response, interactor.loadPage(config, page = 1))
+
+        coVerify(exactly = 1) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    @Test
+    fun hideWatchedEnabled_dropsFullyWatchedItems() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = config(AnimeFilterMode.None)
+        val fresh = item(id = 2, title = "Fresh")
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(
+            page(
+                item(id = 1, title = "Watched movie", watched = 1),
+                fresh,
+                item(id = 3, title = "Finished series", type = ItemType.SERIAL, watched = 10, new = 0),
+            )
+        )
+
+        assertEquals(listOf(fresh), interactor.loadPage(config, page = 1).items)
+    }
+
+    @Test
+    fun hideWatchedEnabled_keepsPartiallyWatchedSeries() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = config(AnimeFilterMode.None)
+        val partial = item(id = 1, title = "Half seen", type = ItemType.SERIAL, watched = 4, new = 6, total = 10)
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(page(partial))
+
+        assertEquals(listOf(partial), interactor.loadPage(config, page = 1).items)
+    }
+
+    @Test
+    fun hideWatchedEnabled_fetchesFurtherPagesToFillThePage() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = config(AnimeFilterMode.None)
+        val firstVisible = item(id = 2, title = "Fresh 1")
+        val secondVisible = item(id = 4, title = "Fresh 2")
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(
+            page(
+                item(id = 1, title = "Watched", watched = 1),
+                firstVisible,
+                current = 1,
+                total = 3,
+                perpage = 2,
+            )
+        )
+        coEvery { api.getItems("movie", "updated", 2, null, null) } returns Result.success(
+            page(
+                item(id = 3, title = "Watched", watched = 1),
+                secondVisible,
+                current = 2,
+                total = 3,
+                perpage = 2,
+            )
+        )
+
+        assertEquals(
+            listOf(firstVisible, secondVisible),
+            interactor.loadPage(config, page = 1).items,
+        )
+    }
+
+    @Test
+    fun hideWatchedEnabled_stopsAfterPageBudgetAndReturnsShortPage() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = config(AnimeFilterMode.None)
+        val onlyVisible = item(id = 1, title = "Fresh")
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(
+            page(
+                onlyVisible,
+                item(id = 2, title = "Watched", watched = 1),
+                current = 1,
+                total = maxPagesPerStepUnderTest + 2,
+                perpage = 2,
+            )
+        )
+        (2..maxPagesPerStepUnderTest + 2).forEach { pageNumber ->
+            coEvery { api.getItems("movie", "updated", pageNumber, null, null) } returns Result.success(
+                page(
+                    item(id = pageNumber * 10, title = "Watched $pageNumber", watched = 1),
+                    item(id = pageNumber * 10 + 1, title = "Watched $pageNumber b", watched = 1),
+                    current = pageNumber,
+                    total = maxPagesPerStepUnderTest + 2,
+                    perpage = 2,
+                )
+            )
+        }
+
+        assertEquals(listOf(onlyVisible), interactor.loadPage(config, page = 1).items)
+
+        coVerify(exactly = 1) { api.getItems("movie", "updated", maxPagesPerStepUnderTest, null, null) }
+        coVerify(exactly = 0) { api.getItems("movie", "updated", maxPagesPerStepUnderTest + 1, null, null) }
+    }
+
+    @Test
+    fun hideWatchedEnabled_stopsAtTheBudgetAndLeavesTheRestToTheCaller() = runTest {
+        // Walking past a page that hid everything is the paginator's job now. One load stops at its
+        // budget and hands back an empty page that still reports pages behind it — proof enough
+        // that the list is not over, without spending a catalogue to find something visible.
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = config(AnimeFilterMode.None)
+        val lastPage = maxPagesPerStepUnderTest + 2
+        val visible = item(id = 999, title = "Fresh at the end")
+        (1 until lastPage).forEach { pageNumber ->
+            coEvery { api.getItems("movie", "updated", pageNumber, null, null) } returns Result.success(
+                page(
+                    item(id = pageNumber * 10, title = "Watched $pageNumber", watched = 1),
+                    current = pageNumber,
+                    total = lastPage,
+                    perpage = 1,
+                )
+            )
+        }
+        coEvery { api.getItems("movie", "updated", lastPage, null, null) } returns Result.success(
+            page(visible, current = lastPage, total = lastPage, perpage = 1)
+        )
+
+        val response = interactor.loadPage(config, page = 1)
+
+        assertTrue(response.items.isEmpty())
+        assertTrue(response.pagination.current < response.pagination.total)
+        coVerify(exactly = 0) { api.getItems("movie", "updated", lastPage, null, null) }
+    }
+
+    @Test
+    fun hideWatchedEnabled_dropsItemsKnownOnlyToTheLocalIndex() = runTest {
+        // The catalogue endpoints return no watch fields at all, so this is the real-world case.
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        indexedAsWatched += 1
+        val config = config(AnimeFilterMode.None)
+        val fresh = item(id = 2, title = "Fresh")
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(
+            page(
+                item(id = 1, title = "Watched only per local index", type = ItemType.SERIAL),
+                fresh,
+            )
+        )
+
+        assertEquals(listOf(fresh), interactor.loadPage(config, page = 1).items)
+    }
+
+    @Test
+    fun displaySettingsChanges_areForwardedFromThePreferences() = runTest {
+        val emissions = mutableListOf<Unit>()
+        val collector = backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            interactor.displaySettingsChanges.collect(emissions::add)
+        }
+
+        displaySettingsChanges.emit(Unit)
+        runCurrent()
+
+        assertEquals(1, emissions.size)
+        collector.cancel()
+    }
+
+    @Test
+    fun hideWatchedToggle_doesNotReuseTheCachedFirstPage() = runTest {
+        val config = config(AnimeFilterMode.None)
+        val watched = item(id = 1, title = "Watched", watched = 1)
+        val fresh = item(id = 2, title = "Fresh")
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(page(watched, fresh))
+
+        assertEquals(listOf(watched, fresh), interactor.loadPage(config, page = 1).items)
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        assertEquals(listOf(fresh), interactor.loadPage(config, page = 1).items)
+    }
+
+    // endregion
+
     @Test
     fun invalidateItemDetails_clearsCachedItemDetails() = runTest {
         val firstItem = item(id = 42, title = "Before")
@@ -456,18 +658,30 @@ class ContentListInteractorTest {
         id: Int,
         title: String,
         vararg genreIds: Int,
+        type: ItemType = ItemType.MOVIE,
+        watched: Int? = null,
+        new: Int? = null,
+        total: Int? = null,
     ) = Item(
         id = id,
         title = title,
-        type = ItemType.MOVIE,
+        type = type,
         genres = genreIds
             .map { genreId -> Genre(id = genreId, title = "Genre $genreId") }
             .takeIf(List<Genre>::isNotEmpty),
+        watched = watched,
+        new = new,
+        total = total,
     )
+
+    /** Mirrors `ContentListInteractor.MAX_PAGES_PER_STEP`, which is private to the interactor. */
+    private val maxPagesPerStepUnderTest = 5
 
     private fun defaultContentPreferences() = ContentPreferences(
         showCartoonsTab = false,
         showAnimeTab = false,
         showAnime = true,
+        hideWatched = false,
+        showWatchedIndicators = true,
     )
 }

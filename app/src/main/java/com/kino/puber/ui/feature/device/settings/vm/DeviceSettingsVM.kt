@@ -76,11 +76,12 @@ internal class DeviceSettingsVM(
                                 skipCreditsEnabled = playerPreferencesRepository.skipCreditsEnabled,
                                 debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
                                 preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
-                                watchedIndicatorsEnabled = playerPreferencesRepository.watchedIndicatorsEnabled,
+                                watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
                                 navigationMode = navigationPreferencesRepository.getNavigationMode(),
                                 showCartoonsTab = contentPreferences.showCartoonsTab,
                                 showAnimeTab = contentPreferences.showAnimeTab,
                                 showAnime = contentPreferences.showAnime,
+                                hideWatched = contentPreferences.hideWatched,
                                 autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
                             )
                         )
@@ -110,6 +111,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
             DeviceSettingsActions.ToggleAnimeTab -> toggleAnimeTab()
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
+            DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
@@ -273,7 +275,7 @@ internal class DeviceSettingsVM(
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         val newValue = !currentState.watchedIndicatorsEnabled
-        playerPreferencesRepository.watchedIndicatorsEnabled = newValue
+        navigationPreferencesRepository.setShowWatchedIndicators(newValue)
         updateViewState(stateValue.copy(state = currentState.copy(watchedIndicatorsEnabled = newValue)))
     }
 
@@ -307,6 +309,14 @@ internal class DeviceSettingsVM(
         val newValue = !currentState.showAnime
         navigationPreferencesRepository.setShowAnime(newValue)
         updateViewState(stateValue.copy(state = currentState.copy(showAnime = newValue)))
+    }
+
+    private fun toggleHideWatched() {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        val newValue = !currentState.hideWatched
+        navigationPreferencesRepository.setHideWatched(newValue)
+        updateViewState(stateValue.copy(state = currentState.copy(hideWatched = newValue)))
     }
 
     private fun toggleAutoUpdateCheck() {

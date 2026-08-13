@@ -348,6 +348,13 @@ class KinoPubApiClient(
         }
 
     /**
+     * Movies the account has started or finished, with their playback progress.
+     */
+    suspend fun getWatchingMovies(): Result<ApiResponseList<Item>> = apiCall {
+        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/movies")
+    }
+
+    /**
      * Get history data with pagination
      */
     suspend fun getHistoryData(page: Int): Result<PaginatedResponse<History>> =

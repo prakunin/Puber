@@ -13,6 +13,7 @@ import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.core.ui.uikit.component.LifecycleAction
 import com.kino.puber.core.ui.model.VideoItemTypeMapper
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -42,7 +43,7 @@ private fun buildFlowModule(
     scope(named(scopeId)) {
         scoped<AppLauncher> { appLauncher }
         scoped<Screens> { ScreensImpl }
-        scoped { VideoItemUIMapper(get(), get()) }
+        scoped { VideoItemUIMapper(get(), get(), get()) }
         scopedOf(::VideoItemTypeMapper)
         viewModelOf(::UpdatePromptVM)
     }
@@ -54,10 +55,15 @@ private const val ScopeRoot = "Root"
 private fun SessionExpiredHandler() {
     val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
     val sessionEventBus = getKoin().get<SessionEventBus>()
+    val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
     LaunchedEffect(Unit) {
         sessionEventBus.events.collect { event ->
             when (event) {
-                SessionEvent.Unauthorized -> router.newRootScreen(router.screens.auth())
+                SessionEvent.Unauthorized -> {
+                    // The index is one account's viewing history; it must not outlive the session.
+                    watchStateSyncInteractor.invalidate()
+                    router.newRootScreen(router.screens.auth())
+                }
             }
         }
     }

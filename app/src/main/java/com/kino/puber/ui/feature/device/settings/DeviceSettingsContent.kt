@@ -362,6 +362,14 @@ private fun LazyListScope.localPreferencesItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleShowAnime) },
         )
     }
+    item {
+        LocalToggleItem(
+            label = stringResource(R.string.settings_hide_watched),
+            description = stringResource(R.string.settings_hide_watched_description),
+            checked = state.hideWatched,
+            onToggle = { onAction(DeviceSettingsActions.ToggleHideWatched) },
+        )
+    }
 }
 
 @Composable

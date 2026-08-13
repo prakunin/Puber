@@ -11,6 +11,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
@@ -25,6 +26,7 @@ internal class MainVM(
     internal val tabRouter: TabRouter,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val deviceInfoInteractor: IDeviceInfoInteractor,
+    private val watchStateSyncInteractor: WatchStateSyncInteractor,
 ) : PuberVM<MainViewState>(router) {
     override val initialViewState = MainViewState()
     internal val tabAppRouterHolder = TabAppRouterHolder(router.screens)
@@ -37,8 +39,21 @@ internal class MainVM(
         updateViewState(state)
         tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
         reportDeviceInformation()
+        syncWatchState()
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
+        }
+    }
+
+    /**
+     * The catalogue itself reports nothing about what has been watched, so the local index is
+     * refreshed once the main screen is up — that is the first point where the session is known to
+     * be authenticated.
+     */
+    private fun syncWatchState() {
+        launch {
+            runCatching { watchStateSyncInteractor.syncIfStale() }
+                .onFailure { error -> log(error, "Failed to sync watch state") }
         }
     }
 
@@ -58,6 +73,7 @@ internal class MainVM(
         when (action) {
             is CommonAction.ItemSelected<*> -> onTabSelected(action.item as MainTab)
             is MainAction.RefreshTab -> onTabRefresh(action.tab)
+            MainAction.Resumed -> syncWatchState()
             else -> super.onAction(action)
         }
     }

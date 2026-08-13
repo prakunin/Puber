@@ -86,6 +86,12 @@ data class Item(
     val total: Int? = null,
     val watched: Int? = null,
     val new: Int? = null,
+    /**
+     * Playback progress of the item itself. Present for movies in endpoints that expose it
+     * (watching endpoints, item details); list endpoints may omit it, in which case movies have no
+     * partial-progress signal beyond [watched].
+     */
+    val watching: WatchingInfo? = null,
     val fps: Float? = null,
     @SerialName("age_rating") val ageRating: String? = null,
 ) : java.io.Serializable
@@ -133,9 +139,41 @@ enum class ItemType(val value: String) {
     }
 }
 
+/** The value [WatchingInfo.status] carries for something the account has finished. */
+private const val WATCHED_STATUS = 1
+
 fun ItemType.isSeriesLike(): Boolean = when (this) {
     ItemType.SERIAL, ItemType.DOCU_SERIAL, ItemType.TV_SHOW -> true
     else -> false
+}
+
+/**
+ * True when nothing is left to watch.
+ *
+ * For a movie the answer is a flag rather than a count, and the endpoints disagree on where they
+ * put it: `watched` where they send one, `watching.status` where they do not. Reading only the
+ * first calls a finished movie unwatched, and that verdict then overwrites what the history walk
+ * had already worked out about it.
+ *
+ * For a series `watched` counts watched episodes, which only proves the account started: what
+ * settles it is `new` (how many episodes are still unwatched) or, failing that, the episode count.
+ * A series that reports neither is *not* called finished — `watched > 0` alone would mark a show
+ * the account is three episodes into as fully watched and hide it from the catalogue.
+ */
+fun Item.isFullyWatched(): Boolean {
+    val watchedCount = watched ?: 0
+    if (!type.isSeriesLike()) {
+        return watchedCount > 0 || watching?.status == WATCHED_STATUS
+    }
+    if (watchedCount == 0) return false
+
+    val unwatchedEpisodes = new
+    val episodeCount = total
+    return when {
+        unwatchedEpisodes != null -> unwatchedEpisodes == 0
+        episodeCount != null && episodeCount > 0 -> watchedCount >= episodeCount
+        else -> false
+    }
 }
 
 @Serializable

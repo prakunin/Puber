@@ -25,6 +25,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableSharedFlow
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -49,6 +50,7 @@ internal class HistoryVMLifecycleTest {
 
     private lateinit var api: KinoPubApiClient
     private lateinit var vm: HistoryVM
+    private val displaySettingsChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     @BeforeEach
     fun setUp() {
@@ -63,11 +65,33 @@ internal class HistoryVMLifecycleTest {
             interactor = HistoryInteractor(
                 api = api,
                 itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true),
+                navigationPreferencesRepository = mockk {
+                    every { displaySettingsChanges } returns this@HistoryVMLifecycleTest.displaySettingsChanges
+                },
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = mockk<AppRouter>(relaxed = true),
             errorHandler = errorHandler,
         )
+    }
+
+    @Test
+    fun watchedIndicatorSettingChange_reloadsWhatIsOnScreen() {
+        // Moving between screens does not pause the activity, so coming back from the settings
+        // screen brings no resume with it — without this the rows keep the previous choice until
+        // something else happens to reload them.
+        val pageOneCalls = AtomicInteger()
+        coEvery { api.getHistoryData(1) } coAnswers {
+            pageOneCalls.incrementAndGet()
+            Result.success(page(listOf(movie(1))))
+        }
+        vm.testOnStart()
+        awaitContent()
+        assertEquals(1, pageOneCalls.get())
+
+        assertTrue(displaySettingsChanges.tryEmit(Unit))
+
+        awaitState { pageOneCalls.get() == 2 }
     }
 
     @Test

@@ -47,6 +47,9 @@ import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import androidx.lifecycle.Lifecycle
+import com.kino.puber.core.ui.uikit.component.LifecycleAction
+import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.toptabs.TopTabMainContent
@@ -58,6 +61,13 @@ internal fun MainScreenComponent() {
     val vm = puberViewModel<MainVM>()
     val state by vm.collectViewState()
     val onAction: (UIAction) -> Unit = remember { vm::onAction }
+    // The watch-state index goes stale while the TV sits idle for hours; coming back is the moment
+    // to catch it up.
+    LifecycleAction(
+        event = Lifecycle.Event.ON_RESUME,
+        onAction = onAction,
+        action = MainAction.Resumed,
+    )
     when (state.navigationMode) {
         NavigationMode.SideDrawer -> DrawerMainContent(
             state = state,

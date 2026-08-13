@@ -19,6 +19,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -55,7 +56,7 @@ class HistoryVMFilteredEmptyPageTest {
     fun setUp() {
         api = mockk()
         itemDetailsRepository = mockk(relaxed = true)
-        interactor = HistoryInteractor(api, itemDetailsRepository)
+        interactor = HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())
         mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider()))
         router = mockk(relaxed = true)
         errorHandler = mockk(relaxed = true)

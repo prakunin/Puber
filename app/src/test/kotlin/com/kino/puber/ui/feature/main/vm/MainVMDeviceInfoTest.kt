@@ -99,6 +99,8 @@ internal class MainVMDeviceInfoTest {
                 showCartoonsTab = true,
                 showAnimeTab = true,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             )
         )
 
@@ -108,6 +110,7 @@ internal class MainVMDeviceInfoTest {
             tabRouter = mockk<TabRouter>(relaxed = true),
             navigationPreferencesRepository = preferences,
             deviceInfoInteractor = deviceInfoInteractor,
+            watchStateSyncInteractor = mockk(relaxed = true),
         )
     }
 }

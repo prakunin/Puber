@@ -3,15 +3,21 @@ package com.kino.puber.data.preferences
 import android.content.Context
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 data class ContentPreferences(
     val showCartoonsTab: Boolean,
     val showAnimeTab: Boolean,
     val showAnime: Boolean,
+    val hideWatched: Boolean,
+    val showWatchedIndicators: Boolean,
 )
 
 class NavigationPreferencesRepository(context: Context) {
@@ -22,9 +28,23 @@ class NavigationPreferencesRepository(context: Context) {
             showCartoonsTab = prefs.getBoolean(KEY_SHOW_CARTOONS_TAB, false),
             showAnimeTab = prefs.getBoolean(KEY_SHOW_ANIME_TAB, false),
             showAnime = prefs.getBoolean(KEY_SHOW_ANIME, true),
+            hideWatched = prefs.getBoolean(KEY_HIDE_WATCHED, false),
+            showWatchedIndicators = readWatchedIndicators(context),
         )
     )
     val contentPreferences: StateFlow<ContentPreferences> = _contentPreferences.asStateFlow()
+
+    /**
+     * Emits whenever a setting that changes what a catalogue card shows flips — hiding watched
+     * titles, or the watched marks themselves. Screens map their cards once and hold the result,
+     * and moving between screens does not pause the activity, so without this a screen would keep
+     * showing the previous choice until it happened to reload for some other reason.
+     */
+    val displaySettingsChanges: Flow<Unit> = contentPreferences
+        .map { it.hideWatched to it.showWatchedIndicators }
+        .distinctUntilChanged()
+        .drop(1)
+        .map { }
 
     fun getNavigationMode(): NavigationMode {
         val name = prefs.getString(KEY_NAVIGATION_MODE, NavigationMode.TopTabs.name)
@@ -92,6 +112,33 @@ class NavigationPreferencesRepository(context: Context) {
     fun setShowAnime(show: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_ANIME, show).apply()
         _contentPreferences.update { it.copy(showAnime = show) }
+    }
+
+    fun setHideWatched(hide: Boolean) {
+        prefs.edit().putBoolean(KEY_HIDE_WATCHED, hide).apply()
+        _contentPreferences.update { it.copy(hideWatched = hide) }
+    }
+
+    fun setShowWatchedIndicators(show: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_WATCHED_INDICATORS, show).apply()
+        _contentPreferences.update { it.copy(showWatchedIndicators = show) }
+    }
+
+    /**
+     * The setting used to live in the player preferences, where nothing could observe it and lists
+     * kept showing the old choice until they happened to reload. It moves here on first read so an
+     * existing choice is not silently reset.
+     */
+    private fun readWatchedIndicators(context: Context): Boolean {
+        if (prefs.contains(KEY_SHOW_WATCHED_INDICATORS)) {
+            return prefs.getBoolean(KEY_SHOW_WATCHED_INDICATORS, true)
+        }
+
+        // Read, not copied: writing here would mean a side effect in the constructor, and the value
+        // lands in the new place as soon as the setting is next touched.
+        return context
+            .getSharedPreferences(LEGACY_PLAYER_PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(LEGACY_KEY_WATCHED_INDICATORS, true)
     }
 
     private fun defaultTabsForMode(mode: NavigationMode): List<TabType> {
@@ -175,6 +222,10 @@ class NavigationPreferencesRepository(context: Context) {
         const val KEY_SHOW_CARTOONS_TAB = "show_cartoons_tab"
         const val KEY_SHOW_ANIME_TAB = "show_anime_tab"
         const val KEY_SHOW_ANIME = "show_anime"
+        const val KEY_HIDE_WATCHED = "hide_watched"
+        const val KEY_SHOW_WATCHED_INDICATORS = "show_watched_indicators"
+        const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
+        const val LEGACY_KEY_WATCHED_INDICATORS = "watched_indicators_enabled"
         const val TOP_TABS_SCHEMA_VERSION_HISTORY = 1
         const val SEPARATOR = ","
 

@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.androidx.baselineprofile)
 }
 
-val currentVersion = "1.7.8"
+val currentVersion = "1.8.9"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
@@ -201,6 +201,11 @@ android {
 
 }
 
+ksp {
+    // Room writes the schema JSON here so migrations can be diffed against it in review.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 kotlin {
     jvmToolchain(Versions.JavaVersionCompat.majorVersion.toInt())
     compilerOptions {
@@ -293,6 +298,11 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.datasource.okhttp)
 
+    // Local watch-state database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
     // Logging
     implementation(libs.timber)
 
@@ -306,6 +316,9 @@ dependencies {
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.coroutines.test)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 

@@ -8,6 +8,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,7 +22,9 @@ class DetailsInteractorTest {
     private val api = mockk<KinoPubApiClient>(relaxed = true)
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     private val watchLaterBookmarkInteractor = mockk<WatchLaterBookmarkInteractor>()
-    private val interactor = DetailsInteractor(api, itemDetailsRepository, watchLaterBookmarkInteractor)
+    private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
+    private val interactor =
+        DetailsInteractor(api, itemDetailsRepository, watchLaterBookmarkInteractor, watchStateRepository)
 
     @Test
     fun isInWatchLaterFolder_returnsTrueFromLocalBookmarks_withoutLiveLookup() = runTest {

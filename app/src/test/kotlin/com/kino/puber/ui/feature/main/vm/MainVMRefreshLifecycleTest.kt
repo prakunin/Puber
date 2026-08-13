@@ -74,6 +74,7 @@ internal class MainVMRefreshLifecycleTest {
             tabRouter = tabRouter,
             navigationPreferencesRepository = mockk(relaxed = true),
             deviceInfoInteractor = deviceInfoInteractor(),
+            watchStateSyncInteractor = mockk(relaxed = true),
         )
         val historyTab = MainTab(
             type = TabType.History,
@@ -111,6 +112,8 @@ internal class MainVMRefreshLifecycleTest {
                 showCartoonsTab = false,
                 showAnimeTab = true,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             )
         )
         val repository = mockk<NavigationPreferencesRepository>()
@@ -127,7 +130,7 @@ internal class MainVMRefreshLifecycleTest {
         val tabRouter = mockk<TabRouter>(relaxed = true)
         val openedTabs = mutableListOf<PuberTab>()
         every { tabRouter.openTab(capture(openedTabs)) } returns Unit
-        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor())
+        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
 
         vm.testOnStart()
         runCurrent()
@@ -146,6 +149,8 @@ internal class MainVMRefreshLifecycleTest {
                 showCartoonsTab = true,
                 showAnimeTab = true,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             )
         )
         val repository = mockk<NavigationPreferencesRepository>()
@@ -166,7 +171,7 @@ internal class MainVMRefreshLifecycleTest {
             puberTab(firstArg(), thirdArg())
         }
         val tabRouter = mockk<TabRouter>(relaxed = true)
-        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor())
+        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
 
         vm.testOnStart()
         runCurrent()

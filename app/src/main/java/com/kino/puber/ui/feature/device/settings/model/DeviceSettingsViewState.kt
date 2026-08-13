@@ -33,6 +33,7 @@ internal sealed interface DeviceSettingsState {
         val showCartoonsTab: Boolean = false,
         val showAnimeTab: Boolean = false,
         val showAnime: Boolean = true,
+        val hideWatched: Boolean = false,
         val autoUpdateCheckEnabled: Boolean = true,
     ) : DeviceSettingsState
 }

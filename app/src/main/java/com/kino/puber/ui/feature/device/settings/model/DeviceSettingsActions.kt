@@ -20,6 +20,7 @@ internal sealed class DeviceSettingsActions : UIAction {
     data object ToggleCartoonsTab : DeviceSettingsActions()
     data object ToggleAnimeTab : DeviceSettingsActions()
     data object ToggleShowAnime : DeviceSettingsActions()
+    data object ToggleHideWatched : DeviceSettingsActions()
     data object ToggleAutoUpdateCheck : DeviceSettingsActions()
     data object OpenApiDomainDialog : DeviceSettingsActions()
     data object CloseApiDomainDialog : DeviceSettingsActions()
