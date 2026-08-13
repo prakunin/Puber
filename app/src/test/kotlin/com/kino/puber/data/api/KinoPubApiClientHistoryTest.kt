@@ -3,8 +3,10 @@ package com.kino.puber.data.api
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.util.Base64
 import android.util.Log
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -14,10 +16,17 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.URLDecoder
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterAll
@@ -34,12 +43,15 @@ internal class KinoPubApiClientHistoryTest {
             mockkStatic(Log::class)
             every { Log.isLoggable(any(), any()) } returns false
             every { Log.println(any(), any(), any()) } returns 0
+            mockkStatic(Base64::class)
+            every { Base64.decode(any<ByteArray>(), any()) } returns "example.test".toByteArray()
         }
 
         @JvmStatic
         @AfterAll
         fun tearDownAndroidLogging() {
             unmockkStatic(Log::class)
+            unmockkStatic(Base64::class)
         }
     }
 
@@ -116,7 +128,64 @@ internal class KinoPubApiClientHistoryTest {
         )
     }
 
-    private fun client(cacheDir: Path, baseUrl: String): KinoPubApiClient {
+    @Test
+    fun updateDeviceInfo_sendsTitleHardwareAndSoftwareAsQueryParameters(
+        @TempDir cacheDir: Path,
+    ) = runTest {
+        val sent = AtomicReference<Request>()
+        val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                sent.set(chain.request())
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body("""{"status":200}""".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        client(cacheDir, KinoPubConfig.MAIN_API_BASE_URL, okHttpClient).updateDeviceInfo(
+            title = "Puber",
+            hardware = "Google Chromecast HD",
+            software = "Android 14",
+        )
+
+        val request = sent.get()
+        assertEquals("POST", request.method)
+        assertEquals("/v1/device/notify", request.url.encodedPath)
+        assertEquals("Puber", request.url.queryParameter("title"))
+        assertEquals("Google Chromecast HD", request.url.queryParameter("hardware"))
+        assertEquals("Android 14", request.url.queryParameter("software"))
+
+        val body = Buffer().also { buffer -> request.body?.writeTo(buffer) }.readUtf8()
+        assertEquals(
+            "application/x-www-form-urlencoded",
+            request.body?.contentType()?.let { "${it.type}/${it.subtype}" },
+        )
+        assertEquals(
+            listOf("application/x-www-form-urlencoded"),
+            request.headers.values("Content-Type").map { value -> value.substringBefore(';').trim() },
+        )
+        assertEquals(
+            mapOf(
+                "title" to "Puber",
+                "hardware" to "Google Chromecast HD",
+                "software" to "Android 14",
+            ),
+            body.split("&").associate { pair ->
+                val (name, value) = pair.split("=", limit = 2)
+                name to URLDecoder.decode(value, "UTF-8")
+            },
+        )
+    }
+
+    private fun client(
+        cacheDir: Path,
+        baseUrl: String,
+        okHttpClient: OkHttpClient = OkHttpClient(),
+    ): KinoPubApiClient {
         val connectivityManager = mockk<ConnectivityManager>()
         val network = mockk<Network>()
         val capabilities = mockk<NetworkCapabilities>()
@@ -133,7 +202,7 @@ internal class KinoPubApiClientHistoryTest {
         every { preferences.getAndroidId() } returns null
 
         return KinoPubApiClient(
-            okHttpClient = OkHttpClient(),
+            okHttpClient = okHttpClient,
             cacheDir = cacheDir.toFile(),
             connectivityManager = connectivityManager,
             cryptoPreferenceRepository = preferences,
