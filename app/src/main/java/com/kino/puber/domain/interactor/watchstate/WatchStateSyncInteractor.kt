@@ -69,18 +69,22 @@ class WatchStateSyncInteractor(
         // History first, so the lists of what is *currently* in progress get the last word: they
         // describe the present, while history describes everything that ever played.
         //
-        // The serials list is what the walk needs to tell a finished series from one still going,
-        // so without it there is no walk at all. Reading the history anyway would index only the
-        // movies in it, and a pass that skipped every series may neither end the full walk nor
-        // prune by what it did not see — it would spend hundreds of requests on progress it is not
-        // allowed to record. The history waits for a run that has the list.
-        val walk = series?.let { inProgress ->
+        // Both lists are required for the walk, for the same reason. The serials list is what tells
+        // a finished series from one still going, so without it the walk could only index the
+        // movies in the history. The movies list is the only source for a film that is started and
+        // no longer in the history at all, so without it a walk that runs to the end is not the
+        // complete pass the prune below takes it for, and would delete those rows. Either missing,
+        // and the history waits for a run that has both rather than spending hundreds of requests
+        // on a pass it is not allowed to finish.
+        val walk = if (series != null && movies != null) {
             syncHistory(
                 generation = generation,
                 observedAt = observedAt,
                 cursor = cursor,
-                seriesStillInProgress = inProgress.map(Item::id).toSet(),
+                seriesStillInProgress = series.map(Item::id).toSet(),
             )
+        } else {
+            null
         }
         if (walk != null) cursor = walk.cursor
         if (!sessionSurvived(generation)) return false
@@ -93,15 +97,17 @@ class WatchStateSyncInteractor(
 
         // A pass that read the history to its end has seen everything the account still has, so
         // whatever it did not restamp is gone from the server and goes now. Done after the watching
-        // lists so their rows carry this pass too.
+        // lists so their rows carry this pass too. A walk only runs when both of those lists
+        // answered, which is what makes "did not restamp" mean "gone" rather than "not asked".
         if (walk?.completedFullWalk == true) {
             repository.pruneStaleRows(cursor.generation)
             cursor = cursor.copy(lastReconciledAt = now)
         }
 
         // Only a complete sync earns the stamp. Half an index must not suppress retries for an
-        // hour. A walk that never ran (no serials list) fails this the same way a failed one does.
-        val everySourceAnswered = movies != null && walk != null && walk.reachedTheEnd
+        // hour. A walk that never ran (a watching list missing) fails this the same way a failed
+        // one does, which is why the lists are not re-checked here.
+        val everySourceAnswered = walk != null && walk.reachedTheEnd
         if (everySourceAnswered) {
             cursor = cursor.copy(lastSyncAt = now)
         }

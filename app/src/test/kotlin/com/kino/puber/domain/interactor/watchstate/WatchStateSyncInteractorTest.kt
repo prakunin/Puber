@@ -128,6 +128,42 @@ class WatchStateSyncInteractorTest {
     }
 
     @Test
+    fun sync_leavesTheHistoryAloneWhenTheMoviesListFailed() = runTest {
+        // A film the account started and later cleared from its history exists in that list and
+        // nowhere else, so a walk without it cannot see everything the prune assumes it saw.
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { repository.recordHistoryPage(any(), any(), any(), any()) }
+        assertFalse(cursor.fullHistoryWalkDone)
+        assertNull(cursor.lastSyncAt)
+    }
+
+    @Test
+    fun reconciliation_keepsMovieRowsWhenTheMoviesListFailed() = runTest {
+        // Same rule as for the serials list: the run that cannot read a source must not be the one
+        // deciding which of that source's rows the account no longer has.
+        val interactor = reconcilingInteractor()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(1L) }
+
+        now += 8.days.inWholeMilliseconds
+        stubHistory(pages = 2)
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { repository.pruneStaleRows(2L) }
+        // And the pass stays open, so the next run with the list in hand prunes instead.
+        coEvery { api.getWatchingMovies() } returns success()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
+    }
+
+    @Test
     fun sync_writesTheWatchingListsAfterTheHistory() = runTest {
         // History describes everything ever played; the watching lists describe the present, so
         // they have to land last.
