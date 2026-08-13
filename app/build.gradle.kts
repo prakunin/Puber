@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.androidx.baselineprofile)
 }
 
-val currentVersion = "1.8.11"
+val currentVersion = "1.8.12"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
