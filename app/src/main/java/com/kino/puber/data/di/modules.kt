@@ -83,6 +83,7 @@ val repositoryModule = module {
     single { PuberDatabase.create(androidContext()) }
     single { get<PuberDatabase>().watchStateDao() }
     single { get<PuberDatabase>().watchStateSyncDao() }
+    single { get<PuberDatabase>().cachedPayloadDao() }
     single { get<PuberDatabase>().transactions() }
     single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
     single<androidx.media3.datasource.cache.Cache> {

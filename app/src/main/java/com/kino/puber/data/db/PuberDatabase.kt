@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [WatchStateEntity::class, WatchStateSyncEntity::class],
-    version = 1,
+    entities = [WatchStateEntity::class, WatchStateSyncEntity::class, CachedPayloadEntity::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class PuberDatabase : RoomDatabase() {
@@ -15,6 +15,8 @@ abstract class PuberDatabase : RoomDatabase() {
     abstract fun watchStateDao(): WatchStateDao
 
     abstract fun watchStateSyncDao(): WatchStateSyncDao
+
+    abstract fun cachedPayloadDao(): CachedPayloadDao
 
     companion object {
         private const val NAME = "puber.db"
