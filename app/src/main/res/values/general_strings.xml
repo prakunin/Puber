@@ -1,4 +1,5 @@
 <resources>
+    <string name="splash_version">версия %1$s</string>
     <string name="error_button_retry">Повторить</string>
     <string name="empty_state">Пусто</string>
     <string name="show_all">Показать\nвсе</string>

@@ -1,4 +1,8 @@
 <resources>
 
-    <style name="Theme.Puber" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <style name="Theme.Puber" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- Same colour the launcher screen paints, so the window shows the splash background
+             instead of the platform default white until Compose draws its first frame. -->
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
 </resources>
