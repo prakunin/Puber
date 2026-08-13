@@ -19,3 +19,6 @@
 /.kent/runtime/
 .serena/
 .env
+
+# Subagent-driven development scratch (ledger, briefs, review packages)
+.superpowers/
