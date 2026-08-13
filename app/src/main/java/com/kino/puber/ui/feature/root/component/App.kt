@@ -11,10 +11,12 @@ import androidx.lifecycle.Lifecycle
 import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
+import kotlinx.coroutines.CancellationException
 import com.kino.puber.core.ui.uikit.component.LifecycleAction
 import com.kino.puber.core.ui.model.VideoItemTypeMapper
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -59,13 +61,29 @@ private fun SessionExpiredHandler() {
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
     val payloadStore = getKoin().get<PersistentPayloadStore>()
     LaunchedEffect(Unit) {
+        // This collect is the app's only subscriber to session-expiry events. An exception escaping
+        // it would kill the collector, and every later Unauthorized event for the rest of the
+        // process would then go unhandled — so the clears below must never be able to do that.
+        suspend fun clearWithoutFailing(clear: suspend () -> Unit) {
+            try {
+                clear()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                log(error, "Failed to clear session-scoped state on logout")
+            }
+        }
+
         sessionEventBus.events.collect { event ->
             when (event) {
                 SessionEvent.Unauthorized -> {
-                    // The index is one account's viewing history; it must not outlive the session.
-                    watchStateSyncInteractor.invalidate()
-                    // Neither may the cached payloads it was built from.
-                    payloadStore.clear()
+                    // The watch-state index is one account's viewing history, and the payload store
+                    // is that account's cached view of one domain's catalogue; neither must outlive
+                    // the session. Ejecting the user to auth is the part that must not be optional,
+                    // so it runs unconditionally below; these clears ahead of it are best-effort,
+                    // same as clearDomainSensitiveCaches's clears on a domain switch.
+                    clearWithoutFailing { watchStateSyncInteractor.invalidate() }
+                    clearWithoutFailing { payloadStore.clear() }
                     router.newRootScreen(router.screens.auth())
                 }
             }
