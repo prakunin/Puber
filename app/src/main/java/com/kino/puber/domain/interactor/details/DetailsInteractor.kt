@@ -23,8 +23,8 @@ internal class DetailsInteractor(
         return itemDetailsRepository.observeItemDetails(id, force = force)
     }
 
-    fun observeSimilarItems(id: Int): Flow<Cached<List<Item>>> {
-        return itemDetailsRepository.observeSimilarItems(id)
+    fun observeSimilarItems(id: Int, force: Boolean = false): Flow<Cached<List<Item>>> {
+        return itemDetailsRepository.observeSimilarItems(id, force = force)
     }
 
     suspend fun getItemDetails(id: Int): Item {

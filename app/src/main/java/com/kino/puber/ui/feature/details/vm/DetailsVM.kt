@@ -63,7 +63,14 @@ internal class DetailsVM(
     }
 
     private var rendered = false
-    private var watchlistTouched = false
+
+    // Guards resolveWatchlistFlag's patch: a lookup only applies if nothing newer has superseded it
+    // by the time it answers. Both onWatchlistToggle and each fresh resolveWatchlistFlag call bump
+    // this, so a toggle drops an older in-flight lookup, but a *later* lookup — started by a forced
+    // reload after that toggle — is not permanently silenced by it. A plain "the user touched this
+    // once" boolean would reject that later lookup too, leaving a stale answer on screen for the rest
+    // of the ViewModel's life.
+    private var watchlistLookupGeneration = 0
 
     private fun loadData(forceRefresh: Boolean = false) {
         launch {
@@ -105,20 +112,22 @@ internal class DetailsVM(
     }
 
     private fun resolveWatchlistFlag(item: Item) {
+        val generation = ++watchlistLookupGeneration
         launch {
             val resolved = runCatching { interactor.isInWatchLaterFolder(item) }.getOrNull() ?: return@launch
-            // The user may have pressed the button while the lookup was in the air. Their action is
-            // the newer fact.
-            if (watchlistTouched) return@launch
+            // Something newer happened while this lookup was in the air — either the user pressed the
+            // button, or a later reload started its own lookup for a possibly different item. Either
+            // way this answer is no longer the freshest fact, so it is dropped rather than applied.
+            if (generation != watchlistLookupGeneration) return@launch
             updateViewState<DetailsScreenState.Content> {
                 copy(isInWatchlist = resolved)
             }
         }
     }
 
-    private fun loadSimilarItems() {
+    private fun loadSimilarItems(force: Boolean = false) {
         launch {
-            interactor.observeSimilarItems(params.itemId).collect { cached ->
+            interactor.observeSimilarItems(params.itemId, force = force).collect { cached ->
                 if (cached !is Cached.Value) return@collect
                 updateViewState<DetailsScreenState.Content> {
                     copy(
@@ -288,7 +297,7 @@ internal class DetailsVM(
     }
 
     private fun onWatchlistToggle() {
-        watchlistTouched = true
+        watchlistLookupGeneration++
         val previous = (stateValue as? DetailsScreenState.Content)?.isInWatchlist ?: return
         val desired = !previous
         updateViewState<DetailsScreenState.Content> {
@@ -454,7 +463,10 @@ internal class DetailsVM(
 
         val content = stateValue as? DetailsScreenState.Content ?: return
         if (content.similarItems.any { item -> changes.affectsItem(item.id) }) {
-            loadSimilarItems()
+            // A stored, non-stale similar-items entry would otherwise answer from cache and skip
+            // revalidation for up to CacheTtl.SimilarItems — the row the user just changed on a nested
+            // details screen would keep its pre-change flags for that long.
+            loadSimilarItems(force = true)
         }
     }
 

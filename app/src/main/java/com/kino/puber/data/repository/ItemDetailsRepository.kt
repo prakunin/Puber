@@ -34,8 +34,8 @@ class ItemDetailsRepository(
         return details.load(CacheKeys.item(id), force = force) { fetchItem(id) }
     }
 
-    fun observeSimilarItems(id: Int): Flow<Cached<List<Item>>> {
-        return similar.load(CacheKeys.similar(id)) {
+    fun observeSimilarItems(id: Int, force: Boolean = false): Flow<Cached<List<Item>>> {
+        return similar.load(CacheKeys.similar(id), force = force) {
             api.getSimilarItems(id).getOrThrow().items.orEmpty()
         }
     }

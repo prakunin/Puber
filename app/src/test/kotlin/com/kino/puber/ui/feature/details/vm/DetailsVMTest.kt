@@ -221,7 +221,11 @@ class DetailsVMTest {
         listener.captured(ContentChangeSet.single(100, ContentChangeType.Bookmark))
 
         coVerify(exactly = 0) { interactor.refreshItemDetails(any()) }
-        verify(exactly = 2) { interactor.observeSimilarItems(42) }
+        // The initial load must not force; the reload triggered by a returned change for a visible
+        // similar item must — otherwise a non-stale cache entry answers from the stored value and
+        // skips revalidation, leaving the just-changed item showing its pre-change flags.
+        verify(exactly = 1) { interactor.observeSimilarItems(42, force = false) }
+        verify(exactly = 1) { interactor.observeSimilarItems(42, force = true) }
     }
 
     @Test
