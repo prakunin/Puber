@@ -241,7 +241,10 @@ internal class PlayerInteractor(
 
     suspend fun saveWatchingTime(id: Int, videoNumber: Int, time: Int, season: Int? = null) {
         api.setWatchingTime(id, videoNumber, time, season).getOrThrow()
-        itemDetailsRepository.invalidate(id)
+        // A position write happens every few seconds of playback. Dropping the entry each time is
+        // what kept the details cache from ever being warm for the titles watched most; marking it
+        // stale still guarantees the next open revalidates, but leaves something to draw meanwhile.
+        itemDetailsRepository.markStale(id)
     }
 
     suspend fun markAsWatched(id: Int, season: Int? = null, videoNumber: Int? = null) {

@@ -518,23 +518,25 @@ class PlayerInteractorTest {
     // region cache invalidation
 
     @Test
-    fun saveWatchingTime_success_invalidatesItemDetailsCache() = runTest {
+    fun saveWatchingTime_success_marksItemDetailsCacheStale() = runTest {
         coEvery { api.setWatchingTime(42, 1, 120, 2) } returns Result.success(
             WatchingStatus(id = 42, status = 1, time = 120, season = 2, episode = 1),
         )
-        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.markStale(any()) } returns Unit
 
         interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 120, season = 2)
 
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, 2) }
-        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.markStale(42) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     @Test
-    fun saveWatchingTime_failure_doesNotInvalidateItemDetailsCache() = runTest {
+    fun saveWatchingTime_failure_doesNotMarkStaleOrInvalidateItemDetailsCache() = runTest {
         coEvery { api.setWatchingTime(42, 1, 120, null) } returns Result.failure(
             IllegalStateException("save failed"),
         )
+        coEvery { itemDetailsRepository.markStale(any()) } returns Unit
         coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
 
         val failure = runCatching {
@@ -543,7 +545,36 @@ class PlayerInteractorTest {
 
         assertTrue(failure is IllegalStateException)
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, null) }
+        coVerify(exactly = 0) { itemDetailsRepository.markStale(any()) }
         coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+    }
+
+    @Test
+    fun saveWatchingTimeMarksTheDetailsStaleInsteadOfDroppingThem() = runTest {
+        // A position is saved every few seconds while playing. Dropping the entry each time is why
+        // the details cache never survived long enough to spare the user a spinner.
+        coEvery { api.setWatchingTime(any(), any(), any(), any()) } returns Result.success(
+            WatchingStatus(id = 42, status = 1, time = 30, season = null, episode = 1),
+        )
+        coEvery { itemDetailsRepository.markStale(any()) } returns Unit
+
+        interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 30)
+
+        coVerify(exactly = 1) { itemDetailsRepository.markStale(42) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(42) }
+    }
+
+    @Test
+    fun markAsWatchedStillDropsTheDetails() = runTest {
+        // Unlike a position, a watched mark changes what the server would return in ways the cached
+        // payload cannot be patched into agreeing with.
+        coEvery { api.toggleWatchingStatus(any(), any(), any(), any()) } returns
+            Result.success(WatchingToggleResponse(status = 1, watched = 1))
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
+
+        interactor.markAsWatched(id = 42)
+
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
