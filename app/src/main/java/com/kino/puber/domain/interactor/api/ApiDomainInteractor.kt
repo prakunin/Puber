@@ -5,6 +5,7 @@ import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ internal class ApiDomainInteractor(
     private val preferences: ICryptoPreferenceRepository,
     private val itemDetailsRepository: ItemDetailsRepository,
     private val genreInteractor: GenreInteractor,
+    private val store: PersistentPayloadStore,
     okHttpClient: OkHttpClient,
 ) {
     private val probeJson = Json { ignoreUnknownKeys = true }
@@ -142,6 +144,11 @@ internal class ApiDomainInteractor(
     private suspend fun clearDomainSensitiveCaches() {
         clearWithoutFailing { itemDetailsRepository.clear() }
         clearWithoutFailing { genreInteractor.clearCache() }
+        // Every payload in the store describes one domain's catalogue; a switch makes all of them
+        // wrong at once. store.clear() (unlike the prefix removal above) also bumps the store's
+        // session generation, so a revalidation that was already in flight when the switch happened
+        // is withdrawn instead of landing after this wipe and reintroducing the old domain's data.
+        clearWithoutFailing { store.clear() }
     }
 
     private suspend fun clearWithoutFailing(clear: suspend () -> Unit) {

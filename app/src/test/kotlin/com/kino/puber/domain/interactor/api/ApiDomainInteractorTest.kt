@@ -3,6 +3,7 @@ package com.kino.puber.domain.interactor.api
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -24,10 +25,12 @@ internal class ApiDomainInteractorTest {
     private val preferences = mockk<ICryptoPreferenceRepository>(relaxed = true)
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     private val genreInteractor = mockk<GenreInteractor>(relaxed = true)
+    private val store = mockk<PersistentPayloadStore>(relaxed = true)
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
         itemDetailsRepository = itemDetailsRepository,
         genreInteractor = genreInteractor,
+        store = store,
         okHttpClient = OkHttpClient(),
     )
 
@@ -82,5 +85,31 @@ internal class ApiDomainInteractorTest {
         assertEquals("api.custom.example", success.state.customDomain)
         verify(exactly = 1) { preferences.saveApiDomain("api.custom.example") }
         verify(exactly = 1) { genreInteractor.clearCache() }
+    }
+
+    /**
+     * Payloads describe one domain's catalogue. Keeping them across a switch shows the previous
+     * domain's content under the new one, so the whole store must be dropped, not just the
+     * repository-level namespaces.
+     */
+    @Test
+    fun resetToDefault_dropsEveryCachedPayload() = runTest {
+        interactor.resetToDefault()
+
+        coVerify(exactly = 1) { store.clear() }
+    }
+
+    /**
+     * The store wipe is independent of the other domain-sensitive clears — see
+     * resetToDefault_completesEvenWhenTheItemDetailsCacheFailsToClear for why none of the three may
+     * skip the others.
+     */
+    @Test
+    fun resetToDefault_stillDropsTheStoreWhenTheItemDetailsCacheFailsToClear() = runTest {
+        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+
+        interactor.resetToDefault()
+
+        coVerify(exactly = 1) { store.clear() }
     }
 }

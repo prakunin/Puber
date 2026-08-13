@@ -13,6 +13,7 @@ import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.core.ui.uikit.component.LifecycleAction
 import com.kino.puber.core.ui.model.VideoItemTypeMapper
@@ -56,12 +57,15 @@ private fun SessionExpiredHandler() {
     val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
     val sessionEventBus = getKoin().get<SessionEventBus>()
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
+    val payloadStore = getKoin().get<PersistentPayloadStore>()
     LaunchedEffect(Unit) {
         sessionEventBus.events.collect { event ->
             when (event) {
                 SessionEvent.Unauthorized -> {
                     // The index is one account's viewing history; it must not outlive the session.
                     watchStateSyncInteractor.invalidate()
+                    // Neither may the cached payloads it was built from.
+                    payloadStore.clear()
                     router.newRootScreen(router.screens.auth())
                 }
             }
