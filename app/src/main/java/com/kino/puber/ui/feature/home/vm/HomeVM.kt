@@ -61,12 +61,12 @@ internal class HomeVM(
      *
      * A watched mark landing changes how a card is *drawn*, not what the server would return, so it
      * is re-mapped from this instead of costing another round of section requests. Sections also
-     * arrive independently now, so this is what a partial screen is published from.
+     * arrive independently now, so this is what a partial screen is published from. This is never
+     * cleared between loads: a refresh overwrites each row in place as its own value arrives, rather
+     * than dropping the whole screen to whatever the first section to answer happens to be.
      */
     private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
     private var loadedCollections: List<KCollection>? = null
-    private var loadedHotItems: List<Item> = emptyList()
-    private var finishedSections = 0
 
     override fun dispatchError(error: ErrorEntity) {
         if (stateValue is HomeViewState.Content) {
@@ -185,9 +185,12 @@ internal class HomeVM(
     }
 
     private suspend fun loadContentSections(forceWatching: Boolean) = supervisorScope {
-        loadedSections.clear()
-        loadedCollections = null
-        finishedSections = 0
+        // Scoped to this call rather than kept on the instance: `loadHome` cancels the previous
+        // job without joining it, so a stale collector's `finally` block can still be in flight
+        // when this run starts. Reading a shared counter there would let up to TOTAL_SECTIONS
+        // stale increments land on this run's count; a fresh holder per run can't be touched by
+        // a previous one no matter how cancellation is interleaved.
+        val run = LoadRun()
 
         val sections = listOf(
             HomeSectionType.ContinueWatching to interactor.observeWatchingItems(force = forceWatching),
@@ -199,18 +202,18 @@ internal class HomeVM(
             HomeSectionType.Bookmarks to interactor.observeBookmarkItems(),
         )
         sections.forEach { (type, flow) ->
-            launch { collectSection(type, flow) }
+            launch { collectSection(run, type, flow) }
         }
-        launch { collectCollections() }
+        launch { collectCollections(run) }
     }
 
-    private suspend fun collectSection(type: HomeSectionType, flow: Flow<Cached<List<Item>>>) {
+    private suspend fun collectSection(run: LoadRun, type: HomeSectionType, flow: Flow<Cached<List<Item>>>) {
         try {
             flow.collect { cached ->
                 when (cached) {
                     is Cached.Value -> {
                         loadedSections[type] = cached.value
-                        if (type == HomeSectionType.Hot) loadedHotItems = cached.value
+                        run.publishedAnything = true
                         publishSections()
                     }
                     is Cached.RefreshFailed -> log(cached.error, "Failed to refresh $type")
@@ -221,16 +224,17 @@ internal class HomeVM(
         } catch (error: Throwable) {
             log(error, "Failed to load $type")
         } finally {
-            onSectionFinished()
+            onSectionFinished(run)
         }
     }
 
-    private suspend fun collectCollections() {
+    private suspend fun collectCollections(run: LoadRun) {
         try {
             interactor.observeCollections().collect { cached ->
                 when (cached) {
                     is Cached.Value -> {
                         loadedCollections = cached.value
+                        run.publishedAnything = true
                         publishSections()
                     }
                     is Cached.RefreshFailed -> log(cached.error, "Failed to refresh collections")
@@ -241,20 +245,23 @@ internal class HomeVM(
         } catch (error: Throwable) {
             log(error, "Failed to load collections")
         } finally {
-            onSectionFinished()
+            onSectionFinished(run)
         }
     }
 
     /**
-     * Shows the error screen only once every section has given up with nothing to show.
+     * Shows the error screen only once every section in this run has given up without this run
+     * having published anything.
      *
      * A single failing row is not worth replacing a working screen over, but a screen that would
-     * stay empty forever has to say so rather than spin.
+     * stay empty forever has to say so rather than spin. "Published anything" is asked of this
+     * run, not of [loadedSections]: a section carried over from an earlier successful load must
+     * not silently excuse a run where every section just failed.
      */
-    private fun onSectionFinished() {
-        finishedSections += 1
-        if (finishedSections < TOTAL_SECTIONS) return
-        if (loadedSections.isNotEmpty() || loadedCollections != null) return
+    private fun onSectionFinished(run: LoadRun) {
+        run.finishedSections += 1
+        if (run.finishedSections < TOTAL_SECTIONS) return
+        if (run.publishedAnything) return
         if (stateValue is HomeViewState.Content) return
         updateViewState(
             HomeViewState.Error(
@@ -273,13 +280,20 @@ internal class HomeVM(
             loadedCollections?.let { mapper.mapCollectionSection(it) },
         ).sortedBy { it.type.ordinal }
 
+        val hotItems = loadedSections[HomeSectionType.Hot].orEmpty()
         updateViewState(
             HomeViewState.Content(
-                heroItems = videoItemMapper.mapHeroItems(loadedHotItems.take(HERO_ITEMS_COUNT)),
+                heroItems = videoItemMapper.mapHeroItems(hotItems.take(HERO_ITEMS_COUNT)),
                 sections = mapped,
                 apiDomainDialog = currentDialogState(),
             )
         )
+    }
+
+    /** Per-[loadContentSections] call counters, so a cancelled run can't skew the next one's. */
+    private class LoadRun {
+        var finishedSections = 0
+        var publishedAnything = false
     }
 
     private fun openApiDomainDialog() {
