@@ -53,6 +53,12 @@ internal fun PlayerSettingsPanels(
         onBackPressed = rememberAction(onAction, PlayerAction.ClosePanel),
     )
 
+    PlayerInfoPanel(
+        visible = content.activePanel == ActivePanel.Info,
+        entries = playerInfoEntries(content),
+        onClose = rememberAction(onAction, PlayerAction.ClosePanel),
+    )
+
     EpisodesPanel(
         visible = content.activePanel == ActivePanel.Episodes,
         episodes = content.episodes,

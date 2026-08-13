@@ -7,6 +7,12 @@ internal sealed class PlayerAction : UIAction {
 
     // Playback
     data object TogglePlayPause : PlayerAction()
+
+    /**
+     * D-pad OK / Enter on the video surface. Resolved by the view model into either
+     * [TogglePlayPause] or [ShowControls], depending on the user preference.
+     */
+    data object OkPressed : PlayerAction()
     data object SeekForward : PlayerAction()
     data object SeekBackward : PlayerAction()
 
@@ -19,6 +25,7 @@ internal sealed class PlayerAction : UIAction {
     data object OpenAudioSubtitlesPanel : PlayerAction()
     data object OpenVideoSettingsPanel : PlayerAction()
     data object OpenEpisodesPanel : PlayerAction()
+    data object OpenInfoPanel : PlayerAction()
     data object ClosePanel : PlayerAction()
 
     // Audio & Subtitles selection
@@ -69,4 +76,5 @@ internal enum class FocusTarget {
     EpisodesButton,
     AudioSubtitlesButton,
     VideoSettingsButton,
+    InfoButton,
 }

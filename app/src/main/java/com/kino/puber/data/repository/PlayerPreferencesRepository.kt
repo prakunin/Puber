@@ -81,6 +81,11 @@ class PlayerPreferencesRepository(context: Context) {
         get() = prefs.getBoolean(KEY_DEBUG_OVERLAY, false)
         set(value) = prefs.edit().putBoolean(KEY_DEBUG_OVERLAY, value).apply()
 
+    /** When disabled, the D-pad OK button reveals the controls overlay instead of pausing. */
+    var okTogglesPlayPause: Boolean
+        get() = prefs.getBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, false)
+        set(value) = prefs.edit().putBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, value).apply()
+
     var preferSurroundAudio: Boolean
         get() = prefs.getBoolean(KEY_PREFER_SURROUND, false)
         set(value) = prefs.edit().putBoolean(KEY_PREFER_SURROUND, value).apply()
@@ -107,6 +112,7 @@ class PlayerPreferencesRepository(context: Context) {
         const val KEY_SKIP_RECAP = "skip_recap_enabled"
         const val KEY_SKIP_CREDITS = "skip_credits_enabled"
         const val KEY_DEBUG_OVERLAY = "debug_overlay_enabled"
+        const val KEY_OK_TOGGLES_PLAY_PAUSE = "ok_toggles_play_pause"
         const val KEY_PREFER_SURROUND = "prefer_surround_audio"
         const val KEY_BUFFER_PRESET = "buffer_preset"
         const val KEY_FAST_DNS = "fast_dns_enabled"

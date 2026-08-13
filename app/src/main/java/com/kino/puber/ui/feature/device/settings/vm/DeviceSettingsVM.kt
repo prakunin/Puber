@@ -75,6 +75,7 @@ internal class DeviceSettingsVM(
                                 skipRecapEnabled = playerPreferencesRepository.skipRecapEnabled,
                                 skipCreditsEnabled = playerPreferencesRepository.skipCreditsEnabled,
                                 debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
+                                okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
                                 preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
                                 watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
                                 navigationMode = navigationPreferencesRepository.getNavigationMode(),
@@ -106,6 +107,7 @@ internal class DeviceSettingsVM(
             }
             DeviceSettingsActions.ToggleDebugOverlay -> toggleDebugOverlay()
             DeviceSettingsActions.ToggleSurroundAudio -> toggleSurroundAudio()
+            DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
@@ -269,6 +271,14 @@ internal class DeviceSettingsVM(
         val newValue = !currentState.preferSurroundAudio
         playerPreferencesRepository.preferSurroundAudio = newValue
         updateViewState(stateValue.copy(state = currentState.copy(preferSurroundAudio = newValue)))
+    }
+
+    private fun toggleOkTogglesPlayPause() {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        val newValue = !currentState.okTogglesPlayPause
+        playerPreferencesRepository.okTogglesPlayPause = newValue
+        updateViewState(stateValue.copy(state = currentState.copy(okTogglesPlayPause = newValue)))
     }
 
     private fun toggleWatchedIndicators() {

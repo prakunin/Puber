@@ -18,6 +18,10 @@
     <string name="settings_prefer_surround_audio">Объемный звук (AC3)</string>
     <string name="settings_watched_indicators">Показывать отметки просмотренного</string>
 
+    <!-- Player controls -->
+    <string name="settings_ok_toggles_play_pause">Кнопка OK ставит на паузу</string>
+    <string name="settings_ok_toggles_play_pause_subtitle">Если выключено, OK показывает панель управления. Пауза остаётся на кнопке ⏯ и медиаклавишах пульта.</string>
+
     <!-- Debug -->
     <string name="settings_debug_title">Отладка</string>
     <string name="settings_debug_overlay">Показывать информацию о потоке</string>

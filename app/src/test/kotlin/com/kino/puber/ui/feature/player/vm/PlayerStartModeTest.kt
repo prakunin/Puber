@@ -4,6 +4,7 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
+import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.ResolvedMedia
 import com.kino.puber.domain.interactor.player.SkipSegmentInteractor
@@ -89,7 +90,10 @@ internal class PlayerStartModeTest {
             contentStateFactory.build(any(), any(), any(), any(), any(), any())
         } returns contentState
         every { interactor.selectStreamUrl(any(), any()) } returns "https://test/v.m3u8"
-        every { interactor.isDebugOverlayEnabled() } returns false
+        every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
+            debugOverlayEnabled = false,
+            okTogglesPlayPause = false,
+        )
         every { interactor.getSubtitleSize() } returns SubtitleSize.MEDIUM
         every { interactor.getBufferPreset() } returns BufferPreset.AUTO
         every { interactor.isFastDnsEnabled() } returns true

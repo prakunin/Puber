@@ -68,8 +68,9 @@ private fun handlePlayerKeyEvent(
         KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerAction.SeekForward
         KeyEvent.KEYCODE_DPAD_UP -> PlayerAction.ShowControls(FocusTarget.SeekBar)
         KeyEvent.KEYCODE_DPAD_DOWN -> PlayerAction.ShowControls(FocusTarget.Buttons)
+        // OK is resolved by the view model: it either toggles playback or reveals the controls.
         KeyEvent.KEYCODE_DPAD_CENTER,
-        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_ENTER -> PlayerAction.OkPressed
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         KeyEvent.KEYCODE_MEDIA_PLAY,
         KeyEvent.KEYCODE_MEDIA_PAUSE -> PlayerAction.TogglePlayPause

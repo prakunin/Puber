@@ -49,6 +49,18 @@ internal interface PlaybackControl {
         fun onError(message: String)
     }
 
+    /** Live playback characteristics, surfaced by the info panel and the debug overlay. */
+    data class DebugInfo(
+        val videoResolution: String,
+        val videoCodec: String,
+        val videoBitrate: String,
+        val videoFrameRate: String,
+        val audioCodec: String,
+        val audioChannels: String,
+        val droppedFrames: String,
+        val bufferedDuration: String,
+    )
+
     val currentPosition: Long
     val duration: Long
     val isPlaying: Boolean
@@ -70,6 +82,7 @@ internal interface PlaybackControl {
     fun setSpeed(speed: Float)
     fun selectAudioTrack(groupIndex: Int)
     fun selectSubtitle(track: SubtitleTrackUIState?)
+    fun getDebugInfo(): DebugInfo?
     fun release()
 }
 
@@ -394,18 +407,8 @@ internal class PlaybackController(
         }
     }
 
-    data class DebugInfo(
-        val videoResolution: String,
-        val videoCodec: String,
-        val videoBitrate: String,
-        val audioCodec: String,
-        val audioChannels: String,
-        val droppedFrames: String,
-        val bufferedDuration: String,
-    )
-
     @OptIn(UnstableApi::class)
-    fun getDebugInfo(): DebugInfo? {
+    override fun getDebugInfo(): PlaybackControl.DebugInfo? {
         val player = exoPlayer ?: return null
         val videoFormat = player.videoFormat
         val audioFormat = player.audioFormat
@@ -416,25 +419,36 @@ internal class PlaybackController(
         val bufferedMs = player.bufferedPosition - player.currentPosition
         val bufferedSec = (bufferedMs / 1000.0).coerceAtLeast(0.0)
 
-        return DebugInfo(
-            videoResolution = videoFormat?.let { "${it.width}x${it.height}" } ?: "—",
-            videoCodec = videoFormat?.codecs ?: videoFormat?.sampleMimeType?.substringAfter("/") ?: "—",
-            videoBitrate = if (videoFormat?.bitrate != null && videoFormat.bitrate > 0) {
-                "%.1f Mbps".format(videoFormat.bitrate / BITS_PER_MEGABIT)
-            } else {
-                "—"
-            },
-            audioCodec = audioFormat?.codecs ?: audioFormat?.sampleMimeType?.substringAfter("/") ?: "—",
-            audioChannels = when (audioFormat?.channelCount) {
-                1 -> "mono"
-                2 -> "stereo"
-                6 -> "5.1"
-                8 -> "7.1"
-                else -> audioFormat?.channelCount?.toString() ?: "—"
-            },
+        return PlaybackControl.DebugInfo(
+            videoResolution = videoFormat?.let { "${it.width}x${it.height}" } ?: UNKNOWN_VALUE,
+            videoCodec = codecName(videoFormat),
+            videoBitrate = videoFormat?.bitrate
+                ?.takeIf { it > 0 }
+                ?.let { "%.1f Mbps".format(it / BITS_PER_MEGABIT) }
+                ?: UNKNOWN_VALUE,
+            videoFrameRate = videoFormat?.frameRate
+                ?.takeIf { it > 0f }
+                ?.let { "%.0f fps".format(it) }
+                ?: UNKNOWN_VALUE,
+            audioCodec = codecName(audioFormat),
+            audioChannels = channelLayout(audioFormat?.channelCount),
             droppedFrames = dropped.toString(),
             bufferedDuration = "%.1fs".format(bufferedSec),
         )
+    }
+
+    private fun codecName(format: Format?): String {
+        return format?.codecs ?: format?.sampleMimeType?.substringAfter("/") ?: UNKNOWN_VALUE
+    }
+
+    private fun channelLayout(channelCount: Int?): String {
+        return when (channelCount) {
+            CHANNELS_MONO -> "mono"
+            CHANNELS_STEREO -> "stereo"
+            CHANNELS_SURROUND_5_1 -> "5.1"
+            CHANNELS_SURROUND_7_1 -> "7.1"
+            else -> channelCount?.toString() ?: UNKNOWN_VALUE
+        }
     }
 
     private fun notifyPlaybackState() {
@@ -564,6 +578,11 @@ internal class PlaybackController(
         const val BANDWIDTH_FRACTION = 0.75f
         const val PLAYER_NETWORK_TIMEOUT_SECONDS = 20L
         const val BITS_PER_MEGABIT = 1_000_000.0
+        const val UNKNOWN_VALUE = "—"
+        const val CHANNELS_MONO = 1
+        const val CHANNELS_STEREO = 2
+        const val CHANNELS_SURROUND_5_1 = 6
+        const val CHANNELS_SURROUND_7_1 = 8
     }
 }
 

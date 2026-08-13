@@ -97,6 +97,7 @@ private fun requestControlsFocus(
             FocusTarget.EpisodesButton -> focusRequesters.episodesButton.requestFocus()
             FocusTarget.AudioSubtitlesButton -> focusRequesters.audioSubtitlesButton.requestFocus()
             FocusTarget.VideoSettingsButton -> focusRequesters.videoSettingsButton.requestFocus()
+            FocusTarget.InfoButton -> focusRequesters.infoButton.requestFocus()
         }
     }
 }

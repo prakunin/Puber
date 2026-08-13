@@ -323,8 +323,12 @@ internal class PlayerInteractor(
         )
     }
 
-    fun isDebugOverlayEnabled(): Boolean {
-        return playerPreferencesRepository.debugOverlayEnabled
+    /** Player behaviour flags, read once when the screen starts. */
+    fun getBehaviourPreferences(): PlayerBehaviourPreferences {
+        return PlayerBehaviourPreferences(
+            debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
+            okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
+        )
     }
 
     fun getSubtitleSize(): SubtitleSize {
@@ -349,3 +353,8 @@ internal class PlayerInteractor(
         playerPreferencesRepository.fastDnsEnabled = enabled
     }
 }
+
+data class PlayerBehaviourPreferences(
+    val debugOverlayEnabled: Boolean,
+    val okTogglesPlayPause: Boolean,
+)

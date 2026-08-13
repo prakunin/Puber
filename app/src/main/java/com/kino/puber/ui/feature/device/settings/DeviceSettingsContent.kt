@@ -325,11 +325,26 @@ private fun LazyListScope.localPreferencesItems(
     }
     item {
         LocalToggleItem(
+            label = stringResource(R.string.settings_ok_toggles_play_pause),
+            description = stringResource(R.string.settings_ok_toggles_play_pause_subtitle),
+            checked = state.okTogglesPlayPause,
+            onToggle = { onAction(DeviceSettingsActions.ToggleOkTogglesPlayPause) },
+        )
+    }
+    item {
+        LocalToggleItem(
             label = stringResource(R.string.settings_watched_indicators),
             checked = state.watchedIndicatorsEnabled,
             onToggle = { onAction(DeviceSettingsActions.ToggleWatchedIndicators) },
         )
     }
+    contentPreferencesItems(state, onAction)
+}
+
+private fun LazyListScope.contentPreferencesItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
     item {
         Spacer(modifier = Modifier.height(16.dp))
     }

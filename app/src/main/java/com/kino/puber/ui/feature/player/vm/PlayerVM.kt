@@ -152,7 +152,7 @@ internal class PlayerVM(
     private val controlsStateMachine = ControlsStateMachine()
     private val progressTracker = ProgressTracker()
     private val audioTrackPreferenceResolver = AudioTrackPreferenceResolver()
-    private val debugOverlayEnabled = interactor.isDebugOverlayEnabled()
+    private val behaviourPreferences = interactor.getBehaviourPreferences()
 
     private val playbackCallback = object : PlaybackControl.Callback {
         override fun onPlaybackStateChanged(
@@ -378,6 +378,7 @@ internal class PlayerVM(
         }
         when (action) {
             is PlayerAction.TogglePlayPause -> togglePlayPause()
+            is PlayerAction.OkPressed -> onOkPressed()
             is PlayerAction.SeekForward -> seekForward()
             is PlayerAction.SeekBackward -> seekBackward()
             is PlayerAction.ShowControls -> showControls(action.focusTarget)
@@ -386,6 +387,7 @@ internal class PlayerVM(
             is PlayerAction.OpenAudioSubtitlesPanel -> openPanel(ActivePanel.AudioSubtitles)
             is PlayerAction.OpenVideoSettingsPanel -> openPanel(ActivePanel.VideoSettings)
             is PlayerAction.OpenEpisodesPanel -> openPanel(ActivePanel.Episodes)
+            is PlayerAction.OpenInfoPanel -> openPanel(ActivePanel.Info)
             is PlayerAction.ClosePanel -> closePanel()
             is PlayerAction.SelectAudioTrack -> applyAudioTrackSelection(action.index)
             is PlayerAction.SelectSubtitle -> applySubtitleSelection(action.index)
@@ -474,6 +476,19 @@ internal class PlayerVM(
         }
     }
 
+    private fun readDebugInfo(infoPanelOpen: Boolean): PlaybackControl.DebugInfo? {
+        val wanted = behaviourPreferences.debugOverlayEnabled || infoPanelOpen
+        return if (wanted) playbackController.getDebugInfo() else null
+    }
+
+    private fun onOkPressed() {
+        if (behaviourPreferences.okTogglesPlayPause) {
+            togglePlayPause()
+        } else {
+            showControls(FocusTarget.Buttons)
+        }
+    }
+
     private fun showControls(focusTarget: FocusTarget) {
         val effects = controlsStateMachine.showControls(focusTarget)
         applyControlsState()
@@ -498,12 +513,21 @@ internal class PlayerVM(
     private fun openPanel(panel: ActivePanel) {
         val effects = controlsStateMachine.openPanel(panel, playbackController.isPlaying)
         applyControlsState()
+        if (panel == ActivePanel.Info) {
+            // Fill the panel right away instead of waiting for the next position tick.
+            updateContent { copy(debugInfo = playbackController.getDebugInfo()) }
+        }
         processEffects(effects)
     }
 
     private fun closePanel() {
         val effects = controlsStateMachine.closePanel()
         applyControlsState()
+        if (!behaviourPreferences.debugOverlayEnabled) {
+            // Readings taken for the info panel must not leak into the debug overlay, which
+            // becomes visible again together with the controls.
+            updateContent { copy(debugInfo = null) }
+        }
         processEffects(effects)
     }
 
@@ -1099,19 +1123,17 @@ internal class PlayerVM(
             while (isActive) {
                 delay(POSITION_UPDATE_INTERVAL_MS)
                 val isPlaying = playbackController.isPlaying
-                val isBuffering = (stateValue as? PlayerViewState.Content)?.content?.isBuffering == true
-                if (isPlaying || isBuffering) {
-                    val debugInfo = if (debugOverlayEnabled) {
-                        (playbackController as? PlaybackController)?.getDebugInfo()
-                    } else {
-                        null
-                    }
+                val content = (stateValue as? PlayerViewState.Content)?.content
+                val isBuffering = content?.isBuffering == true
+                // The info panel keeps its readings live even while playback is paused.
+                val infoPanelOpen = content?.activePanel == ActivePanel.Info
+                if (isPlaying || isBuffering || infoPanelOpen) {
                     updateContent {
                         copy(
                             currentPosition = playbackController.currentPosition,
                             duration = playbackController.duration,
                             bufferedPosition = playbackController.bufferedPosition,
-                            debugInfo = debugInfo,
+                            debugInfo = readDebugInfo(infoPanelOpen),
                         )
                     }
                     if (isPlaying) {

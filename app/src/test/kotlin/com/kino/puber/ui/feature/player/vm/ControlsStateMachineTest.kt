@@ -100,6 +100,23 @@ class ControlsStateMachineTest {
     }
 
     @Test
+    fun `openPanel_info_doesNotPausePlayback`() {
+        val effects = machine.openPanel(ActivePanel.Info, isPlaying = true)
+
+        assertEquals(ActivePanel.Info, machine.state.activePanel)
+        assertFalse(effects.contains(ControlsStateMachine.Effect.PausePlayback))
+    }
+
+    @Test
+    fun `closePanel_afterInfo_restoresInfoButtonFocus`() {
+        machine.openPanel(ActivePanel.Info, isPlaying = true)
+
+        machine.closePanel()
+
+        assertEquals(FocusTarget.InfoButton, machine.state.focusTarget)
+    }
+
+    @Test
     fun `closePanel_afterNonEpisodesPanel_doesNotResumePlayback`() {
         machine.openPanel(ActivePanel.AudioSubtitles, isPlaying = true)
 

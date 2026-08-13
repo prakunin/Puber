@@ -27,6 +27,7 @@ internal sealed interface DeviceSettingsState {
         val skipRecapEnabled: Boolean = true,
         val skipCreditsEnabled: Boolean = true,
         val debugOverlayEnabled: Boolean = false,
+        val okTogglesPlayPause: Boolean = false,
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
         val navigationMode: NavigationMode = NavigationMode.TopTabs,

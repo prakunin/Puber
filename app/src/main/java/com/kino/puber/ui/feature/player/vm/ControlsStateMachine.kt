@@ -40,6 +40,7 @@ internal class ControlsStateMachine {
             ActivePanel.Episodes -> FocusTarget.EpisodesButton
             ActivePanel.AudioSubtitles -> FocusTarget.AudioSubtitlesButton
             ActivePanel.VideoSettings -> FocusTarget.VideoSettingsButton
+            ActivePanel.Info -> FocusTarget.InfoButton
             ActivePanel.None -> FocusTarget.Buttons
         }
 

@@ -37,6 +37,7 @@ internal fun PlayerControlsOverlay(
     onMarkCurrentWatchedClick: () -> Unit,
     onAudioSubtitlesClick: () -> Unit,
     onVideoSettingsClick: () -> Unit,
+    onInfoClick: () -> Unit,
     onNextEpisodeClick: () -> Unit,
     onPreviousEpisodeClick: () -> Unit,
     onSeekForward: () -> Unit,
@@ -48,6 +49,7 @@ internal fun PlayerControlsOverlay(
     episodesButtonFocusRequester: FocusRequester,
     audioSubtitlesButtonFocusRequester: FocusRequester,
     videoSettingsButtonFocusRequester: FocusRequester,
+    infoButtonFocusRequester: FocusRequester,
     seekBarFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -80,6 +82,7 @@ internal fun PlayerControlsOverlay(
                     onMarkCurrentWatchedClick = onMarkCurrentWatchedClick,
                     onAudioSubtitlesClick = onAudioSubtitlesClick,
                     onVideoSettingsClick = onVideoSettingsClick,
+                    onInfoClick = onInfoClick,
                     onNextEpisodeClick = onNextEpisodeClick,
                     onPreviousEpisodeClick = onPreviousEpisodeClick,
                     onSeekForward = onSeekForward,
@@ -91,6 +94,7 @@ internal fun PlayerControlsOverlay(
                     episodesButton = episodesButtonFocusRequester,
                     audioSubtitlesButton = audioSubtitlesButtonFocusRequester,
                     videoSettingsButton = videoSettingsButtonFocusRequester,
+                    infoButton = infoButtonFocusRequester,
                     seekBar = seekBarFocusRequester,
                 ),
             )
@@ -110,6 +114,7 @@ internal data class PlayerControlActions(
     val onMarkCurrentWatchedClick: () -> Unit,
     val onAudioSubtitlesClick: () -> Unit,
     val onVideoSettingsClick: () -> Unit,
+    val onInfoClick: () -> Unit,
     val onNextEpisodeClick: () -> Unit,
     val onPreviousEpisodeClick: () -> Unit,
     val onSeekForward: () -> Unit,
@@ -122,6 +127,7 @@ internal data class PlayerControlFocusRequesters(
     val episodesButton: FocusRequester,
     val audioSubtitlesButton: FocusRequester,
     val videoSettingsButton: FocusRequester,
+    val infoButton: FocusRequester,
     val seekBar: FocusRequester,
 )
 
