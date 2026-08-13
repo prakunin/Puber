@@ -237,10 +237,10 @@ class CachedFeedTest {
     }
 
     /**
-     * The interleaving these three tests care about: a load is running, something invalidates the key
-     * underneath it, and the loader then completes holding a payload that predates the invalidation.
-     * That write must not land — otherwise the entry comes back with a fresh timestamp and the next
-     * read believes it.
+     * The interleaving these tests care about: a load is running, something invalidates the key
+     * underneath it — one key, the namespace, or the whole store — and the loader then completes
+     * holding a payload that predates that. The write must not land, or the entry comes back with a
+     * fresh timestamp and the next read believes it.
      *
      * The in-flight cache reissues the loader once its own entry is invalidated, so the retry is held
      * open for the whole test: the only write that can be observed here is the superseded one.
@@ -309,6 +309,60 @@ class CachedFeedTest {
         assertEquals("\"first\"", store.read("k")?.payload)
         val age = now - (store.read("k")?.updatedAt ?: 0L)
         assertTrue(age > 10.minutes.inWholeMilliseconds) { "the entry was made fresh again, age was $age" }
+    }
+
+    @Test
+    fun wipingTheStoreDuringALoadKeepsThatLoadsResultOutOfTheStore() = runTest {
+        // Logout wipes the table while the screen's loads are still alive, and the store's own
+        // generation guard cannot catch them: it captures the generation when the write reaches it,
+        // by which point the bump has already happened. Left unguarded, the previous account's
+        // payload lands in the freshly wiped table and is served to the next one as fresh.
+        val subject = feed()
+
+        runSupersededLoad(subject) { store.clear() }
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun aLoaderThatLandsAfterAWipeCannotRefillTheMemoryTier() = runTest {
+        // The other half of the same hole. The generation check at the top of load() fires once per
+        // generation, so a load that consumes it leaves a leader still out on the network free to
+        // repopulate the memory tier with the previous session's value — and nothing will ever clear
+        // it again.
+        val subject = feed()
+        val firstLoaderStarted = CompletableDeferred<Unit>()
+        val releaseFirstLoader = CompletableDeferred<Unit>()
+        val retryNeverFinishes = CompletableDeferred<Unit>()
+        var loaderCalls = 0
+        val loading = async {
+            subject.load("k") {
+                loaderCalls += 1
+                if (loaderCalls == 1) {
+                    firstLoaderStarted.complete(Unit)
+                    releaseFirstLoader.await()
+                    "previous session"
+                } else {
+                    retryNeverFinishes.await()
+                    "retried"
+                }
+            }.toList()
+        }
+        firstLoaderStarted.await()
+
+        store.clear()
+        // Another key's load consumes the one-shot generation check, so nothing else is left to
+        // notice the wipe by the time the in-flight leader lands.
+        subject.load("other") { "after the wipe" }.toList()
+        releaseFirstLoader.complete(Unit)
+        runCurrent()
+        loading.cancel()
+
+        var nextSessionLoaderCalls = 0
+        val emissions = subject.load("k") { nextSessionLoaderCalls += 1; "next session" }.toList()
+
+        assertEquals(1, nextSessionLoaderCalls)
+        assertEquals(listOf(Cached.Value("next session", isStale = false)), emissions)
     }
 
     @Test

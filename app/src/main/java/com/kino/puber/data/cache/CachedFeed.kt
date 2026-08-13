@@ -74,7 +74,16 @@ class CachedFeed<V : Any>(
     private val keyEpochs = ConcurrentHashMap<String, Long>()
     private val namespaceEpoch = AtomicLong(0L)
 
-    private data class Epoch(val key: Long, val namespace: Long)
+    /**
+     * Everything that can make a load's result obsolete while it is out on the network.
+     *
+     * The store's generation belongs here as much as this feed's own counters do. A wipe is the
+     * strongest invalidation there is — it ends a session — and the store cannot catch a write that
+     * crosses it: [PersistentPayloadStore.write] reads the generation on entry, which is already the
+     * post-wipe value, so its compensating delete never fires. Logout is the case that matters, since
+     * the wipe runs while the screen's loads are still alive.
+     */
+    private data class Epoch(val generation: Long, val key: Long, val namespace: Long)
 
     fun load(
         key: String,
@@ -100,12 +109,15 @@ class CachedFeed<V : Any>(
                 // lambda again and captures the new epoch, so legitimate reloads still write.
                 val epoch = epochOf(key)
                 loader().also { value ->
-                    if (epochOf(key) == epoch) {
+                    val settled = epochOf(key)
+                    if (settled == epoch) {
                         store.write(
                             key = key,
                             payload = json.encodeToString(serializer, value),
                             updatedAt = clock(),
                         )
+                    } else if (settled.generation != epoch.generation) {
+                        detachAfterWipe(key)
                     }
                 }
             }
@@ -146,6 +158,7 @@ class CachedFeed<V : Any>(
     }
 
     private fun epochOf(key: String): Epoch = Epoch(
+        generation = store.generation,
         key = keyEpochs[key] ?: 0L,
         namespace = namespaceEpoch.get(),
     )
@@ -160,6 +173,24 @@ class CachedFeed<V : Any>(
         // not supersede it.
         namespaceEpoch.incrementAndGet()
         keyEpochs.clear()
+    }
+
+    /**
+     * Takes the flight back, so the in-flight cache refuses the value this load is carrying and
+     * reissues the loader under the new generation.
+     *
+     * Needed only for a wipe. [invalidate] and [invalidateNamespace] clear the memory tier
+     * themselves, synchronously, before this load can settle — but a wipe happens on the store,
+     * which has no way to reach in here, and [dropMemoryTierIfStoreWasWiped] fires once per
+     * generation, so a load that consumed it leaves a leader still out on the network free to
+     * repopulate the tier with the previous session's value and nothing left to clear it again.
+     *
+     * The removal can also evict a legitimate post-wipe entry that landed under the same key in the
+     * meantime. That costs one extra request; serving the previous account's data would cost rather
+     * more.
+     */
+    private fun detachAfterWipe(key: String) {
+        inFlight.remove(key)
     }
 
     /**
