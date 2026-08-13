@@ -76,7 +76,7 @@ val repositoryModule = module {
     singleOf(::CryptoPreferenceRepository) { bind<ICryptoPreferenceRepository>() }
     singleOf(::DeviceInfoRepository) { bind<IDeviceInfoRepository>() }
     singleOf(::DeviceSettingsRepository) { bind<IDeviceSettingsRepository>() }
-    singleOf(::ItemDetailsRepository)
+    single { ItemDetailsRepository(api = get(), watchStateRepository = get(), store = get()) }
     singleOf(::PlayerPreferencesRepository)
     singleOf(::TmdbIdRepository)
     singleOf(::SkipSegmentRepository)

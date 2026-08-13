@@ -72,7 +72,7 @@ internal class ApiDomainInteractor(
         )
     }
 
-    fun saveCustomDomain(input: String): ApiDomainUpdateResult {
+    suspend fun saveCustomDomain(input: String): ApiDomainUpdateResult {
         val normalized = normalizeDomain(input)
         if (normalized.isEmpty()) return ApiDomainUpdateResult.Empty
         if (!normalized.isValidHostname()) return ApiDomainUpdateResult.Invalid
@@ -123,19 +123,19 @@ internal class ApiDomainInteractor(
         )
     }
 
-    fun resetToDefault(): ApiDomainState {
+    suspend fun resetToDefault(): ApiDomainState {
         preferences.saveApiDomain(null)
         KinoPubConfig.setDomainOverride(null)
         clearDomainSensitiveCaches()
         return getState()
     }
 
-    private fun clearDomainSensitiveCaches() {
+    private suspend fun clearDomainSensitiveCaches() {
         itemDetailsRepository.clear()
         genreInteractor.clearCache()
     }
 
-    private fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {
+    private suspend fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {
         val persistedDomain = endpoint.domain.takeIf { it != KinoPubConfig.DEFAULT_API_DOMAIN }
         preferences.saveApiDomain(persistedDomain)
         KinoPubConfig.setDomainOverride(persistedDomain)

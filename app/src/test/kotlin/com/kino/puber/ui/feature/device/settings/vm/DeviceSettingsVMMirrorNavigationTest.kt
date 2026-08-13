@@ -51,7 +51,7 @@ class DeviceSettingsVMMirrorNavigationTest {
             domain = "api.custom.example",
             customDomain = "api.custom.example",
         )
-        every { apiDomainInteractor.saveCustomDomain("api.custom.example") } returns
+        coEvery { apiDomainInteractor.saveCustomDomain("api.custom.example") } returns
             ApiDomainUpdateResult.Success(state)
         val vm = createVM()
 
@@ -73,7 +73,7 @@ class DeviceSettingsVMMirrorNavigationTest {
             domain = "service-kp.com",
             customDomain = null,
         )
-        every { apiDomainInteractor.resetToDefault() } returns state
+        coEvery { apiDomainInteractor.resetToDefault() } returns state
         val vm = createVM()
 
         vm.onAction(DeviceSettingsActions.OpenApiDomainDialog)

@@ -333,7 +333,7 @@ internal class HistoryVMRefreshDepthTest {
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
 
         verify { router.navigateTo(playerScreen) }
-        verify { itemDetailsRepository.invalidate(item.itemId) }
+        coVerify { itemDetailsRepository.invalidate(item.itemId) }
     }
 
     private fun createVM(): HistoryVM {

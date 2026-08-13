@@ -350,7 +350,7 @@ class HistoryVMTest {
         val restored = awaitContent(vm) { it.deletingKeys.isEmpty() }
         assertEquals(listOf(1), restored.itemIds())
         coVerify(exactly = 1) { api.clearExactMediaHistory(item.deletionMediaId) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(item.itemId) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(item.itemId) }
         coVerify(exactly = 0) { api.getHistoryData(2) }
     }
 

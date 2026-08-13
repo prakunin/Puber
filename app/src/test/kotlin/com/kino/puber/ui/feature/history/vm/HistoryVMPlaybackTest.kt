@@ -28,11 +28,12 @@ import com.kino.puber.util.MainDispatcherExtension
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
-import io.mockk.verifyOrder
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -108,7 +109,7 @@ class HistoryVMPlaybackTest {
         awaitContent().items.forEach { vm.onAction(CommonAction.ItemSelected(it)) }
 
         verify(exactly = 0) { screens.player(any(), any(), any(), any(), any()) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
         verify { router.navigateTo(movieDetails) }
         verify { router.navigateTo(episodeDetails) }
         verify { router.navigateTo(fallbackDetails) }
@@ -145,7 +146,7 @@ class HistoryVMPlaybackTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
 
-        verifyOrder {
+        coVerifyOrder {
             itemDetailsRepository.invalidate(10)
             screens.player(
                 itemId = 10,
@@ -176,7 +177,7 @@ class HistoryVMPlaybackTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.ResumeIfAvailable))
 
-        verifyOrder {
+        coVerifyOrder {
             itemDetailsRepository.invalidate(20)
             screens.player(
                 itemId = 20,

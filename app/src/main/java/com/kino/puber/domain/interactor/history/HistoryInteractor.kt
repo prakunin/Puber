@@ -34,7 +34,7 @@ internal class HistoryInteractor(
         itemDetailsRepository.invalidate(itemId)
     }
 
-    fun invalidateItemDetails(itemId: Int) {
+    suspend fun invalidateItemDetails(itemId: Int) {
         itemDetailsRepository.invalidate(itemId)
     }
 }

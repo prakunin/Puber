@@ -168,10 +168,8 @@ internal class HomeVM(
                     return@launch
                 }
 
-                is ApiDomainAutoResolveResult.Success -> {
-                    if (result.changed) {
-                        showMessage(resources.getString(R.string.api_domain_auto_switched, result.state.domain))
-                    }
+                is ApiDomainAutoResolveResult.Success -> if (result.changed) {
+                    showMessage(resources.getString(R.string.api_domain_auto_switched, result.state.domain))
                 }
             }
 
@@ -260,13 +258,15 @@ internal class HomeVM(
     }
 
     private fun saveApiDomain(domain: String) {
-        when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
-            ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
-            ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
-            is ApiDomainUpdateResult.Success -> {
-                closeApiDomainDialog()
-                showMessage(resources.getString(R.string.api_domain_saved, result.state.domain))
-                loadHome()
+        launch {
+            when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
+                ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
+                ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
+                is ApiDomainUpdateResult.Success -> {
+                    closeApiDomainDialog()
+                    showMessage(resources.getString(R.string.api_domain_saved, result.state.domain))
+                    loadHome()
+                }
             }
         }
     }
@@ -293,10 +293,12 @@ internal class HomeVM(
     }
 
     private fun resetApiDomain() {
-        apiDomainInteractor.resetToDefault()
-        closeApiDomainDialog()
-        showMessage(resources.getString(R.string.api_domain_reset_done))
-        loadHome()
+        launch {
+            apiDomainInteractor.resetToDefault()
+            closeApiDomainDialog()
+            showMessage(resources.getString(R.string.api_domain_reset_done))
+            loadHome()
+        }
     }
 
     private fun currentDialogState(): ApiDomainDialogState? {

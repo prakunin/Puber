@@ -359,11 +359,11 @@ internal class DeviceSettingsVM(
     }
 
     private fun saveApiDomain(domain: String) {
-        when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
-            ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
-            ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
-            is ApiDomainUpdateResult.Success -> {
-                updateViewState(
+        launch {
+            when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
+                ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
+                ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
+                is ApiDomainUpdateResult.Success -> updateViewState(
                     stateValue.copy(
                         apiDomain = result.state.toDialogState(),
                         isApiDomainDialogOpen = false,
@@ -384,26 +384,26 @@ internal class DeviceSettingsVM(
                     showMessage(resources.getString(R.string.api_domain_detect_failed))
                 }
 
-                is ApiDomainDetectionResult.Success -> {
-                    updateViewState(
-                        stateValue.copy(
-                            apiDomain = result.state.toDialogState(),
-                            isApiDomainDialogOpen = false,
-                        )
+                is ApiDomainDetectionResult.Success -> updateViewState(
+                    stateValue.copy(
+                        apiDomain = result.state.toDialogState(),
+                        isApiDomainDialogOpen = false,
                     )
-                }
+                )
             }
         }
     }
 
     private fun resetApiDomain() {
-        val state = apiDomainInteractor.resetToDefault()
-        updateViewState(
-            stateValue.copy(
-                apiDomain = state.toDialogState(),
-                isApiDomainDialogOpen = false,
+        launch {
+            val state = apiDomainInteractor.resetToDefault()
+            updateViewState(
+                stateValue.copy(
+                    apiDomain = state.toDialogState(),
+                    isApiDomainDialogOpen = false,
+                )
             )
-        )
+        }
     }
 
     private fun ApiDomainState.toDialogState(): ApiDomainDialogState {

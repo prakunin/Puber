@@ -338,7 +338,7 @@ internal class HistoryVM(
         startMode: PlayerStartMode = PlayerStartMode.ResumeIfAvailable,
     ) {
         when (val target = item.playbackTarget) {
-            is HistoryPlaybackTarget.Movie -> {
+            is HistoryPlaybackTarget.Movie -> launch {
                 interactor.invalidateItemDetails(item.itemId)
                 router.navigateTo(
                     router.screens.player(
@@ -348,7 +348,7 @@ internal class HistoryVM(
                     ),
                 )
             }
-            is HistoryPlaybackTarget.Episode -> {
+            is HistoryPlaybackTarget.Episode -> launch {
                 interactor.invalidateItemDetails(item.itemId)
                 router.navigateTo(
                     router.screens.player(

@@ -9,9 +9,7 @@ import com.kino.puber.data.api.models.WatchlistToggleResponse
 import com.kino.puber.data.repository.ItemDetailsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -32,7 +30,7 @@ class SavedItemInteractorTest {
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
             itemDetailsRepository = itemDetailsRepository,
         )
-        every { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
     }
 
     @Test
@@ -60,7 +58,7 @@ class SavedItemInteractorTest {
 
         assertEquals(false, result.getOrThrow())
         coVerify(exactly = 1) { api.toggleWatchlist(42) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -76,7 +74,7 @@ class SavedItemInteractorTest {
 
         assertTrue(result.isSuccess)
         assertEquals(false, result.getOrThrow())
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -96,7 +94,7 @@ class SavedItemInteractorTest {
         }
 
         assertTrue(cancelled)
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -106,7 +104,7 @@ class SavedItemInteractorTest {
 
         bookmarkInteractor.setItemSaved(itemId = 42, folderId = 7, saved = false)
 
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -119,7 +117,7 @@ class SavedItemInteractorTest {
             bookmarkInteractor.setItemSaved(itemId = 42, folderId = 7, saved = false)
         }
 
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     private fun testSeries(id: Int): Item = Item(

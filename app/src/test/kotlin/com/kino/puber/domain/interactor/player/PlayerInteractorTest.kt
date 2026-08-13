@@ -17,7 +17,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -437,7 +436,7 @@ class PlayerInteractorTest {
         coEvery {
             api.toggleWatchingStatus(id = 10, status = 1, season = null, video = 2)
         } returns Result.success(WatchingToggleResponse(status = 1, watched = 1))
-        every { itemDetailsRepository.invalidate(10) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(10) } returns Unit
         coEvery { itemDetailsRepository.getItemDetails(10) } returns refreshed
 
         val result = interactor.markCurrentAsWatched(id = 10, videoNumber = 2)
@@ -446,7 +445,7 @@ class PlayerInteractorTest {
         coVerify(exactly = 1) {
             api.toggleWatchingStatus(id = 10, status = 1, season = null, video = 2)
         }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(10) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(10) }
         coVerify(exactly = 1) { itemDetailsRepository.getItemDetails(10) }
     }
 
@@ -456,7 +455,7 @@ class PlayerInteractorTest {
         coEvery {
             api.toggleWatchingStatus(id = 42, status = 1, season = 1, video = 1)
         } returns Result.success(WatchingToggleResponse(status = 1, watched = 1))
-        every { itemDetailsRepository.invalidate(42) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(42) } returns Unit
         coEvery { itemDetailsRepository.getItemDetails(42) } returns refreshed
 
         val result = interactor.markCurrentAsWatched(id = 42, season = 1, videoNumber = 1)
@@ -465,7 +464,7 @@ class PlayerInteractorTest {
         coVerify(exactly = 1) {
             api.toggleWatchingStatus(id = 42, status = 1, season = 1, video = 1)
         }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
         coVerify(exactly = 1) { itemDetailsRepository.getItemDetails(42) }
     }
 
@@ -474,7 +473,7 @@ class PlayerInteractorTest {
         coEvery {
             api.toggleWatchingStatus(id = 42, status = 1, season = 1, video = 1)
         } returns Result.success(WatchingToggleResponse(status = 1, watched = 1))
-        every { itemDetailsRepository.invalidate(42) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(42) } returns Unit
         coEvery { itemDetailsRepository.getItemDetails(42) } throws IllegalStateException("refresh failed")
 
         val failure = runCatching {
@@ -483,7 +482,7 @@ class PlayerInteractorTest {
 
         assertTrue(failure is WatchedDetailsRefreshException)
         assertTrue(failure?.cause is IllegalStateException)
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -491,13 +490,13 @@ class PlayerInteractorTest {
         coEvery {
             api.toggleWatchingStatus(id = 42, status = 1, season = 1, video = 2)
         } returns Result.success(WatchingToggleResponse(status = 1, watched = 1))
-        every { itemDetailsRepository.invalidate(42) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(42) } returns Unit
         coEvery { itemDetailsRepository.getItemDetails(42) } throws IllegalStateException("refresh failed")
 
         val result = interactor.setEpisodeWatched(42, season = 1, episode = 2, watched = true)
 
         assertNull(result)
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -505,13 +504,13 @@ class PlayerInteractorTest {
         coEvery {
             api.toggleWatchingStatus(id = 42, status = 0, season = 1, video = null)
         } returns Result.success(WatchingToggleResponse(status = 0, watched = 0))
-        every { itemDetailsRepository.invalidate(42) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(42) } returns Unit
         coEvery { itemDetailsRepository.getItemDetails(42) } throws IllegalStateException("refresh failed")
 
         val result = interactor.setSeasonWatched(42, season = 1, watched = false)
 
         assertNull(result)
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     // endregion
@@ -523,12 +522,12 @@ class PlayerInteractorTest {
         coEvery { api.setWatchingTime(42, 1, 120, 2) } returns Result.success(
             WatchingStatus(id = 42, status = 1, time = 120, season = 2, episode = 1),
         )
-        every { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
 
         interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 120, season = 2)
 
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, 2) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -536,7 +535,7 @@ class PlayerInteractorTest {
         coEvery { api.setWatchingTime(42, 1, 120, null) } returns Result.failure(
             IllegalStateException("save failed"),
         )
-        every { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
 
         val failure = runCatching {
             interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 120)
@@ -544,7 +543,7 @@ class PlayerInteractorTest {
 
         assertTrue(failure is IllegalStateException)
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, null) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     @Test
@@ -552,12 +551,12 @@ class PlayerInteractorTest {
         coEvery { api.toggleWatchingStatus(42, 1, 2, 3) } returns Result.success(
             WatchingToggleResponse(status = 1, watched = 1),
         )
-        every { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
 
         interactor.markAsWatched(id = 42, season = 2, videoNumber = 3)
 
         coVerify(exactly = 1) { api.toggleWatchingStatus(42, 1, 2, 3) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test
@@ -565,7 +564,7 @@ class PlayerInteractorTest {
         coEvery { api.toggleWatchingStatus(42, 1, null, null) } returns Result.failure(
             IllegalStateException("mark failed"),
         )
-        every { itemDetailsRepository.invalidate(any()) } returns Unit
+        coEvery { itemDetailsRepository.invalidate(any()) } returns Unit
 
         val failure = runCatching {
             interactor.markAsWatched(id = 42)
@@ -573,7 +572,7 @@ class PlayerInteractorTest {
 
         assertTrue(failure is IllegalStateException)
         coVerify(exactly = 1) { api.toggleWatchingStatus(42, 1, null, null) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     // endregion
