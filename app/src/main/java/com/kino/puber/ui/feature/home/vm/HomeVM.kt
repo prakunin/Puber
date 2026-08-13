@@ -285,10 +285,18 @@ internal class HomeVM(
      * Called on exactly the paths where [ApiDomainInteractor] wiped its domain-sensitive caches: the
      * auto-resolve that reports `changed`, and the three explicit switches, which have already
      * applied the new domain by the time they reload and so see `changed = false` afterwards.
+     *
+     * The screen goes back to loading with them. Emptying the map alone would not be enough: nothing
+     * republishes until a section answers, so a switch where none of them ever does would leave the
+     * last frame — drawn entirely from the old domain — up for as long as the screen lives. Loading
+     * is also what lets [onSectionFinished] report a switch that failed outright.
      */
     private fun clearRowsFromPreviousCatalogue() {
         loadedSections.clear()
         loadedCollections = null
+        if (stateValue is HomeViewState.Content) {
+            updateViewState(HomeViewState.Loading(apiDomainDialog = currentDialogState()))
+        }
     }
 
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */

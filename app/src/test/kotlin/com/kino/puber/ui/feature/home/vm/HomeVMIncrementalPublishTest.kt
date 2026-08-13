@@ -242,6 +242,42 @@ class HomeVMIncrementalPublishTest {
     }
 
     @Test
+    fun aDomainChangeWhoseSectionsAllFailStopsDrawingThePreviousCatalogue() = runTest {
+        // Emptying the row map is not enough on its own: nothing republishes until a section
+        // answers, so a switch where none of them ever does would leave the last frame — drawn
+        // entirely from the old domain — on screen for as long as the screen lives.
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.testStateValue is HomeViewState.Content)
+
+        coEvery { apiDomainInteractor.autoResolveWorkingDomain() } returns ApiDomainAutoResolveResult.Success(
+            state = ApiDomainState(domain = "other.example", customDomain = null),
+            changed = true,
+        )
+        listOf<() -> Unit>(
+            { every { interactor.observeWatchingItems(any()) } returns failing() },
+            { every { interactor.observeHotItems() } returns failing() },
+            { every { interactor.observeFreshItems() } returns failing() },
+            { every { interactor.observePopularMovies() } returns failing() },
+            { every { interactor.observePopularSeries() } returns failing() },
+            { every { interactor.observeWatchLaterItems() } returns failing() },
+            { every { interactor.observeBookmarkItems() } returns failing() },
+            { every { interactor.observeCollections() } returns failingCollections() },
+        ).forEach { it() }
+
+        vm.onAction(CommonAction.OnResume)
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.testStateValue is HomeViewState.Error) {
+            "still on ${vm.testStateValue}, which is drawn from the domain the app just left"
+        }
+    }
+
+    @Test
     fun savingADomainByHandAlsoDropsTheRowsFromThePreviousCatalogue() = runTest {
         // The explicit switches take a different route to the same place: they apply the domain
         // themselves, so the auto-resolve inside the reload that follows reports changed = false and
