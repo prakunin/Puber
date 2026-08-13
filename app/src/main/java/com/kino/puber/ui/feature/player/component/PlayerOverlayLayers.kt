@@ -88,6 +88,7 @@ internal fun PlayerControlsLayer(
         onSeekForward = rememberAction(onAction, PlayerAction.SeekForward),
         onSeekBackward = rememberAction(onAction, PlayerAction.SeekBackward),
         onTogglePlayPause = rememberAction(onAction, PlayerAction.TogglePlayPause),
+        onOkPressed = rememberAction(onAction, PlayerAction.OkPressed),
         onControlsInteraction = rememberAction(onAction, PlayerAction.ResetControlsTimer),
         onBackPressed = rememberAction(onAction, PlayerAction.HideControls),
         firstButtonFocusRequester = focusRequesters.firstButton,

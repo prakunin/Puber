@@ -5,9 +5,11 @@ import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.util.MainDispatcherExtension
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -46,7 +48,19 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.OkPressed)
 
         assertTrue(contentState(vm).controlsVisible)
-        assertEquals(FocusTarget.Buttons, contentState(vm).controlsFocusTarget)
+        // Not the button row: its first button is play/pause, and holding OK would click it.
+        assertEquals(FocusTarget.SeekBar, contentState(vm).controlsFocusTarget)
+    }
+
+    @Test
+    fun okPressed_onVisibleControls_neverPauses_whenSettingDisabled() {
+        givenOkTogglesPlayPause(enabled = false)
+        val vm = startedVM()
+
+        repeat(3) { vm.onAction(PlayerAction.OkPressed) }
+
+        verify(exactly = 0) { playbackController.pause() }
+        assertEquals(FocusTarget.SeekBar, contentState(vm).controlsFocusTarget)
     }
 
     @Test
@@ -115,6 +129,20 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.ClosePanel)
 
         assertEquals(testDebugInfo, contentState(vm).debugInfo)
+    }
+
+    @Test
+    fun playbackEnded_keepsInfoPanel_withoutRevealingControls() {
+        coEvery {
+            contentStateFactory.build(any(), any(), any(), any(), any(), any())
+        } returns testContentState.copy(hasNextEpisode = false)
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenInfoPanel)
+
+        callbackSlot.captured.onPlaybackEnded()
+
+        assertEquals(ActivePanel.Info, contentState(vm).activePanel)
+        assertFalse(contentState(vm).controlsVisible)
     }
 
     // endregion

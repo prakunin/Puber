@@ -43,6 +43,7 @@ internal fun PlayerControlsOverlay(
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
     onTogglePlayPause: () -> Unit,
+    onOkPressed: () -> Unit,
     onControlsInteraction: () -> Unit,
     onBackPressed: () -> Unit,
     firstButtonFocusRequester: FocusRequester,
@@ -88,6 +89,7 @@ internal fun PlayerControlsOverlay(
                     onSeekForward = onSeekForward,
                     onSeekBackward = onSeekBackward,
                     onTogglePlayPause = onTogglePlayPause,
+                    onOkPressed = onOkPressed,
                 ),
                 focusRequesters = PlayerControlFocusRequesters(
                     firstButton = firstButtonFocusRequester,
@@ -120,6 +122,7 @@ internal data class PlayerControlActions(
     val onSeekForward: () -> Unit,
     val onSeekBackward: () -> Unit,
     val onTogglePlayPause: () -> Unit,
+    val onOkPressed: () -> Unit,
 )
 
 internal data class PlayerControlFocusRequesters(
@@ -172,7 +175,7 @@ private fun ControlsBottomBar(
             isBuffering = progressState.isBuffering,
             onSeekForward = actions.onSeekForward,
             onSeekBackward = actions.onSeekBackward,
-            onTogglePlayPause = actions.onTogglePlayPause,
+            onOkPressed = actions.onOkPressed,
             focusRequester = focusRequesters.seekBar,
         )
         PlayerButtonRow(

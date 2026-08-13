@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -62,33 +64,25 @@ internal data class PlayerInfoEntry(val label: String, val value: String)
 @Composable
 internal fun playerInfoEntries(content: PlayerContentState): List<PlayerInfoEntry> {
     val unknown = stringResource(R.string.player_info_unknown)
-    val labels = listOf(
-        stringResource(R.string.player_info_quality),
-        stringResource(R.string.player_info_resolution),
-        stringResource(R.string.player_info_video_codec),
-        stringResource(R.string.player_info_bitrate),
-        stringResource(R.string.player_info_frame_rate),
-        stringResource(R.string.player_info_audio_track),
-        stringResource(R.string.player_info_audio_codec),
-        stringResource(R.string.player_info_buffer),
-        stringResource(R.string.player_info_buffer_preset),
-        stringResource(R.string.player_info_dropped_frames),
-    )
     val debug = content.debugInfo
-    val values = listOf(
-        content.qualities.getOrNull(content.selectedQualityIndex)?.label,
-        debug?.videoResolution,
-        debug?.videoCodec,
-        debug?.videoBitrate,
-        debug?.videoFrameRate,
-        content.audioTracks.getOrNull(content.selectedAudioTrackIndex)?.label,
-        debug?.let { "${it.audioCodec} · ${it.audioChannels}" },
-        debug?.bufferedDuration,
-        content.bufferPresets.getOrNull(content.selectedBufferPresetIndex)?.label,
-        debug?.droppedFrames,
+    val pairs = listOf(
+        stringResource(R.string.player_info_quality) to
+            content.qualities.getOrNull(content.selectedQualityIndex)?.label,
+        stringResource(R.string.player_info_resolution) to debug?.videoResolution,
+        stringResource(R.string.player_info_video_codec) to debug?.videoCodec,
+        stringResource(R.string.player_info_bitrate) to debug?.videoBitrate,
+        stringResource(R.string.player_info_frame_rate) to debug?.videoFrameRate,
+        stringResource(R.string.player_info_audio_track) to
+            content.audioTracks.getOrNull(content.selectedAudioTrackIndex)?.label,
+        stringResource(R.string.player_info_audio_codec) to
+            debug?.let { "${it.audioCodec} · ${it.audioChannels}" },
+        stringResource(R.string.player_info_buffer) to debug?.bufferedDuration,
+        stringResource(R.string.player_info_buffer_preset) to
+            content.bufferPresets.getOrNull(content.selectedBufferPresetIndex)?.label,
+        stringResource(R.string.player_info_dropped_frames) to debug?.droppedFrames,
     )
-    return labels.mapIndexed { index, label ->
-        PlayerInfoEntry(label, values[index]?.takeIf(String::isNotBlank) ?: unknown)
+    return pairs.map { (label, value) ->
+        PlayerInfoEntry(label, value?.takeIf(String::isNotBlank) ?: unknown)
     }
 }
 
@@ -104,7 +98,12 @@ private fun PlayerInfoPanelContainer(content: @Composable ColumnScope.() -> Unit
                 .height(320.dp)
                 .padding(horizontal = 48.dp)
                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                // The only focusable here is the close button, and the video surface behind
+                // the panel stays focusable — without this the first sideways press would
+                // hand the D-pad back to the hidden player.
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup(),
             content = content,
         )
     }

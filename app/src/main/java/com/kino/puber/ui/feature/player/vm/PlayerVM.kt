@@ -484,9 +484,12 @@ internal class PlayerVM(
     private fun onOkPressed() {
         if (behaviourPreferences.okTogglesPlayPause) {
             togglePlayPause()
-        } else {
-            showControls(FocusTarget.Buttons)
+            return
         }
+        // Focus the seek bar rather than the button row: the row starts on play/pause, so a
+        // held OK — or a second press within the auto-hide window — would click it and pause
+        // anyway, which is exactly what this preference is meant to prevent.
+        showControls(FocusTarget.SeekBar)
     }
 
     private fun showControls(focusTarget: FocusTarget) {
@@ -1001,7 +1004,10 @@ internal class PlayerVM(
             !content.isMovie &&
                 content.hasNextEpisode &&
                 content.nextEpisodeCountdown == null -> startNextEpisodeCountdown()
-            !content.isMovie -> updateContent { copy(controlsVisible = true) }
+            // An open panel owns the screen; revealing the controls under it would also expose
+            // the debug overlay the user may have switched off.
+            !content.isMovie && content.activePanel == ActivePanel.None ->
+                updateContent { copy(controlsVisible = true) }
         }
     }
 
