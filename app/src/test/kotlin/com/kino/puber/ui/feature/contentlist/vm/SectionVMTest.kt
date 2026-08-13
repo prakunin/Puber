@@ -239,6 +239,69 @@ class SectionVMTest {
     }
 
     @Test
+    fun aWalkThatKeepsFindingNothingStopsInsteadOfReadingTheCatalogue() = runTest {
+        // Every section on the screen walks at once, so the rounds need a ceiling of their own:
+        // without one, a heavily watched account has several lists reading their way to the end of
+        // the catalogue in parallel, against a request budget the user needs for opening a title.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        var pagesRead = 0
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            pagesRead++
+            emptyPage(current = secondArg<Int>(), total = 10_000)
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        val pagesPerRound = maxEmptyPageChainUnderTest + 1
+        assertEquals(pagesPerRound * (maxResumeRoundsUnderTest + 1), pagesRead)
+        // And it stays stopped rather than waking up again on the next pause.
+        testScheduler.advanceTimeBy(walkResumePauseUnderTest * 10)
+        testScheduler.advanceUntilIdle()
+        assertEquals(pagesPerRound * (maxResumeRoundsUnderTest + 1), pagesRead)
+        assertEquals(Paginator.State.Empty, paginatorState(paginator))
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun aPageWithSomethingOnItGivesTheWalkItsRoundsBack() = runTest {
+        // The ceiling bounds one fruitless stretch, not the section: a stretch that ended with
+        // items must not leave a later one with a spent budget.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val visible = item(id = 7)
+        // Far enough in that the walk can only reach it with a full budget it has already spent
+        // once: one round short of the ceiling, then a page with an item, then the same again.
+        val pagesPerRound = maxEmptyPageChainUnderTest + 1
+        val pageWithItem = pagesPerRound * maxResumeRoundsUnderTest
+        val lastPageRead = pageWithItem + pagesPerRound * maxResumeRoundsUnderTest
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            if (requested == pageWithItem) {
+                page(visible, current = requested, total = 10_000)
+            } else {
+                emptyPage(current = requested, total = 10_000)
+            }
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+        vm.onAction(CommonAction.LoadMore)
+        testScheduler.advanceUntilIdle()
+
+        // The stretch after the item got a full set of rounds rather than none.
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = lastPageRead) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
     fun aPausedWalkIsDroppedWhenPagingRestarts() = runTest {
         // The pause is where a restart has to be able to take the walk out. Two walks waking up
         // side by side would read the same pages twice and interleave what they publish.
@@ -308,10 +371,13 @@ class SectionVMTest {
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
 
-    /** Mirrors SectionVM.MAX_EMPTY_PAGE_CHAIN. */
+    /** Mirrors ContentListPagingVM.MAX_EMPTY_PAGE_CHAIN. */
     private val maxEmptyPageChainUnderTest = 3
 
-    /** Mirrors SectionVM.WALK_RESUME_PAUSE, in milliseconds. */
+    /** Mirrors ContentListPagingVM.MAX_RESUME_ROUNDS. */
+    private val maxResumeRoundsUnderTest = 3
+
+    /** Mirrors ContentListPagingVM.WALK_RESUME_PAUSE, in milliseconds. */
     private val walkResumePauseUnderTest = 500L
 
     private fun emptyPage(

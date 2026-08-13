@@ -260,5 +260,5 @@ class ShowAllVMTest {
     )
 }
 
-/** Mirrors ShowAllVM.MAX_EMPTY_PAGE_CHAIN. */
+/** Mirrors ContentListPagingVM.MAX_EMPTY_PAGE_CHAIN. */
 private const val MAX_EMPTY_PAGE_CHAIN_UNDER_TEST = 3

@@ -3,8 +3,6 @@ package com.kino.puber.ui.feature.showall.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
-import com.kino.puber.core.logger.log
-import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -16,34 +14,37 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
+import com.kino.puber.ui.feature.contentlist.vm.ContentListPagingVM
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
-import kotlin.time.Duration.Companion.milliseconds
 
 internal class ShowAllVM(
     paginator: Paginator.Store<Item>,
-    private val config: SectionConfig,
-    private val interactor: ContentListInteractor,
+    config: SectionConfig,
+    interactor: ContentListInteractor,
     private val savedItemInteractor: SavedItemInteractor,
-    private val mapper: VideoItemUIMapper,
+    mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
-) : PagingVM<Item, ShowAllViewState>(paginator, router, errorHandler) {
+) : ContentListPagingVM<ShowAllViewState>(
+    paginator,
+    config,
+    interactor,
+    mapper,
+    router,
+    errorHandler,
+) {
 
-    private var currentPage = 0
-    private var emptyPageChain = 0
-    private var publishedAnyItems = false
-    private var cachedInput: List<Item>? = null
-    private var cachedOutput: List<VideoItemUIState> = emptyList()
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
     private var closing = false
 
     override val initialViewState = ShowAllViewState.Loading
+
+    override val logName = "Show all"
 
     override fun onStart() {
         init()
@@ -58,66 +59,6 @@ internal class ShowAllVM(
                 interactor.invalidateFirstPageCache()
                 resetPaging()
             }
-        }
-    }
-
-    override fun onLoadFirstPage() {
-        currentPage = 0
-        emptyPageChain = 0
-        publishedAnyItems = false
-        pagingLaunch(errorHandlerGeneral) { loadPage(page = 1, isFirstPage = true) }
-    }
-
-    override fun onLoadNextPage(key: Item?) {
-        pagingLaunch(errorHandlerPaging) { loadPage(page = currentPage + 1, isFirstPage = false) }
-    }
-
-    /**
-     * Hiding watched titles can empty a whole server page. The paginator is told to keep walking
-     * rather than reading the blank page as the end of the list, but only so far — one load must
-     * not walk the catalogue in a single burst. What is left over is picked up by
-     * [resumeWalkAfterPause].
-     */
-    private suspend fun loadPage(page: Int, isFirstPage: Boolean) {
-        val response = interactor.loadPage(config, page)
-        currentPage = response.pagination.current
-        val serverHasMore = currentPage < response.pagination.total
-        emptyPageChain = if (response.items.isEmpty()) emptyPageChain + 1 else 0
-        val keepWalking = serverHasMore && emptyPageChain in 1..MAX_EMPTY_PAGE_CHAIN
-        val budgetIsSpent = response.items.isEmpty() && serverHasMore && !keepWalking
-        isFullDataNext = !serverHasMore
-        if (response.items.isNotEmpty()) publishedAnyItems = true
-        // A walk that gave up without ever finding anything belongs on the empty state, not on a
-        // content row holding nothing.
-        if (isFirstPage || (!publishedAnyItems && !keepWalking)) {
-            replace(response.items, hasMorePages = keepWalking)
-        } else {
-            setNextPage(response.items, hasMorePages = keepWalking)
-        }
-        if (budgetIsSpent) resumeWalkAfterPause()
-    }
-
-    /**
-     * Picks the walk up again where the page budget ran out.
-     *
-     * That budget bounds one burst of requests, not the list. A run of watched titles longer than
-     * the budget would otherwise strand the screen on the empty state: it offers a retry, and retry
-     * starts over from page one and walks into the same wall.
-     *
-     * The pause is what keeps this from being the same burst by another name — it hands the screen
-     * back its dispatcher between rounds and gives the cancellation a place to land. A restart or a
-     * closed screen drops the walk with the rest of the paging work.
-     */
-    private fun resumeWalkAfterPause() {
-        val resumeFrom = currentPage + 1
-        log(
-            "Show all ${config.id}: nothing to show in $emptyPageChain pages, " +
-                "resuming from page $resumeFrom"
-        )
-        pagingLaunch(errorHandlerPaging) {
-            delay(WALK_RESUME_PAUSE)
-            emptyPageChain = 0
-            loadPage(page = resumeFrom, isFirstPage = false)
         }
     }
 
@@ -138,14 +79,6 @@ internal class ShowAllVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-        }
-    }
-
-    private fun mapItems(items: List<Item>): List<VideoItemUIState> {
-        if (items === cachedInput) return cachedOutput
-        return mapper.mapShortItemList(items).also {
-            cachedInput = items
-            cachedOutput = it
         }
     }
 
@@ -272,13 +205,5 @@ internal class ShowAllVM(
             if (activeJobs.isEmpty()) return
             activeJobs.joinAll()
         }
-    }
-
-    private companion object {
-        /** How many blank pages in a row one load will walk past before it pauses. */
-        const val MAX_EMPTY_PAGE_CHAIN = 3
-
-        /** How long the walk waits before spending the next round of that budget. */
-        val WALK_RESUME_PAUSE = 500.milliseconds
     }
 }
