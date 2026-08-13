@@ -62,6 +62,30 @@ class HomeInteractorCacheTest {
         coVerify(exactly = 2) { api.getWatchingList(onlySubscribed = true) }
     }
 
+    /**
+     * A domain switch wipes the store and nothing else — this interactor is screen-scoped, so the
+     * global that owns the wipe cannot reach in and clear these feeds. The row must still come back
+     * from the server rather than out of a memory tier that survived the wipe.
+     */
+    @Test
+    fun wipingTheStoreMakesEveryHomeRowAskTheServerAgain() = runTest {
+        allowAnime()
+        coEvery { api.getWatchingList(onlySubscribed = true) } returns Result.success(
+            com.kino.puber.data.api.models.ApiResponseList(items = listOf(item(1)))
+        )
+        coEvery { api.getItemsByShortcut("hot", type = "movie") } returns Result.success(page(item(2)))
+        coEvery { api.getItemsByShortcut("hot", type = "serial") } returns Result.success(page(item(3)))
+        interactor.observeWatchingItems().toList()
+        interactor.observeHotItems().toList()
+
+        store.clear()
+        interactor.observeWatchingItems().toList()
+        interactor.observeHotItems().toList()
+
+        coVerify(exactly = 2) { api.getWatchingList(onlySubscribed = true) }
+        coVerify(exactly = 2) { api.getItemsByShortcut("hot", type = "movie") }
+    }
+
     @Test
     fun theWatchingRowAndTheHotRowUseSeparateKeys() = runTest {
         coEvery { api.getWatchingList(onlySubscribed = true) } returns Result.success(
@@ -161,6 +185,9 @@ class HomeInteractorCacheTest {
     private class InMemoryPayloadStore : PersistentPayloadStore {
         private val rows = mutableMapOf<String, StoredPayload>()
 
+        override var generation: Long = 0L
+            private set
+
         override suspend fun read(key: String): StoredPayload? = rows[key]
 
         override suspend fun write(key: String, payload: String, updatedAt: Long) {
@@ -180,6 +207,7 @@ class HomeInteractorCacheTest {
         }
 
         override suspend fun clear() {
+            generation += 1
             rows.clear()
         }
     }

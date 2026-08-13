@@ -10,6 +10,16 @@ data class StoredPayload(
 )
 
 interface PersistentPayloadStore {
+    /**
+     * How many times this store has been wiped.
+     *
+     * Published rather than kept private because a wipe has to reach further than the table: every
+     * cache tier layered on top of this store is holding the same session's data and has no other way
+     * to learn the session ended. A reader that remembers the generation it last saw can tell that
+     * everything it cached before belongs to a session that is over.
+     */
+    val generation: Long
+
     suspend fun read(key: String): StoredPayload?
     suspend fun write(key: String, payload: String, updatedAt: Long)
     suspend fun touch(key: String, updatedAt: Long)
@@ -31,7 +41,8 @@ class RoomPersistentPayloadStore(
      * hazard, and the same remedy, as the watch-state sync.
      */
     @Volatile
-    private var generation = 0L
+    override var generation: Long = 0L
+        private set
 
     override suspend fun read(key: String): StoredPayload? {
         return dao.read(key)?.let { row -> StoredPayload(payload = row.payload, updatedAt = row.updatedAt) }

@@ -146,8 +146,10 @@ internal class ApiDomainInteractor(
         clearWithoutFailing { genreInteractor.clearCache() }
         // Every payload in the store describes one domain's catalogue; a switch makes all of them
         // wrong at once. store.clear() (unlike the prefix removal above) also bumps the store's
-        // session generation, so a revalidation that was already in flight when the switch happened
-        // is withdrawn instead of landing after this wipe and reintroducing the old domain's data.
+        // session generation, which does two jobs: a revalidation that was already in flight when
+        // the switch happened is withdrawn instead of landing after this wipe, and every CachedFeed
+        // — including the ones inside the screen-scoped HomeInteractor, which this global cannot
+        // reach — drops its own memory tier the next time it reads the store.
         clearWithoutFailing { store.clear() }
     }
 

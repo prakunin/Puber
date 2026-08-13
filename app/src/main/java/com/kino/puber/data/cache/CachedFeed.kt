@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
@@ -49,11 +50,22 @@ class CachedFeed<V : Any>(
         nowNanos = { clock() * NANOS_PER_MILLI },
     )
 
+    /**
+     * The store generation this feed's memory tier belongs to.
+     *
+     * A wipe empties the table but cannot reach [inFlight] — the wipe is owned by a global, and a
+     * feed may well live in a screen scope the global has never heard of. So the feed asks the store
+     * instead of waiting to be told: a generation that has moved means everything cached here
+     * describes a session, or a domain, that is over.
+     */
+    private val seenGeneration = AtomicLong(store.generation)
+
     fun load(
         key: String,
         force: Boolean = false,
         loader: suspend () -> V,
     ): Flow<Cached<V>> = flow {
+        dropMemoryTierIfStoreWasWiped()
         val stored = readUsable(key)
         var emitted = false
         if (stored != null) {
@@ -106,6 +118,19 @@ class CachedFeed<V : Any>(
     suspend fun invalidateNamespace() {
         inFlight.clear()
         store.removeByPrefix(keyPrefix)
+    }
+
+    /**
+     * Only the thread that wins the compare-and-set clears, so a burst of concurrent loads after a
+     * wipe costs one clear rather than one per caller — and no caller can clear a tier that was
+     * refilled under a generation it has already accounted for.
+     */
+    private fun dropMemoryTierIfStoreWasWiped() {
+        val current = store.generation
+        val seen = seenGeneration.get()
+        if (current != seen && seenGeneration.compareAndSet(seen, current)) {
+            inFlight.clear()
+        }
     }
 
     @Suppress("ReturnCount")

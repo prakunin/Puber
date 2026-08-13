@@ -234,11 +234,45 @@ class CachedFeedTest {
         assertEquals(listOf(Cached.Value("second", isStale = false)), emissions)
     }
 
+    @Test
+    fun clearingTheStoreDropsTheMemoryTierSoTheNextLoadGoesBackToTheLoader() = runTest {
+        // A wipe (logout, domain switch) empties the table, but the loader-deduplicating memory tier
+        // is a separate map that the wipe cannot reach directly. Left alone it answers the next load
+        // with the previous session's value for up to a full TTL, so the feed has to notice the
+        // store's generation moved and drop it.
+        val subject = feed()
+        subject.load("k") { "first" }.toList()
+
+        store.clear()
+
+        var loaderCalls = 0
+        val emissions = subject.load("k") { loaderCalls += 1; "second" }.toList()
+
+        assertEquals(1, loaderCalls)
+        assertEquals(listOf(Cached.Value("second", isStale = false)), emissions)
+    }
+
+    @Test
+    fun aStoreThatWasNeverClearedKeepsDeduplicatingLoaderCalls() = runTest {
+        // The generation check must not become a reason to drop the memory tier on every load.
+        val subject = feed()
+        subject.load("k") { "first" }.toList()
+        store.remove("k")
+
+        var loaderCalls = 0
+        subject.load("k") { loaderCalls += 1; "second" }.toList()
+
+        assertEquals(0, loaderCalls)
+    }
+
     @Serializable
     private data class Boxed(val value: Int)
 
     private class FakePayloadStore : PersistentPayloadStore {
         private val rows = mutableMapOf<String, StoredPayload>()
+
+        override var generation: Long = 0L
+            private set
 
         override suspend fun read(key: String): StoredPayload? = rows[key]
 
@@ -259,6 +293,7 @@ class CachedFeedTest {
         }
 
         override suspend fun clear() {
+            generation += 1
             rows.clear()
         }
     }

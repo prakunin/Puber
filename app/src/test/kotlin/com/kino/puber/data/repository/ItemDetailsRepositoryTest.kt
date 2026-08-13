@@ -134,6 +134,9 @@ class ItemDetailsRepositoryTest {
     private class InMemoryPayloadStore : PersistentPayloadStore {
         private val rows = mutableMapOf<String, StoredPayload>()
 
+        override var generation: Long = 0L
+            private set
+
         override suspend fun read(key: String): StoredPayload? = rows[key]
 
         override suspend fun write(key: String, payload: String, updatedAt: Long) {
@@ -153,6 +156,7 @@ class ItemDetailsRepositoryTest {
         }
 
         override suspend fun clear() {
+            generation += 1
             rows.clear()
         }
     }
