@@ -63,6 +63,17 @@ class CachedPayloadDaoTest {
     }
 
     @Test
+    fun deleteRemovesOnlyTheGivenKey() = runTest {
+        dao.upsert(CachedPayloadEntity(key = "item:1", payload = "{\"a\":1}", updatedAt = 1))
+        dao.upsert(CachedPayloadEntity(key = "item:2", payload = "{\"a\":2}", updatedAt = 1))
+
+        dao.delete("item:1")
+
+        assertNull(dao.read("item:1"))
+        assertEquals("{\"a\":2}", dao.read("item:2")?.payload)
+    }
+
+    @Test
     fun deleteByPrefixRemovesOnlyTheMatchingKeys() = runTest {
         dao.upsert(CachedPayloadEntity(key = "home:hot", payload = "[]", updatedAt = 1))
         dao.upsert(CachedPayloadEntity(key = "home:fresh", payload = "[]", updatedAt = 1))
