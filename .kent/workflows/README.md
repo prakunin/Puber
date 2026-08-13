@@ -19,17 +19,30 @@ Kent Desktop workflow graph
 
 ## Puber Workflow Set
 
-- `Puber Engineering Delivery v18` (default): common delivery for
-  `feature`, `bugfix`, `refactor`, `migration`, `dependency`, and `test`.
-  Plan selects one `work_kind`, Implement preserves it across bounded slices,
-  and the common verification, Smoke, compliance, PR/CI, waiting, and cleanup
-  tail handles delivery. Same-repository GitHub issues resolve branches as
-  `issue-<number>` after Plan. Fresh recovery sessions reload their context
-  manifest and append evidence, CI retries preserve every attempt, and Smoke
-  can recover a same-task lease whose acquire output was lost.
 - `Puber Release`: next minor release from `origin/master` through
   version-bump PR, CI, approved tag publication, optional automation
   monitoring, and cleanup. Patch/major releases require explicit wording.
+- `Puber Engineering Delivery v20` (default): Kent 2.6.1
+  graph inspect/plan/apply rollout. Backlog tasks were recreated losslessly as
+  `PUB-61` → `PUB-63` and `PUB-62` → `PUB-64`; v19 and its obsolete records
+  were retired after the replacements were verified. The completed Engineering
+  Canary v20 was retired after task-owned cleanup.
+
+Delivery v19 passed its managed-worktree Engineering Canary and a
+preservation-only Android TV Smoke Lab before promotion. The successful lab
+proved exact `emulator-5558` isolation, a fresh build, safe
+`compatible_replace` installation without package-data clearing, bounded
+runtime evidence, and exact-resource cleanup. The temporary Canary and Smoke
+Lab graphs were retired after rollout validation.
+
+Delivery v18 Backlog tasks were recreated losslessly on v19 before retirement:
+
+- `PUB-54` → `PUB-61`; body SHA-256
+  `e9a9887bae6c5156df928359d51d37543051cfad4e1c55255839c3d382247779`,
+  same GitHub source URL and source workspace.
+- `PUB-55` → `PUB-62`; body SHA-256
+  `9387db64d924dafd99f8845b8e0c9a8c802708fed8b32fdfea01c78c0e25e39d`,
+  same empty source URL and source workspace.
 
 `Puber Release` assigns operational ownership directly: `release-manager` owns
 version/tag lifecycle, `delivery-operator` owns PR/Cleanup, and `ci-monitor`
