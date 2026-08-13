@@ -69,6 +69,17 @@ internal class HomeVM(
     private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
     private var loadedCollections: List<KCollection>? = null
 
+    /**
+     * The content-cache generation the rows above were built under.
+     *
+     * A domain switch performed anywhere else in the app — the device settings screen is the one that
+     * matters, since it neither re-roots nor knows this screen exists — wipes the cache and leaves
+     * these rows describing a catalogue the app has stopped talking to. The auto-resolve on the
+     * resume that follows reports `changed = false`, because settings already applied the domain, so
+     * that signal cannot see it. The generation can.
+     */
+    private var loadedCacheGeneration = interactor.cacheGeneration
+
     override fun dispatchError(error: ErrorEntity) {
         if (stateValue is HomeViewState.Content) {
             showMessage(error.message)
@@ -151,6 +162,7 @@ internal class HomeVM(
     private fun loadHome(showDomainSearch: Boolean = stateValue !is HomeViewState.Content) {
         loadHomeJob?.cancel()
         loadHomeJob = launch {
+            clearRowsIfContentCacheWasWiped()
             val preserveContentOnResolveFailure = !showDomainSearch && stateValue is HomeViewState.Content
             if (showDomainSearch) {
                 updateViewState(
@@ -282,11 +294,15 @@ internal class HomeVM(
      * still in flight would sit next to the new domain's rows, and a row whose new request fails
      * would show the old domain's content for as long as the screen lives.
      *
-     * Called on exactly the paths where [ApiDomainInteractor] wiped its domain-sensitive caches: the
-     * auto-resolve that reports `changed`, and the three explicit switches, which have already
-     * applied the new domain by the time they reload and so see `changed = false` afterwards.
+     * Three callers, because no single one covers every route, and the function is idempotent so
+     * overlap costs nothing:
+     * - [clearRowsIfContentCacheWasWiped], at the top of [loadHome] — the durable one, catching a
+     *   wipe performed by anybody, including screens that have never heard of this one.
+     * - the auto-resolve reporting `changed`, which wiped the caches *after* that check already ran.
+     * - the three dialog paths below, directly, so a switch made here shows the moment it is applied
+     *   rather than one auto-resolve later.
      *
-     * The screen goes back to loading with them. Emptying the map alone would not be enough: nothing
+     * The screen goes back to loading with the rows. Emptying the map alone would not be enough: nothing
      * republishes until a section answers, so a switch where none of them ever does would leave the
      * last frame — drawn entirely from the old domain — up for as long as the screen lives. Loading
      * is also what lets [onSectionFinished] report a switch that failed outright.
@@ -294,8 +310,24 @@ internal class HomeVM(
     private fun clearRowsFromPreviousCatalogue() {
         loadedSections.clear()
         loadedCollections = null
+        loadedCacheGeneration = interactor.cacheGeneration
         if (stateValue is HomeViewState.Content) {
             updateViewState(HomeViewState.Loading(apiDomainDialog = currentDialogState()))
+        }
+    }
+
+    /**
+     * Drops the rows when the content cache has been wiped since they were built.
+     *
+     * The wipe is the one fact every domain switch has in common, and the only one that reaches this
+     * screen from routes that have never heard of it: the device settings screen switches the domain
+     * with no re-root and no callback, and `autoResolveWorkingDomain` reports `changed = false` on the
+     * resume that follows because settings already applied it. Asking the store what it did, rather
+     * than waiting for whoever did it to say so, is what closes that.
+     */
+    private fun clearRowsIfContentCacheWasWiped() {
+        if (interactor.cacheGeneration != loadedCacheGeneration) {
+            clearRowsFromPreviousCatalogue()
         }
     }
 

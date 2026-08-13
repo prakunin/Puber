@@ -242,6 +242,35 @@ class HomeVMIncrementalPublishTest {
     }
 
     @Test
+    fun aCacheWipeFromAnotherScreenDropsTheRowsFromThePreviousCatalogue() = runTest {
+        // The device settings screen switches the domain and wipes the same caches, with no re-root
+        // and no way to tell this screen. Coming back to home then resumes, and the auto-resolve
+        // reports changed = false because settings already applied the domain — so the `changed`
+        // signal cannot cover this route by construction. The wipe itself has to be what home sees.
+        every { interactor.cacheGeneration } returns 0L
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns stateFor(HomeSectionType.Hot)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(2)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, (vm.testStateValue as HomeViewState.Content).sections.size)
+
+        every { interactor.cacheGeneration } returns 1L
+        val neverCompletes = CompletableDeferred<Unit>()
+        every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(3)), false))
+
+        vm.onAction(CommonAction.OnResume)
+        runCurrent()
+
+        val types = (vm.testStateValue as HomeViewState.Content).sections.map { it.type }
+        assertEquals(listOf(HomeSectionType.ContinueWatching), types)
+    }
+
+    @Test
     fun aDomainChangeWhoseSectionsAllFailStopsDrawingThePreviousCatalogue() = runTest {
         // Emptying the row map is not enough on its own: nothing republishes until a section
         // answers, so a switch where none of them ever does would leave the last frame — drawn

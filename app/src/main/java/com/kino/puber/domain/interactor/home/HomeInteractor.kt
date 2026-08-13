@@ -20,8 +20,19 @@ class HomeInteractor(
     private val api: KinoPubApiClient,
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
-    store: PersistentPayloadStore,
+    private val store: PersistentPayloadStore,
 ) {
+
+    /**
+     * How many times the content cache has been wiped.
+     *
+     * Every route that switches domains goes through `ApiDomainInteractor.clearDomainSensitiveCaches`
+     * and so bumps this — the home screen's own dialog, the device settings screen, an auto-failover.
+     * Only the first of those can tell the home screen what it did; the others do not know it exists.
+     * So the wipe publishes the fact instead, and a screen holding rows built from the cache can ask
+     * whether they still describe the catalogue it is talking to.
+     */
+    val cacheGeneration: Long get() = store.generation
 
     private val items = CachedFeed(
         store = store,
