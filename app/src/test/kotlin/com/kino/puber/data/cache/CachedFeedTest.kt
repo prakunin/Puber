@@ -135,6 +135,27 @@ class CachedFeedTest {
     }
 
     @Test
+    fun anUndecodablePayloadIsRemovedFromTheStore() = runTest {
+        // The decode failure leaves nothing to emit, so a failing loader must surface as a thrown
+        // exception rather than a RefreshFailed. What this test actually pins down is the store: only
+        // readUsable's removal of the undecodable row could make the second read below find it gone.
+        store.write(key = "k", payload = "{not json", updatedAt = now)
+        val failure = IllegalStateException("offline")
+
+        assertThrows<IllegalStateException> {
+            CachedFeed(
+                store = store,
+                serializer = Boxed.serializer(),
+                ttl = 10.minutes,
+                keyPrefix = "",
+                clock = { now },
+            ).load("k") { throw failure }.toList()
+        }
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
     fun invalidateNamespaceDropsEveryKeyUnderThePrefix() = runTest {
         val subject = CachedFeed(
             store = store,
