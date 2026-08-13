@@ -34,6 +34,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import kotlinx.coroutines.delay
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -189,6 +190,50 @@ class HistoryVMPlaybackTest {
             router.navigateTo(player)
         }
         verify(exactly = 0) { screens.details(any()) }
+    }
+
+    @Test
+    fun play_stillNavigatesWhenInvalidatingItemDetailsFails() {
+        startWith(movie(itemId = 10, videoNumber = 7))
+        val item = awaitContent().items.single()
+        val player = mockk<PuberScreen>()
+        every {
+            screens.player(
+                itemId = 10,
+                seasonNumber = null,
+                episodeNumber = null,
+                videoNumber = 7,
+                startMode = PlayerStartMode.StartFromBeginning,
+            )
+        } returns player
+        coEvery { itemDetailsRepository.invalidate(10) } throws IllegalStateException("disk full")
+
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+
+        verify(exactly = 1) { router.navigateTo(player) }
+    }
+
+    @Test
+    fun play_navigatesOnlyOnceWhenPressedAgainWhileInvalidationIsStillInFlight() {
+        startWith(movie(itemId = 10, videoNumber = 7))
+        val item = awaitContent().items.single()
+        val player = mockk<PuberScreen>()
+        every {
+            screens.player(
+                itemId = 10,
+                seasonNumber = null,
+                episodeNumber = null,
+                videoNumber = 7,
+                startMode = PlayerStartMode.StartFromBeginning,
+            )
+        } returns player
+        coEvery { itemDetailsRepository.invalidate(10) } coAnswers { delay(50) }
+
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { router.navigateTo(player) }
     }
 
     private fun startWith(vararg items: History) {

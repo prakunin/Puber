@@ -1,10 +1,12 @@
 package com.kino.puber.domain.interactor.api
 
 import com.kino.puber.BuildConfig
+import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -130,9 +132,26 @@ internal class ApiDomainInteractor(
         return getState()
     }
 
+    /**
+     * By the time this runs, the caller has already persisted the new domain and pointed
+     * [KinoPubConfig] at it — the switch has happened. A cache that fails to clear is stale data,
+     * not a reason to undo that switch, so each clear is independently best-effort: one failing
+     * must not stop the other from running, and neither may abort the caller's continuation (close
+     * the dialog, show the result, kick off the reload) that follows this call.
+     */
     private suspend fun clearDomainSensitiveCaches() {
-        itemDetailsRepository.clear()
-        genreInteractor.clearCache()
+        clearWithoutFailing { itemDetailsRepository.clear() }
+        clearWithoutFailing { genreInteractor.clearCache() }
+    }
+
+    private suspend fun clearWithoutFailing(clear: suspend () -> Unit) {
+        try {
+            clear()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            log(error, "Failed to clear a domain-sensitive cache after switching domains")
+        }
     }
 
     private suspend fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {

@@ -4,6 +4,7 @@ import androidx.annotation.VisibleForTesting
 import com.kino.puber.core.collections.EquallyFunction
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -25,6 +26,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlin.math.min
 
 internal const val FIRST_PAGE = 1
@@ -52,6 +54,14 @@ internal class HistoryVM(
     private val runtime = HistoryRuntimeStore()
     private val pageLoader = HistoryPageLoader(interactor)
     private val contentPublicationLock = Any()
+
+    /**
+     * Guards [play] against a second OK press landing while the first is still invalidating the
+     * cache. That invalidation is a real Room delete now, not the synchronous map removal it used
+     * to be, so the window in which a second press could fire off a second navigation is no
+     * longer zero.
+     */
+    private var playbackJob: Job? = null
 
     @VisibleForTesting
     internal val testRuntimeState: HistoryRuntimeState
@@ -338,28 +348,43 @@ internal class HistoryVM(
         startMode: PlayerStartMode = PlayerStartMode.ResumeIfAvailable,
     ) {
         when (val target = item.playbackTarget) {
-            is HistoryPlaybackTarget.Movie -> launch {
-                interactor.invalidateItemDetails(item.itemId)
-                router.navigateTo(
-                    router.screens.player(
-                        itemId = item.itemId,
-                        videoNumber = target.videoNumber,
-                        startMode = startMode,
-                    ),
+            is HistoryPlaybackTarget.Movie -> playAndNavigate(item) {
+                router.screens.player(
+                    itemId = item.itemId,
+                    videoNumber = target.videoNumber,
+                    startMode = startMode,
                 )
             }
-            is HistoryPlaybackTarget.Episode -> launch {
-                interactor.invalidateItemDetails(item.itemId)
-                router.navigateTo(
-                    router.screens.player(
-                        itemId = item.itemId,
-                        seasonNumber = target.seasonNumber,
-                        episodeNumber = target.episodeNumber,
-                        startMode = startMode,
-                    ),
+            is HistoryPlaybackTarget.Episode -> playAndNavigate(item) {
+                router.screens.player(
+                    itemId = item.itemId,
+                    seasonNumber = target.seasonNumber,
+                    episodeNumber = target.episodeNumber,
+                    startMode = startMode,
                 )
             }
             HistoryPlaybackTarget.Details -> openDetails(item)
+        }
+    }
+
+    /**
+     * Invalidates the cached item details, then navigates to the player regardless of whether
+     * that invalidation succeeded — Play silently doing nothing because a Room delete failed
+     * would be a far worse experience than the player briefly reading a stale cache entry. Guarded
+     * by [playbackJob] so a second press while the first is still in flight is ignored rather than
+     * pushing the player screen twice.
+     */
+    private fun playAndNavigate(item: HistoryItemUIState, screen: () -> PuberScreen) {
+        if (playbackJob?.isActive == true) return
+        playbackJob = launch {
+            try {
+                interactor.invalidateItemDetails(item.itemId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                log(error, "Failed to invalidate cached item details before playback")
+            }
+            router.navigateTo(screen())
         }
     }
 

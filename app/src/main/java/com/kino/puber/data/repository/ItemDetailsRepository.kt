@@ -45,8 +45,15 @@ class ItemDetailsRepository(
         return observeItemDetails(id).lastValue()
     }
 
+    /**
+     * A hard refresh, unlike [getItemDetails]: it must not fall back to whatever was cached
+     * before the mutation that prompted this call. Callers refresh after mutating server state —
+     * a watched mark, a bookmark toggle — specifically to redraw with the server's current truth,
+     * so a failed revalidation here has to be reported rather than quietly answered with
+     * pre-mutation data.
+     */
     suspend fun refresh(id: Int): Item {
-        return observeItemDetails(id, force = true).lastValue()
+        return observeItemDetails(id, force = true).latestValueOrFailure()
     }
 
     suspend fun markStale(itemId: Int) {
@@ -91,5 +98,21 @@ class ItemDetailsRepository(
             }
         }
         return lastValue ?: throw (failure ?: IllegalStateException("No item details were emitted for this key"))
+    }
+
+    /**
+     * The strict counterpart to [lastValue]: a [Cached.RefreshFailed] is never absorbed, even when
+     * a value was already emitted. Used by [refresh], where returning the value that existed
+     * before this call is exactly the wrong fallback.
+     */
+    private suspend fun Flow<Cached<Item>>.latestValueOrFailure(): Item {
+        var lastValue: Item? = null
+        collect { emission ->
+            when (emission) {
+                is Cached.Value -> lastValue = emission.value
+                is Cached.RefreshFailed -> throw emission.error
+            }
+        }
+        return lastValue ?: throw IllegalStateException("No item details were emitted for this key")
     }
 }

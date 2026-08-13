@@ -116,6 +116,15 @@ class ItemDetailsRepositoryTest {
         assertThrows<IllegalStateException> { repository.getItemDetails(42) }
     }
 
+    @Test
+    fun refreshThrowsWhenRevalidationFailsEvenWithAStoredValuePresent() = runTest {
+        givenApiReturns(item(42, "Fresh"))
+        repository.observeItemDetails(42).toList()
+        coEvery { api.getItemDetails(42) } throws IllegalStateException("network down")
+
+        assertThrows<IllegalStateException> { repository.refresh(42) }
+    }
+
     private fun givenApiReturns(value: Item) {
         coEvery { api.getItemDetails(value.id) } returns Result.success(ApiResponse(item = value))
     }
