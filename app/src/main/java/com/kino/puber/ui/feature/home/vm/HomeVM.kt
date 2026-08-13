@@ -5,8 +5,9 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.content.ContentChangeSet
-import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import com.kino.puber.R
 import com.kino.puber.core.ui.PuberVM
@@ -19,6 +20,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.KCollection
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
@@ -32,6 +34,7 @@ import com.kino.puber.ui.feature.home.model.HomeAction
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.model.HomeViewState
+import kotlinx.coroutines.flow.Flow
 
 internal class HomeVM(
     router: AppRouter,
@@ -46,20 +49,24 @@ internal class HomeVM(
 ) : PuberVM<HomeViewState>(router) {
 
     companion object {
-        private const val HOT_ITEMS_COUNT = 20
         private const val HERO_ITEMS_COUNT = 10
+        private const val TOTAL_SECTIONS = 8
     }
 
     override val initialViewState: HomeViewState = HomeViewState.Loading()
     private var loadHomeJob: Job? = null
 
     /**
-     * The sections exactly as the server sent them.
+     * What each section last returned, keyed by the row it draws.
      *
      * A watched mark landing changes how a card is *drawn*, not what the server would return, so it
-     * is re-mapped from this instead of costing another round of section requests.
+     * is re-mapped from this instead of costing another round of section requests. Sections also
+     * arrive independently now, so this is what a partial screen is published from.
      */
-    private var loadedSections: HomeSections? = null
+    private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
+    private var loadedCollections: List<KCollection>? = null
+    private var loadedHotItems: List<Item> = emptyList()
+    private var finishedSections = 0
 
     override fun dispatchError(error: ErrorEntity) {
         if (stateValue is HomeViewState.Content) {
@@ -78,7 +85,7 @@ internal class HomeVM(
 
     private fun remapLoadedSections() {
         if (stateValue !is HomeViewState.Content) return
-        loadedSections?.let(::publishSections)
+        publishSections()
     }
 
     override fun onAction(action: UIAction) {
@@ -173,70 +180,106 @@ internal class HomeVM(
                 }
             }
 
-            loadContentSections()
+            loadContentSections(forceWatching = !showDomainSearch)
         }
     }
 
-    private suspend fun loadContentSections() = supervisorScope {
-        val hotMoviesDeferred = async { interactor.getHotItems("movie", HOT_ITEMS_COUNT).logFailure("hot movies") }
-        val hotSeriesDeferred = async { interactor.getHotItems("serial", HOT_ITEMS_COUNT).logFailure("hot series") }
-        val watchingDeferred = async { interactor.getWatchingItems().logFailure("watching") }
-        val freshMoviesDeferred = async { interactor.getFreshItems("movie").logFailure("fresh movies") }
-        val freshSeriesDeferred = async { interactor.getFreshItems("serial").logFailure("fresh series") }
-        val popularMoviesDeferred = async { interactor.getPopularByType("movie").logFailure("popular movies") }
-        val popularSeriesDeferred = async { interactor.getPopularByType("serial").logFailure("popular series") }
-        val watchLaterDeferred = async { interactor.getWatchLaterItems().logFailure("watch later") }
-        val bookmarksDeferred = async { loadBookmarkSection() }
-        val collectionsDeferred = async { interactor.getCollections().logFailure("collections") }
+    private suspend fun loadContentSections(forceWatching: Boolean) = supervisorScope {
+        loadedSections.clear()
+        loadedCollections = null
+        finishedSections = 0
 
-        val hotMovies = hotMoviesDeferred.await().orEmpty()
-        val hotSeries = hotSeriesDeferred.await().orEmpty()
-        val hotItems = (hotMovies + hotSeries).sortedByDescending { it.ratingPercentage ?: 0 }
-        val freshItems = (freshMoviesDeferred.await().orEmpty() + freshSeriesDeferred.await().orEmpty())
-            .sortedByDescending { it.updatedAt.orEmpty() }
-
-        val sections = HomeSections(
-            hotItems = hotItems,
-            itemSections = listOfNotNull(
-                watchingDeferred.await()?.let { HomeSectionType.ContinueWatching to it },
-                HomeSectionType.Fresh to freshItems,
-                popularMoviesDeferred.await()?.let { HomeSectionType.PopularMovies to it },
-                popularSeriesDeferred.await()?.let { HomeSectionType.PopularSeries to it },
-                watchLaterDeferred.await()?.let { HomeSectionType.WatchLater to it },
-                bookmarksDeferred.await()?.let { HomeSectionType.Bookmarks to it },
-                HomeSectionType.Hot to hotItems,
-            ),
-            collections = collectionsDeferred.await(),
+        val sections = listOf(
+            HomeSectionType.ContinueWatching to interactor.observeWatchingItems(force = forceWatching),
+            HomeSectionType.Hot to interactor.observeHotItems(),
+            HomeSectionType.Fresh to interactor.observeFreshItems(),
+            HomeSectionType.PopularMovies to interactor.observePopularMovies(),
+            HomeSectionType.PopularSeries to interactor.observePopularSeries(),
+            HomeSectionType.WatchLater to interactor.observeWatchLaterItems(),
+            HomeSectionType.Bookmarks to interactor.observeBookmarkItems(),
         )
-        loadedSections = sections
-        publishSections(sections)
+        sections.forEach { (type, flow) ->
+            launch { collectSection(type, flow) }
+        }
+        launch { collectCollections() }
     }
 
-    /** Maps what the server returned into cards, against whatever the index and settings say now. */
-    private fun publishSections(sections: HomeSections) {
-        val mapped = listOfNotNull(
-            *sections.itemSections
-                .map { (type, items) -> mapper.mapItemSection(items, type) }
-                .toTypedArray(),
-            sections.collections?.let { mapper.mapCollectionSection(it) },
-        ).sortedBy { it.type.ordinal }
+    private suspend fun collectSection(type: HomeSectionType, flow: Flow<Cached<List<Item>>>) {
+        try {
+            flow.collect { cached ->
+                when (cached) {
+                    is Cached.Value -> {
+                        loadedSections[type] = cached.value
+                        if (type == HomeSectionType.Hot) loadedHotItems = cached.value
+                        publishSections()
+                    }
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh $type")
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            log(error, "Failed to load $type")
+        } finally {
+            onSectionFinished()
+        }
+    }
 
+    private suspend fun collectCollections() {
+        try {
+            interactor.observeCollections().collect { cached ->
+                when (cached) {
+                    is Cached.Value -> {
+                        loadedCollections = cached.value
+                        publishSections()
+                    }
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh collections")
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            log(error, "Failed to load collections")
+        } finally {
+            onSectionFinished()
+        }
+    }
+
+    /**
+     * Shows the error screen only once every section has given up with nothing to show.
+     *
+     * A single failing row is not worth replacing a working screen over, but a screen that would
+     * stay empty forever has to say so rather than spin.
+     */
+    private fun onSectionFinished() {
+        finishedSections += 1
+        if (finishedSections < TOTAL_SECTIONS) return
+        if (loadedSections.isNotEmpty() || loadedCollections != null) return
+        if (stateValue is HomeViewState.Content) return
         updateViewState(
-            HomeViewState.Content(
-                heroItems = videoItemMapper.mapHeroItems(sections.hotItems.take(HERO_ITEMS_COUNT)),
-                sections = mapped,
+            HomeViewState.Error(
+                message = resources.getString(R.string.error_generic),
                 apiDomainDialog = currentDialogState(),
             )
         )
     }
 
-    private suspend fun loadBookmarkSection(): List<Item>? {
-        return interactor.getGenericBookmarkItems().logFailure("bookmark items")
-    }
+    /** Maps what the sections returned into cards, against whatever the index and settings say now. */
+    private fun publishSections() {
+        val mapped = listOfNotNull(
+            *loadedSections
+                .map { (type, items) -> mapper.mapItemSection(items, type) }
+                .toTypedArray(),
+            loadedCollections?.let { mapper.mapCollectionSection(it) },
+        ).sortedBy { it.type.ordinal }
 
-    private fun <T> Result<T>.logFailure(section: String): T? {
-        onFailure { log(it, "Failed to load $section") }
-        return getOrNull()
+        updateViewState(
+            HomeViewState.Content(
+                heroItems = videoItemMapper.mapHeroItems(loadedHotItems.take(HERO_ITEMS_COUNT)),
+                sections = mapped,
+                apiDomainDialog = currentDialogState(),
+            )
+        )
     }
 
     private fun openApiDomainDialog() {
@@ -357,13 +400,3 @@ internal class HomeVM(
         )
     }
 }
-
-/**
- * One home load, kept as the server sent it. Cards are derived from this, so a change in the local
- * watch-state index or in the display settings is a re-map rather than another round of requests.
- */
-private class HomeSections(
-    val hotItems: List<Item>,
-    val itemSections: List<Pair<HomeSectionType, List<Item>>>,
-    val collections: List<KCollection>?,
-)
