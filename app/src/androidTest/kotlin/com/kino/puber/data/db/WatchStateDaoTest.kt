@@ -1,6 +1,7 @@
 package com.kino.puber.data.db
 
 import androidx.room3.Room
+import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.test.runTest
@@ -30,7 +31,7 @@ class WatchStateDaoTest {
         database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             PuberDatabase::class.java,
-        ).build()
+        ).setDriver(AndroidSQLiteDriver()).build()
         dao = database.watchStateDao()
     }
 
