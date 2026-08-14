@@ -1,6 +1,7 @@
 package com.kino.puber.data.api
 
 import com.kino.puber.BuildConfig
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.auth.DeviceCodeResponse
 import com.kino.puber.data.api.auth.DeviceFlowResult
@@ -77,6 +78,7 @@ import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +91,9 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 
+// Deliberately left whole for now: at over three times the 600-line budget this wants splitting
+// into per-area clients (content, bookmarks, device, updates), which is its own change.
+@Suppress("LargeClass")
 class KinoPubApiClient(
     private val okHttpClient: OkHttpClient,
     private val cacheDir: File,
@@ -124,36 +129,7 @@ class KinoPubApiClient(
 
                 sendWithoutRequest { request -> shouldSendKinoPubToken(request.url.host) }
 
-                refreshTokens {
-                    val refreshToken = cryptoPreferenceRepository.getRefreshToken().orEmpty()
-                    log("Attempting to refresh access token")
-
-                    try {
-                        val response = client.post("${KinoPubConfig.OAUTH_BASE_URL}device") {
-                            parameter("grant_type", KinoPubConfig.GRANT_TYPE_REFRESH_TOKEN)
-                            parameter("refresh_token", refreshToken)
-                        }
-
-                        if (response.status.isSuccess()) {
-                            val newTokens = response.body<TokenResponse>()
-                            log("Successfully received new tokens")
-                            cryptoPreferenceRepository.saveAccessToken(newTokens.accessToken)
-                            cryptoPreferenceRepository.saveRefreshToken(newTokens.refreshToken)
-                            BearerTokens(newTokens.accessToken, newTokens.refreshToken)
-                        } else {
-                            log("Refresh token failed with HTTP ${response.status.value}")
-                            onSessionExpired()
-                            throw IllegalStateException(REFRESH_TOKEN_FAILURE_MESSAGE)
-                        }
-                    } catch (e: Exception) {
-                        if (e is IllegalStateException && e.message == REFRESH_TOKEN_FAILURE_MESSAGE) {
-                            throw e
-                        }
-                        log("Refresh token request failed")
-                        onSessionExpired()
-                        throw IllegalStateException(REFRESH_TOKEN_FAILURE_MESSAGE, e)
-                    }
-                }
+                refreshTokens { refreshBearerTokens(client) }
             }
         }
 
@@ -195,6 +171,45 @@ class KinoPubApiClient(
             }
             exponentialDelay()
         }
+    }
+
+    private suspend fun refreshBearerTokens(client: HttpClient): BearerTokens {
+        val refreshToken = cryptoPreferenceRepository.getRefreshToken().orEmpty()
+        log("Attempting to refresh access token")
+
+        try {
+            val response = client.post("${KinoPubConfig.OAUTH_BASE_URL}device") {
+                parameter("grant_type", KinoPubConfig.GRANT_TYPE_REFRESH_TOKEN)
+                parameter("refresh_token", refreshToken)
+            }
+
+            if (!response.status.isSuccess()) {
+                log("Refresh token failed with HTTP ${response.status.value}")
+                sessionExpiredFailure()
+            }
+
+            val newTokens = response.body<TokenResponse>()
+            log("Successfully received new tokens")
+            cryptoPreferenceRepository.saveAccessToken(newTokens.accessToken)
+            cryptoPreferenceRepository.saveRefreshToken(newTokens.refreshToken)
+            return BearerTokens(newTokens.accessToken, newTokens.refreshToken)
+        } catch (e: CancellationException) {
+            // A cancelled refresh is not a dead session — reporting it as one would
+            // log the user out whenever the calling scope simply went away.
+            throw e
+        } catch (e: Exception) {
+            if (e is IllegalStateException && e.message == REFRESH_TOKEN_FAILURE_MESSAGE) {
+                throw e
+            }
+            log("Refresh token request failed")
+            sessionExpiredFailure(e)
+        }
+    }
+
+    /** Drops the session and aborts the refresh; callers treat this as "sign in again". */
+    private fun sessionExpiredFailure(cause: Throwable? = null): Nothing {
+        onSessionExpired()
+        throw IllegalStateException(REFRESH_TOKEN_FAILURE_MESSAGE, cause)
     }
 
     fun isAuthenticated(): Boolean =
@@ -862,6 +877,9 @@ class KinoPubApiClient(
         }
     }
 
+    // Cancellation is rethrown, but the partial download has to be deleted first — detekt wants the
+    // throw to be the first statement in the catch block, which would leave the temp file behind.
+    @Suppress("SuspendFunSwallowedCancellation")
     suspend fun downloadUpdateAsset(
         url: String,
         targetFile: File,
@@ -880,49 +898,25 @@ class KinoPubApiClient(
             }
 
             val totalBytes = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-            val channel = response.bodyAsChannel()
-            val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-            var downloadedBytes = 0L
             var lastProgress = -1
 
             fun dispatchProgress(percent: Int) {
-                val coercedPercent = percent.coerceIn(0, 100)
+                val coercedPercent = percent.coerceIn(0, PERCENT_MAX)
                 if (coercedPercent != lastProgress) {
                     lastProgress = coercedPercent
                     onProgress(coercedPercent)
                 }
             }
 
-            if (totalBytes != null && totalBytes > 0L) {
-                dispatchProgress(0)
-            }
+            streamToFile(
+                channel = response.bodyAsChannel(),
+                tempFile = tempFile,
+                totalBytes = totalBytes,
+                dispatchProgress = ::dispatchProgress,
+            )
+            moveIntoPlace(tempFile, targetFile)
 
-            tempFile.outputStream().buffered().use { output ->
-                while (!channel.isClosedForRead) {
-                    val bytesRead = channel.readAvailable(buffer)
-                    if (bytesRead == -1) {
-                        break
-                    }
-
-                    output.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-
-                    if (totalBytes != null && totalBytes > 0L) {
-                        dispatchProgress(((downloadedBytes * 100L) / totalBytes).toInt())
-                    }
-                }
-            }
-
-            if (!tempFile.renameTo(targetFile)) {
-                if (targetFile.exists() && !targetFile.delete()) {
-                    throw IllegalStateException("Unable to replace existing update download")
-                }
-                if (!tempFile.renameTo(targetFile)) {
-                    throw IllegalStateException("Unable to finalize update download")
-                }
-            }
-
-            dispatchProgress(100)
+            dispatchProgress(PERCENT_MAX)
             Result.success(targetFile)
         } catch (error: CancellationException) {
             tempFile.delete()
@@ -930,6 +924,49 @@ class KinoPubApiClient(
         } catch (error: Exception) {
             tempFile.delete()
             Result.failure(error)
+        }
+    }
+
+    /** Streams [channel] into [tempFile], reporting percentages only when the total size is known. */
+    private suspend fun streamToFile(
+        channel: ByteReadChannel,
+        tempFile: File,
+        totalBytes: Long?,
+        dispatchProgress: (Int) -> Unit,
+    ) {
+        val reportsProgress = totalBytes != null && totalBytes > 0L
+        if (reportsProgress) {
+            dispatchProgress(0)
+        }
+
+        val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
+        var downloadedBytes = 0L
+        tempFile.outputStream().buffered().use { output ->
+            while (!channel.isClosedForRead) {
+                val bytesRead = channel.readAvailable(buffer)
+                if (bytesRead == -1) {
+                    break
+                }
+
+                output.write(buffer, 0, bytesRead)
+                downloadedBytes += bytesRead
+
+                if (totalBytes != null && reportsProgress) {
+                    dispatchProgress(((downloadedBytes * PERCENT_MAX) / totalBytes).toInt())
+                }
+            }
+        }
+    }
+
+    private fun moveIntoPlace(tempFile: File, targetFile: File) {
+        if (tempFile.renameTo(targetFile)) {
+            return
+        }
+        if (targetFile.exists() && !targetFile.delete()) {
+            throw IllegalStateException("Unable to replace existing update download")
+        }
+        if (!tempFile.renameTo(targetFile)) {
+            throw IllegalStateException("Unable to finalize update download")
         }
     }
 
@@ -968,6 +1005,8 @@ class KinoPubApiClient(
         }
 
         handleApiResponse<DeviceCodeResponse>(response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -987,6 +1026,8 @@ class KinoPubApiClient(
         }
 
         handleApiResponse<TokenResponse>(response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -1014,13 +1055,10 @@ class KinoPubApiClient(
     fun getDeviceLoginCode(
     ): Flow<Result<DeviceFlowResult>> = flow {
         // Step 1: Get device code
-        val deviceCodeResult = getDeviceCode()
-        if (deviceCodeResult.isFailure) {
-            emit(Result.failure(deviceCodeResult.exceptionOrNull()!!))
+        val deviceCode = getDeviceCode().getOrElse { error ->
+            emit(Result.failure(error))
             return@flow
         }
-
-        val deviceCode = deviceCodeResult.getOrThrow()
 
         emit(
             Result.success(
@@ -1051,13 +1089,13 @@ class KinoPubApiClient(
             }
 
             // Check if error is polling-related (authorization_pending)
-            val error = tokenResult.exceptionOrNull()
+            val error = tokenResult.exceptionOrNull() ?: return@flow
             val isAuthorizationPending =
-                error?.message?.contains("authorization_pending", true) ?: false
+                error.message?.contains("authorization_pending", true) ?: false
 
             if (!isAuthorizationPending) {
                 // Emit non-recoverable error and complete the flow
-                emit(Result.failure(error!!))
+                emit(Result.failure(error))
                 return@flow
             }
         }
@@ -1070,7 +1108,9 @@ class KinoPubApiClient(
     /**
      * Safe handling of API responses with error detection
      */
-    private suspend inline fun <reified T> handleApiResponse(response: HttpResponse): Result<T> = runCatching {
+    private suspend inline fun <reified T> handleApiResponse(
+        response: HttpResponse,
+    ): Result<T> = runCatchingCancellable {
         if (!response.status.isSuccess()) {
             val errorText = response.bodyAsText()
             throw buildApiError(errorText, response.status.value)
@@ -1110,5 +1150,6 @@ class KinoPubApiClient(
         private const val READ_TIMEOUT = 120_000L
         private const val CACHE_SIZE = 50L * 1024 * 1024 // 50 MB
         private const val DOWNLOAD_BUFFER_SIZE = 8 * 1024
+        private const val PERCENT_MAX = 100
     }
 }

@@ -4,6 +4,7 @@ import com.kino.puber.R
 import com.kino.puber.core.content.ContentChange
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
@@ -114,7 +115,7 @@ internal class DetailsVM(
     private fun resolveWatchlistFlag(item: Item) {
         val generation = ++watchlistLookupGeneration
         launch {
-            val resolved = runCatching { interactor.isInWatchLaterFolder(item) }.getOrNull() ?: return@launch
+            val resolved = runCatchingCancellable { interactor.isInWatchLaterFolder(item) }.getOrNull() ?: return@launch
             // Something newer happened while this lookup was in the air — either the user pressed the
             // button, or a later reload started its own lookup for a possibly different item. Either
             // way this answer is no longer the freshest fact, so it is dropped rather than applied.

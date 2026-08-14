@@ -71,7 +71,8 @@ class ItemDetailsRepository(
     }
 
     private suspend fun fetchItem(id: Int): Item {
-        return api.getItemDetails(id).getOrThrow().item!!.also { item ->
+        val response = api.getItemDetails(id).getOrThrow()
+        return checkNotNull(response.item) { "Details response for item $id carried no item" }.also { item ->
             // Details do carry watch fields, unlike the catalogue. Every opened title is a free
             // chance to sharpen the local index. observedAt is passed explicitly (rather than
             // relying on WatchStateRepository's own clock default) because it is genuinely "now"

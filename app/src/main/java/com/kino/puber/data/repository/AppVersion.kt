@@ -26,12 +26,9 @@ internal data class AppVersion(
                 return null
             }
 
+            // toIntOrNull() alone would accept a signed part such as "-1", which is not a version.
             val versionParts = parts.map { part ->
-                if (part.isEmpty() || part.any { !it.isDigit() }) {
-                    return null
-                }
-
-                part.toIntOrNull() ?: return null
+                part.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull() ?: return null
             }
 
             return AppVersion(

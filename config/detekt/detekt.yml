@@ -114,6 +114,10 @@ complexity:
     active: true
     excludes: [ '**/test/**', '**/androidTest/**', '**/commonTest/**', '**/jvmTest/**', '**/androidUnitTest/**', '**/androidInstrumentedTest/**', '**/jsTest/**', '**/iosTest/**' ]
     allowedLines: 60
+    # A composable is a declarative tree, not an imperative method: the line budget that keeps
+    # ordinary functions readable does not transfer, and splitting one to satisfy it adds
+    # recomposition scopes and moves TV focus handling around for no gain.
+    ignoreAnnotated: [ 'Composable' ]
   LongParameterList:
     active: false
     allowedFunctionParameters: 7
@@ -184,6 +188,9 @@ coroutines:
     active: false
   SuspendFunSwallowedCancellation:
     active: true
+    # Tests drive their own scope through runTest and use runCatching to assert failures; a
+    # swallowed cancellation there cannot strand a coroutine the way it can in production code.
+    excludes: [ '**/test/**', '**/androidTest/**' ]
   SuspendFunWithCoroutineScopeReceiver:
     active: false
     aliases: ['SuspendFunctionOnCoroutineScope']

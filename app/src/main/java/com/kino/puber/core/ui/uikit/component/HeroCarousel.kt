@@ -54,6 +54,9 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import kotlinx.coroutines.delay
 
+private const val HERO_AUTO_SCROLL_DELAY_MS = 5_000L
+private const val INDICATOR_CORNER_PERCENT = 50
+
 @Composable
 fun HeroCarousel(
     items: List<HeroItemState>,
@@ -83,7 +86,7 @@ fun HeroCarousel(
     LaunchedEffect(pagerState, isFocused) {
         if (!isFocused) {
             while (true) {
-                delay(5000)
+                delay(HERO_AUTO_SCROLL_DELAY_MS)
                 val next = (pagerState.currentPage + 1) % items.size
                 pagerState.animateScrollToPage(next, animationSpec = tween(500))
             }
@@ -158,7 +161,7 @@ fun HeroCarousel(
                     modifier = Modifier
                         .width(width)
                         .height(height)
-                        .background(color = color, shape = RoundedCornerShape(50)),
+                        .background(color = color, shape = RoundedCornerShape(INDICATOR_CORNER_PERCENT)),
                 )
             }
         }

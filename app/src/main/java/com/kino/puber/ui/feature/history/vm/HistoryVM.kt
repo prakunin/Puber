@@ -101,6 +101,9 @@ internal class HistoryVM(
         }
     }
 
+    // Cancellation is rethrown, but the in-flight page operation has to be released first, or the
+    // runtime keeps rejecting later pages as stale. Detekt wants the throw to come first instead.
+    @Suppress("SuspendFunSwallowedCancellation")
     override fun onLoadFirstPage() {
         val request = runtime.beginFirstPage() ?: return
         pagingLaunch {
@@ -126,6 +129,8 @@ internal class HistoryVM(
         }
     }
 
+    // See [onLoadFirstPage] — the operation slot has to be released before cancellation propagates.
+    @Suppress("SuspendFunSwallowedCancellation")
     override fun onLoadNextPage(key: History?) {
         val request = runtime.currentNextPageRequest() ?: return
         pagingLaunch {
@@ -453,6 +458,8 @@ internal class HistoryVM(
         }
     }
 
+    // See [onLoadFirstPage] — the pending deletion has to be released before cancellation propagates.
+    @Suppress("SuspendFunSwallowedCancellation")
     private suspend fun performDeletion(
         deletion: HistoryOperation.Deleting,
         item: HistoryItemUIState,
@@ -531,7 +538,6 @@ internal class HistoryVM(
             )
             runtime.acceptReconciliation(
                 operationId = operationId,
-                reconciliation = reconciliation,
                 result = result,
                 requestedFocusKey = requestedFocusKey,
             ) ?: return

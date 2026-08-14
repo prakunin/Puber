@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.main.vm
 
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
@@ -52,7 +53,7 @@ internal class MainVM(
      */
     private fun syncWatchState() {
         launch {
-            runCatching { watchStateSyncInteractor.syncIfStale() }
+            runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
         }
     }

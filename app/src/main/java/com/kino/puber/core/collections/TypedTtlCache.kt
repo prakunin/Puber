@@ -134,6 +134,10 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
         return null
     }
 
+    // Cancellation is rethrown, but the flight has to be detached and its waiters released first,
+    // otherwise everyone waiting on this leader hangs. Detekt wants the throw to be the very first
+    // statement in the catch block, which would drop that handover.
+    @Suppress("SuspendFunSwallowedCancellation")
     private suspend fun load(
         key: K,
         flight: Flight<V>,

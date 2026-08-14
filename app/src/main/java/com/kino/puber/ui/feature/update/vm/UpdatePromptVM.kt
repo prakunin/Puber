@@ -70,39 +70,31 @@ internal class UpdatePromptVM(
             resources.getString(R.string.update_prompt_install_failed)
         }
         when (val state = stateValue) {
-            is UpdatePromptViewState.Available -> {
-                updateViewState(
-                    UpdatePromptViewState.Error(
-                        update = state.update,
-                        downloadedFile = null,
-                        message = message,
-                        canRetryInstall = false,
-                    )
+            is UpdatePromptViewState.Available -> updateViewState(
+                UpdatePromptViewState.Error(
+                    update = state.update,
+                    downloadedFile = null,
+                    message = message,
+                    canRetryInstall = false,
                 )
-            }
-            is UpdatePromptViewState.Downloading -> {
-                updateViewState(
-                    UpdatePromptViewState.Error(
-                        update = state.update,
-                        downloadedFile = null,
-                        message = message,
-                        canRetryInstall = false,
-                    )
+            )
+            is UpdatePromptViewState.Downloading -> updateViewState(
+                UpdatePromptViewState.Error(
+                    update = state.update,
+                    downloadedFile = null,
+                    message = message,
+                    canRetryInstall = false,
                 )
-            }
-            is UpdatePromptViewState.PermissionRequired -> {
-                updateViewState(
-                    UpdatePromptViewState.Error(
-                        update = state.update,
-                        downloadedFile = state.downloadedFile,
-                        message = message,
-                        canRetryInstall = true,
-                    )
+            )
+            is UpdatePromptViewState.PermissionRequired -> updateViewState(
+                UpdatePromptViewState.Error(
+                    update = state.update,
+                    downloadedFile = state.downloadedFile,
+                    message = message,
+                    canRetryInstall = true,
                 )
-            }
-            is UpdatePromptViewState.Error -> {
-                updateViewState(state.copy(message = message))
-            }
+            )
+            is UpdatePromptViewState.Error -> updateViewState(state.copy(message = message))
             UpdatePromptViewState.Hidden -> Unit
         }
     }
@@ -139,9 +131,8 @@ internal class UpdatePromptVM(
 
             when (result) {
                 is AppUpdateDownload.Completed -> handleInstallLaunch(update, result.file)
-                is AppUpdateDownload.Progress -> {
+                is AppUpdateDownload.Progress ->
                     updateViewState(UpdatePromptViewState.Downloading(update, result.percent))
-                }
                 AppUpdateDownload.Error.StorageUnavailable -> showDownloadError(
                     update = update,
                     messageRes = R.string.update_prompt_storage_unavailable,
@@ -185,9 +176,8 @@ internal class UpdatePromptVM(
     private fun handleInstallLaunch(update: AvailableUpdate, file: File) {
         when (updateInteractor.launchInstaller(file)) {
             InstallLaunchResult.Launched -> updateViewState(UpdatePromptViewState.Hidden)
-            InstallLaunchResult.PermissionRequired -> {
+            InstallLaunchResult.PermissionRequired ->
                 updateViewState(UpdatePromptViewState.PermissionRequired(update = update, downloadedFile = file))
-            }
             is InstallLaunchResult.Failed -> showInstallError(update, file)
         }
     }

@@ -36,6 +36,9 @@ private val handlersModule = module {
     singleOf(::DefaultErrorHandler) { bind<ErrorHandler>() }
 }
 
+private const val IMAGE_MEMORY_CACHE_PERCENT = 0.15
+private const val IMAGE_DISK_CACHE_BYTES = 100L * 1024 * 1024
+
 class PuberApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
@@ -77,13 +80,13 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(context, 0.15)
+                    .maxSizePercent(context, IMAGE_MEMORY_CACHE_PERCENT)
                     .build()
             }
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache").toOkioPath(normalize = true))
-                    .maxSizeBytes(100L * 1024 * 1024)
+                    .maxSizeBytes(IMAGE_DISK_CACHE_BYTES)
                     .build()
             }
             .components {

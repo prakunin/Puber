@@ -21,8 +21,8 @@ internal class ContentStateFactory(private val mapper: PlayerUIMapper) {
         savedBufferPreset: BufferPreset = BufferPreset.AUTO,
         fastDnsEnabled: Boolean = true,
     ): PlayerContentState = PlayerContentState(
-        title = mapper.buildTitle(item, resolved.seasonNumber, resolved.episodeNumber),
-        subtitle = mapper.buildSubtitle(item, resolved.seasonNumber, resolved.episodeNumber, resolved.episodeTitle),
+        title = mapper.buildTitle(item),
+        subtitle = mapper.buildSubtitle(resolved.seasonNumber, resolved.episodeNumber, resolved.episodeTitle),
         isPlaying = resumeDialog == null,
         currentPosition = 0L,
         duration = resolved.duration?.toLong()?.times(1000) ?: 0L,

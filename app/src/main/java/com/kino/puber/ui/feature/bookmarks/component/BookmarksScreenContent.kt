@@ -42,18 +42,14 @@ internal fun BookmarksScreenContent(
 ) {
     when (state) {
         is BookmarksViewState.Loading -> FullScreenProgressIndicator()
-        is BookmarksViewState.Error -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = state.message)
-            }
+        is BookmarksViewState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = state.message)
         }
-        is BookmarksViewState.Content -> {
-            BookmarksContent(
-                state = state,
-                onAction = onAction,
-                onFolderSelected = onFolderSelected,
-            )
-        }
+        is BookmarksViewState.Content -> BookmarksContent(
+            state = state,
+            onAction = onAction,
+            onFolderSelected = onFolderSelected,
+        )
     }
 }
 

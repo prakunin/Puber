@@ -20,20 +20,23 @@ internal class AppUpdateRepository(
         }
     }
 
-    private fun GitHubReleaseResponse.toAvailableUpdate(currentVersion: AppVersion): AvailableUpdate? {
+    /** The release version when it is a published release strictly newer than [currentVersion]. */
+    private fun GitHubReleaseResponse.upgradeVersionOrNull(currentVersion: AppVersion): AppVersion? {
         if (draft || prerelease) {
             return null
         }
 
         val latestVersion = AppVersion.parse(tagName)
-            ?: return null.also {
-                log("App update: ignoring malformed latest release tag '$tagName'")
-            }
-
-        if (latestVersion <= currentVersion) {
+        if (latestVersion == null) {
+            log("App update: ignoring malformed latest release tag '$tagName'")
             return null
         }
 
+        return latestVersion.takeIf { it > currentVersion }
+    }
+
+    private fun GitHubReleaseResponse.toAvailableUpdate(currentVersion: AppVersion): AvailableUpdate? {
+        val latestVersion = upgradeVersionOrNull(currentVersion) ?: return null
         val apkAsset = selectApkAsset(assets) ?: return null
         val checksumAsset = assets.firstOrNull { asset ->
             asset.name == "${apkAsset.name}.sha256" && asset.browserDownloadUrl.isNotBlank()

@@ -100,7 +100,7 @@ internal class PlayerStartModeTest {
         coEvery { skipSegmentInteractor.loadSegments(any(), any(), any()) } returns emptyList()
         every { skipSegmentInteractor.findCreditsSegment(any()) } returns null
         every { mapper.formatTime(any()) } returns "2:00"
-        every { mapper.buildSubtitle(any(), any(), any(), any()) } returns "S1E1"
+        every { mapper.buildSubtitle(any(), any(), any()) } returns "S1E1"
     }
 
     @AfterEach

@@ -26,6 +26,9 @@ import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.ui.feature.collections.model.CollectionUIState
 import com.kino.puber.ui.feature.collections.model.CollectionsViewState
 
+/** How close to the end of the grid the focus gets before the next page is requested. */
+private const val LOAD_MORE_THRESHOLD = 6
+
 @Composable
 internal fun CollectionsScreenContent(
     state: CollectionsViewState,
@@ -34,18 +37,14 @@ internal fun CollectionsScreenContent(
 ) {
     when (state) {
         is CollectionsViewState.Loading -> FullScreenProgressIndicator()
-        is CollectionsViewState.Error -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = state.message)
-            }
+        is CollectionsViewState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = state.message)
         }
-        is CollectionsViewState.Content -> {
-            CollectionsGrid(
-                collections = state.collections,
-                onCollectionClick = onCollectionClick,
-                onLoadMore = onLoadMore,
-            )
-        }
+        is CollectionsViewState.Content -> CollectionsGrid(
+            collections = state.collections,
+            onCollectionClick = onCollectionClick,
+            onLoadMore = onLoadMore,
+        )
     }
 }
 
@@ -70,7 +69,7 @@ private fun CollectionsGrid(
             .focusRestorer(savedItemFocusRequester),
     ) {
         itemsIndexed(collections, key = { _, item -> item.id }) { index, collection ->
-            if (index >= collections.size - 6) {
+            if (index >= collections.size - LOAD_MORE_THRESHOLD) {
                 onLoadMore()
             }
             val isFocusTarget = index == focusedItemIndex
@@ -80,8 +79,11 @@ private fun CollectionsGrid(
                 onClick = clickCallback,
                 modifier = Modifier
                     .then(
-                        if (isFocusTarget) Modifier.focusRequester(savedItemFocusRequester)
-                        else Modifier
+                        if (isFocusTarget) {
+                            Modifier.focusRequester(savedItemFocusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                     .onFocusChanged { if (it.isFocused) focusedItemIndex = index },
             )

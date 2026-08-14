@@ -9,9 +9,9 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.UIAction
 
 @Immutable
-internal sealed class DetailsScreenState {
-    data object Loading : DetailsScreenState()
-    data class Error(val message: String) : DetailsScreenState()
+internal sealed interface DetailsScreenState {
+    data object Loading : DetailsScreenState
+    data class Error(val message: String) : DetailsScreenState
     data class Content(
         val details: VideoDetailsUIState,
         val info: DetailsInfoUIState,
@@ -24,33 +24,33 @@ internal sealed class DetailsScreenState {
         val initialEpisodeFocusId: Int? = null,
         val similarItems: List<VideoItemUIState> = emptyList(),
         val trailerUrl: String? = null,
-    ) : DetailsScreenState()
+    ) : DetailsScreenState
 }
 
 @Immutable
-internal sealed class DetailsButtonUIState {
+internal sealed interface DetailsButtonUIState {
     data class TextButton(
         val textRes: Int,
         val icon: ImageVector,
         val action: DetailsAction,
         val textOverride: String? = null,
-    ) : DetailsButtonUIState()
+    ) : DetailsButtonUIState
 
     data class IconOnly(
         val icon: ImageVector,
         val contentDescription: Int,
         val action: DetailsAction,
-    ) : DetailsButtonUIState()
+    ) : DetailsButtonUIState
 
     data class WatchlistToggle(
         val contentDescription: Int,
         val action: DetailsAction,
-    ) : DetailsButtonUIState()
+    ) : DetailsButtonUIState
 
     data class WatchedToggle(
         val contentDescription: Int,
         val action: DetailsAction,
-    ) : DetailsButtonUIState()
+    ) : DetailsButtonUIState
 }
 
 @Immutable
@@ -69,16 +69,16 @@ internal data class DetailsInfoRowUIState(
 )
 
 @Immutable
-internal sealed class DetailsAction : UIAction {
-    data object PlayClicked : DetailsAction()
-    data object TrailerClicked : DetailsAction()
-    data object SelectSeasonClicked : DetailsAction()
-    data object WatchlistToggleClicked : DetailsAction()
-    data object WatchedToggleClicked : DetailsAction()
-    data class EpisodeSelected(val item: VideoItemUIState) : DetailsAction()
-    data class EpisodeWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction()
-    data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction()
-    data class SimilarSelected(val item: VideoItemUIState) : DetailsAction()
-    data object CloseSeasonsPanel : DetailsAction()
-    data object CloseTrailer : DetailsAction()
+internal sealed interface DetailsAction : UIAction {
+    data object PlayClicked : DetailsAction
+    data object TrailerClicked : DetailsAction
+    data object SelectSeasonClicked : DetailsAction
+    data object WatchlistToggleClicked : DetailsAction
+    data object WatchedToggleClicked : DetailsAction
+    data class EpisodeSelected(val item: VideoItemUIState) : DetailsAction
+    data class EpisodeWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
+    data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
+    data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
+    data object CloseSeasonsPanel : DetailsAction
+    data object CloseTrailer : DetailsAction
 }

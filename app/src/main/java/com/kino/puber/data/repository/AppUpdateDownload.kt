@@ -29,8 +29,14 @@ internal class AppUpdateDownloader(
             return AppUpdateDownload.Error.DownloadFailed(error)
         }
 
-        val checksumUrl = update.checksumDownloadUrl
-            ?: return AppUpdateDownload.Completed(downloadedFile)
+        return verifyChecksum(downloadedFile, update.checksumDownloadUrl)
+    }
+
+    /** A release without a published checksum is accepted as-is; a bad one deletes the download. */
+    private suspend fun verifyChecksum(downloadedFile: File, checksumUrl: String?): AppUpdateDownload {
+        if (checksumUrl == null) {
+            return AppUpdateDownload.Completed(downloadedFile)
+        }
 
         val checksumContent = apiClient.getUpdateChecksum(checksumUrl).getOrElse { error ->
             downloadedFile.delete()
@@ -63,7 +69,7 @@ internal class AppUpdateDownloader(
 
     private fun sanitizeFileName(raw: String): String {
         val sanitized = raw.substringAfterLast('/').map { char ->
-            if (char.isLetterOrDigit() || char == '.' || char == '_' || char == '-') {
+            if (char.isLetterOrDigit() || char in SAFE_FILE_NAME_PUNCTUATION) {
                 char
             } else {
                 '_'
@@ -75,6 +81,7 @@ internal class AppUpdateDownloader(
     }
 
     private companion object {
+        val SAFE_FILE_NAME_PUNCTUATION = setOf('.', '_', '-')
         const val UPDATES_DIRECTORY_NAME = "updates"
         const val APK_EXTENSION = ".apk"
         const val DEFAULT_APK_NAME = "update.apk"

@@ -28,7 +28,6 @@ internal fun EpisodesPanel(
     initialFocusedItemId: Int? = null,
     onEpisodeSelected: (VideoItemUIState) -> Unit,
     onEpisodeContextMenu: ((VideoItemUIState) -> Unit)? = null,
-    onBackPressed: (() -> Unit)? = null,
     allowFocusExit: Boolean = false,
     modifier: Modifier = Modifier,
 ) {

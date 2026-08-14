@@ -491,7 +491,6 @@ internal fun HistoryRuntimeStore.beginReconciliationRetry(
 
 internal fun HistoryRuntimeStore.acceptReconciliation(
     operationId: Long,
-    reconciliation: HistoryReconciliationContext,
     result: HistoryPageDepthResult,
     requestedFocusKey: HistoryRowKey?,
 ): HistoryRuntimeState? {

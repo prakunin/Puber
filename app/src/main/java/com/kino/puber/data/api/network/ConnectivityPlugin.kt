@@ -5,8 +5,6 @@ import android.net.NetworkCapabilities
 import io.ktor.client.plugins.api.createClientPlugin
 import java.io.IOException
 
-class NoConnectivityException : IOException("No network connectivity")
-
 fun createConnectivityPlugin(connectivityManager: ConnectivityManager) =
     createClientPlugin("ConnectivityPlugin") {
         onRequest { _, _ ->
@@ -15,6 +13,8 @@ fun createConnectivityPlugin(connectivityManager: ConnectivityManager) =
             }
         }
     }
+
+class NoConnectivityException : IOException("No network connectivity")
 
 private fun ConnectivityManager.isNetworkAvailable(): Boolean {
     val network = activeNetwork ?: return false

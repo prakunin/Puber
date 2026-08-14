@@ -11,12 +11,12 @@ internal class ControlsStateMachine {
         val activePanel: ActivePanel = ActivePanel.None,
     )
 
-    sealed class Effect {
-        data object ScheduleHide : Effect()
-        data object CancelHide : Effect()
-        data object PausePlayback : Effect()
-        data object ResumePlayback : Effect()
-        data object SaveAndExit : Effect()
+    sealed interface Effect {
+        data object ScheduleHide : Effect
+        data object CancelHide : Effect
+        data object PausePlayback : Effect
+        data object ResumePlayback : Effect
+        data object SaveAndExit : Effect
     }
 
     var state = State()

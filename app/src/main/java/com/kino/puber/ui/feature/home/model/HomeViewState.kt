@@ -6,26 +6,26 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 
 @Immutable
-internal sealed class HomeViewState {
-    abstract val apiDomainDialog: ApiDomainDialogState?
+internal sealed interface HomeViewState {
+    val apiDomainDialog: ApiDomainDialogState?
 
     @Immutable
     data class Loading(
         val message: String? = null,
         override val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : HomeViewState()
+    ) : HomeViewState
 
     @Immutable
     data class Content(
         val heroItems: List<HeroItemState> = emptyList(),
         val sections: List<HomeSectionState> = emptyList(),
         override val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : HomeViewState()
+    ) : HomeViewState
 
     data class Error(
         val message: String,
         override val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : HomeViewState()
+    ) : HomeViewState
 }
 
 @Immutable

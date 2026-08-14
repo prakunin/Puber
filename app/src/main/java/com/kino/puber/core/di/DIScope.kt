@@ -19,7 +19,9 @@ inline fun <reified VM : ViewModel> puberViewModel(
     key: String? = null,
 ): VM = koinViewModel<VM>(
     key = key,
-    scope = LocalPuberKoinScope.current!!,
+    scope = checkNotNull(LocalPuberKoinScope.current) {
+        "puberViewModel() must be called inside a DIScope"
+    },
 )
 
 @Composable

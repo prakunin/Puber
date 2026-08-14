@@ -157,11 +157,11 @@ internal class PlayerUIMapper(
             .orEmpty()
     }
 
-    fun buildTitle(item: Item, seasonNumber: Int?, episodeNumber: Int?): String {
+    fun buildTitle(item: Item): String {
         return item.title
     }
 
-    fun buildSubtitle(item: Item, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?): String? {
+    fun buildSubtitle(seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?): String? {
         if (seasonNumber == null || episodeNumber == null) return null
         return if (episodeTitle != null) {
             context.getString(R.string.player_season_episode_title, seasonNumber, episodeNumber, episodeTitle)

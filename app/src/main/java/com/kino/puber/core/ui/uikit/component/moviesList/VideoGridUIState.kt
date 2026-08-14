@@ -42,12 +42,12 @@ data class VideoGridUIState(
 )
 
 @Immutable
-sealed class VideoGridItemUIState {
-    data class Title(val title: String) : VideoGridItemUIState()
+sealed interface VideoGridItemUIState {
+    data class Title(val title: String) : VideoGridItemUIState
     data class Items(
         val items: List<VideoItemUIState>,
         val rowKey: String,
-    ) : VideoGridItemUIState()
+    ) : VideoGridItemUIState
 }
 
 @Composable

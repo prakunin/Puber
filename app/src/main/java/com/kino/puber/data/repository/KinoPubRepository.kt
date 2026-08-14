@@ -2,6 +2,7 @@ package com.kino.puber.data.repository
 
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.domain.interactor.auth.model.AuthState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -22,8 +23,6 @@ class KinoPubRepository(
 
         while (true) {
             val codeResult = client.getDeviceLoginCode().first()
-            if (codeResult.isFailure) throw codeResult.exceptionOrNull()!!
-
             val deviceCode = codeResult.getOrThrow().deviceCode
             send(AuthState.Code(deviceCode.userCode, deviceCode.verificationUri, deviceCode.expiresIn))
 
@@ -41,6 +40,10 @@ class KinoPubRepository(
                         authenticated = true
                         break
                     }
+                } catch (cancellation: CancellationException) {
+                    // Cancelling the auth screen has to stop the poll, not be mistaken for a
+                    // failed attempt that keeps looping until the code expires.
+                    throw cancellation
                 } catch (_: Exception) {
                     // Polling error — continue until deadline
                 }

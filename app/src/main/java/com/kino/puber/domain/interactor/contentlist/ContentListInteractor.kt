@@ -127,7 +127,8 @@ internal class ContentListInteractor(
 
     suspend fun getItemDetails(id: Int): Item {
         return detailedItemsCache.getOrPut(itemDetailsCacheKey(id)) {
-            api.getItemDetails(id).getOrThrow().item!!
+            val response = api.getItemDetails(id).getOrThrow()
+            checkNotNull(response.item) { "Details response for item $id carried no item" }
         }
     }
 

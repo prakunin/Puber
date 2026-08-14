@@ -23,10 +23,11 @@ internal class ScopeModuleManager(
     private var module: Module? = null
 
     fun initialize() {
-        scope = koin.createScope(scopeName, named(scopeName)).apply {
+        val created = koin.createScope(scopeName, named(scopeName)).apply {
             linkTo(parentScope)
         }
-        module = moduleFactory(scope!!.id, parentScope).also {
+        scope = created
+        module = moduleFactory(created.id, parentScope).also {
             koin.loadModules(listOf(it))
         }
     }
@@ -69,5 +70,7 @@ fun rememberDIScope(
             parentScope = parentScope,
             koin = koin,
         ).apply { initialize() }
-    }.getScope()!!
+    }.let { manager ->
+        checkNotNull(manager.getScope()) { "Koin scope '$scopeName' was closed before it was used" }
+    }
 }

@@ -45,7 +45,6 @@ internal fun PlayerControlsOverlay(
     onTogglePlayPause: () -> Unit,
     onOkPressed: () -> Unit,
     onControlsInteraction: () -> Unit,
-    onBackPressed: () -> Unit,
     firstButtonFocusRequester: FocusRequester,
     episodesButtonFocusRequester: FocusRequester,
     audioSubtitlesButtonFocusRequester: FocusRequester,

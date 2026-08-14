@@ -56,7 +56,8 @@ private const val ScopeRoot = "Root"
 
 @Composable
 private fun SessionExpiredHandler() {
-    val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
+    val scope = checkNotNull(LocalPuberKoinScope.current) { "SessionExpiredHandler needs an enclosing DIScope" }
+    val router by scope.inject<AppRouter>()
     val sessionEventBus = getKoin().get<SessionEventBus>()
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
     val payloadStore = getKoin().get<PersistentPayloadStore>()

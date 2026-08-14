@@ -8,10 +8,10 @@ import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.vm.PlaybackControl
 
 @Immutable
-internal sealed class PlayerViewState {
-    data object Loading : PlayerViewState()
-    data class Error(val message: String) : PlayerViewState()
-    data class Content(val content: PlayerContentState) : PlayerViewState()
+internal sealed interface PlayerViewState {
+    data object Loading : PlayerViewState
+    data class Error(val message: String) : PlayerViewState
+    data class Content(val content: PlayerContentState) : PlayerViewState
 }
 
 @Immutable

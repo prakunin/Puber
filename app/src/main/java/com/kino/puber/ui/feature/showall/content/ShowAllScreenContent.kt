@@ -27,6 +27,7 @@ import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
@@ -69,7 +70,7 @@ private fun ShowAllContentBody(
 ) {
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     val gridState = rememberLazyGridState()
-    var contextMenuItem by remember { mutableStateOf<com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState?>(null) }
+    var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
 
     val shouldLoadMore by remember {
         derivedStateOf {

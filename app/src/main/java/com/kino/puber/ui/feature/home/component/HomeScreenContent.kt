@@ -70,27 +70,21 @@ internal fun HomeScreenContent(
 ) {
     Box(Modifier.fillMaxSize()) {
         when (state) {
-            is HomeViewState.Loading -> {
-                LoadingView(message = state.message)
-            }
+            is HomeViewState.Loading -> LoadingView(message = state.message)
 
-            is HomeViewState.Error -> {
-                ErrorView(
-                    message = state.message,
-                    onRetry = { onAction(CommonAction.RetryClicked) },
-                    onConfigureApiDomain = { onAction(HomeAction.OpenApiDomainDialog) },
-                )
-            }
+            is HomeViewState.Error -> ErrorView(
+                message = state.message,
+                onRetry = { onAction(CommonAction.RetryClicked) },
+                onConfigureApiDomain = { onAction(HomeAction.OpenApiDomainDialog) },
+            )
 
-            is HomeViewState.Content -> {
-                HomeContent(
-                    state = state,
-                    onAction = onAction,
-                    onHeroClick = onHeroClick,
-                    onCollectionClick = onCollectionClick,
-                    lazyListState = lazyListState,
-                )
-            }
+            is HomeViewState.Content -> HomeContent(
+                state = state,
+                onAction = onAction,
+                onHeroClick = onHeroClick,
+                onCollectionClick = onCollectionClick,
+                lazyListState = lazyListState,
+            )
         }
 
         ApiDomainDialog(
@@ -313,8 +307,11 @@ internal fun HomeSectionRow(
             VideoItemHorizontal(
                 modifier = Modifier
                     .then(
-                        if (isFocusTarget) Modifier.focusRequester(itemFocus.focusRequester)
-                        else Modifier
+                        if (isFocusTarget) {
+                            Modifier.focusRequester(itemFocus.focusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                     .onFocusChanged {
                         if (it.isFocused) {
@@ -362,13 +359,11 @@ private fun Modifier.onSelectKeyClick(
         }
         when (event.type) {
             KeyEventType.KeyDown -> canHandle()
-            KeyEventType.KeyUp -> {
-                if (canHandle()) {
-                    onClick()
-                    true
-                } else {
-                    false
-                }
+            KeyEventType.KeyUp -> if (canHandle()) {
+                onClick()
+                true
+            } else {
+                false
             }
             else -> false
         }

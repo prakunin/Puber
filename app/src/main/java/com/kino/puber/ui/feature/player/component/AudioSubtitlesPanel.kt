@@ -45,7 +45,6 @@ internal fun AudioSubtitlesPanel(
     onAudioTrackSelected: (Int) -> Unit,
     onSubtitleSelected: (Int) -> Unit,
     onSubtitleSizeClick: () -> Unit,
-    onBackPressed: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(

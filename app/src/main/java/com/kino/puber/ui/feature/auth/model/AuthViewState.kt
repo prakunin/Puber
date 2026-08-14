@@ -4,13 +4,13 @@ import androidx.compose.runtime.Immutable
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 
 @Immutable
-internal sealed class AuthViewState {
+internal sealed interface AuthViewState {
     @Immutable
     data class Loading(
         val showMirrorHint: Boolean = false,
         val statusMessage: String? = null,
         val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : AuthViewState()
+    ) : AuthViewState
 
     @Immutable
     data class Content(
@@ -18,5 +18,5 @@ internal sealed class AuthViewState {
         val url: String,
         val timeLeft: String = "",
         val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : AuthViewState()
+    ) : AuthViewState
 }

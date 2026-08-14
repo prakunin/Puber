@@ -141,7 +141,6 @@ internal fun DetailsScreenContent(
                         initialFocusedItemId = state.initialEpisodeFocusId,
                         onEpisodeSelected = { item -> onAction(DetailsAction.EpisodeSelected(item)) },
                         onEpisodeContextMenu = { episodeContextMenuItem = it },
-                        onBackPressed = { onAction(DetailsAction.CloseSeasonsPanel) },
                         allowFocusExit = episodeContextMenuItem != null,
                         modifier = Modifier.focusRequester(seasonsPanelFocusRequester),
                     )

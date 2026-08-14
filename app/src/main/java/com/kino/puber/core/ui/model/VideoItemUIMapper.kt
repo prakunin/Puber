@@ -13,6 +13,9 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchState
 import com.kino.puber.data.repository.WatchStateRepository
 
+/** KinoPub reports its own rating as a 0..100 percentage; the UI shows it on a 0..10 scale. */
+private const val RATING_PERCENT_TO_TEN_SCALE = 10
+
 class VideoItemUIMapper(
     private val resources: ResourceProvider,
     private val navigationPreferencesRepository: NavigationPreferencesRepository? = null,
@@ -123,16 +126,12 @@ class VideoItemUIMapper(
     }
 
     fun buildRatings(item: Item): List<RatingUIState> = buildList {
-        if (item.kinopoiskRating.isValidRating()) {
-            add(RatingUIState.KP(item.kinopoiskRating!!))
-        }
+        item.kinopoiskRating?.takeIf { it.isValidRating() }?.let { add(RatingUIState.KP(it)) }
 
-        if (item.imdbRating.isValidRating()) {
-            add(RatingUIState.IMDB(item.imdbRating!!))
-        }
+        item.imdbRating?.takeIf { it.isValidRating() }?.let { add(RatingUIState.IMDB(it)) }
 
         item.ratingPercentage?.takeIf { it > 0 }?.let { rating ->
-            add(RatingUIState.PUB((rating.toFloat() / 10).toString()))
+            add(RatingUIState.PUB((rating.toFloat() / RATING_PERCENT_TO_TEN_SCALE).toString()))
         }
     }
 

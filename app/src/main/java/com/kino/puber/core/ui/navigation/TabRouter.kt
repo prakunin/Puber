@@ -28,6 +28,6 @@ class TabRouter(
 
 }
 
-sealed class TabCommand {
-    data class Open(val tab: PuberTab) : TabCommand()
+sealed interface TabCommand {
+    data class Open(val tab: PuberTab) : TabCommand
 }

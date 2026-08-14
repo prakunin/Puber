@@ -48,6 +48,10 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+// Deliberately left whole for now: the panel, skip-segment and watch-progress responsibilities
+// want their own collaborators, but the player is the riskiest screen to restructure and that
+// change needs a pass on a real device.
+@Suppress("LargeClass")
 internal class PlayerVM(
     router: AppRouter,
     override val errorHandler: ErrorHandler,
@@ -312,7 +316,7 @@ internal class PlayerVM(
         if (savedPosition <= 0) return null
         val media = currentMedia
         val episodeInfo = if (media?.seasonNumber != null && media.episodeNumber != null) {
-            mapper.buildSubtitle(media.item, media.seasonNumber, media.episodeNumber, null)
+            mapper.buildSubtitle(media.seasonNumber, media.episodeNumber, null)
         } else {
             null
         }

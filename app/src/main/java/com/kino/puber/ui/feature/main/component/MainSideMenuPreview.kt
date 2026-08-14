@@ -78,7 +78,9 @@ private fun SideMenuPreview() = PuberTheme {
                                 MaterialTheme.colorScheme.primaryContainer,
                                 MaterialTheme.shapes.small,
                             )
-                        } else this
+                        } else {
+                            this
+                        }
                     }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

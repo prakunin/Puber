@@ -6,6 +6,6 @@ import com.kino.puber.core.ui.navigation.AppRouter
  * Headless ViewModel for FlowScreen entry points.
  * Has no ViewState — only triggers initial navigation in [onStart].
  */
-abstract class PuberFlowVM(router: AppRouter) : PuberVM<Unit>(router) {
+open class PuberFlowVM(router: AppRouter) : PuberVM<Unit>(router) {
     override val initialViewState: Unit = Unit
 }

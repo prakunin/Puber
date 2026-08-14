@@ -4,14 +4,14 @@ import androidx.compose.runtime.Immutable
 import com.kino.puber.domain.interactor.history.HistoryRowKey
 
 @Immutable
-internal sealed class HistoryViewState {
-    data object Loading : HistoryViewState()
+internal sealed interface HistoryViewState {
+    data object Loading : HistoryViewState
 
-    data object Empty : HistoryViewState()
+    data object Empty : HistoryViewState
 
     data class Error(
         val message: String,
-    ) : HistoryViewState()
+    ) : HistoryViewState
 
     data class Content(
         val items: List<HistoryItemUIState>,
@@ -25,5 +25,5 @@ internal sealed class HistoryViewState {
         val deletingKeys: Set<HistoryRowKey> = emptySet(),
         val focusKey: HistoryRowKey? = null,
         val reloadErrorMessage: String? = null,
-    ) : HistoryViewState()
+    ) : HistoryViewState
 }
