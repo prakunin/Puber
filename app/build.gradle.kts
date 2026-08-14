@@ -288,7 +288,6 @@ dependencies {
     //navigation
     implementation(libs.voyager.navigator)
     implementation(libs.voyager.tab.navigator)
-    implementation(libs.voyager.koin)
 
     // Media3 (Video Player)
     implementation(libs.media3.exoplayer)
