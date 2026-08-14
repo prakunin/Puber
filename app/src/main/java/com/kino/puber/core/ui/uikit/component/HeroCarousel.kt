@@ -24,6 +24,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,6 +57,8 @@ import kotlinx.coroutines.delay
 
 private const val HERO_AUTO_SCROLL_DELAY_MS = 5_000L
 private const val INDICATOR_CORNER_PERCENT = 50
+private const val KEN_BURNS_DURATION_MS = 10_000
+private const val KEN_BURNS_DRIFT_PX = 20f
 
 @Composable
 fun HeroCarousel(
@@ -120,6 +123,7 @@ fun HeroCarousel(
                 state = item,
                 onClick = { onItemClick(item.id) },
                 modifier = Modifier.fillMaxSize(),
+                animate = page == pagerState.currentPage,
             )
         }
 
@@ -188,11 +192,48 @@ private fun Key.isSelectKey(): Boolean {
     return this == Key.DirectionCenter || this == Key.Enter
 }
 
+/** The Ken Burns drift, or a still frame when this page is not the one being looked at. */
+@Immutable
+private data class KenBurnsTransform(val scale: Float, val translateX: Float)
+
+/**
+ * The pager keeps neighbouring pages composed, and an infinite transition runs for as long as it is
+ * composed — so without this every hero page drifts at once, forever, and the ones off screen pay
+ * the same per-frame invalidation as the visible one for nothing. On the weaker TV boxes that is
+ * continuous GPU work behind a still picture.
+ */
+@Composable
+private fun kenBurns(animate: Boolean, driftDirection: Float): KenBurnsTransform {
+    if (!animate) return KenBurnsTransform(scale = 1f, translateX = 0f)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "kenBurns")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = KEN_BURNS_DURATION_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "kenBurnsScale",
+    )
+    val translateX by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = KEN_BURNS_DRIFT_PX * driftDirection,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = KEN_BURNS_DURATION_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "kenBurnsTranslateX",
+    )
+    return KenBurnsTransform(scale = scale, translateX = translateX)
+}
+
 @Composable
 private fun HeroItem(
     state: HeroItemState,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    animate: Boolean = true,
 ) {
     Card(
         onClick = onClick,
@@ -220,25 +261,7 @@ private fun HeroItem(
                 }
             }
             val driftDirection = remember(state.id) { if ((state.id % 2) == 0) 1f else -1f }
-            val infiniteTransition = rememberInfiniteTransition(label = "kenBurns")
-            val scale by infiniteTransition.animateFloat(
-                initialValue = 1.0f,
-                targetValue = 1.08f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 10_000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-                label = "kenBurnsScale",
-            )
-            val translateX by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 20f * driftDirection,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 10_000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-                label = "kenBurnsTranslateX",
-            )
+            val (scale, translateX) = kenBurns(animate = animate, driftDirection = driftDirection)
             SkeletonAsyncImage(
                 model = imageRequest,
                 onError = { if (urlIndex < urls.lastIndex) urlIndex++ },

@@ -53,8 +53,13 @@ internal class SectionVM(
         val refreshRequests = contentListRefreshCoordinator.refreshRequests()
         init()
         launch {
-            refreshRequests.collect {
-                refreshFirstPage()
+            refreshRequests.collect { refresh ->
+                when (refresh) {
+                    SectionRefresh.All -> refreshFirstPage()
+                    // One title changed. Every section on the tab hears this, but only the ones
+                    // actually showing it have a badge to redraw.
+                    is SectionRefresh.ForItem -> if (isShowingItem(refresh.itemId)) refreshFirstPage()
+                }
             }
         }
         launch {
@@ -131,7 +136,7 @@ internal class SectionVM(
             ).onSuccess { actualSaved ->
                 updateSavedItem(item.id, actualSaved)
                 interactor.invalidateFirstPageCache()
-                contentListRefreshCoordinator.requestRefresh()
+                contentListRefreshCoordinator.requestRefreshForItem(item.id)
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it

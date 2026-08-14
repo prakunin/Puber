@@ -140,6 +140,15 @@ internal abstract class ContentListPagingVM<VS>(
     }
 
     /**
+     * Whether the item is among the rows this list is currently showing.
+     *
+     * Read from the mapping cache rather than the paginator, because that is exactly the list the
+     * screen last drew.
+     */
+    protected fun isShowingItem(itemId: Int): Boolean =
+        cachedInput?.any { it.id == itemId } == true
+
+    /**
      * Redraws the rows already loaded against whatever the index and display settings say now,
      * without asking the server for them again.
      *

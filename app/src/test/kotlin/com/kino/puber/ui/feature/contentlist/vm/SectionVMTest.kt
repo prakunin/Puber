@@ -77,53 +77,83 @@ class SectionVMTest {
 
         coordinator.requestRefresh()
 
-        assertEquals(Unit, withTimeout(1_000) { refreshRequests.first() })
+        assertEquals(SectionRefresh.All, withTimeout(1_000) { refreshRequests.first() })
     }
 
     @Test
-    fun directSavedChange_invalidatesCacheOnceAndRestartsSiblingSections() = runTest {
+    fun directSavedChange_restartsOnlyTheSectionsShowingThatItem() = runTest {
+        // The saved flag is baked into the item payload, so a row showing the same title has to be
+        // re-read to draw the new badge. A row that never held it has nothing to redraw, and every
+        // section on the tab used to re-page for one button press.
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val firstPaginator = paginator(dispatcher)
-        val siblingPaginator = paginator(dispatcher)
+        val holdingPaginator = paginator(dispatcher)
+        val unrelatedPaginator = paginator(dispatcher)
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val savedItemInteractor = mockk<SavedItemInteractor>(relaxed = true)
         val coordinator = ContentListRefreshCoordinator()
-        val firstConfig = config("popular")
-        val siblingConfig = config("fresh")
-        coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage()
+        val holdingConfig = config("popular")
+        val unrelatedConfig = config("fresh")
+        coEvery { interactor.loadPage(holdingConfig, page = 1) } returns page(item(42))
+        coEvery { interactor.loadPage(unrelatedConfig, page = 1) } returns page(item(7))
         coEvery {
             savedItemInteractor.setSaved(itemId = 42, isSeriesLike = false, saved = false)
         } returns Result.success(false)
-        val first = createVM(
-            paginator = firstPaginator,
-            config = firstConfig,
+        val holding = createVM(
+            paginator = holdingPaginator,
+            config = holdingConfig,
             interactor = interactor,
             coordinator = coordinator,
             pagingCoroutineContext = dispatcher,
             savedItemInteractor = savedItemInteractor,
+            mapper = mapperFor(42, 7),
         )
-        val sibling = createVM(
-            paginator = siblingPaginator,
-            config = siblingConfig,
+        val unrelated = createVM(
+            paginator = unrelatedPaginator,
+            config = unrelatedConfig,
             interactor = interactor,
             coordinator = coordinator,
             pagingCoroutineContext = dispatcher,
             savedItemInteractor = savedItemInteractor,
+            mapper = mapperFor(42, 7),
         )
-        first.testOnStart()
-        sibling.testOnStart()
+        holding.testOnStart()
+        unrelated.testOnStart()
         testScheduler.advanceUntilIdle()
 
-        first.onAction(CommonAction.ItemSavedChanged(videoItem(42), false))
+        holding.onAction(CommonAction.ItemSavedChanged(videoItem(42), false))
         testScheduler.advanceUntilIdle()
 
         verify(exactly = 1) { interactor.invalidateFirstPageCache() }
-        coVerify(exactly = 2) { interactor.loadPage(firstConfig, page = 1) }
-        coVerify(exactly = 2) { interactor.loadPage(siblingConfig, page = 1) }
-        first.testCancelScope()
-        sibling.testCancelScope()
-        firstPaginator.close()
-        siblingPaginator.close()
+        coVerify(exactly = 2) { interactor.loadPage(holdingConfig, page = 1) }
+        coVerify(exactly = 1) { interactor.loadPage(unrelatedConfig, page = 1) }
+        holding.testCancelScope()
+        unrelated.testCancelScope()
+        holdingPaginator.close()
+        unrelatedPaginator.close()
+    }
+
+    /**
+     * Returning from a details or player screen can carry changes of any kind, including ones that
+     * decide membership, so that route still reloads every row.
+     */
+    @Test
+    fun coordinatorRefresh_stillRestartsEverySection() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val coordinator = ContentListRefreshCoordinator()
+        val sectionConfig = config("popular")
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item(7))
+        val vm = createVM(paginator, sectionConfig, interactor, coordinator, dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        coordinator.requestRefresh()
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 2) { interactor.loadPage(sectionConfig, page = 1) }
+        vm.testCancelScope()
+        paginator.close()
     }
 
     @Test
@@ -433,6 +463,13 @@ class SectionVMTest {
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
+
+    /** A mapper that preserves ids, so a section can tell whether it is holding a given item. */
+    private fun mapperFor(vararg ids: Int) = mockk<VideoItemUIMapper>(relaxed = true).also { mapper ->
+        every { mapper.mapShortItemList(any()) } answers {
+            firstArg<List<Item>>().filter { it.id in ids }.map { videoItem(it.id) }
+        }
+    }
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
 
