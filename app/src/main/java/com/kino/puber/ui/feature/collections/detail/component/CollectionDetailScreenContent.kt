@@ -17,9 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
@@ -55,7 +57,7 @@ internal fun CollectionDetailScreenContent(
 
                     if (state.items.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Пусто")
+                            Text(stringResource(R.string.empty_state))
                         }
                     } else {
                         LazyVerticalGrid(

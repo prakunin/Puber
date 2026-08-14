@@ -214,9 +214,9 @@ internal class PlayerUIMapper(
         )
 
         val ASPECT_RATIOS = listOf(
-            AspectRatioUIState(0, "Авто", AspectRatioMode.AUTO),
-            AspectRatioUIState(1, "Растянуть", AspectRatioMode.STRETCH),
-            AspectRatioUIState(2, "Заполнить", AspectRatioMode.CROP),
+            AspectRatioUIState(0, "Auto", AspectRatioMode.AUTO),
+            AspectRatioUIState(1, "Stretch", AspectRatioMode.STRETCH),
+            AspectRatioUIState(2, "Crop", AspectRatioMode.CROP),
         )
 
         const val DEFAULT_SPEED_INDEX = 3
@@ -230,6 +230,12 @@ internal class PlayerUIMapper(
         BufferPresetUIState(2, context.getString(R.string.player_buffer_medium), BufferPreset.MEDIUM),
         BufferPresetUIState(3, context.getString(R.string.player_buffer_large), BufferPreset.LARGE),
         BufferPresetUIState(4, context.getString(R.string.player_buffer_max), BufferPreset.MAX),
+    )
+
+    fun mapAspectRatios(): List<AspectRatioUIState> = listOf(
+        AspectRatioUIState(0, context.getString(R.string.player_aspect_auto), AspectRatioMode.AUTO),
+        AspectRatioUIState(1, context.getString(R.string.player_aspect_stretch), AspectRatioMode.STRETCH),
+        AspectRatioUIState(2, context.getString(R.string.player_aspect_crop), AspectRatioMode.CROP),
     )
 }
 

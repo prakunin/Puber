@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
@@ -26,6 +27,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.SkeletonAsyncImage
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.collections.model.CollectionUIState
@@ -98,7 +100,7 @@ internal fun CollectionCard(
                 )
                 if (state.count > 0) {
                     Text(
-                        text = "${state.count} шт.",
+                        text = pluralStringResource(R.plurals.items_count, state.count, state.count),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )

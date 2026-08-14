@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.contentlist.model
 
+import com.kino.puber.R
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.ui.feature.main.model.TabType
@@ -45,28 +46,28 @@ internal object TabTypeConfig {
     ): List<SectionConfig> = listOf(
         SectionConfig(
             id = "fresh_$type",
-            title = "Новинки",
+            titleRes = R.string.content_section_fresh,
             type = type,
             shortcut = "fresh",
             animeFilterMode = animeFilterMode,
         ),
         SectionConfig(
             id = "popular_$type",
-            title = "Популярные",
+            titleRes = R.string.content_section_popular,
             type = type,
             shortcut = "popular",
             animeFilterMode = animeFilterMode,
         ),
         SectionConfig(
             id = "hot_$type",
-            title = "Горячие",
+            titleRes = R.string.content_section_hot,
             type = type,
             shortcut = "hot",
             animeFilterMode = animeFilterMode,
         ),
         SectionConfig(
             id = "4k_$type",
-            title = "4K",
+            titleRes = R.string.main_tabs_f4k,
             type = type,
             quality = "4k",
             sort = "updated-",
@@ -74,7 +75,7 @@ internal object TabTypeConfig {
         ),
         SectionConfig(
             id = "all_$type",
-            title = "Все",
+            titleRes = R.string.content_section_all,
             type = type,
             sort = "updated-",
             animeFilterMode = animeFilterMode,
@@ -88,7 +89,7 @@ internal object TabTypeConfig {
     ): List<SectionConfig> = listOf("movie", "serial").map { type ->
         SectionConfig(
             id = "hero_hot_${idSuffix}_$type",
-            title = "",
+            titleRes = null,
             type = type,
             shortcut = "hot",
             genre = genre.toString(),
@@ -99,25 +100,25 @@ internal object TabTypeConfig {
     private fun sectionsWithout4k(type: String): List<SectionConfig> = listOf(
         SectionConfig(
             id = "fresh_$type",
-            title = "Новинки",
+            titleRes = R.string.content_section_fresh,
             type = type,
             shortcut = "fresh",
         ),
         SectionConfig(
             id = "popular_$type",
-            title = "Популярные",
+            titleRes = R.string.content_section_popular,
             type = type,
             shortcut = "popular",
         ),
         SectionConfig(
             id = "hot_$type",
-            title = "Горячие",
+            titleRes = R.string.content_section_hot,
             type = type,
             shortcut = "hot",
         ),
         SectionConfig(
             id = "all_$type",
-            title = "Все",
+            titleRes = R.string.content_section_all,
             type = type,
             sort = "updated-",
         ),
@@ -126,14 +127,14 @@ internal object TabTypeConfig {
     private fun cartoonSections(): List<SectionConfig> = listOf(
         SectionConfig(
             id = "popular_cartoon",
-            title = "Популярные",
+            titleRes = R.string.content_section_popular,
             genre = CARTOON_GENRE_ID.toString(),
             sort = "views-",
             animeFilterMode = AnimeFilterMode.Exclude,
         ),
         SectionConfig(
             id = "all_cartoon",
-            title = "Все",
+            titleRes = R.string.content_section_all,
             genre = CARTOON_GENRE_ID.toString(),
             sort = "updated-",
             animeFilterMode = AnimeFilterMode.Exclude,
@@ -143,14 +144,14 @@ internal object TabTypeConfig {
     private fun animeSections(): List<SectionConfig> = listOf(
         SectionConfig(
             id = "popular_anime",
-            title = "Популярные",
+            titleRes = R.string.content_section_popular,
             genre = ANIME_GENRE_ID.toString(),
             sort = "views-",
             animeFilterMode = AnimeFilterMode.Only,
         ),
         SectionConfig(
             id = "all_anime",
-            title = "Все",
+            titleRes = R.string.content_section_all,
             genre = ANIME_GENRE_ID.toString(),
             sort = "updated-",
             animeFilterMode = AnimeFilterMode.Only,
@@ -160,13 +161,13 @@ internal object TabTypeConfig {
     private fun for4kSections(): List<SectionConfig> = listOf(
         SectionConfig(
             id = "popular_4k",
-            title = "Популярные",
+            titleRes = R.string.content_section_popular,
             quality = "4k",
             sort = "views-",
         ),
         SectionConfig(
             id = "all_4k",
-            title = "Все",
+            titleRes = R.string.content_section_all,
             quality = "4k",
             sort = "updated-",
         ),

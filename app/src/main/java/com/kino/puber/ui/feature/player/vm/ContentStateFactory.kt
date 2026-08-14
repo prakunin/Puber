@@ -43,7 +43,7 @@ internal class ContentStateFactory(private val mapper: PlayerUIMapper) {
         selectedQualityIndex = 0,
         speeds = PlayerUIMapper.SPEEDS,
         selectedSpeedIndex = PlayerUIMapper.DEFAULT_SPEED_INDEX,
-        aspectRatios = PlayerUIMapper.ASPECT_RATIOS,
+        aspectRatios = mapper.mapAspectRatios(),
         selectedAspectRatioIndex = PlayerUIMapper.DEFAULT_ASPECT_RATIO_INDEX,
         bufferPresets = mapper.mapBufferPresets(),
         selectedBufferPresetIndex = BufferPreset.entries.indexOf(savedBufferPreset).coerceAtLeast(0),
