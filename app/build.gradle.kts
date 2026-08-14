@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.9.0"
+val currentVersion = "1.9.1"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
