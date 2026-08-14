@@ -5,8 +5,8 @@ truth. The current CLI can inspect and edit workflows, but does not import these
 
 ## Portable Pattern
 
-Do not link Appsome workflow instances directly into Puber. Reuse the graph family and transition contract, then create a
-Puber workflow instance whose prompts call `.kent/project-contract.md`.
+Do not link another project's workflow instances directly into Puber. Reuse the graph family and transition contract,
+then create a Puber workflow instance whose prompts call `.kent/project-contract.md`.
 
 The intended layering is:
 
@@ -55,8 +55,8 @@ Before retiring any workflow, read current Kent-owned state instead of relying
 on task IDs or status captured in this repository:
 
 ```bash
-kent workflow list --project /Users/rovkinmax/dev/android/Puber --json
-kent task list --project /Users/rovkinmax/dev/android/Puber --json
+kent workflow list --project "$(git rev-parse --show-toplevel)" --json
+kent task list --project "$(git rev-parse --show-toplevel)" --json
 ```
 
 Group tasks by the current workflow ID. Recreate every current Backlog task in
@@ -73,7 +73,7 @@ contains a complete and valid project adapter:
 
 ```bash
 ~/.kent/bin/kent-preflight-revision \
-  --project /Users/rovkinmax/dev/android/Puber \
+  --project "$(git rev-parse --show-toplevel)" \
   --ref origin/master
 ```
 

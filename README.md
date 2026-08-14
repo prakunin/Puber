@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android%20TV-ready-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android TV" />
-  <img src="https://img.shields.io/badge/Kotlin-2.3-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
+  <img src="https://img.shields.io/badge/Kotlin-2.4-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Jetpack%20Compose-TV-4285F4?style=for-the-badge" alt="Jetpack Compose TV" />
   <img src="https://img.shields.io/badge/Non--commercial-fan%20project-orange?style=for-the-badge" alt="Non-commercial fan project" />
 </p>
@@ -47,6 +47,8 @@ Puber — любительский и некоммерческий клиент 
 - Детальные карточки с постерами, фонами, рейтингами, описанием, сезонами, трейлером, похожим контентом и быстрыми действиями.
 - Полноэкранный плеер на Media3/ExoPlayer с HLS, сериями, аудиодорожками, субтитрами, качеством, скоростью, aspect ratio и настройками буфера.
 - “Я смотрю” для отслеживаемых тайтлов, отметки просмотренного, закладки и список “Буду смотреть”.
+- Персистентный кэш главной, карточек и похожего контента, а также локальная синхронизация статуса просмотра — данные
+  появляются быстрее и переживают перезапуск приложения.
 - Поиск по каталогу с результатами, рейтингами и локализованными/оригинальными названиями.
 - Device flow-авторизация: код и QR для привязки устройства к аккаунту KinoPub.
 - Настройки устройства и воспроизведения: SSL, HEVC, HDR, 4K, навигация, видимые табы, отладочный overlay.
@@ -61,6 +63,7 @@ Puber — любительский и некоммерческий клиент 
 - Koin для DI.
 - Voyager для навигации.
 - Coil 3 для изображений.
+- Room 3 и AndroidX SQLite для персистентного кэша и локального статуса просмотра.
 - kotlinx.serialization для моделей API.
 - Detekt и Baseline Profile-инфраструктура.
 
@@ -70,8 +73,8 @@ Puber — любительский и некоммерческий клиент 
 
 Требования:
 
-- JDK 17.
-- Android SDK с compile/target SDK 36.
+- JDK 21 для Gradle и компиляторов; приложение по-прежнему собирается с JVM target 17.
+- Android SDK 37. `compileSdk` — 37, `targetSdk` — 36, `minSdk` — 24.
 - Аккаунт KinoPub для реального использования приложения.
 
 Локальные секреты можно передать через `local.properties` или переменные окружения:
@@ -79,19 +82,28 @@ Puber — любительский и некоммерческий клиент 
 ```properties
 PUBER_CLIENT_SECRET=...
 TMDB_READ_ACCESS_TOKEN=...
+PUBER_API_DOMAIN=...
 ```
 
 `PUBER_CLIENT_SECRET` нужен для полноценной авторизации через KinoPub OAuth device flow. `TMDB_READ_ACCESS_TOKEN`
 используется для экспериментального поиска сегментов intro/credits; без него эта часть может работать ограниченно.
+Опциональный `PUBER_API_DOMAIN` задаёт API-зеркало для новой установки; выбранный пользователем домен имеет приоритет.
 
 Полезные команды:
 
 ```bash
 ./gradlew :app:compileDevDebugKotlin
-./gradlew installDevDebug
+./gradlew :app:testDevDebugUnitTest
+./gradlew :app:assembleDevDebug
+./gradlew :app:detektAll
 ```
 
-Dev-сборка устанавливается как `com.kino.puber.stage`, production namespace приложения — `com.kino.puber`.
+Готовый APK находится в `app/build/outputs/apk/dev/debug/`. Dev-сборка устанавливается как
+`com.kino.puber.stage`, production application ID — `com.kino.puber`.
+
+Для работы агента, worktree-сборок и проверок на TV сначала прочитайте [`AGENTS.md`](AGENTS.md): там описаны Kent
+workflow, `./tools/agentw`, обязательная аренда эмулятора и безопасная установка APK. Процесс публикации описан в
+[`docs/release.md`](docs/release.md).
 
 ## Статус проекта
 
