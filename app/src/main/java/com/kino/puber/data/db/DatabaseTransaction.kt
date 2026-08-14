@@ -1,6 +1,6 @@
 package com.kino.puber.data.db
 
-import androidx.room.withTransaction
+import androidx.room3.withWriteTransaction
 
 /**
  * Runs a block as one database transaction.
@@ -19,5 +19,5 @@ interface DatabaseTransaction {
 }
 
 fun PuberDatabase.transactions(): DatabaseTransaction = object : DatabaseTransaction {
-    override suspend fun <T> run(block: suspend () -> T): T = withTransaction { block() }
+    override suspend fun <T> run(block: suspend () -> T): T = withWriteTransaction { block() }
 }

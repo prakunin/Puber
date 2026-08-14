@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.detekt)
     id("kotlin-parcelize")
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.androidx.room)
 }
 
 val currentVersion = "1.9.0"
@@ -201,9 +202,9 @@ android {
 
 }
 
-ksp {
+room3 {
     // Room writes the schema JSON here so migrations can be diffed against it in review.
-    arg("room.schemaLocation", "$projectDir/schemas")
+    schemaDirectory("$projectDir/schemas")
 }
 
 kotlin {
@@ -299,7 +300,7 @@ dependencies {
 
     // Local watch-state database
     implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.sqlite.framework)
     ksp(libs.androidx.room.compiler)
 
     // Logging
