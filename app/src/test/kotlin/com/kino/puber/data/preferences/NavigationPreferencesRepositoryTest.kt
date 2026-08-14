@@ -33,13 +33,14 @@ private const val HISTORY_SCHEMA_VERSION = 1
 internal class NavigationPreferencesRepositoryTest {
 
     @Test
-    fun defaultSideDrawer_usesEnabledDeclarationOrderWithHistory() {
+    fun defaultSideDrawer_includesHomeInEnabledDeclarationOrder() {
         val fixture = fixture()
 
         val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
 
         assertEquals(
             listOf(
+                TabType.Home,
                 TabType.Search,
                 TabType.Favourites,
                 TabType.History,
@@ -59,7 +60,7 @@ internal class NavigationPreferencesRepositoryTest {
     }
 
     @Test
-    fun storedSideDrawerSelection_isReturnedWithoutInsertionOrReordering() {
+    fun storedSideDrawerSelection_insertsRequiredHomeWithoutReorderingSelection() {
         val fixture = fixture(
             storedDrawerTabs = "Movies,Favourites,Settings",
         )
@@ -67,7 +68,7 @@ internal class NavigationPreferencesRepositoryTest {
         val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
 
         assertEquals(
-            listOf(TabType.Movies, TabType.Favourites, TabType.Settings),
+            listOf(TabType.Home, TabType.Movies, TabType.Favourites, TabType.Settings),
             tabs,
         )
         assertFalse(TabType.History in tabs)
@@ -293,6 +294,7 @@ internal class NavigationPreferencesRepositoryTest {
         )
         assertEquals(
             listOf(
+                TabType.Home,
                 TabType.Favourites,
                 TabType.Movies,
                 TabType.Series,
@@ -346,7 +348,7 @@ internal class NavigationPreferencesRepositoryTest {
             fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
         )
         assertEquals(
-            listOf(TabType.Favourites, TabType.Movies, TabType.Settings),
+            listOf(TabType.Home, TabType.Favourites, TabType.Movies, TabType.Settings),
             fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
     }
@@ -363,11 +365,24 @@ internal class NavigationPreferencesRepositoryTest {
         )
 
         assertEquals(
-            listOf(TabType.Favourites, TabType.Movies, TabType.Anime, TabType.Collections, TabType.Settings),
+            listOf(
+                TabType.Home,
+                TabType.Favourites,
+                TabType.Movies,
+                TabType.Anime,
+                TabType.Collections,
+                TabType.Settings,
+            ),
             moviesFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
         assertEquals(
-            listOf(TabType.Favourites, TabType.Cartoons, TabType.History, TabType.Settings),
+            listOf(
+                TabType.Home,
+                TabType.Favourites,
+                TabType.Cartoons,
+                TabType.History,
+                TabType.Settings,
+            ),
             boundaryFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
     }

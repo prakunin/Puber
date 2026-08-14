@@ -62,7 +62,7 @@ class NavigationPreferencesRepository(context: Context) {
         val key = tabsKeyForMode(mode)
         val stored = prefs.getString(key, null)
         val baseTabs = stored?.let(::deserializeTabs) ?: defaultTabsForMode(mode)
-        return insertOptionalTabs(baseTabs)
+        return insertOptionalTabs(ensureRequiredTabs(mode, baseTabs))
     }
 
     private fun migrateTopTabsIfNeeded() {
@@ -158,13 +158,13 @@ class NavigationPreferencesRepository(context: Context) {
         val result = tabs.toMutableList()
         if (mode == NavigationMode.TopTabs) {
             result.removeAll { it == TabType.Search || it == TabType.Settings }
-            if (TabType.Home !in result) {
-                result.add(0, TabType.Home)
-            }
         } else {
             if (TabType.Settings !in result) {
                 result.add(TabType.Settings)
             }
+        }
+        if (TabType.Home !in result) {
+            result.add(0, TabType.Home)
         }
         return result
     }
