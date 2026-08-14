@@ -120,6 +120,22 @@ class CachedFeedTest {
     }
 
     @Test
+    fun anEntryPastTheHardCeilingIsRemovedFromTheStore() = runTest {
+        // Nothing will ever read a row this old again, so leaving it behind lets the table grow
+        // without bound — the details namespace stores whole season/video/file payloads. The
+        // assertion works the same way anUndecodablePayloadIsRemovedFromTheStore does: the loader
+        // throws with nothing cached to emit, so only readUsable's removal can make the row vanish.
+        feed().load("k") { "ancient" }.toList()
+        now += 8.days.inWholeMilliseconds
+
+        assertThrows<IllegalStateException> {
+            feed().load("k") { throw IllegalStateException("offline") }.toList()
+        }
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
     fun anUndecodablePayloadCountsAsAbsentAndIsDropped() = runTest {
         // A model field can change without a schema version changing, so a payload written by an
         // older build must not be able to break the screen it feeds.

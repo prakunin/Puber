@@ -1,5 +1,6 @@
 package com.kino.puber.domain.di
 
+import com.kino.puber.data.api.network.HttpEndpointProbe
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.auth.AuthInteractor
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
@@ -26,7 +27,15 @@ val interactorModule = module {
     singleOf(::GenreInteractor)
     singleOf(::WatchLaterBookmarkInteractor)
     singleOf(::SavedItemInteractor)
-    singleOf(::ApiDomainInteractor)
+    single {
+        ApiDomainInteractor(
+            preferences = get(),
+            itemDetailsRepository = get(),
+            genreInteractor = get(),
+            store = get(),
+            probe = HttpEndpointProbe(get()),
+        )
+    }
     single { WatchStateSyncInteractor(api = get(), repository = get()) }
     singleOf(::CardDisplayChanges)
 }

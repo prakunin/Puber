@@ -2,7 +2,9 @@ package com.kino.puber.domain.interactor.api
 
 import com.kino.puber.BuildConfig
 import com.kino.puber.core.logger.log
+import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
+import com.kino.puber.data.api.network.EndpointProbe
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -10,14 +12,8 @@ import com.kino.puber.domain.interactor.genre.GenreInteractor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.minutes
 
 internal data class ApiDomainState(
     val domain: String,
@@ -51,13 +47,13 @@ internal class ApiDomainInteractor(
     private val itemDetailsRepository: ItemDetailsRepository,
     private val genreInteractor: GenreInteractor,
     private val store: PersistentPayloadStore,
-    okHttpClient: OkHttpClient,
+    private val probe: EndpointProbe,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val probeJson = Json { ignoreUnknownKeys = true }
 
-    private val probeClient = okHttpClient.newBuilder()
-        .callTimeout(PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    /** Written from an IO thread, read from whichever one resolves next. */
+    @Volatile
+    private var lastReachable: ReachableDomain? = null
 
     fun initialize() {
         KinoPubConfig.setDomainOverride(
@@ -109,6 +105,16 @@ internal class ApiDomainInteractor(
 
     suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult = withContext(Dispatchers.IO) {
         val currentDomain = KinoPubConfig.CURRENT_API_DOMAIN
+        // The home screen resolves before every load, and the load behind an ON_RESUME is by far the
+        // most common one. Re-asking a domain that answered minutes ago costs a full catalogue GET
+        // whose body has to be read and parsed, and it sits in front of everything the screen came
+        // back to show. The candidate walk below would have picked this same domain first and
+        // reported the same `changed = false`, so answering from here is the identical outcome
+        // without the request.
+        if (isKnownReachable(currentDomain)) {
+            return@withContext ApiDomainAutoResolveResult.Success(state = getState(), changed = false)
+        }
+
         val endpoint = buildAutoResolveCandidates().firstOrNull(::isEndpointReachable)
             ?: return@withContext ApiDomainAutoResolveResult.NotFound
 
@@ -163,69 +169,50 @@ internal class ApiDomainInteractor(
         }
     }
 
-    private suspend fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {
+    private suspend fun applyEndpoint(endpoint: ApiEndpointPreset) {
         val persistedDomain = endpoint.domain.takeIf { it != KinoPubConfig.DEFAULT_API_DOMAIN }
         preferences.saveApiDomain(persistedDomain)
         KinoPubConfig.setDomainOverride(persistedDomain)
         clearDomainSensitiveCaches()
     }
 
-    private fun buildAutoResolveCandidates(): List<com.kino.puber.data.api.config.ApiEndpointPreset> {
+    private fun buildAutoResolveCandidates(): List<ApiEndpointPreset> {
         val currentEndpoint = KinoPubConfig.CURRENT_ENDPOINT
         return (listOf(currentEndpoint) + KinoPubConfig.BUILT_IN_ENDPOINTS)
             .distinctBy { it.domain }
     }
 
-    private fun isEndpointReachable(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset): Boolean {
-        val request = Request.Builder()
-            .url("${endpoint.mainBaseUrl}items/fresh?type=movie")
-            .header("Accept", "application/json")
-            .get()
-            .build()
-
-        return runCatching {
-            probeClient.newCall(request).execute().use { response ->
-                response.code in MIN_REACHABLE_STATUS..MAX_REACHABLE_STATUS &&
-                    response.code != HTTP_NOT_FOUND &&
-                    response.isKinoPubApiResponse()
-            }
-        }.getOrDefault(false)
+    private fun isEndpointReachable(endpoint: ApiEndpointPreset): Boolean {
+        val reachable = probe.isReachable(endpoint)
+        if (reachable) lastReachable = ReachableDomain(endpoint.domain, clock())
+        return reachable
     }
 
-    private fun Response.isKinoPubApiResponse(): Boolean {
-        val contentType = header("Content-Type").orEmpty()
-        if (!contentType.contains(JSON_CONTENT_TYPE, ignoreCase = true)) return false
-
-        val root = runCatching {
-            probeJson.parseToJsonElement(body.string()).jsonObject
-        }.getOrNull() ?: return false
-
-        return root.hasPaginatedItems() || root.hasApiError()
+    /**
+     * Whether [domain] answered recently enough to be taken on trust.
+     *
+     * Keyed by domain, not just by time: a switch made anywhere in the app — this interactor's own
+     * dialog, the device settings screen — leaves a verdict here that belongs to the domain the app
+     * has stopped talking to, and it must not stand in for the new one.
+     *
+     * The window is a tolerance for staleness rather than a claim the domain is still up. Once it
+     * lapses the failover walk runs again, so a domain blocked since the last probe still recovers.
+     */
+    private fun isKnownReachable(domain: String): Boolean {
+        val known = lastReachable ?: return false
+        return known.domain == domain && clock() - known.at < ProbeCacheTtl.inWholeMilliseconds
     }
 
-    private fun JsonObject.hasPaginatedItems(): Boolean {
-        return containsKey(API_ITEMS_FIELD) && containsKey(API_PAGINATION_FIELD)
-    }
-
-    private fun JsonObject.hasApiError(): Boolean {
-        return containsKey(API_STATUS_FIELD) &&
-            (containsKey(API_ERROR_FIELD) || containsKey(API_MESSAGE_FIELD))
-    }
+    /** The last domain a probe confirmed, and when it answered. */
+    private data class ReachableDomain(val domain: String, val at: Long)
 
     internal companion object {
         private const val MAX_HOSTNAME_LENGTH = 253
         private const val MIN_DOMAIN_PARTS = 2
         private const val MAX_LABEL_LENGTH = 63
-        private const val PROBE_TIMEOUT_SECONDS = 5L
-        private const val MIN_REACHABLE_STATUS = 200
-        private const val MAX_REACHABLE_STATUS = 499
-        private const val HTTP_NOT_FOUND = 404
-        private const val JSON_CONTENT_TYPE = "application/json"
-        private const val API_ITEMS_FIELD = "items"
-        private const val API_PAGINATION_FIELD = "pagination"
-        private const val API_STATUS_FIELD = "status"
-        private const val API_ERROR_FIELD = "error"
-        private const val API_MESSAGE_FIELD = "message"
+
+        /** How long a successful probe stands in for the next one. */
+        private val ProbeCacheTtl = 15.minutes
 
         fun resolveStartupDomain(savedDomain: String?, buildDomain: String?): String? {
             return savedDomain.toValidDomainOrNull() ?: buildDomain.toValidDomainOrNull()

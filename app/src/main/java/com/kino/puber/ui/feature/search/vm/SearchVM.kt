@@ -38,7 +38,7 @@ internal class SearchVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-            is CommonAction.RetryClicked -> executeSearch()
+            is CommonAction.RetryClicked -> restartSearch()
             else -> super.onAction(action)
         }
     }
@@ -56,16 +56,27 @@ internal class SearchVM(
         }
     }
 
-    private fun executeSearch() {
+    /**
+     * Replaces whatever the screen is currently doing for the query it has now.
+     *
+     * Every route into a search goes through here so there is only ever one job to cancel. Running
+     * the request in its own [launch] instead would leave it outside [searchJob], and cancelling the
+     * debounce would no longer reach it — the request for a query the user has already typed past
+     * would keep going and publish over the newer answer whenever it landed second.
+     */
+    private fun restartSearch() {
         if (query.length < MIN_QUERY_LENGTH) return
-        launch {
-            updateViewState(SearchViewState.Loading)
-            val items = interactor.search(query)
-            if (items.isEmpty()) {
-                updateViewState(SearchViewState.Empty)
-            } else {
-                updateViewState(SearchViewState.Content(mapper.mapShortItemList(items)))
-            }
+        searchJob?.cancel()
+        searchJob = launch { executeSearch() }
+    }
+
+    private suspend fun executeSearch() {
+        updateViewState(SearchViewState.Loading)
+        val items = interactor.search(query)
+        if (items.isEmpty()) {
+            updateViewState(SearchViewState.Empty)
+        } else {
+            updateViewState(SearchViewState.Content(mapper.mapShortItemList(items)))
         }
     }
 
@@ -86,8 +97,8 @@ internal class SearchVM(
     }
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
-        if (changes == null || changes.isEmpty || query.length < MIN_QUERY_LENGTH) return
-        executeSearch()
+        if (changes == null || changes.isEmpty) return
+        restartSearch()
     }
 
     private fun setItemSaved(item: VideoItemUIState, saved: Boolean) {

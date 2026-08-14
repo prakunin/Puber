@@ -18,8 +18,11 @@ import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 internal class MainVM(
     router: AppRouter,
@@ -40,7 +43,7 @@ internal class MainVM(
         updateViewState(state)
         tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
         reportDeviceInformation()
-        syncWatchState()
+        syncWatchState(startingAfter = StartupSyncDelay)
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }
@@ -50,9 +53,14 @@ internal class MainVM(
      * The catalogue itself reports nothing about what has been watched, so the local index is
      * refreshed once the main screen is up — that is the first point where the session is known to
      * be authenticated.
+     *
+     * @param startingAfter how long to hold off. The startup run waits out the home screen's own
+     * burst — see [StartupSyncDelay]. A resume passes nothing: it has no burst of that size to stay
+     * clear of, and whether the run is due at all is already the interactor's decision.
      */
-    private fun syncWatchState() {
+    private fun syncWatchState(startingAfter: Duration = Duration.ZERO) {
         launch {
+            if (startingAfter > Duration.ZERO) delay(startingAfter)
             runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
         }
@@ -139,7 +147,17 @@ internal class MainVM(
         super.onCleared()
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * How long the startup watch-state sync waits before it starts.
+         *
+         * A heuristic, not a handshake: nothing here can observe the home screen's first frame, and
+         * the point is only to keep the history walk out of the way while the screen's own requests
+         * are competing for OkHttp's five-per-host budget. Overshooting costs a slightly later
+         * index; undershooting costs a slower first frame, which the user actually sees.
+         */
+        val StartupSyncDelay = 5.seconds
+
         val ANIME_FILTERED_TABS = setOf(
             TabType.Home,
             TabType.Movies,
