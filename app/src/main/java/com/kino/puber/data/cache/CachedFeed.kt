@@ -116,6 +116,13 @@ class CachedFeed<V : Any>(
                             payload = json.encodeToString(serializer, value),
                             updatedAt = clock(),
                         )
+                        // The write suspends into the database, so a wipe can land inside it, after
+                        // the guard above has already passed. The store takes its own row back out
+                        // in that case, but nothing takes the value back out of the memory tier, so
+                        // the same question has to be asked again on this side.
+                        if (store.generation != epoch.generation) {
+                            detachAfterWipe(key)
+                        }
                     } else if (settled.generation != epoch.generation) {
                         detachAfterWipe(key)
                     }
