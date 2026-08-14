@@ -19,6 +19,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -26,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -47,6 +47,9 @@ import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import androidx.lifecycle.Lifecycle
+import com.kino.puber.core.ui.uikit.component.LifecycleAction
+import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.toptabs.TopTabMainContent
@@ -58,6 +61,13 @@ internal fun MainScreenComponent() {
     val vm = puberViewModel<MainVM>()
     val state by vm.collectViewState()
     val onAction: (UIAction) -> Unit = remember { vm::onAction }
+    // The watch-state index goes stale while the TV sits idle for hours; coming back is the moment
+    // to catch it up.
+    LifecycleAction(
+        event = Lifecycle.Event.ON_RESUME,
+        onAction = onAction,
+        action = MainAction.Resumed,
+    )
     when (state.navigationMode) {
         NavigationMode.SideDrawer -> DrawerMainContent(
             state = state,
@@ -109,14 +119,19 @@ private fun DrawerMainContent(
 }
 
 @Composable
-private fun NavigationDrawerScope.MainSideMenuContent(
+internal fun NavigationDrawerScope.MainSideMenuContent(
     state: MainViewState,
     drawerState: DrawerState,
     mainContentFocus: FocusRequester,
     onAction: (UIAction) -> Unit
 ) {
-
-    val fallbackFocusItem = remember { FocusRequester() }
+    val tabFocusRequesters = remember(state.tabs.map(MainTab::type)) {
+        state.tabs.associate { it.type to FocusRequester() }
+    }
+    val emptyMenuFocusRequester = remember { FocusRequester() }
+    val fallbackFocusItem = tabFocusRequesters[state.selectedTab]
+        ?: tabFocusRequesters.values.firstOrNull()
+        ?: emptyMenuFocusRequester
     val backgroundColor = animateColorAsState(
         targetValue = if (drawerState.isOpen) {
             Color.Transparent
@@ -141,13 +156,15 @@ private fun NavigationDrawerScope.MainSideMenuContent(
     ) {
         Spacer(Modifier.height(16.dp))
         state.tabs.forEach { tab ->
-            MainSideMenuItem(
-                tabFocusRequester = fallbackFocusItem,
-                tab = tab,
-                onAction = onAction,
-                drawerState = drawerState,
-                mainContentFocus = mainContentFocus,
-            )
+            key(tab.type) {
+                MainSideMenuItem(
+                    tabFocusRequester = tabFocusRequesters.getValue(tab.type),
+                    tab = tab,
+                    onAction = onAction,
+                    drawerState = drawerState,
+                    mainContentFocus = mainContentFocus,
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -164,23 +181,15 @@ private fun NavigationDrawerScope.MainSideMenuItem(
     mainContentFocus: FocusRequester,
     onAction: (UIAction) -> Unit
 ) {
-    val modifier = Modifier.height(40.dp)
-        .onFocusChanged { focusState ->
-            if (focusState.isFocused) {
-                onAction(CommonAction.ItemSelected(tab))
-            }
-        }.run {
-            if (tab.isSelected) {
-                focusRequester(tabFocusRequester)
-            } else {
-                this
-            }
-        }
+    val modifier = Modifier
+        .height(40.dp)
+        .focusRequester(tabFocusRequester)
 
     NavigationDrawerItem(
         modifier = modifier,
         selected = tab.isSelected,
         onClick = {
+            onAction(CommonAction.ItemSelected(tab))
             drawerState.setValue(DrawerValue.Closed)
             mainContentFocus.requestFocus()
         },

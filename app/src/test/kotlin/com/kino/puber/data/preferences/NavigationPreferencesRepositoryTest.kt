@@ -10,7 +10,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,18 +24,23 @@ private const val TOP_TABS_SCHEMA_VERSION_KEY = "toptabs_schema_version"
 private const val SHOW_CARTOONS_TAB_KEY = "show_cartoons_tab"
 private const val SHOW_ANIME_TAB_KEY = "show_anime_tab"
 private const val SHOW_ANIME_KEY = "show_anime"
+private const val HIDE_WATCHED_KEY = "hide_watched"
+private const val SHOW_WATCHED_INDICATORS_KEY = "show_watched_indicators"
+private const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
+private const val LEGACY_WATCHED_INDICATORS_KEY = "watched_indicators_enabled"
 private const val HISTORY_SCHEMA_VERSION = 1
 
 internal class NavigationPreferencesRepositoryTest {
 
     @Test
-    fun defaultSideDrawer_usesEnabledDeclarationOrderWithHistory() {
+    fun defaultSideDrawer_includesHomeInEnabledDeclarationOrder() {
         val fixture = fixture()
 
         val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
 
         assertEquals(
             listOf(
+                TabType.Home,
                 TabType.Search,
                 TabType.Favourites,
                 TabType.History,
@@ -53,7 +60,7 @@ internal class NavigationPreferencesRepositoryTest {
     }
 
     @Test
-    fun storedSideDrawerSelection_isReturnedWithoutInsertionOrReordering() {
+    fun storedSideDrawerSelection_insertsRequiredHomeWithoutReorderingSelection() {
         val fixture = fixture(
             storedDrawerTabs = "Movies,Favourites,Settings",
         )
@@ -61,7 +68,7 @@ internal class NavigationPreferencesRepositoryTest {
         val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
 
         assertEquals(
-            listOf(TabType.Movies, TabType.Favourites, TabType.Settings),
+            listOf(TabType.Home, TabType.Movies, TabType.Favourites, TabType.Settings),
             tabs,
         )
         assertFalse(TabType.History in tabs)
@@ -180,9 +187,28 @@ internal class NavigationPreferencesRepositoryTest {
                 showCartoonsTab = false,
                 showAnimeTab = false,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             ),
             fixture.repository.contentPreferences.value,
         )
+    }
+
+    @Test
+    fun watchedIndicators_fallBackToTheChoiceLeftInThePlayerPreferences() {
+        // The setting moved out of the player preferences; an existing choice must survive the move
+        // rather than silently reverting to the default.
+        val fixture = fixture(legacyWatchedIndicators = false)
+
+        assertFalse(fixture.repository.contentPreferences.value.showWatchedIndicators)
+        assertTrue(fixture.preferences.transactions.isEmpty())
+    }
+
+    @Test
+    fun watchedIndicators_preferTheirOwnValueOverTheLegacyOne() {
+        val fixture = fixture(showWatchedIndicators = true, legacyWatchedIndicators = false)
+
+        assertTrue(fixture.repository.contentPreferences.value.showWatchedIndicators)
     }
 
     @Test
@@ -191,6 +217,8 @@ internal class NavigationPreferencesRepositoryTest {
             showCartoonsTab = true,
             showAnimeTab = true,
             showAnime = false,
+            hideWatched = true,
+            showWatchedIndicators = true,
         )
 
         assertEquals(
@@ -198,6 +226,8 @@ internal class NavigationPreferencesRepositoryTest {
                 showCartoonsTab = true,
                 showAnimeTab = true,
                 showAnime = false,
+                hideWatched = true,
+                showWatchedIndicators = true,
             ),
             fixture.repository.contentPreferences.value,
         )
@@ -216,20 +246,26 @@ internal class NavigationPreferencesRepositoryTest {
                 showCartoonsTab = true,
                 showAnimeTab = false,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             ),
             emitted.await(),
         )
         fixture.repository.setShowAnimeTab(true)
         fixture.repository.setShowAnime(false)
+        fixture.repository.setHideWatched(true)
 
         assertEquals(true, fixture.preferences.values[SHOW_CARTOONS_TAB_KEY])
         assertEquals(true, fixture.preferences.values[SHOW_ANIME_TAB_KEY])
         assertEquals(false, fixture.preferences.values[SHOW_ANIME_KEY])
+        assertEquals(true, fixture.preferences.values[HIDE_WATCHED_KEY])
         assertEquals(
             ContentPreferences(
                 showCartoonsTab = true,
                 showAnimeTab = true,
                 showAnime = false,
+                hideWatched = true,
+                showWatchedIndicators = true,
             ),
             fixture.repository.contentPreferences.value,
         )
@@ -258,6 +294,7 @@ internal class NavigationPreferencesRepositoryTest {
         )
         assertEquals(
             listOf(
+                TabType.Home,
                 TabType.Favourites,
                 TabType.Movies,
                 TabType.Series,
@@ -311,7 +348,7 @@ internal class NavigationPreferencesRepositoryTest {
             fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
         )
         assertEquals(
-            listOf(TabType.Favourites, TabType.Movies, TabType.Settings),
+            listOf(TabType.Home, TabType.Favourites, TabType.Movies, TabType.Settings),
             fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
     }
@@ -328,13 +365,48 @@ internal class NavigationPreferencesRepositoryTest {
         )
 
         assertEquals(
-            listOf(TabType.Favourites, TabType.Movies, TabType.Anime, TabType.Collections, TabType.Settings),
+            listOf(
+                TabType.Home,
+                TabType.Favourites,
+                TabType.Movies,
+                TabType.Anime,
+                TabType.Collections,
+                TabType.Settings,
+            ),
             moviesFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
         assertEquals(
-            listOf(TabType.Favourites, TabType.Cartoons, TabType.History, TabType.Settings),
+            listOf(
+                TabType.Home,
+                TabType.Favourites,
+                TabType.Cartoons,
+                TabType.History,
+                TabType.Settings,
+            ),
             boundaryFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
         )
+    }
+
+    @Test
+    fun displaySettingsChanges_fireForBothHidingAndTheWatchedMarks() = runTest {
+        val fixture = fixture()
+        val emissions = mutableListOf<Unit>()
+        val collector = backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            fixture.repository.displaySettingsChanges.collect(emissions::add)
+        }
+
+        // Stepped one at a time: a StateFlow conflates, and setting three values in a row would
+        // only ever be seen as the last of them.
+        fixture.repository.setHideWatched(true)
+        runCurrent()
+        fixture.repository.setShowWatchedIndicators(false)
+        runCurrent()
+        // An unrelated preference must not drag every screen through a reload.
+        fixture.repository.setShowAnimeTab(true)
+        runCurrent()
+
+        assertEquals(2, emissions.size)
+        collector.cancel()
     }
 
     private fun fixture(
@@ -343,6 +415,9 @@ internal class NavigationPreferencesRepositoryTest {
         showCartoonsTab: Boolean? = null,
         showAnimeTab: Boolean? = null,
         showAnime: Boolean? = null,
+        hideWatched: Boolean? = null,
+        showWatchedIndicators: Boolean? = null,
+        legacyWatchedIndicators: Boolean? = null,
     ): Fixture {
         val preferences = TestPreferences()
         storedTabs?.let { preferences.values[TOP_TABS_KEY] = it }
@@ -350,9 +425,18 @@ internal class NavigationPreferencesRepositoryTest {
         showCartoonsTab?.let { preferences.values[SHOW_CARTOONS_TAB_KEY] = it }
         showAnimeTab?.let { preferences.values[SHOW_ANIME_TAB_KEY] = it }
         showAnime?.let { preferences.values[SHOW_ANIME_KEY] = it }
+        hideWatched?.let { preferences.values[HIDE_WATCHED_KEY] = it }
+        showWatchedIndicators?.let { preferences.values[SHOW_WATCHED_INDICATORS_KEY] = it }
+        val legacyPreferences = TestPreferences()
+        legacyWatchedIndicators?.let {
+            legacyPreferences.values[LEGACY_WATCHED_INDICATORS_KEY] = it
+        }
         val context = mockk<Context>()
         every {
-            context.getSharedPreferences(any(), Context.MODE_PRIVATE)
+            context.getSharedPreferences(LEGACY_PLAYER_PREFS_NAME, Context.MODE_PRIVATE)
+        } returns legacyPreferences.sharedPreferences
+        every {
+            context.getSharedPreferences(neq(LEGACY_PLAYER_PREFS_NAME), Context.MODE_PRIVATE)
         } returns preferences.sharedPreferences
         return Fixture(
             repository = NavigationPreferencesRepository(context),
@@ -384,6 +468,7 @@ private class TestPreferences {
         every { sharedPreferences.getBoolean(any(), any()) } answers {
             values[firstArg()] as? Boolean ?: secondArg()
         }
+        every { sharedPreferences.contains(any()) } answers { values.containsKey(firstArg()) }
         every { sharedPreferences.edit() } returns editor
         every { editor.putString(any(), any()) } answers {
             pending[firstArg()] = secondArg<String?>()

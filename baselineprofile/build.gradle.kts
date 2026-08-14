@@ -31,7 +31,7 @@ android {
 }
 
 kotlin {
-    jvmToolchain(Versions.JavaVersionCompat.majorVersion.toInt())
+    jvmToolchain(Versions.ToolchainJavaVersion)
 }
 
 baselineProfile {

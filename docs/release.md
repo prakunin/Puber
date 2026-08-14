@@ -4,18 +4,25 @@
 
 Releases are published by `.github/workflows/release.yml`.
 
-The normal release flow is tag based:
+The canonical release path is the Kent `Puber Release` workflow described by
+`.kent/commands/release.md`. It performs the complete lifecycle:
 
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
+1. Create `release/<version>` from the current `origin/master`.
+2. Update `currentVersion`, verify it, and deliver the version-bump PR.
+3. Wait until GitHub reports that PR merged; neither the agent nor the workflow merges it.
+4. Prepare concise user-facing release notes in Russian.
+5. After publication approval, create `v<version>` on the merged `master` commit and push it.
+6. Monitor release automation, apply the prepared notes, verify the GitHub Release, and clean up conservatively.
+
+The default bump is the next minor version. Patch/hotfix and major releases must be requested explicitly. Never push a
+release commit directly to `master`, and never create the tag before the version-bump PR is merged.
 
 The workflow builds `prodRelease`, uploads the APK and SHA-256 checksum as a workflow artifact, and attaches both files
 to the GitHub Release for the tag.
 
-The workflow also supports manual runs from GitHub Actions through `workflow_dispatch`. Use the `release_tag` input with
-the same `vX.Y.Z` format.
+GitHub Actions also supports a recovery/manual run through `workflow_dispatch`. Use `release_tag=vX.Y.Z` only for a tag
+that already names the intended merged release commit; this does not replace the version PR, tag approval, monitoring, or
+final release-note verification.
 
 Required GitHub Secrets:
 

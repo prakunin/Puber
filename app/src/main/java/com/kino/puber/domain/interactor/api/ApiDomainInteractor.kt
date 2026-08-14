@@ -1,9 +1,13 @@
 package com.kino.puber.domain.interactor.api
 
+import com.kino.puber.BuildConfig
+import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -46,6 +50,7 @@ internal class ApiDomainInteractor(
     private val preferences: ICryptoPreferenceRepository,
     private val itemDetailsRepository: ItemDetailsRepository,
     private val genreInteractor: GenreInteractor,
+    private val store: PersistentPayloadStore,
     okHttpClient: OkHttpClient,
 ) {
     private val probeJson = Json { ignoreUnknownKeys = true }
@@ -55,7 +60,12 @@ internal class ApiDomainInteractor(
         .build()
 
     fun initialize() {
-        KinoPubConfig.setDomainOverride(preferences.getApiDomain().toValidDomainOrNull())
+        KinoPubConfig.setDomainOverride(
+            resolveStartupDomain(
+                savedDomain = preferences.getApiDomain(),
+                buildDomain = BuildConfig.API_DOMAIN_OVERRIDE,
+            )
+        )
     }
 
     fun getState(): ApiDomainState {
@@ -66,7 +76,7 @@ internal class ApiDomainInteractor(
         )
     }
 
-    fun saveCustomDomain(input: String): ApiDomainUpdateResult {
+    suspend fun saveCustomDomain(input: String): ApiDomainUpdateResult {
         val normalized = normalizeDomain(input)
         if (normalized.isEmpty()) return ApiDomainUpdateResult.Empty
         if (!normalized.isValidHostname()) return ApiDomainUpdateResult.Invalid
@@ -117,24 +127,43 @@ internal class ApiDomainInteractor(
         )
     }
 
-    fun resetToDefault(): ApiDomainState {
+    suspend fun resetToDefault(): ApiDomainState {
         preferences.saveApiDomain(null)
         KinoPubConfig.setDomainOverride(null)
         clearDomainSensitiveCaches()
         return getState()
     }
 
-    private fun String?.toValidDomainOrNull(): String? {
-        val normalized = normalizeDomain(this.orEmpty())
-        return normalized.takeIf { it.isNotEmpty() && it.isValidHostname() }
+    /**
+     * By the time this runs, the caller has already persisted the new domain and pointed
+     * [KinoPubConfig] at it — the switch has happened. A cache that fails to clear is stale data,
+     * not a reason to undo that switch, so each clear is independently best-effort: one failing
+     * must not stop the other from running, and neither may abort the caller's continuation (close
+     * the dialog, show the result, kick off the reload) that follows this call.
+     */
+    private suspend fun clearDomainSensitiveCaches() {
+        clearWithoutFailing { itemDetailsRepository.clear() }
+        clearWithoutFailing { genreInteractor.clearCache() }
+        // Every payload in the store describes one domain's catalogue; a switch makes all of them
+        // wrong at once. store.clear() (unlike the prefix removal above) also bumps the store's
+        // session generation, which does two jobs: a revalidation that was already in flight when
+        // the switch happened is withdrawn instead of landing after this wipe, and every CachedFeed
+        // — including the ones inside the screen-scoped HomeInteractor, which this global cannot
+        // reach — drops its own memory tier the next time it reads the store.
+        clearWithoutFailing { store.clear() }
     }
 
-    private fun clearDomainSensitiveCaches() {
-        itemDetailsRepository.clear()
-        genreInteractor.clearCache()
+    private suspend fun clearWithoutFailing(clear: suspend () -> Unit) {
+        try {
+            clear()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            log(error, "Failed to clear a domain-sensitive cache after switching domains")
+        }
     }
 
-    private fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {
+    private suspend fun applyEndpoint(endpoint: com.kino.puber.data.api.config.ApiEndpointPreset) {
         val persistedDomain = endpoint.domain.takeIf { it != KinoPubConfig.DEFAULT_API_DOMAIN }
         preferences.saveApiDomain(persistedDomain)
         KinoPubConfig.setDomainOverride(persistedDomain)
@@ -183,7 +212,7 @@ internal class ApiDomainInteractor(
             (containsKey(API_ERROR_FIELD) || containsKey(API_MESSAGE_FIELD))
     }
 
-    private companion object {
+    internal companion object {
         private const val MAX_HOSTNAME_LENGTH = 253
         private const val MIN_DOMAIN_PARTS = 2
         private const val MAX_LABEL_LENGTH = 63
@@ -197,6 +226,15 @@ internal class ApiDomainInteractor(
         private const val API_STATUS_FIELD = "status"
         private const val API_ERROR_FIELD = "error"
         private const val API_MESSAGE_FIELD = "message"
+
+        fun resolveStartupDomain(savedDomain: String?, buildDomain: String?): String? {
+            return savedDomain.toValidDomainOrNull() ?: buildDomain.toValidDomainOrNull()
+        }
+
+        fun String?.toValidDomainOrNull(): String? {
+            val normalized = normalizeDomain(this.orEmpty())
+            return normalized.takeIf { it.isNotEmpty() && it.isValidHostname() }
+        }
 
         fun normalizeDomain(input: String): String {
             return input

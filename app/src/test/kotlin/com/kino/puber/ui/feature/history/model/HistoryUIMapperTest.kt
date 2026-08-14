@@ -7,7 +7,9 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Posters
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
-import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.data.preferences.ContentPreferences
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.domain.interactor.history.HistorySemanticKey
 import com.kino.puber.util.FakeResourceProvider
@@ -132,34 +134,36 @@ class HistoryUIMapperTest {
     }
 
     @Test
-    fun map_prefersMediaWatchedFlagAndFallsBackToWatchingStatusOnlyWhenAbsent() {
-        val explicitNotWatched = requireNotNull(
+    fun map_decidesWatchedFromHowFarThePositionGot() {
+        // The endpoint states a position, not a verdict, so the same policy the catalogue index
+        // uses decides here — a title must not read as finished on one screen only.
+        val abandoned = requireNotNull(
             mapper.map(
                 movie(
                     recordId = null,
                     itemId = 2,
                     videoId = 3,
                     videoNumber = 1,
-                    watching = WatchingInfo(status = 1),
-                    watched = 0,
+                    watching = WatchingInfo(time = 1_200, duration = 6_000),
+                    watched = null,
                 ),
             ),
         )
-        val fallbackWatched = requireNotNull(
+        val leftDuringTheCredits = requireNotNull(
             mapper.map(
                 movie(
                     recordId = null,
                     itemId = 2,
                     videoId = 4,
                     videoNumber = 2,
-                    watching = WatchingInfo(status = 1),
+                    watching = WatchingInfo(time = 5_700, duration = 6_000),
                     watched = null,
                 ),
             ),
         )
 
-        assertFalse(explicitNotWatched.isWatched)
-        assertTrue(fallbackWatched.isWatched)
+        assertFalse(abandoned.isWatched)
+        assertTrue(leftDuringTheCredits.isWatched)
     }
 
     @Test
@@ -181,12 +185,21 @@ class HistoryUIMapperTest {
 
     @Test
     fun map_completedEntryForcesWatchedIndicatorWhenSharedPreferenceIsOff() {
-        val preferences = mockk<PlayerPreferencesRepository>()
-        every { preferences.watchedIndicatorsEnabled } returns false
+        val preferences = mockk<NavigationPreferencesRepository> {
+            every { contentPreferences } returns MutableStateFlow(
+                ContentPreferences(
+                    showCartoonsTab = false,
+                    showAnimeTab = false,
+                    showAnime = true,
+                    hideWatched = false,
+                    showWatchedIndicators = false,
+                )
+            )
+        }
         val historyMapper = HistoryUIMapper(
             VideoItemUIMapper(
                 resources = FakeResourceProvider(),
-                playerPreferencesRepository = preferences,
+                navigationPreferencesRepository = preferences,
             ),
         )
         val completed = movie(

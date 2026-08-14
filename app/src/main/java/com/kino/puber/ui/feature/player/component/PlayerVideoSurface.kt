@@ -39,6 +39,9 @@ internal fun PlayerVideoSurface(
                 view.player = currentPlayer
             }
             currentPlayer?.let { view.resizeMode = content.resizeMode() }
+            // Android TV, Fire TV in particular, starts its screen saver after a period without
+            // remote input; playback alone does not count as user activity.
+            view.keepScreenOn = content.isPlaying
         },
         modifier = Modifier
             .fillMaxSize()
@@ -60,13 +63,18 @@ private fun handlePlayerKeyEvent(
     onAction: (UIAction) -> Unit,
 ): Boolean {
     if (keyEvent.action != KeyEvent.ACTION_DOWN || hasResumeDialog) return false
+    if (keyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyEvent.keyCode == KeyEvent.KEYCODE_ENTER) {
+        // OK is resolved by the view model: it either toggles playback or reveals the controls.
+        // Auto-repeat from a held button must not fire it again; the arrow keys below keep
+        // repeating on purpose, so the guard stays scoped to OK.
+        if (keyEvent.repeatCount == 0) onAction(PlayerAction.OkPressed)
+        return true
+    }
     val action = when (keyEvent.keyCode) {
         KeyEvent.KEYCODE_DPAD_LEFT -> PlayerAction.SeekBackward
         KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerAction.SeekForward
         KeyEvent.KEYCODE_DPAD_UP -> PlayerAction.ShowControls(FocusTarget.SeekBar)
         KeyEvent.KEYCODE_DPAD_DOWN -> PlayerAction.ShowControls(FocusTarget.Buttons)
-        KeyEvent.KEYCODE_DPAD_CENTER,
-        KeyEvent.KEYCODE_ENTER,
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
         KeyEvent.KEYCODE_MEDIA_PLAY,
         KeyEvent.KEYCODE_MEDIA_PAUSE -> PlayerAction.TogglePlayPause

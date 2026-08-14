@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.main.vm
 
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -9,11 +10,14 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 
 internal class MainVM(
@@ -21,6 +25,8 @@ internal class MainVM(
     private val mainUIMapper: MainUIMapper,
     internal val tabRouter: TabRouter,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
+    private val deviceInfoInteractor: IDeviceInfoInteractor,
+    private val watchStateSyncInteractor: WatchStateSyncInteractor,
 ) : PuberVM<MainViewState>(router) {
     override val initialViewState = MainViewState()
     internal val tabAppRouterHolder = TabAppRouterHolder(router.screens)
@@ -32,8 +38,34 @@ internal class MainVM(
         observedContentPreferences = navigationPreferencesRepository.contentPreferences.value
         updateViewState(state)
         tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
+        reportDeviceInformation()
+        syncWatchState()
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
+        }
+    }
+
+    /**
+     * The catalogue itself reports nothing about what has been watched, so the local index is
+     * refreshed once the main screen is up — that is the first point where the session is known to
+     * be authenticated.
+     */
+    private fun syncWatchState() {
+        launch {
+            runCatching { watchStateSyncInteractor.syncIfStale() }
+                .onFailure { error -> log(error, "Failed to sync watch state") }
+        }
+    }
+
+    /**
+     * Keeps the KinoPub device record in sync for sessions that skip the auth screen,
+     * otherwise a device linked once stays "unknown" forever.
+     */
+    private fun reportDeviceInformation() {
+        launch {
+            deviceInfoInteractor.setDeviceInformation()
+                .catch { error -> log(error, "Failed to report device information") }
+                .collect()
         }
     }
 
@@ -41,6 +73,7 @@ internal class MainVM(
         when (action) {
             is CommonAction.ItemSelected<*> -> onTabSelected(action.item as MainTab)
             is MainAction.RefreshTab -> onTabRefresh(action.tab)
+            MainAction.Resumed -> syncWatchState()
             else -> super.onAction(action)
         }
     }

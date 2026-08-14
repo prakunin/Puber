@@ -25,13 +25,16 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
-import io.mockk.verifyOrder
+import kotlinx.coroutines.delay
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -70,7 +73,7 @@ class HistoryVMPlaybackTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = router,
             errorHandler = errorHandler,
@@ -107,7 +110,7 @@ class HistoryVMPlaybackTest {
         awaitContent().items.forEach { vm.onAction(CommonAction.ItemSelected(it)) }
 
         verify(exactly = 0) { screens.player(any(), any(), any(), any(), any()) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
         verify { router.navigateTo(movieDetails) }
         verify { router.navigateTo(episodeDetails) }
         verify { router.navigateTo(fallbackDetails) }
@@ -144,7 +147,7 @@ class HistoryVMPlaybackTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
 
-        verifyOrder {
+        coVerifyOrder {
             itemDetailsRepository.invalidate(10)
             screens.player(
                 itemId = 10,
@@ -175,7 +178,7 @@ class HistoryVMPlaybackTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.ResumeIfAvailable))
 
-        verifyOrder {
+        coVerifyOrder {
             itemDetailsRepository.invalidate(20)
             screens.player(
                 itemId = 20,
@@ -187,6 +190,50 @@ class HistoryVMPlaybackTest {
             router.navigateTo(player)
         }
         verify(exactly = 0) { screens.details(any()) }
+    }
+
+    @Test
+    fun play_stillNavigatesWhenInvalidatingItemDetailsFails() {
+        startWith(movie(itemId = 10, videoNumber = 7))
+        val item = awaitContent().items.single()
+        val player = mockk<PuberScreen>()
+        every {
+            screens.player(
+                itemId = 10,
+                seasonNumber = null,
+                episodeNumber = null,
+                videoNumber = 7,
+                startMode = PlayerStartMode.StartFromBeginning,
+            )
+        } returns player
+        coEvery { itemDetailsRepository.invalidate(10) } throws IllegalStateException("disk full")
+
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+
+        verify(exactly = 1) { router.navigateTo(player) }
+    }
+
+    @Test
+    fun play_navigatesOnlyOnceWhenPressedAgainWhileInvalidationIsStillInFlight() {
+        startWith(movie(itemId = 10, videoNumber = 7))
+        val item = awaitContent().items.single()
+        val player = mockk<PuberScreen>()
+        every {
+            screens.player(
+                itemId = 10,
+                seasonNumber = null,
+                episodeNumber = null,
+                videoNumber = 7,
+                startMode = PlayerStartMode.StartFromBeginning,
+            )
+        } returns player
+        coEvery { itemDetailsRepository.invalidate(10) } coAnswers { delay(50) }
+
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        verify(exactly = 1) { router.navigateTo(player) }
     }
 
     private fun startWith(vararg items: History) {

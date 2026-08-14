@@ -6,11 +6,11 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Audio
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
-import com.kino.puber.data.repository.PlayerPreferencesRepository
 import java.util.Locale
 
 private const val MILLIS_PER_SECOND = 1_000L
@@ -19,7 +19,7 @@ private const val SECONDS_PER_MINUTE = 60L
 
 internal class PlayerUIMapper(
     private val context: Context,
-    private val playerPreferencesRepository: PlayerPreferencesRepository? = null,
+    private val navigationPreferencesRepository: NavigationPreferencesRepository? = null,
 ) {
 
     fun mapAudioTracks(audios: List<Audio>?): List<AudioTrackUIState> {
@@ -148,7 +148,7 @@ internal class PlayerUIMapper(
     }
 
     fun watchedIndicatorsEnabled(): Boolean {
-        return playerPreferencesRepository?.watchedIndicatorsEnabled ?: true
+        return navigationPreferencesRepository?.contentPreferences?.value?.showWatchedIndicators ?: true
     }
 
     private fun mapPosterUrls(url: String?): List<String> {

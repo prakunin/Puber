@@ -8,6 +8,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,7 +22,9 @@ class DetailsInteractorTest {
     private val api = mockk<KinoPubApiClient>(relaxed = true)
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     private val watchLaterBookmarkInteractor = mockk<WatchLaterBookmarkInteractor>()
-    private val interactor = DetailsInteractor(api, itemDetailsRepository, watchLaterBookmarkInteractor)
+    private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
+    private val interactor =
+        DetailsInteractor(api, itemDetailsRepository, watchLaterBookmarkInteractor, watchStateRepository)
 
     @Test
     fun isInWatchLaterFolder_returnsTrueFromLocalBookmarks_withoutLiveLookup() = runTest {
@@ -55,6 +58,28 @@ class DetailsInteractorTest {
         val result = interactor.isInWatchLaterFolder(item)
 
         assertEquals(true, result)
+        coVerify(exactly = 0) { api.getItemBookmarkFolders(any()) }
+    }
+
+    @Test
+    fun seededWatchlistFlag_forSeries_readsInWatchlistWithoutAnyLookup() = runTest {
+        val notSaved = Item(id = 42, title = "Series", type = ItemType.SERIAL, inWatchlist = false)
+        val saved = notSaved.copy(inWatchlist = true)
+
+        assertEquals(false, interactor.seededWatchlistFlag(notSaved))
+        assertEquals(true, interactor.seededWatchlistFlag(saved))
+        coVerify(exactly = 0) { api.getItemBookmarkFolders(any()) }
+    }
+
+    @Test
+    fun seededWatchlistFlag_forMovie_isTrueOnlyWhenBookmarksAreAlreadyOnThePayload() = runTest {
+        val withoutBookmarks = movie(bookmarks = emptyList())
+        val withBookmarks = movie(bookmarks = listOf(Bookmark(id = 7, title = "Any folder")))
+
+        assertEquals(false, interactor.seededWatchlistFlag(withoutBookmarks))
+        assertEquals(true, interactor.seededWatchlistFlag(withBookmarks))
+        // Unlike isInWatchLaterFolder, an empty bookmarks list is not a reason to make a live call —
+        // the caller is expected to patch the answer in later instead of waiting for it here.
         coVerify(exactly = 0) { api.getItemBookmarkFolders(any()) }
     }
 

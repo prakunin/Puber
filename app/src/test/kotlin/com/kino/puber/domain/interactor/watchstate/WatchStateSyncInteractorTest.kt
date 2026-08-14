@@ -1,0 +1,496 @@
+package com.kino.puber.domain.interactor.watchstate
+
+import com.kino.puber.data.api.KinoPubApiClient
+import com.kino.puber.data.api.models.ApiResponseList
+import com.kino.puber.data.api.models.History
+import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.ItemType
+import com.kino.puber.data.api.models.PaginatedResponse
+import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.repository.WatchStateSyncCursor
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.coVerifyOrder
+import io.mockk.mockk
+import io.mockk.slot
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+
+class WatchStateSyncInteractorTest {
+
+    private val api = mockk<KinoPubApiClient>()
+    private val repository = mockk<WatchStateRepository>(relaxed = true)
+    private var now = 1_000L
+
+    /**
+     * Stands in for the row the repository keeps the bookmark in, so a run reads back what the
+     * previous one stored.
+     */
+    private var cursor = WatchStateSyncCursor()
+
+    private val interactor = WatchStateSyncInteractor(
+        api = api,
+        repository = repository,
+        clock = { now },
+        staleAfter = 1.hours,
+        // The cooldown between runs has its own test; here it would only stop back-to-back calls
+        // these cases make on purpose.
+        minTimeBetweenRuns = Duration.ZERO,
+    )
+
+    @BeforeEach
+    fun setUp() {
+        coEvery { repository.syncCursor() } answers { cursor }
+        coEvery { repository.saveSyncCursor(any()) } answers { cursor = firstArg() }
+        coEvery { repository.recordHistoryPage(any(), any(), any(), any()) } answers { cursor = arg(3) }
+        coEvery { repository.clear() } answers { cursor = WatchStateSyncCursor() }
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success()
+        coEvery { api.getWatchingMovies() } returns success()
+        stubHistory(pages = 1)
+    }
+
+    @Test
+    fun sync_sendsSerialsAndBareMoviesDownDifferentPaths() = runTest {
+        val series = item(id = 1, type = ItemType.SERIAL)
+        val movie = item(id = 2, type = ItemType.MOVIE)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success(series)
+        coEvery { api.getWatchingMovies() } returns success(movie)
+        val recordedSeries = slot<List<Item>>()
+        val recordedMovies = slot<List<Item>>()
+        coEvery { repository.recordFromServer(capture(recordedSeries), any()) } returns Unit
+        coEvery { repository.recordInProgress(capture(recordedMovies), any()) } returns Unit
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals(listOf(series), recordedSeries.captured)
+        assertEquals(listOf(movie), recordedMovies.captured)
+    }
+
+    @Test
+    fun sync_leavesTheHistoryAloneWhenTheSerialsListFailed() = runTest {
+        // Without that list every series in the history would have to be skipped — guessing would
+        // mark every show ever played as finished — and the pass could not record how far it got.
+        // Walking hundreds of pages to index only the movies is not worth the requests.
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { repository.recordHistoryPage(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun sync_doesNotCallTheWalkCompleteWhenTheSerialsListFailed() = runTest {
+        // Claiming the walk here would suppress the next full pass for a week, and let the prune
+        // below delete every series row the previous pass had stamped.
+        stubHistory(pages = 1)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+
+        assertFalse(cursor.fullHistoryWalkDone)
+        assertNull(cursor.lastReconciledAt)
+        assertNull(cursor.lastSyncAt)
+        coVerify(exactly = 0) { repository.pruneStaleRows(any()) }
+    }
+
+    @Test
+    fun reconciliation_keepsSeriesRowsWhenTheSerialsListFailed() = runTest {
+        // The pass that reconciles is the one that deletes. A run that could not read a single
+        // series must not be the one to decide which series the account no longer has.
+        val interactor = reconcilingInteractor()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(1L) }
+
+        now += 8.days.inWholeMilliseconds
+        stubHistory(pages = 2)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { repository.pruneStaleRows(2L) }
+        // The next run with the list in hand still walks the whole history and prunes then.
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
+    }
+
+    @Test
+    fun sync_leavesTheHistoryAloneWhenTheMoviesListFailed() = runTest {
+        // A film the account started and later cleared from its history exists in that list and
+        // nowhere else, so a walk without it cannot see everything the prune assumes it saw.
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { repository.recordHistoryPage(any(), any(), any(), any()) }
+        assertFalse(cursor.fullHistoryWalkDone)
+        assertNull(cursor.lastSyncAt)
+    }
+
+    @Test
+    fun reconciliation_keepsMovieRowsWhenTheMoviesListFailed() = runTest {
+        // Same rule as for the serials list: the run that cannot read a source must not be the one
+        // deciding which of that source's rows the account no longer has.
+        val interactor = reconcilingInteractor()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(1L) }
+
+        now += 8.days.inWholeMilliseconds
+        stubHistory(pages = 2)
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 0) { repository.pruneStaleRows(2L) }
+        // And the pass stays open, so the next run with the list in hand prunes instead.
+        coEvery { api.getWatchingMovies() } returns success()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
+    }
+
+    @Test
+    fun sync_writesTheWatchingListsAfterTheHistory() = runTest {
+        // History describes everything ever played; the watching lists describe the present, so
+        // they have to land last.
+        val series = item(id = 1, type = ItemType.SERIAL)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success(series)
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerifyOrder {
+            repository.recordHistoryPage(any(), any(), any(), any())
+            repository.recordFromServer(listOf(series), any())
+        }
+    }
+
+    @Test
+    fun sync_throwsAwayWhatItWroteWhenTheSessionEndedMidRun() = runTest {
+        // Those rows and that walk cursor belong to the account that just signed out; inheriting
+        // either would show one account's viewing history under the next one.
+        coEvery { api.getWatchingMovies() } coAnswers {
+            interactor.invalidate()
+            success()
+        }
+
+        assertFalse(interactor.syncIfStale())
+
+        assertNull(cursor.lastSyncAt)
+        assertEquals(0L, cursor.historyNewestSeen)
+        assertFalse(cursor.fullHistoryWalkDone)
+        coVerify(atLeast = 1) { repository.clear() }
+    }
+
+    @Test
+    fun anUnfinishedWalkIsNotRestartedByTheNextResume() = runTest {
+        // A walk that runs out of page budget never stamps lastSyncAt, so the staleness check
+        // cannot see it. The ON_RESUME right after the main screen appears would otherwise start
+        // the next 300 pages immediately, which is exactly what the budget exists to prevent.
+        val interactor = WatchStateSyncInteractor(
+            api = api,
+            repository = repository,
+            clock = { now },
+            staleAfter = 1.hours,
+            minTimeBetweenRuns = 5.minutes,
+        )
+        stubHistory(pages = 4)
+        coEvery { api.getHistoryData(2) } returns Result.failure(IllegalStateException("interrupted"))
+        assertTrue(interactor.syncIfStale())
+        assertNull(cursor.lastSyncAt)
+
+        assertFalse(interactor.syncIfStale())
+
+        now += 5.minutes.inWholeMilliseconds
+        stubHistory(pages = 4)
+        assertTrue(interactor.syncIfStale())
+    }
+
+    @Test
+    fun aNewSessionIsIndexedWithoutWaitingOutThePreviousOnesCooldown() = runTest {
+        val interactor = WatchStateSyncInteractor(
+            api = api,
+            repository = repository,
+            clock = { now },
+            staleAfter = 1.hours,
+            minTimeBetweenRuns = 5.minutes,
+        )
+        assertTrue(interactor.syncIfStale())
+
+        interactor.invalidate()
+
+        assertTrue(interactor.syncIfStale())
+    }
+
+    @Test
+    fun aCompletedFullWalkDropsWhatItNeverSaw() = runTest {
+        // Nothing in the incremental sources ever says a title is gone — a cleared history or a
+        // mark undone on another device simply stops being mentioned. Only a pass that read the
+        // history to its end knows what is missing.
+        stubHistory(pages = 2)
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 1) { repository.pruneStaleRows(1L) }
+        assertEquals(now, cursor.lastReconciledAt)
+    }
+
+    @Test
+    fun anIncrementalPassPrunesNothing() = runTest {
+        // It only read as far back as the last walk, so everything older is unseen but not gone.
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        now += 1.hours.inWholeMilliseconds
+        stubHistory(pages = 2)
+
+        assertTrue(interactor.syncIfStale(force = true))
+
+        coVerify(exactly = 1) { repository.pruneStaleRows(any()) }
+    }
+
+    @Test
+    fun theIndexIsReconciledAgainAfterTheInterval() = runTest {
+        val interactor = reconcilingInteractor()
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        assertEquals(1L, cursor.generation)
+
+        now += 8.days.inWholeMilliseconds
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+
+        // A fresh pass, walked in full again, pruning whatever the previous one left behind.
+        assertEquals(2L, cursor.generation)
+        coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
+    }
+
+    @Test
+    fun aWalkStillInProgressIsNotInterruptedByAReconciliation() = runTest {
+        // Opening a pass mid-walk would orphan the rows already stamped by this one, and the prune
+        // at the end would delete them.
+        val interactor = reconcilingInteractor()
+        stubHistory(pages = 4)
+        coEvery { api.getHistoryData(2) } returns Result.failure(IllegalStateException("interrupted"))
+        assertTrue(interactor.syncIfStale())
+        assertFalse(cursor.fullHistoryWalkDone)
+
+        now += 8.days.inWholeMilliseconds
+        stubHistory(pages = 4)
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals(1L, cursor.generation)
+    }
+
+    private fun reconcilingInteractor() = WatchStateSyncInteractor(
+        api = api,
+        repository = repository,
+        clock = { now },
+        staleAfter = 1.hours,
+        minTimeBetweenRuns = Duration.ZERO,
+        reconcileAfter = 7.days,
+    )
+
+    @Test
+    fun theBookmarkNeverOutlivesTheRowsItDescribes() = runTest {
+        // They live in one database and are dropped together, so the app cannot end up sitting on
+        // an empty index believing it had already read the whole history.
+        stubHistory(pages = 2)
+        assertTrue(interactor.syncIfStale())
+        assertTrue(cursor.fullHistoryWalkDone)
+
+        interactor.invalidate()
+
+        assertEquals(WatchStateSyncCursor(), cursor)
+    }
+
+    @Test
+    fun firstSync_walksTheWholeHistory() = runTest {
+        stubHistory(pages = 4)
+
+        assertTrue(interactor.syncIfStale())
+
+        (1..4).forEach { page -> coVerify(exactly = 1) { api.getHistoryData(page) } }
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    @Test
+    fun interruptedWalk_resumesFromWhereItStopped() = runTest {
+        // The walk spans hundreds of requests; a killed app must not send it back to page 1.
+        stubHistory(pages = 4)
+        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("killed"))
+        assertTrue(interactor.syncIfStale())
+        assertFalse(cursor.fullHistoryWalkDone)
+        assertEquals(3, cursor.historyResumePage)
+
+        stubHistory(pages = 4)
+        assertTrue(interactor.syncIfStale(force = true))
+
+        assertTrue(cursor.fullHistoryWalkDone)
+        // The resume overlaps a couple of pages, so page 1 is read again rather than skipped past.
+        coVerify(exactly = 2) { api.getHistoryData(3) }
+    }
+
+    @Test
+    fun interruptedWalk_keepsWhatItAlreadyRead() = runTest {
+        stubHistory(pages = 4)
+        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("killed"))
+
+        assertTrue(interactor.syncIfStale())
+
+        // Pages 1-2 were folded in before the failure, so their newest stamp survives.
+        assertEquals(999L, cursor.historyNewestSeen)
+    }
+
+    @Test
+    fun laterSync_stopsAtTheFirstPageWithNothingNew() = runTest {
+        stubHistory(pages = 4)
+        assertTrue(interactor.syncIfStale())
+        now += 1.hours.inWholeMilliseconds
+
+        assertTrue(interactor.syncIfStale(force = true))
+
+        // Page 1 holds the newest entries, which the first walk already folded in.
+        coVerify(exactly = 2) { api.getHistoryData(1) }
+        coVerify(exactly = 1) { api.getHistoryData(2) }
+    }
+
+    @Test
+    fun laterSync_doesNotTreatAnEmptyPageAsHavingCaughtUp() = runTest {
+        // Deleted entries leave gaps in the history; an empty page says nothing about how far the
+        // new entries reach.
+        stubHistory(pages = 3)
+        assertTrue(interactor.syncIfStale())
+        coEvery { api.getHistoryData(1) } returns Result.success(
+            PaginatedResponse(items = emptyList(), pagination = Pagination(current = 1, perpage = 20, total = 3))
+        )
+
+        assertTrue(interactor.syncIfStale(force = true))
+
+        coVerify(exactly = 2) { api.getHistoryData(2) }
+    }
+
+    @Test
+    fun laterSync_keepsReadingWhileEntriesAreNewerThanTheLastWalk() = runTest {
+        stubHistory(pages = 3)
+        assertTrue(interactor.syncIfStale())
+        // Everything on pages 1-2 is newer than what the previous walk saw.
+        stubHistory(pages = 3, lastSeenBase = 10_000L)
+
+        assertTrue(interactor.syncIfStale(force = true))
+
+        coVerify(exactly = 2) { api.getHistoryData(2) }
+    }
+
+    @Test
+    fun sync_skipsWhileTheIndexIsFresh() = runTest {
+        assertTrue(interactor.syncIfStale())
+        now += 1.hours.inWholeMilliseconds - 1
+
+        assertFalse(interactor.syncIfStale())
+
+        coVerify(exactly = 1) { api.getWatchingList(onlySubscribed = false) }
+    }
+
+    @Test
+    fun sync_refetchesOnceTheIndexIsStale() = runTest {
+        assertTrue(interactor.syncIfStale())
+        now += 1.hours.inWholeMilliseconds
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 2) { api.getWatchingList(onlySubscribed = false) }
+    }
+
+    @Test
+    fun sync_keepsWhatOneEndpointReturnedWhenTheOtherFails() = runTest {
+        val movie = item(id = 2, type = ItemType.MOVIE)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+        coEvery { api.getWatchingMovies() } returns success(movie)
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify { repository.recordInProgress(listOf(movie), any()) }
+    }
+
+    @Test
+    fun sync_retriesImmediatelyAfterAPartialFailure() = runTest {
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 2) { api.getWatchingList(onlySubscribed = false) }
+    }
+
+    @Test
+    fun sync_doesNotStampTheClockWhenTheHistoryFails() = runTest {
+        coEvery { api.getHistoryData(any()) } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.syncIfStale())
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 2) { api.getWatchingMovies() }
+    }
+
+    @Test
+    fun sync_doesNotStampTheClockWhenBothWatchingListsFail() = runTest {
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+
+        assertFalse(interactor.syncIfStale())
+        assertFalse(interactor.syncIfStale())
+
+        coVerify(exactly = 2) { api.getWatchingMovies() }
+        coVerify(exactly = 0) { repository.recordInProgress(any(), any()) }
+    }
+
+    @Test
+    fun invalidate_makesTheNextSyncStartFromScratch() = runTest {
+        stubHistory(pages = 3)
+        assertTrue(interactor.syncIfStale())
+
+        interactor.invalidate()
+        assertTrue(interactor.syncIfStale())
+
+        assertTrue(cursor.fullHistoryWalkDone)
+        coVerify(exactly = 2) { api.getHistoryData(3) }
+    }
+
+    /**
+     * Page 1 carries the newest entries, so `last_seen` decreases as the page number grows — the
+     * ordering the incremental pass relies on.
+     */
+    private fun stubHistory(pages: Int, lastSeenBase: Long = 1_000L) {
+        (1..pages).forEach { page ->
+            coEvery { api.getHistoryData(page) } returns Result.success(
+                PaginatedResponse(
+                    items = listOf(historyEntry(itemId = page, lastSeen = lastSeenBase - page)),
+                    pagination = Pagination(current = page, perpage = 1, total = pages),
+                )
+            )
+        }
+    }
+
+    private fun historyEntry(itemId: Int, lastSeen: Long) = History(
+        item = item(id = itemId, type = ItemType.MOVIE),
+        video = Video(id = itemId * 100, duration = 100, watched = 1),
+        updated = lastSeen.toString(),
+    )
+
+    private fun success(vararg items: Item) = Result.success(ApiResponseList(items = items.toList()))
+
+    private fun item(id: Int, type: ItemType) = Item(id = id, title = "Item $id", type = type)
+}

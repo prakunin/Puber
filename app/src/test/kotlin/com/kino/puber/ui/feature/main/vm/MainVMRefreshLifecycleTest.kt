@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
@@ -22,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -71,6 +73,8 @@ internal class MainVMRefreshLifecycleTest {
             mainUIMapper = mapper,
             tabRouter = tabRouter,
             navigationPreferencesRepository = mockk(relaxed = true),
+            deviceInfoInteractor = deviceInfoInteractor(),
+            watchStateSyncInteractor = mockk(relaxed = true),
         )
         val historyTab = MainTab(
             type = TabType.History,
@@ -108,6 +112,8 @@ internal class MainVMRefreshLifecycleTest {
                 showCartoonsTab = false,
                 showAnimeTab = true,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             )
         )
         val repository = mockk<NavigationPreferencesRepository>()
@@ -124,7 +130,7 @@ internal class MainVMRefreshLifecycleTest {
         val tabRouter = mockk<TabRouter>(relaxed = true)
         val openedTabs = mutableListOf<PuberTab>()
         every { tabRouter.openTab(capture(openedTabs)) } returns Unit
-        val vm = MainVM(router, mapper, tabRouter, repository)
+        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
 
         vm.testOnStart()
         runCurrent()
@@ -143,6 +149,8 @@ internal class MainVMRefreshLifecycleTest {
                 showCartoonsTab = true,
                 showAnimeTab = true,
                 showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
             )
         )
         val repository = mockk<NavigationPreferencesRepository>()
@@ -163,7 +171,7 @@ internal class MainVMRefreshLifecycleTest {
             puberTab(firstArg(), thirdArg())
         }
         val tabRouter = mockk<TabRouter>(relaxed = true)
-        val vm = MainVM(router, mapper, tabRouter, repository)
+        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
 
         vm.testOnStart()
         runCurrent()
@@ -190,6 +198,12 @@ internal class MainVMRefreshLifecycleTest {
             )
         }
         vm.testCancelScope()
+    }
+
+    private fun deviceInfoInteractor(): IDeviceInfoInteractor {
+        return mockk<IDeviceInfoInteractor>().apply {
+            every { setDeviceInformation() } returns flowOf(Unit)
+        }
     }
 
     private fun mainState(selectedTab: TabType): MainViewState {

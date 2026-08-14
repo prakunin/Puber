@@ -35,10 +35,9 @@ class HistorySerializationTest {
         assertEquals(73001, video.id)
         assertEquals(2, video.number)
         assertEquals(5_400, video.duration)
-        assertEquals(0, video.watched)
+        assertNull(video.watched)
         assertEquals(1_200, watching.time)
         assertEquals(5_400, watching.duration)
-        assertEquals(0, watching.status)
         assertEquals("4102444810", watching.updatedAt)
         assertEquals(1_200, history.time)
         assertEquals("4102444810", history.updated)
@@ -59,10 +58,9 @@ class HistorySerializationTest {
         assertEquals(83001, video.id)
         assertEquals(9, video.number)
         assertEquals(2_700, video.duration)
-        assertEquals(1, video.watched)
+        assertNull(video.watched)
         assertEquals(2_700, watching.time)
         assertEquals(2_700, watching.duration)
-        assertEquals(1, watching.status)
         assertEquals("4105296010", history.updated)
     }
 
@@ -87,7 +85,7 @@ class HistorySerializationTest {
         assertEquals(2, video.number)
         assertEquals(1_200, video.watching?.time)
         assertEquals(4_800, video.watching?.duration)
-        assertEquals(0, video.watched)
+        assertNull(video.watched)
         assertEquals("411111111", history.updated)
     }
 
@@ -136,6 +134,35 @@ class HistorySerializationTest {
         assertNull(history.season)
         assertEquals(9, history.video?.number)
     }
+
+    @Test
+    fun theRawPositionSurvivesTheMapping() {
+        // What the endpoint actually said has to reach WatchCompletionPolicy intact; deciding
+        // "finished" here would hand every consumer a guess dressed as a server fact.
+        val response = json.decodeFromString<HistoryPageResponse>(
+            historyPage(duration = 6_000, time = 5_700),
+        ).toModel()
+
+        val video = requireNotNull(response.items.single().video)
+        assertNull(video.watched)
+        assertEquals(5_700, video.watching?.time)
+        assertEquals(6_000, video.watching?.duration)
+    }
+
+    private fun historyPage(duration: Int, time: Int): String = """
+        {
+          "history": [{
+            "counter": 1,
+            "first_seen": 1,
+            "item": {"id": 92001, "title": "Synthetic Movie", "type": "movie"},
+            "last_seen": 2,
+            "media": {"id": 93001, "number": 1, "snumber": 0, "duration": $duration},
+            "time": $time,
+            "deleted": false
+          }],
+          "pagination": {"current": 1, "perpage": 20, "total": 1, "total_items": 1}
+        }
+    """.trimIndent()
 
     @Test
     fun missingMediaId_isRejected() {

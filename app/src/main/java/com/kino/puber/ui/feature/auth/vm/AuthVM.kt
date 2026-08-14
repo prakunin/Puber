@@ -222,14 +222,16 @@ internal class AuthVM(
     }
 
     private fun saveApiDomain(domain: String) {
-        when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
-            ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
-            ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
-            is ApiDomainUpdateResult.Success -> {
-                hasRetriedAlternativeDomainAfterAuthError = false
-                closeApiDomainDialog()
-                showMessage(resources.getString(R.string.api_domain_saved, result.state.domain))
-                startAuth()
+        launch {
+            when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
+                ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
+                ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
+                is ApiDomainUpdateResult.Success -> {
+                    hasRetriedAlternativeDomainAfterAuthError = false
+                    closeApiDomainDialog()
+                    showMessage(resources.getString(R.string.api_domain_saved, result.state.domain))
+                    startAuth()
+                }
             }
         }
     }
@@ -258,10 +260,12 @@ internal class AuthVM(
 
     private fun resetApiDomain() {
         hasRetriedAlternativeDomainAfterAuthError = false
-        apiDomainInteractor.resetToDefault()
-        closeApiDomainDialog()
-        showMessage(resources.getString(R.string.api_domain_reset_done))
-        startAuth()
+        launch {
+            apiDomainInteractor.resetToDefault()
+            closeApiDomainDialog()
+            showMessage(resources.getString(R.string.api_domain_reset_done))
+            startAuth()
+        }
     }
 
     private fun currentDialogState(): ApiDomainDialogState? {

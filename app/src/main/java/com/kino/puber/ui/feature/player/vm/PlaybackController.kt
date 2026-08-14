@@ -49,6 +49,18 @@ internal interface PlaybackControl {
         fun onError(message: String)
     }
 
+    /** Live playback characteristics, surfaced by the info panel and the debug overlay. */
+    data class DebugInfo(
+        val videoResolution: String,
+        val videoCodec: String,
+        val videoBitrate: String,
+        val videoFrameRate: String,
+        val audioCodec: String,
+        val audioChannels: String,
+        val droppedFrames: String,
+        val bufferedDuration: String,
+    )
+
     val currentPosition: Long
     val duration: Long
     val isPlaying: Boolean
@@ -70,6 +82,7 @@ internal interface PlaybackControl {
     fun setSpeed(speed: Float)
     fun selectAudioTrack(groupIndex: Int)
     fun selectSubtitle(track: SubtitleTrackUIState?)
+    fun getDebugInfo(): DebugInfo?
     fun release()
 }
 
@@ -93,7 +106,10 @@ internal class PlaybackController(
     val player: ExoPlayer? get() = exoPlayer
     override val currentPosition: Long get() = exoPlayer?.currentPosition ?: 0L
     override val duration: Long get() = exoPlayer?.duration?.coerceAtLeast(0) ?: 0L
-    override val isPlaying: Boolean get() = exoPlayer?.isPlaying == true
+    override val isPlaying: Boolean
+        get() = exoPlayer?.let {
+            isPlaybackIntended(it.playWhenReady, it.playbackState, it.playbackSuppressionReason)
+        } == true
     override val bufferedPosition: Long get() = exoPlayer?.bufferedPosition ?: 0L
     
     private val playerListener = object : Player.Listener {
@@ -101,9 +117,22 @@ internal class PlaybackController(
             notifyPlaybackState()
         }
 
+        // onIsPlayingChanged stays silent while the player is stalled or suppressed, so these two
+        // report the transitions it misses.
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            notifyPlaybackState()
+        }
+
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+            notifyPlaybackState()
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
-                Player.STATE_ENDED -> callback?.onPlaybackEnded()
+                Player.STATE_ENDED -> {
+                    notifyPlaybackState()
+                    callback?.onPlaybackEnded()
+                }
                 Player.STATE_READY -> {
                     notifyPlaybackState()
                     notifyTracksUpdated()
@@ -220,7 +249,7 @@ internal class PlaybackController(
     override fun switchStream(streamUrl: String, subtitles: List<SubtitleLink>?) {
         val player = exoPlayer ?: return
         val savedPosition = player.currentPosition
-        val wasPlaying = player.isPlaying
+        val wasPlaying = player.playWhenReady
         val savedTrackParams = player.trackSelectionParameters
 
         player.stop()
@@ -235,7 +264,13 @@ internal class PlaybackController(
     }
 
     override fun play() {
-        exoPlayer?.play()
+        exoPlayer?.let { player ->
+            // playWhenReady stays true once media ends, so play() alone would be a no-op there.
+            if (player.playbackState == Player.STATE_ENDED) {
+                player.seekToDefaultPosition()
+            }
+            player.play()
+        }
     }
 
     override fun pause() {
@@ -372,18 +407,8 @@ internal class PlaybackController(
         }
     }
 
-    data class DebugInfo(
-        val videoResolution: String,
-        val videoCodec: String,
-        val videoBitrate: String,
-        val audioCodec: String,
-        val audioChannels: String,
-        val droppedFrames: String,
-        val bufferedDuration: String,
-    )
-
     @OptIn(UnstableApi::class)
-    fun getDebugInfo(): DebugInfo? {
+    override fun getDebugInfo(): PlaybackControl.DebugInfo? {
         val player = exoPlayer ?: return null
         val videoFormat = player.videoFormat
         val audioFormat = player.audioFormat
@@ -394,31 +419,46 @@ internal class PlaybackController(
         val bufferedMs = player.bufferedPosition - player.currentPosition
         val bufferedSec = (bufferedMs / 1000.0).coerceAtLeast(0.0)
 
-        return DebugInfo(
-            videoResolution = videoFormat?.let { "${it.width}x${it.height}" } ?: "—",
-            videoCodec = videoFormat?.codecs ?: videoFormat?.sampleMimeType?.substringAfter("/") ?: "—",
-            videoBitrate = if (videoFormat?.bitrate != null && videoFormat.bitrate > 0) {
-                "%.1f Mbps".format(videoFormat.bitrate / BITS_PER_MEGABIT)
-            } else {
-                "—"
-            },
-            audioCodec = audioFormat?.codecs ?: audioFormat?.sampleMimeType?.substringAfter("/") ?: "—",
-            audioChannels = when (audioFormat?.channelCount) {
-                1 -> "mono"
-                2 -> "stereo"
-                6 -> "5.1"
-                8 -> "7.1"
-                else -> audioFormat?.channelCount?.toString() ?: "—"
-            },
+        return PlaybackControl.DebugInfo(
+            videoResolution = videoFormat?.let { "${it.width}x${it.height}" } ?: UNKNOWN_VALUE,
+            videoCodec = codecName(videoFormat),
+            videoBitrate = videoFormat?.bitrate
+                ?.takeIf { it > 0 }
+                ?.let { "%.1f Mbps".format(it / BITS_PER_MEGABIT) }
+                ?: UNKNOWN_VALUE,
+            videoFrameRate = videoFormat?.frameRate
+                ?.takeIf { it > 0f }
+                ?.let { "%.0f fps".format(it) }
+                ?: UNKNOWN_VALUE,
+            audioCodec = codecName(audioFormat),
+            audioChannels = channelLayout(audioFormat?.channelCount),
             droppedFrames = dropped.toString(),
             bufferedDuration = "%.1fs".format(bufferedSec),
         )
     }
 
+    private fun codecName(format: Format?): String {
+        return format?.codecs ?: format?.sampleMimeType?.substringAfter("/") ?: UNKNOWN_VALUE
+    }
+
+    private fun channelLayout(channelCount: Int?): String {
+        return when (channelCount) {
+            CHANNELS_MONO -> "mono"
+            CHANNELS_STEREO -> "stereo"
+            CHANNELS_SURROUND_5_1 -> "5.1"
+            CHANNELS_SURROUND_7_1 -> "7.1"
+            else -> channelCount?.toString() ?: UNKNOWN_VALUE
+        }
+    }
+
     private fun notifyPlaybackState() {
         val player = exoPlayer ?: return
         callback?.onPlaybackStateChanged(
-            isPlaying = player.isPlaying,
+            isPlaying = isPlaybackIntended(
+                playWhenReady = player.playWhenReady,
+                playbackState = player.playbackState,
+                playbackSuppressionReason = player.playbackSuppressionReason,
+            ),
             isBuffering = player.playbackState == Player.STATE_BUFFERING,
             position = player.currentPosition,
             duration = player.duration.coerceAtLeast(0),
@@ -538,5 +578,30 @@ internal class PlaybackController(
         const val BANDWIDTH_FRACTION = 0.75f
         const val PLAYER_NETWORK_TIMEOUT_SECONDS = 20L
         const val BITS_PER_MEGABIT = 1_000_000.0
+        const val UNKNOWN_VALUE = "—"
+        const val CHANNELS_MONO = 1
+        const val CHANNELS_STEREO = 2
+        const val CHANNELS_SURROUND_5_1 = 6
+        const val CHANNELS_SURROUND_7_1 = 8
     }
 }
+
+/**
+ * Whether playback is running from the user's point of view.
+ *
+ * Deliberately not [androidx.media3.common.Player.isPlaying], which drops to `false` on every
+ * re-buffering: the UI would then report a pause the user never asked for, and keep-screen-on
+ * would be released mid-playback, letting the TV screen saver in.
+ *
+ * Suppression is honoured, though — on transient audio focus loss, say when Alexa answers,
+ * playback really does stop while `playWhenReady` stays true.
+ */
+internal fun isPlaybackIntended(
+    playWhenReady: Boolean,
+    playbackState: Int,
+    playbackSuppressionReason: Int,
+): Boolean =
+    playWhenReady &&
+        playbackState != Player.STATE_IDLE &&
+        playbackState != Player.STATE_ENDED &&
+        playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE

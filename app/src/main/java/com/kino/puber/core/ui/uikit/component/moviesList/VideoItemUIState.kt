@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ data class VideoItemUIState(
 )
 
 internal const val WATCHED_INDICATOR_TEST_TAG = "watched_indicator"
+internal const val WATCH_PROGRESS_TEST_TAG = "watch_progress"
 
 @Composable
 fun VideoItem(
@@ -116,27 +118,8 @@ fun VideoItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
             )
-            val count = state.unwatchedCount
-            if (count != null && count > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            RoundedCornerShape(4.dp),
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = count.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-            }
-            WatchedIndicatorBadge(
-                visible = state.isWatched && state.showWatchedIndicator,
+            TopEndBadge(
+                state = state,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
             val hasRatings = state.ratings.isNotEmpty()
@@ -178,8 +161,66 @@ fun VideoItem(
                     }
                 }
             }
+            WatchProgressBar(
+                progressPercent = state.progressPercent,
+                isWatched = state.isWatched,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
+}
+
+/**
+ * The eye badge and the unwatched-episode counter share the top-end corner, so only one may win.
+ */
+@Composable
+private fun TopEndBadge(
+    state: VideoItemUIState,
+    modifier: Modifier = Modifier,
+) {
+    if (state.isWatched && state.showWatchedIndicator) {
+        WatchedIndicatorBadge(visible = true, modifier = modifier)
+        return
+    }
+
+    val count = state.unwatchedCount ?: return
+    if (count <= 0) return
+
+    Box(
+        modifier = modifier
+            .padding(6.dp)
+            .background(
+                MaterialTheme.colorScheme.primary,
+                RoundedCornerShape(4.dp),
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
+@Composable
+internal fun WatchProgressBar(
+    progressPercent: Float?,
+    isWatched: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    // A fully watched item is marked by the eye badge instead, so the two never stack.
+    if (progressPercent == null || isWatched) return
+
+    LinearProgressIndicator(
+        progress = { progressPercent.coerceIn(0f, 1f) },
+        modifier = modifier
+            .testTag(WATCH_PROGRESS_TEST_TAG)
+            .fillMaxWidth()
+            .height(3.dp),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    )
 }
 
 @Composable
@@ -319,6 +360,28 @@ private fun PreviewPlainCard() = PuberTheme {
 private fun PreviewBadgeOnly() = PuberTheme {
     VideoItem(
         state = previewState(unwatchedCount = 12),
+        onClick = {},
+    )
+}
+
+@Preview(name = "Partially watched (progress bar)")
+@Composable
+private fun PreviewPartiallyWatched() = PuberTheme {
+    VideoItem(
+        state = previewState(
+            showTitle = true,
+            ratings = twoRatings,
+            progressPercent = 0.4f,
+        ),
+        onClick = {},
+    )
+}
+
+@Preview(name = "Fully watched (eye badge)")
+@Composable
+private fun PreviewFullyWatched() = PuberTheme {
+    VideoItem(
+        state = previewState(showTitle = true).copy(isWatched = true),
         onClick = {},
     )
 }

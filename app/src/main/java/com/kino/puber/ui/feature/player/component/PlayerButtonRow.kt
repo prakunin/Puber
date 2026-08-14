@@ -1,5 +1,10 @@
 package com.kino.puber.ui.feature.player.component
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,12 +20,17 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -123,6 +133,12 @@ private fun PrimaryControls(
             onClick = actions.onVideoSettingsClick,
             modifier = Modifier.focusRequester(focusRequesters.videoSettingsButton),
         )
+        PlayerButton(
+            text = stringResource(R.string.player_button_info),
+            icon = Icons.Outlined.Info,
+            onClick = actions.onInfoClick,
+            modifier = Modifier.focusRequester(focusRequesters.infoButton),
+        )
     }
 }
 
@@ -189,25 +205,37 @@ private fun PlayerButton(
     enabled: Boolean = true,
     stateDescription: String? = null,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Button(
         onClick = onClick,
-        modifier = modifier.semantics {
-            selected?.let { this.selected = it }
-            stateDescription?.let { this.stateDescription = it }
-        },
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .semantics {
+                selected?.let { this.selected = it }
+                stateDescription?.let { this.stateDescription = it }
+            },
         enabled = enabled,
         colors = if (selected == true) selectedButtonColors() else transparentButtonColors(),
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = text,
             modifier = Modifier.size(20.dp),
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        AnimatedVisibility(
+            visible = focused,
+            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+        ) {
+            Row {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = text,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
 

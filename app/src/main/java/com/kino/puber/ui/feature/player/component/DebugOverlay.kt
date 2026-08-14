@@ -11,11 +11,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
-import com.kino.puber.ui.feature.player.vm.PlaybackController
+import com.kino.puber.ui.feature.player.vm.PlaybackControl
 
 @Composable
 internal fun DebugOverlay(
-    debugInfo: PlaybackController.DebugInfo?,
+    debugInfo: PlaybackControl.DebugInfo?,
     modifier: Modifier = Modifier,
 ) {
     if (debugInfo == null) return

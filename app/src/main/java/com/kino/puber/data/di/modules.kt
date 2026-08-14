@@ -9,6 +9,8 @@ import com.kino.puber.data.repository.AppUpdateDownloader
 import com.kino.puber.data.repository.AppUpdateInstaller
 import com.kino.puber.data.repository.AppUpdatePreferencesRepository
 import com.kino.puber.data.repository.AppUpdateRepository
+import com.kino.puber.data.db.PuberDatabase
+import com.kino.puber.data.db.transactions
 import com.kino.puber.data.repository.CryptoPreferenceRepository
 import com.kino.puber.data.repository.DeviceInfoRepository
 import com.kino.puber.data.repository.DeviceSettingsRepository
@@ -19,10 +21,13 @@ import com.kino.puber.data.repository.IDeviceSettingsRepository
 import com.kino.puber.data.repository.IKinoPubRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.KinoPubRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.data.repository.RoomPersistentPayloadStore
 import com.kino.puber.data.repository.SkipSegmentRepository
 import com.kino.puber.data.repository.SkipSegmentService
 import com.kino.puber.data.repository.TmdbIdRepository
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.api.IntroDbAppApiClient
 import com.kino.puber.data.api.TheIntroDbApiClient
@@ -71,12 +76,19 @@ val repositoryModule = module {
     singleOf(::CryptoPreferenceRepository) { bind<ICryptoPreferenceRepository>() }
     singleOf(::DeviceInfoRepository) { bind<IDeviceInfoRepository>() }
     singleOf(::DeviceSettingsRepository) { bind<IDeviceSettingsRepository>() }
-    singleOf(::ItemDetailsRepository)
+    single { ItemDetailsRepository(api = get(), watchStateRepository = get(), store = get()) }
     singleOf(::PlayerPreferencesRepository)
     singleOf(::TmdbIdRepository)
     singleOf(::SkipSegmentRepository)
     singleOf(::SkipSegmentService)
     singleOf(::NavigationPreferencesRepository)
+    single { PuberDatabase.create(androidContext()) }
+    single { get<PuberDatabase>().watchStateDao() }
+    single { get<PuberDatabase>().watchStateSyncDao() }
+    single { get<PuberDatabase>().cachedPayloadDao() }
+    single<PersistentPayloadStore> { RoomPersistentPayloadStore(dao = get()) }
+    single { get<PuberDatabase>().transactions() }
+    single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
     single<androidx.media3.datasource.cache.Cache> {
         val cacheDir = java.io.File(androidContext().externalCacheDir ?: androidContext().cacheDir, "media_cache")
         SimpleCache(

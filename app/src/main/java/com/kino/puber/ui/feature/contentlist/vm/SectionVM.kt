@@ -5,7 +5,6 @@ import androidx.compose.runtime.State
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
-import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
@@ -21,15 +20,23 @@ import kotlin.coroutines.CoroutineContext
 
 internal class SectionVM(
     paginator: Paginator.Store<Item>,
-    private val config: SectionConfig,
-    private val interactor: ContentListInteractor,
+    config: SectionConfig,
+    interactor: ContentListInteractor,
     private val savedItemInteractor: SavedItemInteractor,
-    private val mapper: VideoItemUIMapper,
+    mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
     private val contentListRefreshCoordinator: ContentListRefreshCoordinator,
     pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
-) : PagingVM<Item, SectionState>(paginator, router, errorHandler, pagingCoroutineContext) {
+) : ContentListPagingVM<SectionState>(
+    paginator,
+    config,
+    interactor,
+    mapper,
+    router,
+    errorHandler,
+    pagingCoroutineContext,
+) {
 
     // Collect state without back dispatcher — for use outside LazyColumn items
     @Composable
@@ -38,11 +45,9 @@ internal class SectionVM(
         return viewState.collectAsStateWithLifecycle(initialViewState)
     }
 
-    private var currentPage = 0
-    private var cachedInput: List<Item>? = null
-    private var cachedOutput: List<VideoItemUIState> = emptyList()
-
     override val initialViewState = SectionState.Loading
+
+    override val logName = "Section"
 
     override fun onStart() {
         val refreshRequests = contentListRefreshCoordinator.refreshRequests()
@@ -52,29 +57,22 @@ internal class SectionVM(
                 refreshFirstPage()
             }
         }
+        launch {
+            interactor.displaySettingsChanges.collect {
+                interactor.invalidateFirstPageCache()
+                refreshFirstPage()
+            }
+        }
+        launch {
+            interactor.watchStateChanges.collect {
+                interactor.invalidateFirstPageCache()
+                refreshFirstPage()
+            }
+        }
     }
 
     fun refreshFirstPage() {
         resetPaging()
-    }
-
-    override fun onLoadFirstPage() {
-        currentPage = 0
-        pagingLaunch(errorHandlerGeneral) {
-            val response = interactor.loadPage(config, page = 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            replace(response.items)
-        }
-    }
-
-    override fun onLoadNextPage(key: Item?) {
-        pagingLaunch(errorHandlerPaging) {
-            val response = interactor.loadPage(config, page = currentPage + 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            setNextPage(response.items)
-        }
     }
 
     override fun onAction(action: UIAction) {
@@ -85,14 +83,6 @@ internal class SectionVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-        }
-    }
-
-    private fun mapItems(items: List<Item>): List<VideoItemUIState> {
-        if (items === cachedInput) return cachedOutput
-        return mapper.mapShortItemList(items).also {
-            cachedInput = items
-            cachedOutput = it
         }
     }
 

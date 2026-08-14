@@ -241,7 +241,10 @@ internal class PlayerInteractor(
 
     suspend fun saveWatchingTime(id: Int, videoNumber: Int, time: Int, season: Int? = null) {
         api.setWatchingTime(id, videoNumber, time, season).getOrThrow()
-        itemDetailsRepository.invalidate(id)
+        // A position write happens every few seconds of playback. Dropping the entry each time is
+        // what kept the details cache from ever being warm for the titles watched most; marking it
+        // stale still guarantees the next open revalidates, but leaves something to draw meanwhile.
+        itemDetailsRepository.markStale(id)
     }
 
     suspend fun markAsWatched(id: Int, season: Int? = null, videoNumber: Int? = null) {
@@ -323,8 +326,12 @@ internal class PlayerInteractor(
         )
     }
 
-    fun isDebugOverlayEnabled(): Boolean {
-        return playerPreferencesRepository.debugOverlayEnabled
+    /** Player behaviour flags, read once when the screen starts. */
+    fun getBehaviourPreferences(): PlayerBehaviourPreferences {
+        return PlayerBehaviourPreferences(
+            debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
+            okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
+        )
     }
 
     fun getSubtitleSize(): SubtitleSize {
@@ -349,3 +356,8 @@ internal class PlayerInteractor(
         playerPreferencesRepository.fastDnsEnabled = enabled
     }
 }
+
+data class PlayerBehaviourPreferences(
+    val debugOverlayEnabled: Boolean,
+    val okTogglesPlayPause: Boolean,
+)

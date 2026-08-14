@@ -6,6 +6,7 @@ import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -15,6 +16,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
@@ -60,39 +62,81 @@ internal class DetailsVM(
         loadData()
     }
 
+    private var rendered = false
+
+    // Guards resolveWatchlistFlag's patch: a lookup only applies if nothing newer has superseded it
+    // by the time it answers. Both onWatchlistToggle and each fresh resolveWatchlistFlag call bump
+    // this, so a toggle drops an older in-flight lookup, but a *later* lookup — started by a forced
+    // reload after that toggle — is not permanently silenced by it. A plain "the user touched this
+    // once" boolean would reject that later lookup too, leaving a stale answer on screen for the rest
+    // of the ViewModel's life.
+    private var watchlistLookupGeneration = 0
+
     private fun loadData(forceRefresh: Boolean = false) {
         launch {
-            val item = if (forceRefresh) {
-                interactor.refreshItemDetails(params.itemId)
-            } else {
-                interactor.getItemDetails(params.itemId)
+            interactor.observeItemDetails(params.itemId, force = forceRefresh).collect { cached ->
+                when (cached) {
+                    is Cached.Value -> renderItem(cached.value)
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh item details")
+                }
             }
-            currentItem = item
-            val mapped = mapDetails(
-                item = item,
-                isInWatchlist = interactor.isInWatchLaterFolder(item),
-            )
-            updateViewState(
-                mapped.copy(
-                    seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
-                ),
-            )
-            loadSimilarItems()
         }
     }
 
-    private fun loadSimilarItems() {
+    /**
+     * Draws the item at once and settles the watchlist flag behind it.
+     *
+     * The flag the item carries is right for a series and can be a false negative for a movie, but
+     * the authoritative answer costs a request. Holding the screen for it is what made an already
+     * cached title still show a spinner, so it is patched in instead.
+     */
+    private fun renderItem(item: Item) {
+        currentItem = item
+        val seeded = interactor.seededWatchlistFlag(item)
+        if (rendered) {
+            updateCurrentItem(
+                item = item,
+                isInWatchlist = (stateValue as? DetailsScreenState.Content)?.isInWatchlist ?: seeded,
+            )
+            return
+        }
+        rendered = true
+        val mapped = mapDetails(item = item, isInWatchlist = seeded)
+        updateViewState(
+            mapped.copy(
+                seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
+            ),
+        )
+        loadSimilarItems()
+        resolveWatchlistFlag(item)
+    }
+
+    private fun resolveWatchlistFlag(item: Item) {
+        val generation = ++watchlistLookupGeneration
         launch {
-            runCatching { interactor.getSimilarItems(params.itemId) }
-                .onSuccess { items ->
-                    updateViewState<DetailsScreenState.Content> {
-                        copy(
-                            similarItems = mapper.mapSimilarItems(
-                                items.filterNot { item -> item.id == params.itemId }
-                            )
+            val resolved = runCatching { interactor.isInWatchLaterFolder(item) }.getOrNull() ?: return@launch
+            // Something newer happened while this lookup was in the air — either the user pressed the
+            // button, or a later reload started its own lookup for a possibly different item. Either
+            // way this answer is no longer the freshest fact, so it is dropped rather than applied.
+            if (generation != watchlistLookupGeneration) return@launch
+            updateViewState<DetailsScreenState.Content> {
+                copy(isInWatchlist = resolved)
+            }
+        }
+    }
+
+    private fun loadSimilarItems(force: Boolean = false) {
+        launch {
+            interactor.observeSimilarItems(params.itemId, force = force).collect { cached ->
+                if (cached !is Cached.Value) return@collect
+                updateViewState<DetailsScreenState.Content> {
+                    copy(
+                        similarItems = mapper.mapSimilarItems(
+                            cached.value.filterNot { item -> item.id == params.itemId }
                         )
-                    }
+                    )
                 }
+            }
         }
     }
 
@@ -253,6 +297,7 @@ internal class DetailsVM(
     }
 
     private fun onWatchlistToggle() {
+        watchlistLookupGeneration++
         val previous = (stateValue as? DetailsScreenState.Content)?.isInWatchlist ?: return
         val desired = !previous
         updateViewState<DetailsScreenState.Content> {
@@ -411,13 +456,17 @@ internal class DetailsVM(
         if (changes == null || changes.isEmpty) return
         contentChanges = contentChanges.merge(changes)
         if (changes.affectsItem(params.itemId)) {
+            rendered = false
             loadData(forceRefresh = true)
             return
         }
 
         val content = stateValue as? DetailsScreenState.Content ?: return
         if (content.similarItems.any { item -> changes.affectsItem(item.id) }) {
-            loadSimilarItems()
+            // A stored, non-stale similar-items entry would otherwise answer from cache and skip
+            // revalidation for up to CacheTtl.SimilarItems — the row the user just changed on a nested
+            // details screen would keep its pre-change flags for that long.
+            loadSimilarItems(force = true)
         }
     }
 

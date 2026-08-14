@@ -70,9 +70,15 @@ abstract class PagingVM<T, VS>(
 
     protected open fun deleteItem(item: T) = paginator.itemDeleted(item)
 
-    protected fun replace(list: List<T>, key: T? = null) = paginator.replace(list, key)
+    /**
+     * @param hasMorePages whether the server still has pages after this one. Needed because a page
+     * emptied by local filtering is not the end of the list.
+     */
+    protected fun replace(list: List<T>, key: T? = null, hasMorePages: Boolean = false) =
+        paginator.replace(list, key, hasMorePages)
 
-    protected fun setNextPage(list: List<T>) = paginator.nextPage(list)
+    protected fun setNextPage(list: List<T>, hasMorePages: Boolean = false) =
+        paginator.nextPage(list, hasMorePages)
 
     protected fun setPrevPage(list: List<T>) = paginator.prevPage(list)
 

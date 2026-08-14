@@ -3,7 +3,6 @@ package com.kino.puber.ui.feature.showall.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
-import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -15,6 +14,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
+import com.kino.puber.ui.feature.contentlist.vm.ContentListPagingVM
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -23,41 +23,42 @@ import kotlinx.coroutines.joinAll
 
 internal class ShowAllVM(
     paginator: Paginator.Store<Item>,
-    private val config: SectionConfig,
-    private val interactor: ContentListInteractor,
+    config: SectionConfig,
+    interactor: ContentListInteractor,
     private val savedItemInteractor: SavedItemInteractor,
-    private val mapper: VideoItemUIMapper,
+    mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
-) : PagingVM<Item, ShowAllViewState>(paginator, router, errorHandler) {
+) : ContentListPagingVM<ShowAllViewState>(
+    paginator,
+    config,
+    interactor,
+    mapper,
+    router,
+    errorHandler,
+) {
 
-    private var currentPage = 0
-    private var cachedInput: List<Item>? = null
-    private var cachedOutput: List<VideoItemUIState> = emptyList()
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
     private var closing = false
 
     override val initialViewState = ShowAllViewState.Loading
 
-    override fun onStart() = init()
+    override val logName = "Show all"
 
-    override fun onLoadFirstPage() {
-        currentPage = 0
-        pagingLaunch(errorHandlerGeneral) {
-            val response = interactor.loadPage(config, page = 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            replace(response.items)
+    override fun onStart() {
+        init()
+        launch {
+            interactor.displaySettingsChanges.collect {
+                interactor.invalidateFirstPageCache()
+                resetPaging()
+            }
         }
-    }
-
-    override fun onLoadNextPage(key: Item?) {
-        pagingLaunch(errorHandlerPaging) {
-            val response = interactor.loadPage(config, page = currentPage + 1)
-            currentPage = response.pagination.current
-            isFullDataNext = currentPage >= response.pagination.total
-            setNextPage(response.items)
+        launch {
+            interactor.watchStateChanges.collect {
+                interactor.invalidateFirstPageCache()
+                resetPaging()
+            }
         }
     }
 
@@ -78,14 +79,6 @@ internal class ShowAllVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-        }
-    }
-
-    private fun mapItems(items: List<Item>): List<VideoItemUIState> {
-        if (items === cachedInput) return cachedOutput
-        return mapper.mapShortItemList(items).also {
-            cachedInput = items
-            cachedOutput = it
         }
     }
 

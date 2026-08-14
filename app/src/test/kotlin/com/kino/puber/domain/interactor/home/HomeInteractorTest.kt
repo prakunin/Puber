@@ -12,6 +12,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -42,6 +43,7 @@ class HomeInteractorTest {
             api = api,
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
             navigationPreferencesRepository = navigationPreferencesRepository,
+            store = mockk<PersistentPayloadStore>(relaxed = true),
         )
     }
 
@@ -267,5 +269,7 @@ class HomeInteractorTest {
         showCartoonsTab = false,
         showAnimeTab = false,
         showAnime = true,
+        hideWatched = false,
+        showWatchedIndicators = true,
     )
 }

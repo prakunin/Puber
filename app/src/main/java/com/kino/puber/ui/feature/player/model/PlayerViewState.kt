@@ -5,7 +5,7 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.FocusTarget
-import com.kino.puber.ui.feature.player.vm.PlaybackController
+import com.kino.puber.ui.feature.player.vm.PlaybackControl
 
 @Immutable
 internal sealed class PlayerViewState {
@@ -75,8 +75,8 @@ internal data class PlayerContentState(
     val episodes: VideoGridUIState?,
     val currentEpisodeId: Int?,
 
-    // Debug overlay
-    val debugInfo: PlaybackController.DebugInfo? = null,
+    // Live playback readings (info panel + debug overlay)
+    val debugInfo: PlaybackControl.DebugInfo? = null,
 )
 
 @Immutable
@@ -93,4 +93,5 @@ internal enum class ActivePanel {
     AudioSubtitles,
     VideoSettings,
     Episodes,
+    Info,
 }

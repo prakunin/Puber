@@ -49,7 +49,7 @@ internal fun PlayerProgressBar(
     isBuffering: Boolean = false,
     onSeekForward: () -> Unit = {},
     onSeekBackward: () -> Unit = {},
-    onTogglePlayPause: () -> Unit = {},
+    onOkPressed: () -> Unit = {},
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
@@ -85,7 +85,7 @@ internal fun PlayerProgressBar(
             focusRequester = focusRequester,
             onSeekForward = onSeekForward,
             onSeekBackward = onSeekBackward,
-            onTogglePlayPause = onTogglePlayPause,
+            onOkPressed = onOkPressed,
         )
     }
 }
@@ -117,7 +117,7 @@ private fun ProgressBarRow(
     focusRequester: FocusRequester,
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
-    onTogglePlayPause: () -> Unit,
+    onOkPressed: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -132,7 +132,7 @@ private fun ProgressBarRow(
             focusRequester = focusRequester,
             onSeekForward = onSeekForward,
             onSeekBackward = onSeekBackward,
-            onTogglePlayPause = onTogglePlayPause,
+            onOkPressed = onOkPressed,
             modifier = Modifier.weight(1f),
         )
         RemainingTimeText(remainingTimeText)
@@ -166,7 +166,7 @@ private fun SeekTrack(
     focusRequester: FocusRequester,
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
-    onTogglePlayPause: () -> Unit,
+    onOkPressed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -180,7 +180,7 @@ private fun SeekTrack(
                     action = keyEvent.nativeKeyEvent.action,
                     onSeekForward = onSeekForward,
                     onSeekBackward = onSeekBackward,
-                    onTogglePlayPause = onTogglePlayPause,
+                    onOkPressed = onOkPressed,
                 )
             },
         contentAlignment = Alignment.CenterStart,
@@ -271,7 +271,7 @@ private fun handleProgressKeyEvent(
     action: Int,
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
-    onTogglePlayPause: () -> Unit,
+    onOkPressed: () -> Unit,
 ): Boolean {
     if (action != KeyEvent.ACTION_DOWN) return false
     return when (keyCode) {
@@ -284,7 +284,7 @@ private fun handleProgressKeyEvent(
             true
         }
         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-            onTogglePlayPause()
+            onOkPressed()
             true
         }
         else -> false

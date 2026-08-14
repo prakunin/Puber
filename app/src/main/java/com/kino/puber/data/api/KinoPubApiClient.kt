@@ -61,6 +61,7 @@ import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
@@ -71,6 +72,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.Parameters
 import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -173,14 +175,15 @@ class KinoPubApiClient(
             json(json)
         }
 
-        // Default request configuration
+        // Default request configuration.
+        // Content-Type is intentionally not defaulted here: DefaultRequest appends it as an extra
+        // value, so form-encoded requests would carry both their own type and application/json.
         install(DefaultRequest) {
             headers {
                 val username = cryptoPreferenceRepository.getUsername()
                 val androidId = cryptoPreferenceRepository.getAndroidId()
                 append("User-Agent", UserAgentBuilder.build(username, androidId))
                 append("Accept", "application/json")
-                contentType(ContentType.Application.Json)
             }
         }
 
@@ -343,6 +346,13 @@ class KinoPubApiClient(
             val subscribed = if (onlySubscribed) 1 else 0
             httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/serials?subscribed=$subscribed")
         }
+
+    /**
+     * Movies the account has started or finished, with their playback progress.
+     */
+    suspend fun getWatchingMovies(): Result<ApiResponseList<Item>> = apiCall {
+        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/movies")
+    }
 
     /**
      * Get history data with pagination
@@ -547,9 +557,18 @@ class KinoPubApiClient(
         title: String, hardware: String, software: String
     ): Result<Unit> = apiCall {
         httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}device/notify") {
+            // The API reads these from the POST body; query parameters are kept as a fallback.
+            parameter("title", title)
+            parameter("hardware", hardware)
+            parameter("software", software)
+            contentType(ContentType.Application.FormUrlEncoded)
             setBody(
-                mapOf(
-                    "title" to title, "hardware" to hardware, "software" to software
+                FormDataContent(
+                    Parameters.build {
+                        append("title", title)
+                        append("hardware", hardware)
+                        append("software", software)
+                    }
                 )
             )
         }

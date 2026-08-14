@@ -7,12 +7,16 @@ import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.data.api.models.isSeriesLike
-import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.data.repository.WatchState
+import com.kino.puber.data.repository.WatchStateRepository
 
 class VideoItemUIMapper(
     private val resources: ResourceProvider,
-    private val playerPreferencesRepository: PlayerPreferencesRepository? = null,
+    private val navigationPreferencesRepository: NavigationPreferencesRepository? = null,
+    private val watchStateRepository: WatchStateRepository? = null,
 ) {
 
     fun mapShortItemList(items: List<Item>): List<VideoItemUIState> {
@@ -34,6 +38,7 @@ class VideoItemUIMapper(
             unwatchedCount = item.new,
             ratings = buildRatings(item),
             isWatched = isItemWatched(item),
+            progressPercent = if (watchedIndicatorsEnabled()) watchProgress(item) else null,
             showWatchedIndicator = watchedIndicatorsEnabled(),
             isSeriesLike = item.type.isSeriesLike(),
             isSaved = if (item.type.isSeriesLike()) {
@@ -88,12 +93,33 @@ class VideoItemUIMapper(
         )
     }
 
-    fun isItemWatched(item: Item): Boolean {
-        val watched = item.watched ?: return false
-        if (watched == 0) return false
-        // For series: watched when no new (unwatched) episodes remain
-        val newEpisodes = item.new
-        return newEpisodes == null || newEpisodes == 0
+    /**
+     * Partial-watch progress for a list card, or null when the item is untouched, fully watched, or
+     * nothing is known about it yet.
+     *
+     * Catalogue payloads carry no watch fields at all, so this comes from the local watch-state
+     * index; the item's own fields win when it has them (details and watching endpoints do).
+     */
+    fun watchProgress(item: Item): Float? = watchState(item)?.progressPercent
+
+    fun isItemWatched(item: Item): Boolean = watchState(item)?.isFullyWatched == true
+
+    private fun watchState(item: Item): WatchState? {
+        return watchStateRepository?.resolve(item) ?: item.toLocalWatchState()
+    }
+
+    /** Fallback for previews and tests constructed without the repository. */
+    private fun Item.toLocalWatchState(): WatchState? {
+        if (watched == null && new == null && watching == null) return null
+        return WatchState(
+            itemId = id,
+            isSeriesLike = type.isSeriesLike(),
+            isFullyWatched = isFullyWatched(),
+            watchedEpisodes = watched,
+            totalEpisodes = total,
+            progressTime = watching?.time,
+            progressDuration = watching?.duration,
+        )
     }
 
     fun buildRatings(item: Item): List<RatingUIState> = buildList {
@@ -171,7 +197,7 @@ class VideoItemUIMapper(
     }
 
     fun watchedIndicatorsEnabled(): Boolean {
-        return playerPreferencesRepository?.watchedIndicatorsEnabled ?: true
+        return navigationPreferencesRepository?.contentPreferences?.value?.showWatchedIndicators ?: true
     }
 }
 

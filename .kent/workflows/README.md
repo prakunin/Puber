@@ -5,8 +5,8 @@ truth. The current CLI can inspect and edit workflows, but does not import these
 
 ## Portable Pattern
 
-Do not link Appsome workflow instances directly into Puber. Reuse the graph family and transition contract, then create a
-Puber workflow instance whose prompts call `.kent/project-contract.md`.
+Do not link another project's workflow instances directly into Puber. Reuse the graph family and transition contract,
+then create a Puber workflow instance whose prompts call `.kent/project-contract.md`.
 
 The intended layering is:
 
@@ -19,14 +19,30 @@ Kent Desktop workflow graph
 
 ## Puber Workflow Set
 
-- `Puber Engineering Delivery v12` (default): common delivery for
-  `feature`, `bugfix`, `refactor`, `migration`, `dependency`, and `test`.
-  Plan selects one `work_kind`, Implement preserves it across bounded slices,
-  and the common verification, Smoke, compliance, PR/CI, waiting, and cleanup
-  tail handles delivery.
 - `Puber Release`: next minor release from `origin/master` through
   version-bump PR, CI, approved tag publication, optional automation
   monitoring, and cleanup. Patch/major releases require explicit wording.
+- `Puber Engineering Delivery v20` (default): Kent 2.6.1
+  graph inspect/plan/apply rollout. Backlog tasks were recreated losslessly as
+  `PUB-61` → `PUB-63` and `PUB-62` → `PUB-64`; v19 and its obsolete records
+  were retired after the replacements were verified. The completed Engineering
+  Canary v20 was retired after task-owned cleanup.
+
+Delivery v19 passed its managed-worktree Engineering Canary and a
+preservation-only Android TV Smoke Lab before promotion. The successful lab
+proved exact `emulator-5558` isolation, a fresh build, safe
+`compatible_replace` installation without package-data clearing, bounded
+runtime evidence, and exact-resource cleanup. The temporary Canary and Smoke
+Lab graphs were retired after rollout validation.
+
+Delivery v18 Backlog tasks were recreated losslessly on v19 before retirement:
+
+- `PUB-54` → `PUB-61`; body SHA-256
+  `e9a9887bae6c5156df928359d51d37543051cfad4e1c55255839c3d382247779`,
+  same GitHub source URL and source workspace.
+- `PUB-55` → `PUB-62`; body SHA-256
+  `9387db64d924dafd99f8845b8e0c9a8c802708fed8b32fdfea01c78c0e25e39d`,
+  same empty source URL and source workspace.
 
 `Puber Release` assigns operational ownership directly: `release-manager` owns
 version/tag lifecycle, `delivery-operator` owns PR/Cleanup, and `ci-monitor`
@@ -39,8 +55,8 @@ Before retiring any workflow, read current Kent-owned state instead of relying
 on task IDs or status captured in this repository:
 
 ```bash
-kent workflow list --project /Users/rovkinmax/dev/android/Puber --json
-kent task list --project /Users/rovkinmax/dev/android/Puber --json
+kent workflow list --project "$(git rev-parse --show-toplevel)" --json
+kent task list --project "$(git rev-parse --show-toplevel)" --json
 ```
 
 Group tasks by the current workflow ID. Recreate every current Backlog task in
@@ -57,7 +73,7 @@ contains a complete and valid project adapter:
 
 ```bash
 ~/.kent/bin/kent-preflight-revision \
-  --project /Users/rovkinmax/dev/android/Puber \
+  --project "$(git rev-parse --show-toplevel)" \
   --ref origin/master
 ```
 
@@ -109,8 +125,10 @@ another branch or commit.
   to `adb -s`. Starting another emulator is allowed only when the task/user explicitly permits parallel device usage and
   the agent acquires a distinct lock for that emulator. Physical devices must not be used unless the task/user explicitly
   provides permission and an explicit serial for that physical device; agents must never rely on adb's default target
-  selection. Smoke workflows must build APKs and install with explicit `adb -s "$DEVICE_SERIAL"`; Gradle `install*` tasks
-  are forbidden for smoke tests.
+  selection. Smoke workflows must build APKs and install only through
+  `.kent/adapters/mobile/android-apk-install-preserve` with the exact serial;
+  direct `adb install`, destructive retries, and Gradle `install*` tasks are
+  forbidden.
 - Every successful terminal path should pass through `cleanup`, but cleanup is conservative by default. Cleanup after a PR
   path must verify the PR through GitHub state rather than git ancestry alone because squash merges are allowed.
 - Pass explicit `workspace_path`, `plan_path`, and `work_kind`; never rely on

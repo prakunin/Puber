@@ -8,6 +8,22 @@
     <string name="player_button_mark_watched_state_not_watched">Не просмотрено</string>
     <string name="player_button_audio_subtitles">Аудио и субтитры</string>
     <string name="player_button_video">Видео</string>
+    <string name="player_button_info">О потоке</string>
+
+    <!-- Info Panel -->
+    <string name="player_info_title">О потоке</string>
+    <string name="player_info_quality">Качество</string>
+    <string name="player_info_resolution">Разрешение</string>
+    <string name="player_info_video_codec">Видеокодек</string>
+    <string name="player_info_bitrate">Битрейт</string>
+    <string name="player_info_frame_rate">Кадры в секунду</string>
+    <string name="player_info_audio_track">Аудиодорожка</string>
+    <string name="player_info_audio_codec">Аудиокодек</string>
+    <string name="player_info_buffer">Буфер</string>
+    <string name="player_info_buffer_preset">Режим буфера</string>
+    <string name="player_info_dropped_frames">Пропущено кадров</string>
+    <string name="player_info_unknown">—</string>
+    <string name="player_info_close">Закрыть</string>
 
     <!-- Audio & Subtitles Panel -->
     <string name="player_panel_sound">ЗВУК</string>

@@ -75,12 +75,14 @@ internal class DeviceSettingsVM(
                                 skipRecapEnabled = playerPreferencesRepository.skipRecapEnabled,
                                 skipCreditsEnabled = playerPreferencesRepository.skipCreditsEnabled,
                                 debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
+                                okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
                                 preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
-                                watchedIndicatorsEnabled = playerPreferencesRepository.watchedIndicatorsEnabled,
+                                watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
                                 navigationMode = navigationPreferencesRepository.getNavigationMode(),
                                 showCartoonsTab = contentPreferences.showCartoonsTab,
                                 showAnimeTab = contentPreferences.showAnimeTab,
                                 showAnime = contentPreferences.showAnime,
+                                hideWatched = contentPreferences.hideWatched,
                                 autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
                             )
                         )
@@ -105,11 +107,13 @@ internal class DeviceSettingsVM(
             }
             DeviceSettingsActions.ToggleDebugOverlay -> toggleDebugOverlay()
             DeviceSettingsActions.ToggleSurroundAudio -> toggleSurroundAudio()
+            DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
             DeviceSettingsActions.ToggleAnimeTab -> toggleAnimeTab()
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
+            DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
@@ -269,11 +273,19 @@ internal class DeviceSettingsVM(
         updateViewState(stateValue.copy(state = currentState.copy(preferSurroundAudio = newValue)))
     }
 
+    private fun toggleOkTogglesPlayPause() {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        val newValue = !currentState.okTogglesPlayPause
+        playerPreferencesRepository.okTogglesPlayPause = newValue
+        updateViewState(stateValue.copy(state = currentState.copy(okTogglesPlayPause = newValue)))
+    }
+
     private fun toggleWatchedIndicators() {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         val newValue = !currentState.watchedIndicatorsEnabled
-        playerPreferencesRepository.watchedIndicatorsEnabled = newValue
+        navigationPreferencesRepository.setShowWatchedIndicators(newValue)
         updateViewState(stateValue.copy(state = currentState.copy(watchedIndicatorsEnabled = newValue)))
     }
 
@@ -309,6 +321,14 @@ internal class DeviceSettingsVM(
         updateViewState(stateValue.copy(state = currentState.copy(showAnime = newValue)))
     }
 
+    private fun toggleHideWatched() {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        val newValue = !currentState.hideWatched
+        navigationPreferencesRepository.setHideWatched(newValue)
+        updateViewState(stateValue.copy(state = currentState.copy(hideWatched = newValue)))
+    }
+
     private fun toggleAutoUpdateCheck() {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
@@ -339,17 +359,16 @@ internal class DeviceSettingsVM(
     }
 
     private fun saveApiDomain(domain: String) {
-        when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
-            ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
-            ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
-            is ApiDomainUpdateResult.Success -> {
-                updateViewState(
+        launch {
+            when (val result = apiDomainInteractor.saveCustomDomain(domain)) {
+                ApiDomainUpdateResult.Empty -> showMessage(resources.getString(R.string.api_domain_empty))
+                ApiDomainUpdateResult.Invalid -> showMessage(resources.getString(R.string.api_domain_invalid))
+                is ApiDomainUpdateResult.Success -> updateViewState(
                     stateValue.copy(
                         apiDomain = result.state.toDialogState(),
                         isApiDomainDialogOpen = false,
                     )
                 )
-                router.newRootScreen(router.screens.main())
             }
         }
     }
@@ -365,28 +384,26 @@ internal class DeviceSettingsVM(
                     showMessage(resources.getString(R.string.api_domain_detect_failed))
                 }
 
-                is ApiDomainDetectionResult.Success -> {
-                    updateViewState(
-                        stateValue.copy(
-                            apiDomain = result.state.toDialogState(),
-                            isApiDomainDialogOpen = false,
-                        )
+                is ApiDomainDetectionResult.Success -> updateViewState(
+                    stateValue.copy(
+                        apiDomain = result.state.toDialogState(),
+                        isApiDomainDialogOpen = false,
                     )
-                    router.newRootScreen(router.screens.main())
-                }
+                )
             }
         }
     }
 
     private fun resetApiDomain() {
-        val state = apiDomainInteractor.resetToDefault()
-        updateViewState(
-            stateValue.copy(
-                apiDomain = state.toDialogState(),
-                isApiDomainDialogOpen = false,
+        launch {
+            val state = apiDomainInteractor.resetToDefault()
+            updateViewState(
+                stateValue.copy(
+                    apiDomain = state.toDialogState(),
+                    isApiDomainDialogOpen = false,
+                )
             )
-        )
-        router.newRootScreen(router.screens.main())
+        }
     }
 
     private fun ApiDomainState.toDialogState(): ApiDomainDialogState {

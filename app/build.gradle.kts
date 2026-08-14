@@ -10,9 +10,10 @@ plugins {
     alias(libs.plugins.detekt)
     id("kotlin-parcelize")
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.7.0"
+val currentVersion = "1.7.1"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
@@ -52,6 +53,22 @@ fun getTmdbReadAccessToken(): String {
     return ""
 }
 
+/**
+ * Default API mirror for a fresh install. A domain saved in the app always wins over it.
+ */
+fun getApiDomainOverride(): String {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        val localProperties = Properties()
+        localProperties.load(FileInputStream(localPropertiesFile))
+        val domain = localProperties.getProperty("PUBER_API_DOMAIN")
+        if (!domain.isNullOrEmpty()) return domain
+    }
+    val envDomain = System.getenv("PUBER_API_DOMAIN")
+    if (!envDomain.isNullOrEmpty()) return envDomain
+    return ""
+}
+
 fun envOrNull(name: String): String? {
     return System.getenv(name)?.takeIf { it.isNotBlank() }
 }
@@ -70,6 +87,7 @@ android {
         // Add CLIENT_SECRET to BuildConfig
         buildConfigField("String", "CLIENT_SECRET", "\"${getClientSecret()}\"")
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${getTmdbReadAccessToken()}\"")
+        buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"${getApiDomainOverride()}\"")
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
@@ -184,8 +202,13 @@ android {
 
 }
 
+room3 {
+    // Room writes the schema JSON here so migrations can be diffed against it in review.
+    schemaDirectory("$projectDir/schemas")
+}
+
 kotlin {
-    jvmToolchain(Versions.JavaVersionCompat.majorVersion.toInt())
+    jvmToolchain(Versions.ToolchainJavaVersion)
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(Versions.JvmTargetVersion))
         freeCompilerArgs.add("-Xjvm-default=all")
@@ -206,7 +229,7 @@ kotlin {
 
 tasks {
     @Suppress("unused")
-    val detektAll by registering(io.gitlab.arturbosch.detekt.Detekt::class) {
+    val detektAll by registering(dev.detekt.gradle.Detekt::class) {
         parallel = true
         setSource(files(projectDir))
         include("**/*.kt")
@@ -227,7 +250,6 @@ dependencies {
     implementation(libs.androidx.ui.text)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -266,7 +288,6 @@ dependencies {
     //navigation
     implementation(libs.voyager.navigator)
     implementation(libs.voyager.tab.navigator)
-    implementation(libs.voyager.koin)
 
     // Media3 (Video Player)
     implementation(libs.media3.exoplayer)
@@ -275,6 +296,11 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.common)
     implementation(libs.media3.datasource.okhttp)
+
+    // Local watch-state database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.sqlite.framework)
+    ksp(libs.androidx.room.compiler)
 
     // Logging
     implementation(libs.timber)
@@ -289,6 +315,9 @@ dependencies {
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.coroutines.test)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 

@@ -17,12 +17,14 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.domain.interactor.bookmarks.BookmarkInteractor
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.flow.emptyFlow
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -94,7 +96,11 @@ class BookmarksVMTest {
         coVerify(exactly = 2) { interactor.getBookmarkItems(7, page = 1) }
     }
 
-    private fun createVM() = BookmarksVM(router, interactor, mapper, errorHandler)
+    private val cardDisplayChanges = mockk<CardDisplayChanges> {
+        every { changes } returns emptyFlow()
+    }
+
+    private fun createVM() = BookmarksVM(router, interactor, mapper, cardDisplayChanges, errorHandler)
 
     private fun page() = PaginatedResponse(
         items = listOf(Item(id = 42, title = "Movie", type = ItemType.MOVIE)),

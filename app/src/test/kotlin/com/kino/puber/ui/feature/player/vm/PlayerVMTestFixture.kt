@@ -10,6 +10,7 @@ import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
+import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.ResolvedMedia
 import com.kino.puber.domain.interactor.player.SkipSegmentInteractor
@@ -60,6 +61,7 @@ internal abstract class PlayerVMTestFixture {
             every { currentPosition } returns 0L
             every { duration } returns 2_400_000L
             every { bufferedPosition } returns 0L
+            every { getDebugInfo() } returns null
         }
 
         coEvery { interactor.getItemDetails(any()) } returns testItem
@@ -72,7 +74,10 @@ internal abstract class PlayerVMTestFixture {
         every { interactor.getPreferredAudioLang(any()) } returns null
         every { interactor.getPreferredSubtitleLang(any()) } returns null
         every { interactor.getPreferredSubtitleUrl(any()) } returns null
-        every { interactor.isDebugOverlayEnabled() } returns false
+        every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
+            debugOverlayEnabled = false,
+            okTogglesPlayPause = false,
+        )
         every { interactor.getSubtitleSize() } returns SubtitleSize.MEDIUM
         every { interactor.getBufferPreset() } returns BufferPreset.AUTO
         every { interactor.isFastDnsEnabled() } returns true

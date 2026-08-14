@@ -23,13 +23,13 @@ import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
-import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -73,7 +73,7 @@ class HistoryVMDeletionSchedulingTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = router,
             errorHandler = errorHandler,
@@ -125,7 +125,7 @@ class HistoryVMDeletionSchedulingTest {
         assertTrue(reconciled.isDeleteExactMediaAvailable)
         assertEquals(3, pageOneCalls.get())
         coVerify(exactly = 1) { api.clearExactMediaHistory(deleted.deletionMediaId) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(deleted.itemId) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(deleted.itemId) }
     }
 
     @Test
@@ -158,7 +158,7 @@ class HistoryVMDeletionSchedulingTest {
         assertEquals(3, pageOneCalls.get())
         coVerify(exactly = 0) { api.clearExactMediaHistory(100) }
         coVerify(exactly = 1) { api.clearExactMediaHistory(120) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(1) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(1) }
     }
 
     @Test
@@ -179,7 +179,7 @@ class HistoryVMDeletionSchedulingTest {
         }
         vm = HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = spyk(HistoryInteractor(api, itemDetailsRepository)),
+            interactor = spyk(HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())),
             mapper = blockingMapper,
             router = router,
             errorHandler = errorHandler,
@@ -211,7 +211,7 @@ class HistoryVMDeletionSchedulingTest {
         assertEquals(3, pageOneCalls.get())
         coVerify(exactly = 0) { api.clearExactMediaHistory(100) }
         coVerify(exactly = 1) { api.clearExactMediaHistory(120) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(1) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(1) }
     }
 
     @Test
@@ -240,7 +240,7 @@ class HistoryVMDeletionSchedulingTest {
         awaitState { it == HistoryViewState.Empty }
         coVerify(exactly = 0) { api.clearExactMediaHistory(100) }
         coVerify(exactly = 1) { api.clearExactMediaHistory(120) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(1) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(1) }
     }
 
     @Test
@@ -270,7 +270,7 @@ class HistoryVMDeletionSchedulingTest {
 
         awaitState { it == HistoryViewState.Empty }
         coVerify(exactly = 0) { api.clearExactMediaHistory(any()) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     @Test
@@ -305,7 +305,7 @@ class HistoryVMDeletionSchedulingTest {
         }
         assertTrue(refreshed.isDeleteExactMediaAvailable)
         coVerify(exactly = 0) { api.clearExactMediaHistory(any()) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     @Test
@@ -355,7 +355,7 @@ class HistoryVMDeletionSchedulingTest {
         assertEquals(2, pageOneCalls.get())
         assertEquals(2, pageTwoCalls.get())
         coVerify(exactly = 1) { api.clearExactMediaHistory(deleted.deletionMediaId) }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(deleted.itemId) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(deleted.itemId) }
     }
 
     @Test

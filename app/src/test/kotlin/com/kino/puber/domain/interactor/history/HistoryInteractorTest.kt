@@ -8,11 +8,11 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -23,7 +23,7 @@ class HistoryInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
-    private val interactor = HistoryInteractor(api, itemDetailsRepository)
+    private val interactor = HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())
 
     @Test
     fun getPage_returnsVerifiedPaginatedResponse() = runTest {
@@ -50,7 +50,7 @@ class HistoryInteractorTest {
             api.clearExactMediaHistory(73001)
             itemDetailsRepository.invalidate(72001)
         }
-        verify(exactly = 1) { itemDetailsRepository.invalidate(72001) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(72001) }
     }
 
     @Test
@@ -64,14 +64,14 @@ class HistoryInteractorTest {
 
         assertTrue(failure is IOException)
         coVerify(exactly = 1) { api.clearExactMediaHistory(73001) }
-        verify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
 
     @Test
-    fun invalidateItemDetails_invalidatesSelectedItemCacheEntry() {
+    fun invalidateItemDetails_invalidatesSelectedItemCacheEntry() = runTest {
         interactor.invalidateItemDetails(itemId = 72001)
 
-        verify(exactly = 1) { itemDetailsRepository.invalidate(72001) }
+        coVerify(exactly = 1) { itemDetailsRepository.invalidate(72001) }
     }
 
     @Test

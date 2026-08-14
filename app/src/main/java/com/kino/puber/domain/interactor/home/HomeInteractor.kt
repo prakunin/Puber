@@ -6,14 +6,104 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.KCollection
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isAnime
+import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.CacheKeys
+import com.kino.puber.data.cache.CacheTtl
+import com.kino.puber.data.cache.CachedFeed
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.builtins.ListSerializer
 
 class HomeInteractor(
     private val api: KinoPubApiClient,
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
+    private val store: PersistentPayloadStore,
 ) {
+
+    /**
+     * How many times the content cache has been wiped.
+     *
+     * Every route that switches domains goes through `ApiDomainInteractor.clearDomainSensitiveCaches`
+     * and so bumps this — the home screen's own dialog, the device settings screen, an auto-failover.
+     * Only the first of those can tell the home screen what it did; the others do not know it exists.
+     * So the wipe publishes the fact instead, and a screen holding rows built from the cache can ask
+     * whether they still describe the catalogue it is talking to.
+     */
+    val cacheGeneration: Long get() = store.generation
+
+    private val items = CachedFeed(
+        store = store,
+        serializer = ListSerializer(Item.serializer()),
+        ttl = CacheTtl.HomeSection,
+        keyPrefix = CacheKeys.HomePrefix,
+    )
+
+    /**
+     * A row a finished episode makes wrong at once, so it gets a TTL of its own rather than the
+     * half-hour the editorial rows are happy with.
+     */
+    private val watching = CachedFeed(
+        store = store,
+        serializer = ListSerializer(Item.serializer()),
+        ttl = CacheTtl.ContinueWatching,
+        keyPrefix = CacheKeys.HomePrefix,
+    )
+
+    private val collections = CachedFeed(
+        store = store,
+        serializer = ListSerializer(KCollection.serializer()),
+        ttl = CacheTtl.HomeSection,
+        keyPrefix = CacheKeys.HomePrefix,
+    )
+
+    fun observeWatchingItems(force: Boolean = false): Flow<Cached<List<Item>>> {
+        return watching.load(CacheKeys.home(CONTINUE_WATCHING_KEY), force = force) {
+            getWatchingItems().getOrThrow()
+        }
+    }
+
+    /**
+     * One key holds one rendered row, so the two requests behind hot items are merged and sorted
+     * before they are stored rather than after they are read.
+     */
+    fun observeHotItems(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(HOT_KEY)) {
+            val movies = getHotItems("movie", HOT_ITEMS_COUNT).getOrThrow()
+            val series = getHotItems("serial", HOT_ITEMS_COUNT).getOrThrow()
+            (movies + series).sortedByDescending { it.ratingPercentage ?: 0 }
+        }
+    }
+
+    fun observeFreshItems(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(FRESH_KEY)) {
+            val movies = getFreshItems("movie").getOrThrow()
+            val series = getFreshItems("serial").getOrThrow()
+            (movies + series).sortedByDescending { it.updatedAt.orEmpty() }
+        }
+    }
+
+    fun observePopularMovies(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(POPULAR_MOVIES_KEY)) { getPopularByType("movie").getOrThrow() }
+    }
+
+    fun observePopularSeries(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(POPULAR_SERIES_KEY)) { getPopularByType("serial").getOrThrow() }
+    }
+
+    fun observeWatchLaterItems(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(WATCH_LATER_KEY)) { getWatchLaterItems().getOrThrow() }
+    }
+
+    fun observeBookmarkItems(): Flow<Cached<List<Item>>> {
+        return items.load(CacheKeys.home(BOOKMARKS_KEY)) { getGenericBookmarkItems().getOrThrow() }
+    }
+
+    fun observeCollections(): Flow<Cached<List<KCollection>>> {
+        return collections.load(CacheKeys.home(COLLECTIONS_KEY)) { getCollections().getOrThrow() }
+    }
 
     suspend fun getHotItems(type: String = "movie", limit: Int = 10): Result<List<Item>> {
         return getDiscoveryItems(shortcut = "hot", type = type, limit = limit)
@@ -105,5 +195,14 @@ class HomeInteractor(
 
     companion object {
         private const val FIRST_PAGE = 1
+        private const val HOT_ITEMS_COUNT = 20
+        private const val CONTINUE_WATCHING_KEY = "continue_watching"
+        private const val HOT_KEY = "hot"
+        private const val FRESH_KEY = "fresh"
+        private const val POPULAR_MOVIES_KEY = "popular_movies"
+        private const val POPULAR_SERIES_KEY = "popular_series"
+        private const val WATCH_LATER_KEY = "watch_later"
+        private const val BOOKMARKS_KEY = "bookmarks"
+        private const val COLLECTIONS_KEY = "collections"
     }
 }

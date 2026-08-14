@@ -118,8 +118,18 @@ object Paginator {
         object LoadPrev : Action()
         data class Error(val error: ErrorEntity) : Action()
         data class PageError(val error: ErrorEntity) : Action()
-        data class Replace<T>(val items: List<T>, val key: T? = null) : Action()
-        data class NextPage<T>(val items: List<T>) : Action()
+        /**
+         * @param hasMorePages whether the server still has pages after this one. A page can come
+         * back empty because everything on it was filtered out locally, which is not the same as
+         * the list being over.
+         */
+        data class Replace<T>(
+            val items: List<T>,
+            val key: T? = null,
+            val hasMorePages: Boolean = false,
+        ) : Action()
+
+        data class NextPage<T>(val items: List<T>, val hasMorePages: Boolean = false) : Action()
         data class PrevPage<T>(val items: List<T>) : Action()
         data class ItemUpdated<T>(val item: T) : Action()
         data class ItemDeleted<T>(val item: T) : Action()
@@ -155,7 +165,7 @@ object Paginator {
             }
 
             is Action.Replace<*> -> {
-                executeReplaceAction(action)
+                executeReplaceAction(action, sideEffectListener)
             }
 
             is Action.LoadPrev -> {
@@ -171,7 +181,7 @@ object Paginator {
             }
 
             is Action.NextPage<*> -> {
-                executeNextPageAction(action, state, comparator)
+                executeNextPageAction(action, state, comparator, sideEffectListener)
             }
 
             is Action.ItemUpdated<*> -> {
@@ -227,9 +237,17 @@ object Paginator {
         return State.Loading
     }
 
-    private fun executeReplaceAction(action: Action.Replace<*>): State {
+    private fun executeReplaceAction(
+        action: Action.Replace<*>,
+        sideEffectListener: (SideEffect) -> Unit,
+    ): State {
         if (action.items.isEmpty()) {
-            return State.Empty
+            // Local filtering can empty a page the server still counts, and there may be pages
+            // behind it. Calling that the end leaves a section reading as having no content at all,
+            // with nothing left that would ask for the rest.
+            if (!action.hasMorePages) return State.Empty
+            sideEffectListener(SideEffect.LoadNextPage(null))
+            return State.Loading
         }
         return State.Data(action.items, action.key)
     }
@@ -344,8 +362,14 @@ object Paginator {
         action: Action.NextPage<*>,
         state: State,
         comparator: EquallyFunction<T>,
+        sideEffectListener: (SideEffect) -> Unit,
     ): State {
         val items = action.items as List<T>
+        // Same as a replaced page: nothing survived the filter here, but the server has more.
+        if (items.isEmpty() && action.hasMorePages) {
+            sideEffectListener(SideEffect.LoadNextPage(null))
+            return state
+        }
         return when (state) {
             is State.Empty -> {
                 if (items.isEmpty()) {
@@ -705,10 +729,11 @@ fun <T> Paginator.Store<T>.loadNext() = proceed(Paginator.Action.LoadNext)
 
 fun <T> Paginator.Store<T>.loadPrev() = proceed(Paginator.Action.LoadPrev)
 
-fun <T> Paginator.Store<T>.replace(list: List<T>, key: T? = null) =
-    proceed(Paginator.Action.Replace(list, key))
+fun <T> Paginator.Store<T>.replace(list: List<T>, key: T? = null, hasMorePages: Boolean = false) =
+    proceed(Paginator.Action.Replace(list, key, hasMorePages))
 
-fun <T> Paginator.Store<T>.nextPage(list: List<T>) = proceed(Paginator.Action.NextPage(list))
+fun <T> Paginator.Store<T>.nextPage(list: List<T>, hasMorePages: Boolean = false) =
+    proceed(Paginator.Action.NextPage(list, hasMorePages))
 
 fun <T> Paginator.Store<T>.prevPage(list: List<T>) = proceed(Paginator.Action.PrevPage(list))
 

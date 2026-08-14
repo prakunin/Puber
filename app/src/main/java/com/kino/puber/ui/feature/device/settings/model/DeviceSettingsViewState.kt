@@ -27,12 +27,14 @@ internal sealed interface DeviceSettingsState {
         val skipRecapEnabled: Boolean = true,
         val skipCreditsEnabled: Boolean = true,
         val debugOverlayEnabled: Boolean = false,
+        val okTogglesPlayPause: Boolean = false,
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
         val navigationMode: NavigationMode = NavigationMode.TopTabs,
         val showCartoonsTab: Boolean = false,
         val showAnimeTab: Boolean = false,
         val showAnime: Boolean = true,
+        val hideWatched: Boolean = false,
         val autoUpdateCheckEnabled: Boolean = true,
     ) : DeviceSettingsState
 }

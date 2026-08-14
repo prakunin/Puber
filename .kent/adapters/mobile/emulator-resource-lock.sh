@@ -10,12 +10,17 @@ script_path="$(
 runtime_root="${KENT_RESOURCE_LOCK_DIR:-$HOME/.kent/runtime/resource-locks}"
 guard_root="$runtime_root/.guards"
 mkdir -p "$runtime_root" "$guard_root"
+if [[ -z "${KENT_RESOURCE_LOCK_OWNER_PID:-}" ]]; then
+  export KENT_RESOURCE_LOCK_OWNER_PID="$PPID"
+fi
 
 usage() {
   cat >&2 <<'USAGE'
 Usage:
   emulator-resource-lock.sh acquire <resource> [wait_seconds] [ttl_seconds]
   emulator-resource-lock.sh acquire-any <resource>... -- [wait_seconds] [ttl_seconds]
+  emulator-resource-lock.sh resume <resource> <token>
+  emulator-resource-lock.sh resume-owned <resource>
   emulator-resource-lock.sh release <resource> <token>
   emulator-resource-lock.sh status [resource]
   emulator-resource-lock.sh adb-emulators [any|phone|tv]
@@ -89,7 +94,10 @@ locked_status() {
 locked_try_acquire() {
   local resource="$1"
   local ttl_seconds="$2"
-  local dir age token
+  local dir age token owner_pid
+
+  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  require_nonnegative_integer owner_pid "$owner_pid"
 
   dir="$(lock_dir_for "$resource")"
   if [[ -d "$dir" ]]; then
@@ -108,7 +116,7 @@ locked_try_acquire() {
   {
     printf 'token=%s\n' "$token"
     printf 'resource=%s\n' "$resource"
-    printf 'pid=%s\n' "$PPID"
+    printf 'pid=%s\n' "$owner_pid"
     printf 'cwd=%s\n' "$PWD"
     printf 'created_at=%s\n' "$(now_epoch)"
     printf 'task_id=%s\n' "${KENT_TASK_ID:-unknown}"
@@ -139,6 +147,89 @@ locked_release() {
   remove_known_lock_dir "$dir"
 }
 
+locked_resume() {
+  local resource="$1"
+  local token="$2"
+  local dir current owner_pid
+
+  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  require_nonnegative_integer owner_pid "$owner_pid"
+
+  dir="$(lock_dir_for "$resource")"
+  if [[ -d "$dir" ]]; then
+    current="$(sed -n 's/^token=//p' "$dir/owner" 2>/dev/null || true)"
+    if [[ "$current" != "$token" ]]; then
+      printf 'resource_lock_token_mismatch resource=%s lock_dir=%s\n' \
+        "$resource" "$dir" >&2
+      return 75
+    fi
+  else
+    mkdir "$dir"
+  fi
+
+  {
+    printf 'token=%s\n' "$token"
+    printf 'resource=%s\n' "$resource"
+    printf 'pid=%s\n' "$owner_pid"
+    printf 'cwd=%s\n' "$PWD"
+    printf 'created_at=%s\n' "$(now_epoch)"
+    printf 'task_id=%s\n' "${KENT_TASK_ID:-unknown}"
+    printf 'session_id=%s\n' "${KENT_SESSION_ID:-unknown}"
+  } >"$dir/owner"
+  printf '%s\n' "$(now_epoch)" >"$dir/created_at"
+  printf '%s\n' "$token"
+}
+
+locked_resume_owned() {
+  local resource="$1"
+  local dir token owner_task_id task_id owner_pid
+
+  task_id="${KENT_TASK_ID:-}"
+  if [[ -z "$task_id" || "$task_id" == "unknown" ]]; then
+    printf 'resource_lock_task_identity_required resource=%s\n' \
+      "$resource" >&2
+    return 64
+  fi
+
+  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  require_nonnegative_integer owner_pid "$owner_pid"
+
+  dir="$(lock_dir_for "$resource")"
+  if [[ ! -d "$dir" ]]; then
+    printf 'resource_lock_not_owned resource=%s task_id=%s\n' \
+      "$resource" "$task_id" >&2
+    return 75
+  fi
+
+  token="$(sed -n 's/^token=//p' "$dir/owner" 2>/dev/null || true)"
+  owner_task_id="$(
+    sed -n 's/^task_id=//p' "$dir/owner" 2>/dev/null || true
+  )"
+  if [[ -z "$token" || -z "$owner_task_id" ||
+    "$owner_task_id" == "unknown" ]]; then
+    printf 'resource_lock_owner_metadata_missing resource=%s\n' \
+      "$resource" >&2
+    return 75
+  fi
+  if [[ "$owner_task_id" != "$task_id" ]]; then
+    printf 'resource_lock_owned_by_other_task resource=%s owner_task_id=%s task_id=%s\n' \
+      "$resource" "$owner_task_id" "$task_id" >&2
+    return 75
+  fi
+
+  {
+    printf 'token=%s\n' "$token"
+    printf 'resource=%s\n' "$resource"
+    printf 'pid=%s\n' "$owner_pid"
+    printf 'cwd=%s\n' "$PWD"
+    printf 'created_at=%s\n' "$(now_epoch)"
+    printf 'task_id=%s\n' "$task_id"
+    printf 'session_id=%s\n' "${KENT_SESSION_ID:-unknown}"
+  } >"$dir/owner"
+  printf '%s\n' "$(now_epoch)" >"$dir/created_at"
+  printf '%s\n' "$token"
+}
+
 locked_dispatch() {
   local operation="$1"
   local resource="$2"
@@ -152,6 +243,14 @@ locked_dispatch() {
     release)
       [[ $# -eq 1 ]] || return 64
       locked_release "$resource" "$1"
+      ;;
+    resume)
+      [[ $# -eq 1 ]] || return 64
+      locked_resume "$resource" "$1"
+      ;;
+    resume-owned)
+      [[ $# -eq 0 ]] || return 64
+      locked_resume_owned "$resource"
       ;;
     status)
       [[ $# -eq 0 ]] || return 64
@@ -404,6 +503,14 @@ case "$cmd" in
   acquire-any)
     shift
     acquire_any "$@"
+    ;;
+  resume)
+    [[ $# -eq 3 ]] || { usage; exit 64; }
+    with_resource_guard "$2" resume "$3"
+    ;;
+  resume-owned)
+    [[ $# -eq 2 ]] || { usage; exit 64; }
+    with_resource_guard "$2" resume-owned
     ;;
   release)
     [[ $# -eq 3 ]] || { usage; exit 64; }
