@@ -5,7 +5,11 @@ import java.util.TimeZone
 object Versions {
     const val MinSdk = 24
     const val TargetSdk = 36
-    const val CompileSdk = 36
+    /**
+     * Ahead of [TargetSdk]: Compose 1.12 and core-ktx 1.19 declare `minCompileSdk=37`. Compiling
+     * against newer APIs is independent of opting in to their runtime behaviour.
+     */
+    const val CompileSdk = 37
     /**
      * Bytecode that ships to the device. Stays on 17: with minSdk 24 anything newer leans on
      * D8 desugaring, and Android gains nothing from a higher class file version.
