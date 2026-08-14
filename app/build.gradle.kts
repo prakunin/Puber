@@ -228,7 +228,7 @@ kotlin {
 
 tasks {
     @Suppress("unused")
-    val detektAll by registering(io.gitlab.arturbosch.detekt.Detekt::class) {
+    val detektAll by registering(dev.detekt.gradle.Detekt::class) {
         parallel = true
         setSource(files(projectDir))
         include("**/*.kt")

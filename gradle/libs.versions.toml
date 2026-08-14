@@ -9,7 +9,7 @@ tvMaterial = "1.1.0"
 composePlaceholderMaterial3Version = "1.0.12"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
-detekt = "1.23.8"
+detekt = "2.0.0-alpha.6"
 okhttp = "5.4.0"
 ktor = "3.5.2"
 kotlinxSerialization = "1.11.0"
@@ -37,7 +37,7 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmarkMacroJunit4" }
 
