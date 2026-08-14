@@ -6,8 +6,15 @@ object Versions {
     const val MinSdk = 24
     const val TargetSdk = 36
     const val CompileSdk = 36
+    /**
+     * Bytecode that ships to the device. Stays on 17: with minSdk 24 anything newer leans on
+     * D8 desugaring, and Android gains nothing from a higher class file version.
+     */
     val JavaVersionCompat: JavaVersion = JavaVersion.VERSION_17
     const val JvmTargetVersion = "17"
+
+    /** JDK that runs the compilers. Independent of [JavaVersionCompat], which targets the device. */
+    const val ToolchainJavaVersion = 21
     const val DebugVersionCode: Int = 2090000000
     val VersionCode: Int
         get() {
