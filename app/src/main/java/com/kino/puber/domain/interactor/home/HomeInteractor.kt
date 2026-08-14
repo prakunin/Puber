@@ -12,6 +12,7 @@ import com.kino.puber.data.cache.CacheTtl
 import com.kino.puber.data.cache.CachedFeed
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.builtins.ListSerializer
@@ -19,6 +20,7 @@ import kotlinx.serialization.builtins.ListSerializer
 class HomeInteractor(
     private val api: KinoPubApiClient,
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
+    private val bookmarkFolders: BookmarkFoldersInteractor,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val store: PersistentPayloadStore,
 ) {
@@ -122,7 +124,7 @@ class HomeInteractor(
     }
 
     suspend fun getBookmarkFolders(): Result<List<Bookmark>> {
-        return api.getBookmarks()
+        return bookmarkFolders.folders()
     }
 
     suspend fun getBookmarkItems(folderId: Int): Result<List<Item>> {
@@ -130,7 +132,7 @@ class HomeInteractor(
     }
 
     suspend fun getGenericBookmarkItems(): Result<List<Item>> {
-        return api.getBookmarks().mapCatching { folders ->
+        return bookmarkFolders.folders().mapCatching { folders ->
             val folder = folders.firstOrNull { it.title != WatchLaterBookmarkInteractor.FOLDER_TITLE }
                 ?: return@mapCatching emptyList()
             api.getBookmarkItems(folder.id).getOrThrow().items

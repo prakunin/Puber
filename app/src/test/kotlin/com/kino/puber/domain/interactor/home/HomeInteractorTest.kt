@@ -13,6 +13,7 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -42,6 +43,7 @@ class HomeInteractorTest {
         interactor = HomeInteractor(
             api = api,
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
+            bookmarkFolders = BookmarkFoldersInteractor(api),
             navigationPreferencesRepository = navigationPreferencesRepository,
             store = mockk<PersistentPayloadStore>(relaxed = true),
         )
@@ -211,6 +213,35 @@ class HomeInteractorTest {
         assertEquals(listOf(anime), interactor.getWatchLaterItems().getOrThrow())
         assertEquals(listOf(anime), interactor.getGenericBookmarkItems().getOrThrow())
         assertEquals(listOf(collection), interactor.getCollections().getOrThrow())
+    }
+
+    /**
+     * Both bookmark rows load together on the home screen and neither can ask for items before it
+     * knows the folder ids, so before they shared a source the folder list was fetched twice on
+     * every cold start.
+     */
+    @Test
+    fun bothBookmarkRowsShareOneFolderRequest() = runTest {
+        val watchLaterFolder = Bookmark(id = 1, title = WatchLaterBookmarkInteractor.FOLDER_TITLE)
+        val genericFolder = Bookmark(id = 2, title = "Favorites")
+        val item = Item(id = 42, title = "Movie", type = ItemType.MOVIE)
+        coEvery { api.getBookmarks() } returns Result.success(listOf(watchLaterFolder, genericFolder))
+        coEvery { api.getBookmarkItems(any(), null) } returns Result.success(page(item))
+        // The real watch-later interactor, because what is under test is the two of them sharing a
+        // folder source — a mocked one cannot reach the request this is counting.
+        val bookmarkFolders = BookmarkFoldersInteractor(api)
+        val subject = HomeInteractor(
+            api = api,
+            watchLaterBookmarkInteractor = WatchLaterBookmarkInteractor(api, bookmarkFolders),
+            bookmarkFolders = bookmarkFolders,
+            navigationPreferencesRepository = navigationPreferencesRepository,
+            store = mockk<PersistentPayloadStore>(relaxed = true),
+        )
+
+        subject.getWatchLaterItems()
+        subject.getGenericBookmarkItems()
+
+        coVerify(exactly = 1) { api.getBookmarks() }
     }
 
     @Test

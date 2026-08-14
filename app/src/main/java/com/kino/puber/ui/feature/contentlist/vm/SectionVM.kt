@@ -65,8 +65,15 @@ internal class SectionVM(
         }
         launch {
             interactor.watchStateChanges.collect {
-                interactor.invalidateFirstPageCache()
-                refreshFirstPage()
+                // Every section on the screen wakes on this same signal, so what it costs is paid
+                // once per open row. With watched titles shown the index only changes how a card is
+                // drawn, and the rows already fetched are still the right ones.
+                if (interactor.hideWatchedEnabled) {
+                    interactor.invalidateFirstPageCache()
+                    refreshFirstPage()
+                } else {
+                    remapLoadedItems()
+                }
             }
         }
     }

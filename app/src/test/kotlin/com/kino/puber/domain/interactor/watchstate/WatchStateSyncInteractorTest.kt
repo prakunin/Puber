@@ -163,6 +163,72 @@ class WatchStateSyncInteractorTest {
         coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
     }
 
+    /**
+     * Every write is a transaction, and every transaction re-runs the query behind the repository's
+     * snapshot, which rebuilds the whole id-to-state map. Paid once per page across a first walk of
+     * hundreds of pages, that dominates the cost of the walk — and none of it is visible until the
+     * walk finishes anyway.
+     */
+    @Test
+    fun theWalkWritesOncePerBatchOfPagesRatherThanOncePerPage() = runTest {
+        stubHistory(pages = 20)
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 1) { repository.recordHistoryPage(any(), any(), any(), any()) }
+    }
+
+    /** Batching may not lose an entry: every page the walk read still has to reach the repository. */
+    @Test
+    fun aBatchedWalkStillWritesEveryEntryItRead() = runTest {
+        stubHistory(pages = 20)
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals((1..20).toList(), written.flatten().map { it.item.id }.sorted())
+    }
+
+    /**
+     * The walk ends when the server runs out, which lands wherever it lands — usually mid-batch. A
+     * remainder left unwritten would be re-read by every later run, because the cursor that would
+     * have said otherwise is written with it.
+     */
+    @Test
+    fun aWalkEndingMidBatchStillWritesTheRemainder() = runTest {
+        stubHistory(pages = 3)
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals((1..3).toList(), written.flatten().map { it.item.id }.sorted())
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * A page that fails ends the run, but what was already read is still good and its cursor is
+     * still true. Dropping it would make the next run fetch those pages again for nothing.
+     */
+    @Test
+    fun aWalkInterruptedMidBatchStillWritesWhatItHadRead() = runTest {
+        stubHistory(pages = 20)
+        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("interrupted"))
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals(listOf(1, 2), written.flatten().map { it.item.id }.sorted())
+    }
+
     @Test
     fun sync_writesTheWatchingListsAfterTheHistory() = runTest {
         // History describes everything ever played; the watching lists describe the present, so

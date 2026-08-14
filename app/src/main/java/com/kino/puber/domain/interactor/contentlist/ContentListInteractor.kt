@@ -35,6 +35,15 @@ internal class ContentListInteractor(
      */
     val watchStateChanges: Flow<Long> = watchStateRepository.settledChanges
 
+    /**
+     * Whether the index decides list *membership* rather than only how a card is drawn.
+     *
+     * This is what separates a watch-state change a list can redraw from one it has to re-page for:
+     * see [isVisible], where the index is consulted only when this is on.
+     */
+    val hideWatchedEnabled: Boolean
+        get() = navigationPreferencesRepository.contentPreferences.value.hideWatched
+
     suspend fun loadPage(config: SectionConfig, page: Int): PaginatedResponse<Item> {
         dropFirstPageCacheIfWatchStateMoved()
         val preferences = navigationPreferencesRepository.contentPreferences.value

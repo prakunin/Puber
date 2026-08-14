@@ -10,6 +10,7 @@ import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.StoredPayload
+import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -31,6 +32,7 @@ class HomeInteractorCacheTest {
     private val interactor = HomeInteractor(
         api = api,
         watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
+        bookmarkFolders = BookmarkFoldersInteractor(api),
         navigationPreferencesRepository = navigationPreferencesRepository,
         store = store,
     )

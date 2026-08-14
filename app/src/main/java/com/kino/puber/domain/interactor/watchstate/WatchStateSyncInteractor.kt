@@ -210,18 +210,40 @@ class WatchStateSyncInteractor(
         var current = cursor
         var page = firstPageToRead(walkEverything, cursor)
         var pagesRead = 0
+        val pending = mutableListOf<History>()
+        var pagesPending = 0
+
+        /**
+         * Stores what has accumulated, with the bookmark that covers exactly those pages. Returns
+         * whether the run still belongs to its session — the caller must stop if it does not.
+         *
+         * Rows and bookmark still travel together, for the reason they always did: a bookmark that
+         * outlived its rows would tell the next run this stretch of history is already indexed. That
+         * holds for a batch as much as for a page — a batch lost in full loses its cursor too, so the
+         * next run simply reads those pages again.
+         */
+        suspend fun flush(): Boolean {
+            if (pending.isEmpty()) return sessionSurvived(generation)
+            repository.recordHistoryPage(pending.toList(), seriesStillInProgress, observedAt, current)
+            pending.clear()
+            pagesPending = 0
+            return sessionSurvived(generation)
+        }
 
         while (pagesRead < MAX_HISTORY_PAGES_PER_RUN) {
-            val response = api.getHistoryData(page).getOrNull()
-                ?: return HistoryWalk(current, reachedTheEnd = false)
+            // Whatever has been read so far is still true and its cursor still describes it, so the
+            // remainder is written by the flush below rather than re-fetched by the next run.
+            val response = api.getHistoryData(page).getOrNull() ?: break
             val outcome = current.advancedOver(response, walkEverything, knownUpTo)
             current = outcome.cursor
-            // Rows and bookmark together: a bookmark that outlived its rows would tell the next run
-            // this stretch of history is already indexed, and those entries would never be re-read.
-            repository.recordHistoryPage(response.items, seriesStillInProgress, observedAt, current)
-            // The session ending mid-walk voids both, so nothing below may run for it.
-            if (!sessionSurvived(generation)) break
+            pending += response.items
+            pagesPending += 1
 
+            // The session ending mid-walk voids the rows and the cursor alike, so nothing below may
+            // run for it. `flush` is only reached when a write is actually due.
+            if ((pagesPending >= HISTORY_PAGES_PER_WRITE || outcome.walkIsOver) && !flush()) {
+                return HistoryWalk(current, reachedTheEnd = false)
+            }
             if (outcome.walkIsOver) {
                 return HistoryWalk(
                     cursor = current,
@@ -233,8 +255,9 @@ class WatchStateSyncInteractor(
             pagesRead++
         }
 
-        // Out of page budget for this run, or the session ended under it. Either way the next run
-        // resumes from where this stopped.
+        // Out of page budget for this run, or a page failed. Either way the next run resumes from
+        // where this stopped, which is what the final batch records.
+        flush()
         return HistoryWalk(current, reachedTheEnd = false)
     }
 
@@ -288,6 +311,17 @@ class WatchStateSyncInteractor(
          * one burst, so a cold start is never spent entirely on catching up.
          */
         const val MAX_HISTORY_PAGES_PER_RUN = 300
+
+        /**
+         * How many pages one write covers.
+         *
+         * Every write is a transaction, and every transaction re-runs the query behind
+         * [WatchStateRepository.snapshot], which rebuilds the whole id-to-state map. Per page across
+         * a first walk that is hundreds of pages long, that rebuild costs more than the requests do.
+         * Nothing observes the index mid-walk anyway — the change signal is debounced well past a
+         * batch — so the only thing a larger batch risks is re-reading its own pages after a crash.
+         */
+        const val HISTORY_PAGES_PER_WRITE = 20
 
         /** Pages re-read on resume, to absorb entries deleted since the walk stopped. */
         const val RESUME_OVERLAP_PAGES = 2

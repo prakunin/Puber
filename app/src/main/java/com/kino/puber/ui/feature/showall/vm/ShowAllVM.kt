@@ -56,8 +56,14 @@ internal class ShowAllVM(
         }
         launch {
             interactor.watchStateChanges.collect {
-                interactor.invalidateFirstPageCache()
-                resetPaging()
+                // Same split as the section rows: with watched titles shown the index changes how a
+                // card is drawn, not which cards belong, so the grid redraws instead of re-paging.
+                if (interactor.hideWatchedEnabled) {
+                    interactor.invalidateFirstPageCache()
+                    resetPaging()
+                } else {
+                    remapLoadedItems()
+                }
             }
         }
     }

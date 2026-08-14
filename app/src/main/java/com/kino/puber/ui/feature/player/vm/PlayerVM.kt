@@ -1138,13 +1138,15 @@ internal class PlayerVM(
                 // The info panel keeps its readings live even while playback is paused.
                 val infoPanelOpen = content?.activePanel == ActivePanel.Info
                 if (isPlaying || isBuffering || infoPanelOpen) {
-                    updateContent {
-                        copy(
-                            currentPosition = playbackController.currentPosition,
-                            duration = playbackController.duration,
-                            bufferedPosition = playbackController.bufferedPosition,
-                            debugInfo = readDebugInfo(infoPanelOpen),
-                        )
+                    if (isAnythingShowingPosition(content, infoPanelOpen, isBuffering)) {
+                        updateContent {
+                            copy(
+                                currentPosition = playbackController.currentPosition,
+                                duration = playbackController.duration,
+                                bufferedPosition = playbackController.bufferedPosition,
+                                debugInfo = readDebugInfo(infoPanelOpen),
+                            )
+                        }
                     }
                     if (isPlaying) {
                         checkAutoMarkWatched()
@@ -1155,6 +1157,28 @@ internal class PlayerVM(
             }
         }
     }
+
+    /**
+     * Whether anything on screen is currently drawing a playback position.
+     *
+     * Publishing copies the whole [PlayerContentState], and `PlayerContent` hands that one object to
+     * all six of its layers, so a copy is a recomposition pass across the entire player — settings
+     * panels and episode grid included, closed or not. Every reader of the four fields the tick
+     * writes is behind one of these three conditions: the seek bar and the debug overlay on
+     * `controlsVisible`, the info panel on its own flag, and the buffering bar on `isBuffering`.
+     *
+     * The checks the tick also drives are deliberately *not* covered by this — auto-mark, the early
+     * next-episode prompt and skip segments all read [playbackController] directly and keep running
+     * with the controls away.
+     *
+     * Revealing the controls does not publish by itself, so the seek bar can be up to one tick
+     * behind when it appears. That is the resolution it draws at anyway.
+     */
+    private fun isAnythingShowingPosition(
+        content: PlayerContentState?,
+        infoPanelOpen: Boolean,
+        isBuffering: Boolean,
+    ): Boolean = content?.controlsVisible == true || infoPanelOpen || isBuffering
 
     private fun checkEarlyNextEpisode() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return

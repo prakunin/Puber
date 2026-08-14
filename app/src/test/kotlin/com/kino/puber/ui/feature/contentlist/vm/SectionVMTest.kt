@@ -23,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -335,6 +336,70 @@ class SectionVMTest {
         lateinit var current: Paginator.State
         paginator.render = { current = it }
         return current
+    }
+
+    /**
+     * With watched titles shown, the index decides how a card is *drawn*, not which cards the list
+     * contains — so the rows already fetched are still the right rows. Re-paging them costs a
+     * request per open section for a change a re-map covers, and every section on the screen reacts
+     * to the same signal at once.
+     */
+    @Test
+    fun watchStateChange_redrawsTheLoadedRowsWithoutRefetchingThem() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val watchStateChanges = MutableSharedFlow<Long>()
+        every { interactor.watchStateChanges } returns watchStateChanges
+        every { interactor.hideWatchedEnabled } returns false
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        val mapper = mockk<VideoItemUIMapper>(relaxed = true)
+        every { mapper.mapShortItemList(any()) } returns listOf(videoItem(1))
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapper,
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+        every { mapper.mapShortItemList(any()) } returns listOf(videoItem(1).copy(title = "Watched"))
+
+        watchStateChanges.emit(1L)
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { interactor.loadPage(any(), page = 1) }
+        verify(exactly = 0) { interactor.invalidateFirstPageCache() }
+        assertEquals(
+            listOf("Watched"),
+            (vm.testStateValue as SectionState.Content).items.map { it.title },
+        )
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * With watched titles hidden the index decides membership, so a re-map cannot answer it: rows
+     * that have just become watched have to leave the list, which only a re-page can do.
+     */
+    @Test
+    fun watchStateChange_stillRepagesWhenWatchedTitlesAreHidden() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val watchStateChanges = MutableSharedFlow<Long>()
+        every { interactor.watchStateChanges } returns watchStateChanges
+        every { interactor.hideWatchedEnabled } returns true
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        watchStateChanges.emit(1L)
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 2) { interactor.loadPage(any(), page = 1) }
+        verify(exactly = 1) { interactor.invalidateFirstPageCache() }
+        vm.testCancelScope()
+        paginator.close()
     }
 
     private fun createVM(
