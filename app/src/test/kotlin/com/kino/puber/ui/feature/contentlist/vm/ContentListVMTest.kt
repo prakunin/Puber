@@ -252,7 +252,7 @@ class ContentListVMTest {
     }
 
     @Test
-    fun returnedChangesForFocusedItem_invalidateAndReloadSelectedDetails() {
+    fun returnedChangesForFocusedItem_reloadSelectedDetailsFromTheSharedRepository() {
         val screen = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
         every { screens.player(42, null, null) } returns screen
@@ -263,12 +263,13 @@ class ContentListVMTest {
         verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
 
         listener.captured(ContentChangeSet.single(42, ContentChangeType.Watched))
+        mainDispatcher.dispatcher.scheduler.runCurrent()
 
-        verify(exactly = 1) { interactor.invalidateItemDetails(42) }
+        coVerify(exactly = 2) { interactor.getItemDetails(42) }
     }
 
     @Test
-    fun returnedChanges_invalidateDetailsForEveryChangedItem() {
+    fun returnedMultipleChanges_refreshSectionsOnlyOnce() {
         val screen = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
         every { screens.player(42, null, null) } returns screen
@@ -282,8 +283,8 @@ class ContentListVMTest {
                 .merge(ContentChangeSet.single(100, ContentChangeType.Bookmark))
         )
 
-        verify(exactly = 1) { interactor.invalidateItemDetails(42) }
-        verify(exactly = 1) { interactor.invalidateItemDetails(100) }
+        verify(exactly = 1) { interactor.invalidateFirstPageCache() }
+        verify(exactly = 1) { refreshCoordinator.requestRefresh() }
     }
 
     private fun createVM() = ContentListVM(

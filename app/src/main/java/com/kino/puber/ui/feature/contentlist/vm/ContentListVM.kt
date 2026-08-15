@@ -128,7 +128,6 @@ internal class ContentListVM(
     }
 
     private fun refreshContent(changes: ContentChangeSet) {
-        changes.itemIds.forEach(interactor::invalidateItemDetails)
         interactor.invalidateFirstPageCache()
         contentListRefreshCoordinator.requestRefresh()
         loadHero()

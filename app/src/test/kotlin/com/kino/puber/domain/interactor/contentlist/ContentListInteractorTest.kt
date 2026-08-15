@@ -2,7 +2,6 @@ package com.kino.puber.domain.interactor.contentlist
 
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.config.KinoPubConfig
-import com.kino.puber.data.api.models.ApiResponse
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.data.api.models.Genre
@@ -13,6 +12,7 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -62,8 +62,9 @@ internal open class ContentListInteractorTestFixture {
         every { version } returns MutableStateFlow(0L)
         every { settledChanges } returns this@ContentListInteractorTestFixture.settledWatchStateChanges
     }
+    protected val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     protected val interactor =
-        ContentListInteractor(api, navigationPreferencesRepository, watchStateRepository)
+        ContentListInteractor(api, navigationPreferencesRepository, watchStateRepository, itemDetailsRepository)
 
     @BeforeEach
     fun setup() {
@@ -680,18 +681,14 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
     // endregion
 
     @Test
-    fun invalidateItemDetails_clearsCachedItemDetails() = runTest {
-        val firstItem = item(id = 42, title = "Before")
-        val refreshedItem = item(id = 42, title = "After")
-        coEvery { api.getItemDetails(42) } returns Result.success(ApiResponse(item = firstItem)) andThen
-            Result.success(ApiResponse(item = refreshedItem))
+    fun getItemDetails_usesTheSharedCacheOnlyRepositoryPath() = runTest {
+        val expected = item(id = 42, title = "Shared")
+        coEvery { itemDetailsRepository.getItemDetailsCacheOnly(42) } returns expected
 
-        assertEquals(firstItem, interactor.getItemDetails(42))
-        assertEquals(firstItem, interactor.getItemDetails(42))
-        interactor.invalidateItemDetails(42)
-        assertEquals(refreshedItem, interactor.getItemDetails(42))
+        assertEquals(expected, interactor.getItemDetails(42))
 
-        coVerify(exactly = 2) { api.getItemDetails(42) }
+        coVerify(exactly = 1) { itemDetailsRepository.getItemDetailsCacheOnly(42) }
+        coVerify(exactly = 0) { api.getItemDetails(any()) }
     }
 }
 

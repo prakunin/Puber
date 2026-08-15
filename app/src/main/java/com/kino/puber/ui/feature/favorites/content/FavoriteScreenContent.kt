@@ -84,6 +84,7 @@ private fun FavoriteScreenContentBody(
                 onItemClick = { onAction(CommonAction.ItemSelected(it)) },
                 onItemFocused = { onAction(CommonAction.ItemFocused(it)) },
                 onItemContextMenu = { contextMenuItem = it },
+                detailsPrefetchEnabled = true,
             )
         }
     }

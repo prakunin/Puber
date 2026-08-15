@@ -46,6 +46,8 @@ import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.TvSafeButton
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
+import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchRow
+import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchSurface
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
@@ -78,13 +80,17 @@ internal fun HomeScreenContent(
                 onConfigureApiDomain = { onAction(HomeAction.OpenApiDomainDialog) },
             )
 
-            is HomeViewState.Content -> HomeContent(
-                state = state,
-                onAction = onAction,
-                onHeroClick = onHeroClick,
-                onCollectionClick = onCollectionClick,
-                lazyListState = lazyListState,
-            )
+            // The rows are the surface, so it opens with them and closes when the screen leaves —
+            // including on the way to details or the player, where none of this is worth fetching.
+            is HomeViewState.Content -> DetailsPrefetchSurface {
+                HomeContent(
+                    state = state,
+                    onAction = onAction,
+                    onHeroClick = onHeroClick,
+                    onCollectionClick = onCollectionClick,
+                    lazyListState = lazyListState,
+                )
+            }
         }
 
         ApiDomainDialog(
@@ -245,6 +251,11 @@ private fun LazyListScope.homeSections(
                     rowKey = section.type.name,
                     items = section.items,
                     isTargetRow = section.type.name == rowFocus.focusedRowKey,
+                    rowOrder = index,
+                    // Collections open a list, not a details screen, and their ids are collection
+                    // ids. The row keeps its absolute position all the same, so the rows either
+                    // side of it are not mistaken for neighbours of each other.
+                    detailsPrefetchEnabled = section.type != HomeSectionType.Collections,
                     onSectionFocused = { rowFocus.onRowFocused(section.type.name) },
                     onItemClick = { item ->
                         if (section.type == HomeSectionType.Collections) {
@@ -284,7 +295,15 @@ internal fun HomeSectionRow(
     onItemContextMenu: ((VideoItemUIState) -> Unit)?,
     onItemFocused: (VideoItemUIState) -> Unit,
     onRowEmpty: () -> Unit,
+    rowOrder: Int = 0,
+    detailsPrefetchEnabled: Boolean = false,
 ) {
+    DetailsPrefetchRow(
+        rowOrder = rowOrder,
+        rowKey = rowKey,
+        items = items,
+        enabled = detailsPrefetchEnabled,
+    )
     val listState = rememberLazyListState()
     val itemFocus = rememberReconciledItemFocus(
         rowKey = rowKey,

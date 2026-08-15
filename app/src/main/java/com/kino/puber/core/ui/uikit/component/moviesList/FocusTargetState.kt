@@ -90,6 +90,7 @@ internal fun rememberReconciledItemFocus(
 
     return reconciledItemFocusState(
         targetItemId, focusRequester, rowHasFocusRef, focusedItemId, isTargetRow, onRootFocusRestored,
+        rowKey, LocalDetailsPrefetchSurface.current,
     )
 }
 
@@ -100,6 +101,8 @@ private fun reconciledItemFocusState(
     focusedItemId: MutableState<Int?>,
     isTargetRow: Boolean,
     onRootFocusRestored: () -> Unit,
+    rowKey: String,
+    prefetchSurface: DetailsPrefetchSurfaceState?,
 ) = ReconciledItemFocusState(
     targetItemId = targetItemId,
     focusRequester = focusRequester,
@@ -110,6 +113,9 @@ private fun reconciledItemFocusState(
         if (isTargetRow && itemId == targetItemId) {
             onRootFocusRestored()
         }
+        // Where a card announces itself as worth fetching. Without an opted-in surface and a
+        // registered row this resolves to nothing, so no row pays for it that did not ask.
+        prefetchSurface?.onItemFocused(rowKey, itemId)
     },
 )
 

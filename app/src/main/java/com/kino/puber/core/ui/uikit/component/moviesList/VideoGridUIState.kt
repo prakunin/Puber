@@ -41,6 +41,9 @@ data class VideoGridUIState(
     val list: List<VideoGridItemUIState>,
 )
 
+/** The position of a grid entry that is not a row of cards, and so cannot be a focus neighbour. */
+private const val NOT_A_ROW = -1
+
 @Immutable
 sealed interface VideoGridItemUIState {
     data class Title(val title: String) : VideoGridItemUIState
@@ -50,6 +53,11 @@ sealed interface VideoGridItemUIState {
     ) : VideoGridItemUIState
 }
 
+/**
+ * @param detailsPrefetchEnabled whether this grid's cards open `DetailsScreen`. Off by default
+ * because the grid is also the player's episode list, whose ids are episode ids: prefetching those
+ * would call the item-details endpoint with an id that means something else entirely.
+ */
 @Composable
 fun VideoGrid(
     modifier: Modifier = Modifier,
@@ -59,6 +67,32 @@ fun VideoGrid(
     onItemContextMenu: ((VideoItemUIState) -> Unit)? = null,
     enableTopSideGradient: Boolean = true,
     initialFocusedItemId: Int? = null,
+    detailsPrefetchEnabled: Boolean = false,
+) {
+    DetailsPrefetchSurface(enabled = detailsPrefetchEnabled) {
+        VideoGridContent(
+            modifier = modifier,
+            state = state,
+            onItemClick = onItemClick,
+            onItemFocused = onItemFocused,
+            onItemContextMenu = onItemContextMenu,
+            enableTopSideGradient = enableTopSideGradient,
+            initialFocusedItemId = initialFocusedItemId,
+            detailsPrefetchEnabled = detailsPrefetchEnabled,
+        )
+    }
+}
+
+@Composable
+private fun VideoGridContent(
+    modifier: Modifier,
+    state: VideoGridUIState,
+    onItemClick: (VideoItemUIState) -> Unit,
+    onItemFocused: (VideoItemUIState) -> Unit,
+    onItemContextMenu: ((VideoItemUIState) -> Unit)?,
+    enableTopSideGradient: Boolean,
+    initialFocusedItemId: Int?,
+    detailsPrefetchEnabled: Boolean,
 ) {
     val lazyListState = rememberLazyListState()
     val gridFocus = rememberVideoGridFocusState(
@@ -68,6 +102,14 @@ fun VideoGrid(
     )
 
     val showTopGradient by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset > 0 } }
+
+    // The absolute position of each card row, counted over the whole grid rather than over what the
+    // LazyColumn happens to have composed. Titles are not focusable and so hold no position: a press
+    // down from the row above a title lands in the row below it.
+    val rowOrders = remember(state.list) {
+        var order = 0
+        state.list.map { entry -> if (entry is VideoGridItemUIState.Items) order++ else NOT_A_ROW }
+    }
 
     PositionFocusedItemInLazyLayout {
         Box(modifier = modifier.fillMaxSize()) {
@@ -81,7 +123,7 @@ fun VideoGrid(
                         is VideoGridItemUIState.Title -> "title_${item.title}"
                         is VideoGridItemUIState.Items -> "items_${item.rowKey}"
                     }
-                }) { _, columnItem ->
+                }) { index, columnItem ->
                     when (columnItem) {
 
                         is VideoGridItemUIState.Title -> Text(
@@ -94,6 +136,8 @@ fun VideoGrid(
 
                         is VideoGridItemUIState.Items -> VideoGridItems(
                             items = columnItem,
+                            rowOrder = rowOrders[index],
+                            detailsPrefetchEnabled = detailsPrefetchEnabled,
                             isTargetRow = columnItem.rowKey == gridFocus.rowFocus.focusedRowKey,
                             initialFocusedItemId = initialFocusedItemId?.takeIf { itemId ->
                                 columnItem.items.any { it.id == itemId }
@@ -143,6 +187,8 @@ private fun BoxScope.VideoGridTopGradient(visible: Boolean) {
 @Composable
 private fun VideoGridItems(
     items: VideoGridItemUIState.Items,
+    rowOrder: Int,
+    detailsPrefetchEnabled: Boolean,
     isTargetRow: Boolean,
     initialFocusedItemId: Int?,
     onItemClick: (VideoItemUIState) -> Unit,
@@ -150,6 +196,12 @@ private fun VideoGridItems(
     onItemFocused: (VideoItemUIState) -> Unit,
     onRowEmpty: () -> Unit,
 ) {
+    DetailsPrefetchRow(
+        rowOrder = rowOrder,
+        rowKey = items.rowKey,
+        items = items.items,
+        enabled = detailsPrefetchEnabled,
+    )
     val itemFocus = rememberReconciledItemFocus(
         rowKey = items.rowKey,
         items = items.items,

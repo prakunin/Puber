@@ -10,6 +10,7 @@ import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,6 +51,7 @@ internal class ApiDomainInteractor(
     private val store: PersistentPayloadStore,
     private val probe: EndpointProbe,
     private val reachability: EndpointReachability,
+    private val detailsPrefetcher: DetailsPrefetcher,
 ) {
 
     fun initialize() {
@@ -154,6 +156,10 @@ internal class ApiDomainInteractor(
         // — including the ones inside the screen-scoped HomeInteractor, which this global cannot
         // reach — drops its own memory tier the next time it reads the store.
         clearWithoutFailing { store.clear() }
+        // The prefetcher's own record of what is warm describes the caches just emptied above.
+        // Kept, it would refuse to re-fetch those ids for up to a minute of browsing the new
+        // domain — against a cache that no longer holds a single one of them.
+        clearWithoutFailing { detailsPrefetcher.invalidate() }
     }
 
     private suspend fun clearWithoutFailing(clear: suspend () -> Unit) {

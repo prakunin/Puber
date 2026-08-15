@@ -8,21 +8,27 @@ import com.kino.puber.data.cache.Cached
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import kotlin.time.Duration.Companion.minutes
 
 class ItemDetailsRepositoryTest {
 
     private val api = mockk<KinoPubApiClient>(relaxed = true)
     private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
     private val store = InMemoryPayloadStore()
+    private var now = 1_000_000L
     private val repository = ItemDetailsRepository(
         api = api,
         watchStateRepository = watchStateRepository,
         store = store,
+        clock = { now },
     )
 
     @Test
@@ -31,7 +37,7 @@ class ItemDetailsRepositoryTest {
 
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(listOf(Cached.Value(item(42, "Fresh"), isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value(item(42, "Fresh"), isStale = false, updatedAt = now)), emissions)
     }
 
     @Test
@@ -41,8 +47,117 @@ class ItemDetailsRepositoryTest {
 
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(listOf(Cached.Value(item(42, "Fresh"), isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value(item(42, "Fresh"), isStale = false, updatedAt = now)), emissions)
         coVerify(exactly = 1) { api.getItemDetails(42) }
+    }
+
+    @Test
+    fun warmingFillsTheCacheTheNextOpenReads() = runTest {
+        givenApiReturns(item(42, "Fresh"))
+
+        repository.warmItemDetails(42)
+        val emissions = repository.observeItemDetails(42).toList()
+
+        assertEquals(listOf(Cached.Value(item(42, "Fresh"), isStale = false, updatedAt = now)), emissions)
+        coVerify(exactly = 1) { api.getItemDetails(42) }
+    }
+
+    @Test
+    fun anObserverJoinsAWarmThatIsStillInFlight() = runTest {
+        // The case the whole feature is built on: the user presses OK while the warm its card
+        // started is still out. A second request here would mean the press waited for its own.
+        val release = CompletableDeferred<Unit>()
+        coEvery { api.getItemDetails(42) } coAnswers {
+            release.await()
+            Result.success(ApiResponse(item = item(42, "Fresh")))
+        }
+
+        val warming = async { repository.warmItemDetails(42) }
+        runCurrent()
+        val observing = async { repository.observeItemDetails(42).toList() }
+        runCurrent()
+        release.complete(Unit)
+        warming.await()
+
+        assertEquals(
+            listOf(Cached.Value(item(42, "Fresh"), isStale = false, updatedAt = now)),
+            observing.await(),
+        )
+        coVerify(exactly = 1) { api.getItemDetails(42) }
+    }
+
+    @Test
+    fun warmingDoesNotTouchTheWatchStateIndex() = runTest {
+        // A prefetch is work nobody asked for, so it must not tick settledChanges, redraw watched
+        // badges, or re-page a list with hideWatched on.
+        givenApiReturns(item(42, "Fresh"))
+
+        repository.warmItemDetails(42)
+
+        coVerify(exactly = 0) { watchStateRepository.recordFromServer(any(), any()) }
+    }
+
+    @Test
+    fun cacheOnlyReadReturnsTheSharedValueWithoutTouchingTheWatchStateIndex() = runTest {
+        val expected = item(42, "Preview")
+        givenApiReturns(expected)
+
+        val actual = repository.getItemDetailsCacheOnly(42)
+
+        assertEquals(expected, actual)
+        coVerify(exactly = 0) { watchStateRepository.recordFromServer(any(), any()) }
+    }
+
+    @Test
+    fun readingAWarmedItemRecordsItWithTheStampTheValueCarries() = runTest {
+        // Recording happens on the observing path, so a Details screen that only joined a prefetch
+        // still sharpens the index — with the value's own age, not the moment it happened to open.
+        val fetched = item(42, "Fresh")
+        givenApiReturns(fetched)
+        repository.warmItemDetails(42)
+        val warmedAt = now
+        now += 1.minutes.inWholeMilliseconds
+
+        repository.observeItemDetails(42).toList()
+
+        coVerify(exactly = 1) { watchStateRepository.recordFromServer(listOf(fetched), warmedAt) }
+    }
+
+    @Test
+    fun readingAStaleItemRecordsOnlyTheRevalidatedValue() = runTest {
+        // A stale value is about to be replaced, and it can be days old. Restamping the index with
+        // it would let it outrank observations that are actually newer.
+        val stale = item(42, "Fresh")
+        givenApiReturns(stale)
+        repository.observeItemDetails(42).toList()
+        repository.markStale(42)
+        val newer = item(42, "Newer")
+        givenApiReturns(newer)
+        now += 1.minutes.inWholeMilliseconds
+
+        repository.observeItemDetails(42).toList()
+
+        coVerify(exactly = 1) { watchStateRepository.recordFromServer(listOf(newer), now) }
+        // Once, from the first read. A second would be the stale emission being recorded as well.
+        coVerify(exactly = 1) { watchStateRepository.recordFromServer(listOf(stale), any()) }
+    }
+
+    @Test
+    fun aWarmWithNothingStoredFailsWhenTheLoadFails() = runTest {
+        // What tells the prefetcher this id was not warmed, so a later attempt is still worth making.
+        coEvery { api.getItemDetails(42) } throws IllegalStateException("network down")
+
+        assertThrows<IllegalStateException> { repository.warmItemDetails(42) }
+    }
+
+    @Test
+    fun aWarmThatOnlyFailsToRevalidateSucceedsBecauseTheStoredValueStands() = runTest {
+        givenApiReturns(item(42, "Fresh"))
+        repository.observeItemDetails(42).toList()
+        repository.markStale(42)
+        coEvery { api.getItemDetails(42) } throws IllegalStateException("network down")
+
+        repository.warmItemDetails(42)
     }
 
     @Test
@@ -52,10 +167,11 @@ class ItemDetailsRepositoryTest {
         givenApiReturns(item(42, "Newer"))
 
         repository.markStale(42)
+        val markedStaleAt = checkNotNull(store.read("item:42")).updatedAt
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true), emissions[0])
-        assertEquals(Cached.Value(item(42, "Newer"), isStale = false), emissions[1])
+        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true, updatedAt = markedStaleAt), emissions[0])
+        assertEquals(Cached.Value(item(42, "Newer"), isStale = false, updatedAt = now), emissions[1])
     }
 
     @Test
@@ -67,7 +183,7 @@ class ItemDetailsRepositoryTest {
         repository.invalidate(42)
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(listOf(Cached.Value(item(42, "Newer"), isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value(item(42, "Newer"), isStale = false, updatedAt = now)), emissions)
     }
 
     @Test

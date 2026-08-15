@@ -46,7 +46,7 @@ class HomeInteractorCacheTest {
 
         val emissions = interactor.observeWatchingItems().toList()
 
-        assertEquals(listOf(Cached.Value(listOf(item(1)), isStale = false)), emissions)
+        assertOnlyValue(listOf(item(1)), isStale = false, emissions = emissions)
         coVerify(exactly = 1) { api.getWatchingList(onlySubscribed = true) }
     }
 
@@ -59,8 +59,8 @@ class HomeInteractorCacheTest {
 
         val emissions = interactor.observeWatchingItems(force = true).toList()
 
-        assertEquals(Cached.Value(listOf(item(1)), isStale = true), emissions[0])
-        assertEquals(Cached.Value(listOf(item(1)), isStale = false), emissions[1])
+        assertValue(listOf(item(1)), isStale = true, emission = emissions[0])
+        assertValue(listOf(item(1)), isStale = false, emission = emissions[1])
         coVerify(exactly = 2) { api.getWatchingList(onlySubscribed = true) }
     }
 
@@ -121,9 +121,10 @@ class HomeInteractorCacheTest {
 
         // Plain concatenation would read [midMovie, nullRatingMovie, topSeries, negativeSeries].
         // A rating-descending sort, with the null treated as 0, reads as below instead.
-        assertEquals(
-            listOf(Cached.Value(listOf(topSeries, midMovie, nullRatingMovie, negativeSeries), isStale = false)),
-            emissions,
+        assertOnlyValue(
+            listOf(topSeries, midMovie, nullRatingMovie, negativeSeries),
+            isStale = false,
+            emissions = emissions,
         )
     }
 
@@ -147,10 +148,26 @@ class HomeInteractorCacheTest {
 
         // Plain concatenation would read [midMovie, nullUpdatedMovie, topSeries, oldSeries].
         // An updatedAt-descending sort, with the null falling back to "", reads as below instead.
-        assertEquals(
-            listOf(Cached.Value(listOf(topSeries, midMovie, oldSeries, nullUpdatedMovie), isStale = false)),
-            emissions,
+        assertOnlyValue(
+            listOf(topSeries, midMovie, oldSeries, nullUpdatedMovie),
+            isStale = false,
+            emissions = emissions,
         )
+    }
+
+    /**
+     * These cases are about what the feed serves and whether it went back to the server, not about
+     * the stamp the value carries — which is a real clock here and so cannot be asserted on.
+     */
+    private fun <T> assertOnlyValue(expected: T, isStale: Boolean, emissions: List<Cached<T>>) {
+        assertEquals(1, emissions.size)
+        assertValue(expected, isStale, emissions.single())
+    }
+
+    private fun <T> assertValue(expected: T, isStale: Boolean, emission: Cached<T>) {
+        val value = emission as Cached.Value
+        assertEquals(expected, value.value)
+        assertEquals(isStale, value.isStale)
     }
 
     /** Hot and Fresh both go through the discovery passthrough branch, sidestepping anime pagination. */

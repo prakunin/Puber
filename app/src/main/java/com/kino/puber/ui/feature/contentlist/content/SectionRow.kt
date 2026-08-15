@@ -36,6 +36,7 @@ import com.kino.puber.core.ui.uikit.component.FadeGradient
 import com.kino.puber.core.ui.uikit.component.LoadMoreHandler
 import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
 import com.kino.puber.R
+import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchRow
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
@@ -48,6 +49,7 @@ internal fun SectionRowContent(
     state: SectionState,
     config: SectionConfig,
     isTargetRow: Boolean,
+    rowOrder: Int = 0,
     onItemClick: (VideoItemUIState) -> Unit,
     onItemContextMenu: (VideoItemUIState) -> Unit,
     onItemFocused: (VideoItemUIState) -> Unit,
@@ -77,6 +79,7 @@ internal fun SectionRowContent(
             is SectionState.Content -> ContentSectionCards(
                 state = s,
                 isTargetRow = isTargetRow,
+                rowOrder = rowOrder,
                 shouldRequestInitialFocus = hasFocusRef[0],
                 contentFocusRequester = contentFocusRequester,
                 rowKey = config.id,
@@ -96,6 +99,7 @@ internal fun SectionRowContent(
 private fun ContentSectionCards(
     state: SectionState.Content,
     isTargetRow: Boolean,
+    rowOrder: Int,
     shouldRequestInitialFocus: Boolean,
     contentFocusRequester: FocusRequester,
     rowKey: String,
@@ -107,6 +111,8 @@ private fun ContentSectionCards(
     onShowAll: (() -> Unit)?,
     onRowEmpty: () -> Unit,
 ) {
+    // Every content-list title row opens the details screen, so all of them take part.
+    DetailsPrefetchRow(rowOrder = rowOrder, rowKey = rowKey, items = state.items)
     val listState = rememberLazyListState()
     val emptyRowHandler = onRowEmpty.takeIf { onShowAll == null } ?: {}
     val itemFocus = rememberReconciledItemFocus(

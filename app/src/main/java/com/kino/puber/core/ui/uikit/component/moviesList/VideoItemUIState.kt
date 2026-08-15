@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +63,7 @@ data class VideoItemUIState(
     val seasonNumber: Int? = null,
     val episodeNumber: Int? = null,
     val isSeasonWatched: Boolean? = null,
+    val year: String = "",
 )
 
 internal const val WATCHED_INDICATOR_TEST_TAG = "watched_indicator"
@@ -91,76 +93,15 @@ fun VideoItem(
         onClick = onClick,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            val context = LocalContext.current
-            val urls = remember(state.imageUrl, state.imageFallbackUrls) {
-                (listOf(state.imageUrl) + state.imageFallbackUrls)
-                    .filter { it.isNotBlank() }
-                    .distinct()
-            }
-            var urlIndex by remember(state.id, urls) { mutableIntStateOf(0) }
-            val currentUrl = urls.getOrNull(urlIndex)
-            val imageRequest = remember(currentUrl) {
-                currentUrl?.let { imageUrl ->
-                    ImageRequest.Builder(context)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build()
-                }
-            }
-            SkeletonAsyncImage(
-                modifier = Modifier.fillMaxSize(),
-                model = imageRequest,
-                onError = {
-                    if (urlIndex < urls.lastIndex) {
-                        urlIndex++
-                    }
-                },
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-            )
+            CardPoster(state = state, modifier = Modifier.fillMaxSize())
             TopEndBadge(
                 state = state,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
-            val hasRatings = state.ratings.isNotEmpty()
-            val hasTitle = state.showTitle && state.title.isNotEmpty()
-            if (hasRatings || hasTitle) {
-                val scrimColor = MaterialTheme.colorScheme.scrim
-                val gradientBrush = remember(scrimColor) {
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            scrimColor.copy(alpha = 0f),
-                            scrimColor.copy(alpha = 0.85f),
-                        ),
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .background(gradientBrush)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                ) {
-                    if (hasRatings) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            state.ratings.forEach { rating ->
-                                Rating(state = rating)
-                            }
-                        }
-                    }
-
-                    if (hasTitle) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = state.title,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = if (hasRatings) 2 else 4,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            CardCaption(
+                state = state,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
             WatchProgressBar(
                 progressPercent = state.progressPercent,
                 isWatched = state.isWatched,
@@ -168,6 +109,130 @@ fun VideoItem(
             )
         }
     }
+}
+
+/**
+ * The poster, falling forward through [VideoItemUIState.imageFallbackUrls] as each candidate fails.
+ *
+ * The index is keyed on the item as well as the list, so a recycled card starts from the first
+ * candidate again rather than inheriting the position the previous item's failures left behind.
+ */
+@Composable
+private fun CardPoster(
+    state: VideoItemUIState,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val urls = remember(state.imageUrl, state.imageFallbackUrls) {
+        (listOf(state.imageUrl) + state.imageFallbackUrls)
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+    var urlIndex by remember(state.id, urls) { mutableIntStateOf(0) }
+    val currentUrl = urls.getOrNull(urlIndex)
+    val imageRequest = remember(currentUrl) {
+        currentUrl?.let { imageUrl ->
+            ImageRequest.Builder(context)
+                .data(imageUrl)
+                .crossfade(true)
+                .build()
+        }
+    }
+    SkeletonAsyncImage(
+        modifier = modifier,
+        model = imageRequest,
+        onError = {
+            if (urlIndex < urls.lastIndex) {
+                urlIndex++
+            }
+        },
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+    )
+}
+
+/**
+ * Year, ratings and title over a scrim at the foot of the card. Absent entirely when the item has
+ * none of them, so a bare poster is not darkened for nothing.
+ */
+@Composable
+private fun CardCaption(
+    state: VideoItemUIState,
+    modifier: Modifier = Modifier,
+) {
+    val hasRatings = state.ratings.isNotEmpty()
+    val hasYear = state.year.isNotBlank()
+    val hasTitle = state.showTitle && state.title.isNotEmpty()
+    if (!hasRatings && !hasYear && !hasTitle) return
+
+    val scrimColor = MaterialTheme.colorScheme.scrim
+    val gradientBrush = remember(scrimColor) {
+        Brush.verticalGradient(
+            colors = listOf(
+                scrimColor.copy(alpha = 0f),
+                scrimColor.copy(alpha = 0.85f),
+            ),
+        )
+    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(gradientBrush)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        if (hasRatings || hasYear) {
+            CardRatingsRow(state = state, hasYear = hasYear)
+        }
+
+        if (hasTitle) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = state.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = if (hasRatings || hasYear) 2 else 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * The year rides alongside the IMDB rating when there is one, and stands on its own line when there
+ * is not — the card is too narrow to give it a line of its own while a rating sits beside it.
+ */
+@Composable
+private fun CardRatingsRow(
+    state: VideoItemUIState,
+    hasYear: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (hasYear && state.ratings.none { it is RatingUIState.IMDB }) {
+            CardYear(state.year)
+        }
+        state.ratings.forEach { rating ->
+            if (hasYear && rating is RatingUIState.IMDB) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CardYear(state.year)
+                    Rating(state = rating)
+                }
+            } else {
+                Rating(state = rating)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CardYear(year: String) {
+    Text(
+        text = year,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 /**
@@ -273,6 +338,7 @@ private fun previewState(
     unwatchedCount: Int? = null,
     ratings: List<RatingUIState> = emptyList(),
     progressPercent: Float? = null,
+    year: String = "2024",
 ) = VideoItemUIState(
     id = 1,
     title = title,
@@ -282,6 +348,7 @@ private fun previewState(
     unwatchedCount = unwatchedCount,
     ratings = ratings,
     progressPercent = progressPercent,
+    year = year,
 )
 
 @Preview(name = "Ratings only (3)")

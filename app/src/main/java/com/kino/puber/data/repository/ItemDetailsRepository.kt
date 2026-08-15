@@ -8,12 +8,14 @@ import com.kino.puber.data.cache.CacheKeys
 import com.kino.puber.data.cache.CacheTtl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.builtins.ListSerializer
 
 class ItemDetailsRepository(
     private val api: KinoPubApiClient,
     private val watchStateRepository: WatchStateRepository,
     store: PersistentPayloadStore,
+    clock: () -> Long = System::currentTimeMillis,
 ) {
 
     private val details = CachedFeed(
@@ -21,6 +23,7 @@ class ItemDetailsRepository(
         serializer = Item.serializer(),
         ttl = CacheTtl.ItemDetails,
         keyPrefix = CacheKeys.ItemPrefix,
+        clock = clock,
     )
 
     private val similar = CachedFeed(
@@ -28,9 +31,51 @@ class ItemDetailsRepository(
         serializer = ListSerializer(Item.serializer()),
         ttl = CacheTtl.SimilarItems,
         keyPrefix = CacheKeys.SimilarPrefix,
+        clock = clock,
     )
 
     fun observeItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
+        return loadItemDetails(id, force = force).onEach { emission ->
+            // Details do carry watch fields, unlike the catalogue, so every title someone actually
+            // reads is a free chance to sharpen the local index.
+            //
+            // Recorded here rather than inside the loader because a read need not have run the
+            // loader at all: it may be serving the store, or joining a prefetch already in flight.
+            // Either way it received the value and the index should hear about it. A stale value is
+            // skipped — it is about to be replaced, and it can be days old.
+            if (emission !is Cached.Value || emission.isStale) return@onEach
+            watchStateRepository.recordFromServer(listOf(emission.value), observedAt = emission.updatedAt)
+        }
+    }
+
+    /**
+     * Fills or revalidates the details cache without any of the effects reading has.
+     *
+     * For work the user did not ask for: a prefetch must not touch the watch-state index, because
+     * that would tick `settledChanges`, redraw watched badges and re-page a filtered list behind a
+     * card nobody has opened. It shares [observeItemDetails]'s load, so the value it leaves behind
+     * is exactly what the details screen later reads, and a press that lands mid-warm joins the
+     * request rather than issuing a second one.
+     *
+     * Throws when there was nothing to serve and the load failed. A failed revalidation over a
+     * stored value is not a failure here: that value stands and remains usable.
+     */
+    suspend fun warmItemDetails(id: Int) {
+        getItemDetailsCacheOnly(id)
+    }
+
+    /**
+     * Reads through the shared details cache without publishing the item's watch fields.
+     *
+     * Used by focus-driven previews as well as prefetching: both are speculative reads that must
+     * share the request Details will later join, but neither may redraw or re-page the list merely
+     * because focus rested on a card.
+     */
+    suspend fun getItemDetailsCacheOnly(id: Int): Item {
+        return loadItemDetails(id).lastValue()
+    }
+
+    private fun loadItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
         return details.load(CacheKeys.item(id), force = force) { fetchItem(id) }
     }
 
@@ -72,13 +117,7 @@ class ItemDetailsRepository(
 
     private suspend fun fetchItem(id: Int): Item {
         val response = api.getItemDetails(id).getOrThrow()
-        return checkNotNull(response.item) { "Details response for item $id carried no item" }.also { item ->
-            // Details do carry watch fields, unlike the catalogue. Every opened title is a free
-            // chance to sharpen the local index. observedAt is passed explicitly (rather than
-            // relying on WatchStateRepository's own clock default) because it is genuinely "now"
-            // from this fetch's point of view.
-            watchStateRepository.recordFromServer(listOf(item), observedAt = System.currentTimeMillis())
-        }
+        return checkNotNull(response.item) { "Details response for item $id carried no item" }
     }
 
     /**

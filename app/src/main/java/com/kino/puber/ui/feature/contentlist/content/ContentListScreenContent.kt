@@ -35,6 +35,7 @@ import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchSurface
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
 import com.kino.puber.core.ui.uikit.component.moviesList.nearestNonEmptyRowKey
@@ -70,21 +71,23 @@ internal fun ContentListScreenContent(
     }
 
     androidx.compose.foundation.layout.Box {
-        ContentListLayout(
-            state = state,
-            sections = sections,
-            sectionVms = sectionVms,
-            sectionStates = sectionStates,
-            focusedSectionIndex = focusedSectionIndex,
-            onSectionFocused = { focusedSectionIndex = it },
-            onContextMenu = { item, sectionVm ->
-                contextMenuTarget = ContentListContextMenuTarget(item, sectionVm)
-            },
-            onAction = onAction,
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(mainContentFocus),
-        )
+        DetailsPrefetchSurface {
+            ContentListLayout(
+                state = state,
+                sections = sections,
+                sectionVms = sectionVms,
+                sectionStates = sectionStates,
+                focusedSectionIndex = focusedSectionIndex,
+                onSectionFocused = { focusedSectionIndex = it },
+                onContextMenu = { item, sectionVm ->
+                    contextMenuTarget = ContentListContextMenuTarget(item, sectionVm)
+                },
+                onAction = onAction,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(mainContentFocus),
+            )
+        }
 
         val activeContextMenuTarget = contextMenuTarget
         VideoItemContextMenuDialog(
@@ -267,6 +270,7 @@ private fun LazyListScope.sectionItem(
             state = sectionState,
             config = config,
             isTargetRow = isTargetRow,
+            rowOrder = index,
             onItemClick = rememberedOnItemClick,
             onItemContextMenu = { onContextMenu(it, sectionVm) },
             onItemFocused = rememberedOnItemFocused,

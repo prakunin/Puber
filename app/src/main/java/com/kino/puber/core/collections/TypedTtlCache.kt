@@ -8,8 +8,19 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 interface TypedTtlCache<K : Any, V : Any> {
-    suspend fun getOrPut(key: K, defaultValue: suspend () -> V): V
+    fun get(key: K): V?
+    suspend fun getOrPut(
+        key: K,
+        ttl: ((V) -> Duration)? = null,
+        defaultValue: suspend () -> V,
+    ): V
+    suspend fun reload(
+        key: K,
+        ttl: ((V) -> Duration)? = null,
+        defaultValue: suspend () -> V,
+    ): V
     fun put(key: K, value: V, ttl: Duration? = null)
+    fun putIfAbsent(key: K, value: V, ttl: Duration? = null): Boolean
     fun remove(key: K)
     fun clear()
 
@@ -61,11 +72,19 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
         require(maximumConcurrentLoads > 0) { "maximumConcurrentLoads must be positive" }
     }
 
-    override suspend fun getOrPut(key: K, defaultValue: suspend () -> V): V {
+    override fun get(key: K): V? = synchronized(lock) {
+        getValidValueUnsafe(key)
+    }
+
+    override suspend fun getOrPut(
+        key: K,
+        ttl: ((V) -> Duration)?,
+        defaultValue: suspend () -> V,
+    ): V {
         while (true) {
             when (val lookup = lookupOrElect(key)) {
                 is Lookup.Value -> return lookup.value
-                is Lookup.Load -> load(key, lookup.flight, defaultValue)?.let { return it }
+                is Lookup.Load -> load(key, lookup.flight, ttl, defaultValue)?.let { return it }
                 is Lookup.Wait -> when (val outcome = lookup.flight.outcome.await()) {
                     is FlightOutcome.Success -> return outcome.value
                     is FlightOutcome.Failure -> throw outcome.throwable
@@ -76,6 +95,38 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
         }
     }
 
+    /**
+     * Atomically supersedes both a completed value and an older flight, then loads [key].
+     *
+     * Unlike `remove(key); getOrPut(key)`, no caller can insert a completed value in the gap and
+     * accidentally satisfy a hard refresh without running [defaultValue].
+     */
+    // Cancellation must detach the reserved flight before it is rethrown, or every waiter hangs.
+    @Suppress("SuspendFunSwallowedCancellation")
+    override suspend fun reload(
+        key: K,
+        ttl: ((V) -> Duration)?,
+        defaultValue: suspend () -> V,
+    ): V {
+        val (flight, displaced) = synchronized(lock) {
+            completed.remove(key)
+            val displaced = flights.remove(key)
+            val replacement = Flight<V>()
+            flights[key] = replacement
+            replacement to displaced
+        }
+        displaced?.outcome?.complete(FlightOutcome.Invalidated)
+        try {
+            loadPermits.acquire()
+        } catch (cancellation: CancellationException) {
+            detachFlight(key, flight)
+            flight.outcome.complete(FlightOutcome.LeaderCancelled)
+            throw cancellation
+        }
+        return load(key, flight, ttl, defaultValue)
+            ?: getOrPut(key, ttl, defaultValue)
+    }
+
     override fun put(key: K, value: V, ttl: Duration?) {
         val invalidatedFlight = synchronized(lock) {
             val flight = flights.remove(key)
@@ -83,6 +134,22 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
             flight
         }
         invalidatedFlight?.outcome?.complete(FlightOutcome.Invalidated)
+    }
+
+    /**
+     * Adds a completed value without superseding a load already running for the same key.
+     *
+     * This is used when a higher-level cache promotes a persistent value into memory. A forced
+     * refresh may have started while that persistent read was suspended; promotion must not cancel
+     * that newer work and make the older value authoritative again.
+     */
+    override fun putIfAbsent(key: K, value: V, ttl: Duration?): Boolean = synchronized(lock) {
+        if (flights.containsKey(key) || getValidValueUnsafe(key) != null) {
+            false
+        } else {
+            putUnsafe(key, value, ttl ?: defaultTtl)
+            true
+        }
     }
 
     override fun remove(key: K) {
@@ -141,6 +208,7 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
     private suspend fun load(
         key: K,
         flight: Flight<V>,
+        ttl: ((V) -> Duration)?,
         defaultValue: suspend () -> V,
     ): V? {
         try {
@@ -148,7 +216,7 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
             val accepted = synchronized(lock) {
                 if (flights[key] === flight) {
                     flights.remove(key)
-                    putUnsafe(key, value, defaultTtl)
+                    putUnsafe(key, value, ttl?.invoke(value) ?: defaultTtl)
                     true
                 } else {
                     false

@@ -156,6 +156,12 @@ class VideoItemUIMapperTest {
     }
 
     @Test
+    fun mapShortItem_mapsYear() {
+        val item = testItem(year = 2024)
+        assertEquals("2024", mapper.mapShortItem(item).year)
+    }
+
+    @Test
     fun mapShortItem_marksMovieSaved_whenBookmarksExist() {
         val item = testItem(type = ItemType.MOVIE, bookmarks = listOf(Bookmark(id = 1, title = "Saved")))
         assertEquals(true, mapper.mapShortItem(item).isSaved)

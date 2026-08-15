@@ -6,6 +6,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -33,6 +34,25 @@ class PersistentPayloadStoreTest {
         store.clear()
 
         assertNull(store.read("item:1"))
+    }
+
+    @Test
+    fun clearChangesGenerationBeforeAndAfterTheDatabaseMutation() = runTest {
+        val clearReached = CompletableDeferred<Unit>()
+        val releaseClear = CompletableDeferred<Unit>()
+        dao.onClear = {
+            clearReached.complete(Unit)
+            releaseClear.await()
+        }
+        val before = store.generation
+        val clearing = async { store.clear() }
+        clearReached.await()
+        val during = store.generation
+
+        assertNotEquals(before, during)
+        releaseClear.complete(Unit)
+        clearing.await()
+        assertNotEquals(during, store.generation)
     }
 
     @Test
@@ -79,6 +99,7 @@ class PersistentPayloadStoreTest {
     private class FakeCachedPayloadDao : CachedPayloadDao {
         private val rows = mutableMapOf<String, CachedPayloadEntity>()
         var onUpsert: (suspend () -> Unit)? = null
+        var onClear: (suspend () -> Unit)? = null
 
         override suspend fun read(key: String): CachedPayloadEntity? = rows[key]
 
@@ -100,6 +121,7 @@ class PersistentPayloadStoreTest {
         }
 
         override suspend fun clear() {
+            onClear?.invoke()
             rows.clear()
         }
     }

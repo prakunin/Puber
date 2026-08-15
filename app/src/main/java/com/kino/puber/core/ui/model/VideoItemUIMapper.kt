@@ -49,6 +49,7 @@ class VideoItemUIMapper(
             } else {
                 item.bookmarks.orEmpty().isNotEmpty()
             },
+            year = item.year?.toString().orEmpty(),
         )
     }
 

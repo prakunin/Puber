@@ -135,11 +135,14 @@ fun VideoItemHorizontal(
                     Spacer(Modifier.weight(1f))
                 }
 
-                if (state.ratings.isNotEmpty()) {
+                if (state.ratings.isNotEmpty() || state.year.isNotBlank()) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (state.year.isNotBlank()) {
+                            CardYear(state.year)
+                        }
                         state.ratings.forEach { rating ->
                             Rating(state = rating)
                         }
@@ -208,6 +211,7 @@ private fun previewState(
     unwatchedCount: Int? = null,
     ratings: List<RatingUIState> = emptyList(),
     progressPercent: Float? = null,
+    year: String = "2024",
 ) = VideoItemUIState(
     id = 1,
     title = title,
@@ -217,6 +221,7 @@ private fun previewState(
     unwatchedCount = unwatchedCount,
     ratings = ratings,
     progressPercent = progressPercent,
+    year = year,
 )
 
 @Preview(name = "Horizontal - All ratings")

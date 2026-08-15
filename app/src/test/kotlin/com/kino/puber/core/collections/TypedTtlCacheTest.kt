@@ -17,6 +17,17 @@ import kotlin.time.Duration.Companion.nanoseconds
 class TypedTtlCacheTest {
 
     @Test
+    fun get_returnsOnlyACompletedUnexpiredValue() {
+        var now = 0L
+        val cache = TypedTtlCacheImpl<String, String>(nowNanos = { now })
+        cache.put("key", "value", ttl = 10.nanoseconds)
+
+        assertEquals("value", cache.get("key"))
+        now = 10L
+        assertEquals(null, cache.get("key"))
+    }
+
+    @Test
     fun concurrentCallers_shareSingleLoad() = runTest {
         val cache = TypedTtlCacheImpl<String, String>()
         val releaseLoad = CompletableDeferred<Unit>()
@@ -190,6 +201,52 @@ class TypedTtlCacheTest {
         releaseLoad.complete(Unit)
         assertEquals("manual", staleLeader.await())
         assertEquals("manual", cache.getOrPut("key") { "unexpected" })
+    }
+
+    @Test
+    fun putIfAbsent_doesNotSupersedeAnActiveLoad() = runTest {
+        val cache = TypedTtlCacheImpl<String, String>()
+        val releaseLoad = CompletableDeferred<Unit>()
+        val loading = async(start = CoroutineStart.UNDISPATCHED) {
+            cache.getOrPut("key") {
+                releaseLoad.await()
+                "fresh"
+            }
+        }
+
+        assertFalse(cache.putIfAbsent("key", "stored"))
+        releaseLoad.complete(Unit)
+
+        assertEquals("fresh", loading.await())
+        assertEquals("fresh", cache.get("key"))
+    }
+
+    @Test
+    fun putIfAbsent_doesNotReplaceACompletedValue() {
+        val cache = TypedTtlCacheImpl<String, String>()
+        cache.put("key", "current")
+
+        assertFalse(cache.putIfAbsent("key", "older"))
+        assertEquals("current", cache.get("key"))
+    }
+
+    @Test
+    fun reload_bypassesACompletedValueAndReservesTheKey() = runTest {
+        val cache = TypedTtlCacheImpl<String, String>()
+        cache.put("key", "stored")
+        val releaseLoad = CompletableDeferred<Unit>()
+        val loading = async(start = CoroutineStart.UNDISPATCHED) {
+            cache.reload("key") {
+                releaseLoad.await()
+                "fresh"
+            }
+        }
+
+        assertFalse(cache.putIfAbsent("key", "racing stored value"))
+        releaseLoad.complete(Unit)
+
+        assertEquals("fresh", loading.await())
+        assertEquals("fresh", cache.get("key"))
     }
 
     @Test

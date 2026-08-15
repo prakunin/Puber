@@ -14,6 +14,7 @@ import com.kino.puber.domain.interactor.device.DeviceSettingInteractor
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.update.AppUpdateInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
@@ -39,6 +40,7 @@ val interactorModule = module {
             store = get(),
             probe = HttpEndpointProbe(get()),
             reachability = get(),
+            detailsPrefetcher = get(),
         )
     }
     singleOf(::AppForegroundState)
@@ -50,4 +52,12 @@ val interactorModule = module {
         )
     }
     singleOf(::CardDisplayChanges)
+    // A single, and deliberately not screen-scoped: focus survives moves between tabs, and a warm
+    // already on the network outlives the screen that asked for it.
+    single {
+        DetailsPrefetcher(
+            details = get(),
+            foreground = get(),
+        )
+    }
 }

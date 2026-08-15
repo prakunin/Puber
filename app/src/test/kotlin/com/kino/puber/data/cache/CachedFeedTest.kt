@@ -35,7 +35,40 @@ class CachedFeedTest {
     fun emptyKeyEmitsOnceFromTheLoader() = runTest {
         val emissions = feed().load("k") { "fresh" }.toList()
 
-        assertEquals(listOf(Cached.Value("fresh", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("fresh", isStale = false, updatedAt = now)), emissions)
+    }
+
+    @Test
+    fun aFreshValueCarriesTheTimeItWasAccepted() = runTest {
+        val emissions = feed().load("k") { "fresh" }.toList()
+
+        assertEquals(now, (emissions.single() as Cached.Value).updatedAt)
+    }
+
+    @Test
+    fun aStoredValueCarriesTheTimeItWasStored() = runTest {
+        val storedAt = now
+        feed().load("k") { "first" }.toList()
+        now += 1.minutes.inWholeMilliseconds
+
+        val emissions = feed().load("k") { "second" }.toList()
+
+        assertEquals(storedAt, (emissions.single() as Cached.Value).updatedAt)
+    }
+
+    @Test
+    fun aValueServedFromTheMemoryTierKeepsTheStampItWasAcceptedWith() = runTest {
+        // The stamp is the value's age, not the reader's arrival time: two screens joining the same
+        // load, or reading it minutes apart, must be told the same thing about how old it is.
+        val subject = feed()
+        subject.load("k") { "fresh" }.toList()
+        store.remove("k")
+        val acceptedAt = now
+        now += 5.minutes.inWholeMilliseconds
+
+        val emissions = subject.load("k") { "another" }.toList()
+
+        assertEquals(acceptedAt, (emissions.single() as Cached.Value).updatedAt)
     }
 
     @Test
@@ -52,12 +85,48 @@ class CachedFeedTest {
 
         val emissions = feed().load("k") { loaderCalls += 1; "second" }.toList()
 
-        assertEquals(listOf(Cached.Value("first", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("first", isStale = false, updatedAt = now)), emissions)
         assertEquals(0, loaderCalls)
     }
 
     @Test
+    fun aFreshMemoryValueDoesNotReadThePersistentTierAgain() = runTest {
+        val subject = feed()
+        subject.load("k") { "first" }.toList()
+        store.readCount = 0
+
+        val emissions = subject.load("k") { "unexpected" }.toList()
+
+        assertEquals(listOf(Cached.Value("first", isStale = false, updatedAt = now)), emissions)
+        assertEquals(0, store.readCount)
+    }
+
+    @Test
+    fun aFreshPersistentValueIsPromotedWithoutExtendingItsOriginalTtl() = runTest {
+        val storedAt = now
+        feed().load("k") { "stored" }.toList()
+        now += 5.minutes.inWholeMilliseconds
+        val subject = feed()
+        store.readCount = 0
+
+        subject.load("k") { "unexpected" }.toList()
+        subject.load("k") { "unexpected" }.toList()
+
+        assertEquals(1, store.readCount)
+        now = storedAt + 11.minutes.inWholeMilliseconds
+        val emissions = subject.load("k") { "fresh" }.toList()
+        assertEquals(
+            listOf(
+                Cached.Value("stored", isStale = true, updatedAt = storedAt),
+                Cached.Value("fresh", isStale = false, updatedAt = now),
+            ),
+            emissions,
+        )
+    }
+
+    @Test
     fun staleStoredValueEmitsTheCachedValueThenTheFreshOne() = runTest {
+        val storedAt = now
         feed().load("k") { "first" }.toList()
         now += 11.minutes.inWholeMilliseconds
 
@@ -65,8 +134,8 @@ class CachedFeedTest {
 
         assertEquals(
             listOf(
-                Cached.Value("first", isStale = true),
-                Cached.Value("second", isStale = false),
+                Cached.Value("first", isStale = true, updatedAt = storedAt),
+                Cached.Value("second", isStale = false, updatedAt = now),
             ),
             emissions,
         )
@@ -80,22 +149,60 @@ class CachedFeedTest {
 
         assertEquals(
             listOf(
-                Cached.Value("first", isStale = true),
-                Cached.Value("second", isStale = false),
+                Cached.Value("first", isStale = true, updatedAt = now),
+                Cached.Value("second", isStale = false, updatedAt = now),
             ),
             emissions,
         )
     }
 
     @Test
+    fun forceCannotBeSatisfiedByAStoredValuePromotedDuringItsRoomRead() = runTest {
+        val storedAt = now
+        feed().load("k") { "stored" }.toList()
+        val subject = feed()
+        val forceReadStarted = CompletableDeferred<Unit>()
+        val releaseForceRead = CompletableDeferred<Unit>()
+        var reads = 0
+        store.onRead = { key ->
+            if (key == "k" && ++reads == 1) {
+                forceReadStarted.complete(Unit)
+                releaseForceRead.await()
+            }
+        }
+        var forcedLoaderCalls = 0
+        val forced = async {
+            subject.load("k", force = true) {
+                forcedLoaderCalls += 1
+                "fresh"
+            }.toList()
+        }
+        forceReadStarted.await()
+
+        val normal = subject.load("k") { "unexpected" }.toList()
+        releaseForceRead.complete(Unit)
+
+        assertEquals(listOf(Cached.Value("stored", isStale = false, updatedAt = storedAt)), normal)
+        assertEquals(
+            listOf(
+                Cached.Value("stored", isStale = true, updatedAt = storedAt),
+                Cached.Value("fresh", isStale = false, updatedAt = now),
+            ),
+            forced.await(),
+        )
+        assertEquals(1, forcedLoaderCalls)
+    }
+
+    @Test
     fun aLoaderFailureAfterACachedEmissionIsReportedAndKeepsTheValue() = runTest {
+        val storedAt = now
         feed().load("k") { "first" }.toList()
         now += 11.minutes.inWholeMilliseconds
         val failure = IllegalStateException("offline")
 
         val emissions = feed().load("k") { throw failure }.toList()
 
-        assertEquals(Cached.Value("first", isStale = true), emissions[0])
+        assertEquals(Cached.Value("first", isStale = true, updatedAt = storedAt), emissions[0])
         assertEquals(Cached.RefreshFailed(failure), emissions[1])
         assertEquals("\"first\"", store.read("k")?.payload)
     }
@@ -116,7 +223,7 @@ class CachedFeedTest {
 
         val emissions = feed().load("k") { "fresh" }.toList()
 
-        assertEquals(listOf(Cached.Value("fresh", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("fresh", isStale = false, updatedAt = now)), emissions)
     }
 
     @Test
@@ -149,7 +256,7 @@ class CachedFeedTest {
             clock = { now },
         ).load("k") { Boxed(7) }.toList()
 
-        assertEquals(listOf(Cached.Value(Boxed(7), isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value(Boxed(7), isStale = false, updatedAt = now)), emissions)
     }
 
     @Test
@@ -219,11 +326,12 @@ class CachedFeedTest {
         subject.markStale("k")
 
         assertEquals("\"first\"", store.read("k")?.payload)
+        val markedStaleAt = checkNotNull(store.read("k")).updatedAt
         val emissions = subject.load("k") { "second" }.toList()
         assertEquals(
             listOf(
-                Cached.Value("first", isStale = true),
-                Cached.Value("second", isStale = false),
+                Cached.Value("first", isStale = true, updatedAt = markedStaleAt),
+                Cached.Value("second", isStale = false, updatedAt = now),
             ),
             emissions,
         )
@@ -249,7 +357,79 @@ class CachedFeedTest {
 
         assertNull(store.read("k"))
         val emissions = subject.load("k") { "second" }.toList()
-        assertEquals(listOf(Cached.Value("second", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("second", isStale = false, updatedAt = now)), emissions)
+    }
+
+    @Test
+    fun aRoomReadCrossingKeyInvalidationCannotPromoteTheRemovedValue() = runTest {
+        feed().load("k") { "stored" }.toList()
+        val subject = feed()
+        val readStarted = CompletableDeferred<Unit>()
+        val releaseRead = CompletableDeferred<Unit>()
+        store.onRead = { key ->
+            if (key == "k") {
+                readStarted.complete(Unit)
+                releaseRead.await()
+            }
+        }
+        val reading = async { subject.load("k") { "fresh" }.toList() }
+        readStarted.await()
+
+        subject.invalidate("k")
+        store.onRead = null
+        releaseRead.complete(Unit)
+
+        assertEquals(listOf(Cached.Value("fresh", isStale = false, updatedAt = now)), reading.await())
+        assertEquals("\"fresh\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRoomReadCrossingNamespaceInvalidationCannotPromoteTheRemovedValue() = runTest {
+        feed().load("k") { "stored" }.toList()
+        val subject = feed()
+        val readStarted = CompletableDeferred<Unit>()
+        val releaseRead = CompletableDeferred<Unit>()
+        store.onRead = { key ->
+            if (key == "k") {
+                readStarted.complete(Unit)
+                releaseRead.await()
+            }
+        }
+        val reading = async { subject.load("k") { "fresh" }.toList() }
+        readStarted.await()
+
+        subject.invalidateNamespace()
+        store.onRead = null
+        releaseRead.complete(Unit)
+
+        assertEquals(listOf(Cached.Value("fresh", isStale = false, updatedAt = now)), reading.await())
+        assertEquals("\"fresh\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRoomReadCrossingAStoreWipeCannotPromoteThePreviousGeneration() = runTest {
+        feed().load("k") { "previous session" }.toList()
+        val subject = feed()
+        val readStarted = CompletableDeferred<Unit>()
+        val releaseRead = CompletableDeferred<Unit>()
+        store.onRead = { key ->
+            if (key == "k") {
+                readStarted.complete(Unit)
+                releaseRead.await()
+            }
+        }
+        val reading = async { subject.load("k") { "next session" }.toList() }
+        readStarted.await()
+
+        store.clear()
+        store.onRead = null
+        releaseRead.complete(Unit)
+
+        assertEquals(
+            listOf(Cached.Value("next session", isStale = false, updatedAt = now)),
+            reading.await(),
+        )
+        assertEquals("\"next session\"", store.read("k")?.payload)
     }
 
     /**
@@ -378,7 +558,7 @@ class CachedFeedTest {
         val emissions = subject.load("k") { nextSessionLoaderCalls += 1; "next session" }.toList()
 
         assertEquals(1, nextSessionLoaderCalls)
-        assertEquals(listOf(Cached.Value("next session", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("next session", isStale = false, updatedAt = now)), emissions)
     }
 
     @Test
@@ -396,7 +576,7 @@ class CachedFeedTest {
         val emissions = subject.load("k") { loaderCalls += 1; "second" }.toList()
 
         assertEquals(1, loaderCalls)
-        assertEquals(listOf(Cached.Value("second", isStale = false)), emissions)
+        assertEquals(listOf(Cached.Value("second", isStale = false, updatedAt = now)), emissions)
     }
 
     @Test
@@ -417,11 +597,18 @@ class CachedFeedTest {
 
     private class FakePayloadStore : PersistentPayloadStore {
         private val rows = mutableMapOf<String, StoredPayload>()
+        var readCount: Int = 0
+        var onRead: (suspend (String) -> Unit)? = null
 
         override var generation: Long = 0L
             private set
 
-        override suspend fun read(key: String): StoredPayload? = rows[key]
+        override suspend fun read(key: String): StoredPayload? {
+            readCount += 1
+            val stored = rows[key]
+            onRead?.invoke(key)
+            return stored
+        }
 
         override suspend fun write(key: String, payload: String, updatedAt: Long) {
             rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
@@ -441,7 +628,11 @@ class CachedFeedTest {
 
         override suspend fun clear() {
             generation += 1
-            rows.clear()
+            try {
+                rows.clear()
+            } finally {
+                generation += 1
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.kino.puber.domain.interactor.contentlist
 
-import com.kino.puber.core.collections.TypedTtlCache
 import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.config.KinoPubConfig
@@ -8,6 +7,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isAnime
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -19,9 +19,9 @@ internal class ContentListInteractor(
     private val api: KinoPubApiClient,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val watchStateRepository: WatchStateRepository,
+    private val itemDetailsRepository: ItemDetailsRepository,
 ) {
 
-    private val detailedItemsCache: TypedTtlCache<String, Item> = TypedTtlCacheImpl()
     private val freshPagers = ConcurrentHashMap<String, FreshSectionPager>()
 
     /**
@@ -146,10 +146,7 @@ internal class ContentListInteractor(
     }
 
     suspend fun getItemDetails(id: Int): Item {
-        return detailedItemsCache.getOrPut(itemDetailsCacheKey(id)) {
-            val response = api.getItemDetails(id).getOrThrow()
-            checkNotNull(response.item) { "Details response for item $id carried no item" }
-        }
+        return itemDetailsRepository.getItemDetailsCacheOnly(id)
     }
 
     fun invalidateFirstPageCache() {
@@ -168,14 +165,6 @@ internal class ContentListInteractor(
         if (cachedWatchStateVersion.getAndSet(version) != version) {
             firstPageCache.clear()
         }
-    }
-
-    fun invalidateItemDetails(id: Int) {
-        detailedItemsCache.remove(itemDetailsCacheKey(id))
-    }
-
-    private fun itemDetailsCacheKey(id: Int): String {
-        return "${KinoPubConfig.CURRENT_API_DOMAIN}_$id"
     }
 
     companion object {

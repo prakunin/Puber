@@ -16,6 +16,7 @@ import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import kotlinx.coroutines.CancellationException
 import com.kino.puber.core.ui.uikit.component.LifecycleAction
@@ -62,6 +63,7 @@ private fun SessionExpiredHandler() {
     val sessionEventBus = getKoin().get<SessionEventBus>()
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
     val payloadStore = getKoin().get<PersistentPayloadStore>()
+    val detailsPrefetcher = getKoin().get<DetailsPrefetcher>()
     LaunchedEffect(Unit) {
         // This collect is the app's only subscriber to session-expiry events. An exception escaping
         // it would kill the collector, and every later Unauthorized event for the rest of the
@@ -86,6 +88,9 @@ private fun SessionExpiredHandler() {
                     // same as clearDomainSensitiveCaches's clears on a domain switch.
                     clearWithoutFailing { watchStateSyncInteractor.invalidate() }
                     clearWithoutFailing { payloadStore.clear() }
+                    // Last, so it forgets a cache that is already gone rather than one a warm in
+                    // flight could still refill behind it.
+                    clearWithoutFailing { detailsPrefetcher.invalidate() }
                     router.newRootScreen(router.screens.auth())
                 }
             }

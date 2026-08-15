@@ -11,11 +11,21 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.milliseconds
 
 /** What a [CachedFeed] hands its caller. */
 sealed interface Cached<out V> {
-    /** A usable value. [isStale] means a revalidation is on its way and a second value will follow. */
-    data class Value<V>(val value: V, val isStale: Boolean) : Cached<V>
+    /**
+     * A usable value. [isStale] means a revalidation is on its way and a second value will follow.
+     *
+     * [updatedAt] is when this value was accepted, not when it was handed over: two readers joining
+     * one load, or reading the same entry minutes apart, are told the same age. Callers that record
+     * the value somewhere ordered by time — the watch-state index — must pass this rather than their
+     * own clock, or a cached item outranks a newer observation simply because it was read later.
+     * It defaults to the epoch, which orders behind everything, so a value of unknown age can never
+     * win against a real observation.
+     */
+    data class Value<V>(val value: V, val isStale: Boolean, val updatedAt: Long = 0L) : Cached<V>
 
     /**
      * The revalidation failed after a value was already emitted. The caller keeps showing what it
@@ -41,10 +51,13 @@ class CachedFeed<V : Any>(
 ) {
 
     /**
-     * Deduplicates loader calls so two screens asking for the same key at the same moment cost one
-     * request. Its own TTL is the feed's, so a value it still holds is by definition fresh.
+     * The current-memory tier and the single-flight coordinator behind it.
+     *
+     * A completed value is kept only for the part of [ttl] that remains according to its original
+     * server timestamp. Room and memory therefore cannot disagree about freshness or silently
+     * extend one another's lifetime.
      */
-    private val inFlight = TypedTtlCacheImpl<String, V>(
+    private val memory = TypedTtlCacheImpl<String, Stamped<V>>(
         defaultTtl = ttl,
         // One clock has to govern both tiers, or a test that advances the fake clock leaves the
         // in-memory tier frozen in real time and the two disagree about what is fresh.
@@ -54,7 +67,7 @@ class CachedFeed<V : Any>(
     /**
      * The store generation this feed's memory tier belongs to.
      *
-     * A wipe empties the table but cannot reach [inFlight] — the wipe is owned by a global, and a
+     * A wipe empties the table but cannot reach [memory] — the wipe is owned by a global, and a
      * feed may well live in a screen scope the global has never heard of. So the feed asks the store
      * instead of waiting to be told: a generation that has moved means everything cached here
      * describes a session, or a domain, that is over.
@@ -91,48 +104,44 @@ class CachedFeed<V : Any>(
         loader: suspend () -> V,
     ): Flow<Cached<V>> = flow {
         dropMemoryTierIfStoreWasWiped()
-        val stored = readUsable(key)
-        var emitted = false
-        if (stored != null) {
-            val isStale = force || clock() - stored.updatedAt > ttl.inWholeMilliseconds
-            emit(Cached.Value(stored.value, isStale = isStale))
-            emitted = true
-            if (!isStale) return@flow
-        }
-        if (force) {
-            inFlight.remove(key)
+
+        val cached = readCached(key = key, force = force)
+        if (cached != null) {
+            emit(cached)
+            if (!cached.isStale) return@flow
         }
         try {
-            val fresh = inFlight.getOrPut(key) {
+            val fresh = loadFresh(key = key, force = force) {
                 // Captured where the fetch begins, so it answers "was this key invalidated while I
                 // was away?". A retry the in-flight cache issues after an invalidation runs this
                 // lambda again and captures the new epoch, so legitimate reloads still write.
                 val epoch = epochOf(key)
-                loader().also { value ->
+                // Stamped once, here, and carried by everyone who joins this flight — including a
+                // reader that arrives after the memory tier has held the value for a while.
+                Stamped(loader(), clock()).also { (value, updatedAt) ->
                     val settled = epochOf(key)
                     if (settled == epoch) {
                         store.write(
                             key = key,
                             payload = json.encodeToString(serializer, value),
-                            updatedAt = clock(),
+                            updatedAt = updatedAt,
                         )
-                        // The write suspends into the database, so a wipe can land inside it, after
-                        // the guard above has already passed. The store takes its own row back out
-                        // in that case, but nothing takes the value back out of the memory tier, so
-                        // the same question has to be asked again on this side.
-                        if (store.generation != epoch.generation) {
-                            detachAfterWipe(key)
+                        // A store mutation can land while the database write is suspended, after
+                        // the guard above passed. The old result must not survive in either tier.
+                        if (epochOf(key) != epoch) {
+                            store.remove(key)
+                            memory.remove(key)
                         }
                     } else if (settled.generation != epoch.generation) {
                         detachAfterWipe(key)
                     }
                 }
             }
-            emit(Cached.Value(fresh, isStale = false))
+            emit(Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt))
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
-            if (!emitted) throw error
+            if (cached == null) throw error
             emit(Cached.RefreshFailed(error))
         }
     }
@@ -146,22 +155,39 @@ class CachedFeed<V : Any>(
      */
     suspend fun markStale(key: String) {
         supersedeKey(key)
-        inFlight.remove(key)
-        store.touch(key = key, updatedAt = clock() - ttl.inWholeMilliseconds - 1)
+        memory.remove(key)
+        try {
+            store.touch(key = key, updatedAt = clock() - ttl.inWholeMilliseconds - 1)
+        } finally {
+            // A reader can start after the first barrier but before the suspending store mutation
+            // settles. The second barrier rejects that reader's snapshot as well.
+            supersedeKey(key)
+            memory.remove(key)
+        }
     }
 
     /** Drops the entry, so the next [load] has nothing to emit before the network answers. */
     suspend fun invalidate(key: String) {
         supersedeKey(key)
-        inFlight.remove(key)
-        store.remove(key)
+        memory.remove(key)
+        try {
+            store.remove(key)
+        } finally {
+            supersedeKey(key)
+            memory.remove(key)
+        }
     }
 
     /** Drops every entry in this feed's namespace. */
     suspend fun invalidateNamespace() {
         supersedeNamespace()
-        inFlight.clear()
-        store.removeByPrefix(keyPrefix)
+        memory.clear()
+        try {
+            store.removeByPrefix(keyPrefix)
+        } finally {
+            supersedeNamespace()
+            memory.clear()
+        }
     }
 
     private fun epochOf(key: String): Epoch = Epoch(
@@ -183,7 +209,7 @@ class CachedFeed<V : Any>(
     }
 
     /**
-     * Takes the flight back, so the in-flight cache refuses the value this load is carrying and
+     * Takes the flight back, so the memory coordinator refuses the value this load is carrying and
      * reissues the loader under the new generation.
      *
      * Needed only for a wipe. [invalidate] and [invalidateNamespace] clear the memory tier
@@ -197,7 +223,7 @@ class CachedFeed<V : Any>(
      * more.
      */
     private fun detachAfterWipe(key: String) {
-        inFlight.remove(key)
+        memory.remove(key)
     }
 
     /**
@@ -209,8 +235,57 @@ class CachedFeed<V : Any>(
         val current = store.generation
         val seen = seenGeneration.get()
         if (current != seen && seenGeneration.compareAndSet(seen, current)) {
-            inFlight.clear()
+            memory.clear()
         }
+    }
+
+    private fun remainingFreshness(updatedAt: Long): Duration {
+        val age = (clock() - updatedAt).coerceAtLeast(0L)
+        return (ttl.inWholeMilliseconds - age).coerceAtLeast(0L).milliseconds
+    }
+
+    private suspend fun loadFresh(
+        key: String,
+        force: Boolean,
+        loader: suspend () -> Stamped<V>,
+    ): Stamped<V> {
+        val freshness: (Stamped<V>) -> Duration = { value -> remainingFreshness(value.updatedAt) }
+        return if (force) {
+            memory.reload(key, ttl = freshness, defaultValue = loader)
+        } else {
+            memory.getOrPut(key, ttl = freshness, defaultValue = loader)
+        }
+    }
+
+    // Each guard is a concurrency boundary: flattening them would make it easier to promote a value
+    // after the epoch it was read under had already been superseded.
+    @Suppress("ReturnCount")
+    private suspend fun readCached(key: String, force: Boolean): Cached.Value<V>? {
+        memory.get(key)?.let { current ->
+            return Cached.Value(current.value, isStale = force, updatedAt = current.updatedAt)
+        }
+
+        val epoch = epochOf(key)
+        val stored = readUsable(key) ?: return null
+        if (epochOf(key) != epoch) return null
+        val isStale = force || clock() - stored.updatedAt > ttl.inWholeMilliseconds
+        val selected = if (isStale) stored else promoteToMemory(key, stored, epoch) ?: return null
+        if (epochOf(key) != epoch) {
+            memory.remove(key)
+            return null
+        }
+        return Cached.Value(selected.value, isStale = isStale, updatedAt = selected.updatedAt)
+    }
+
+    private fun promoteToMemory(key: String, stored: Usable<V>, epoch: Epoch): Usable<V>? {
+        val promoted = Stamped(stored.value, stored.updatedAt)
+        if (memory.putIfAbsent(key, promoted, ttl = remainingFreshness(stored.updatedAt))) {
+            return stored.takeIf { epochOf(key) == epoch }.also { accepted ->
+                if (accepted == null) memory.remove(key)
+            }
+        }
+        if (epochOf(key) != epoch) return null
+        return memory.get(key)?.let { current -> Usable(current.value, current.updatedAt) } ?: stored
     }
 
     @Suppress("ReturnCount")
@@ -233,6 +308,9 @@ class CachedFeed<V : Any>(
     }
 
     private class Usable<V>(val value: V, val updatedAt: Long)
+
+    /** A value together with the moment it was accepted, so the memory tier keeps ages too. */
+    private data class Stamped<V : Any>(val value: V, val updatedAt: Long)
 
     companion object {
         /**

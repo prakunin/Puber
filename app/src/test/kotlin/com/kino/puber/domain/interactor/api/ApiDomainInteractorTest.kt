@@ -8,6 +8,7 @@ import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,6 +32,7 @@ internal class ApiDomainInteractorTest {
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     private val genreInteractor = mockk<GenreInteractor>(relaxed = true)
     private val store = mockk<PersistentPayloadStore>(relaxed = true)
+    private val detailsPrefetcher = mockk<DetailsPrefetcher>(relaxed = true)
     private var reachableDomains = emptySet<String>()
     private val probeCalls = mutableListOf<String>()
     private var now = 1_000_000L
@@ -45,6 +47,7 @@ internal class ApiDomainInteractorTest {
             endpoint.domain in reachableDomains
         },
         reachability = reachability,
+        detailsPrefetcher = detailsPrefetcher,
     )
 
     private var domainOverride: String? = null
@@ -251,5 +254,26 @@ internal class ApiDomainInteractorTest {
         interactor.resetToDefault()
 
         coVerify(exactly = 1) { store.clear() }
+    }
+
+    /**
+     * The prefetcher's record of what is warm describes the caches this switch just emptied. Left
+     * standing it suppresses fetches for ids the new domain has never cached, and the details
+     * screen goes back to showing a spinner for them.
+     */
+    @Test
+    fun resetToDefault_makesThePrefetcherForgetWhatItWarmed() = runTest {
+        interactor.resetToDefault()
+
+        verify(exactly = 1) { detailsPrefetcher.invalidate() }
+    }
+
+    @Test
+    fun resetToDefault_stillClearsThePrefetcherWhenTheItemDetailsCacheFailsToClear() = runTest {
+        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+
+        interactor.resetToDefault()
+
+        verify(exactly = 1) { detailsPrefetcher.invalidate() }
     }
 }

@@ -11,7 +11,7 @@ data class StoredPayload(
 
 interface PersistentPayloadStore {
     /**
-     * How many times this store has been wiped.
+     * A monotonic token that changes while and after this store is wiped.
      *
      * Published rather than kept private because a wipe has to reach further than the table: every
      * cache tier layered on top of this store is holding the same session's data and has no other way
@@ -70,6 +70,12 @@ class RoomPersistentPayloadStore(
 
     override suspend fun clear() {
         generation += 1
-        dao.clear()
+        try {
+            dao.clear()
+        } finally {
+            // Readers that began after the first bump but before the database finished clearing
+            // need a different token from both the pre-clear and in-progress states.
+            generation += 1
+        }
     }
 }
