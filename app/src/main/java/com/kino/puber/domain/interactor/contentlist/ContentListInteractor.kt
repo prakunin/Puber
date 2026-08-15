@@ -12,6 +12,7 @@ import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.minutes
 
 internal class ContentListInteractor(
@@ -21,6 +22,7 @@ internal class ContentListInteractor(
 ) {
 
     private val detailedItemsCache: TypedTtlCache<String, Item> = TypedTtlCacheImpl()
+    private val freshPagers = ConcurrentHashMap<String, FreshSectionPager>()
 
     /**
      * Emits whenever a setting that changes what a catalogue card shows flips — hiding watched
@@ -45,7 +47,14 @@ internal class ContentListInteractor(
         get() = navigationPreferencesRepository.contentPreferences.value.hideWatched
 
     suspend fun loadPage(config: SectionConfig, page: Int): PaginatedResponse<Item> {
+        // Kept ahead of the fresh-section branch below so the version bookkeeping happens on any
+        // page load, whichever kind of section asked for it.
         dropFirstPageCacheIfWatchStateMoved()
+        if (config.shortcutTypes.isNotEmpty()) {
+            return freshPagers
+                .computeIfAbsent(config.id) { FreshSectionPager(api, config) }
+                .loadPage(page)
+        }
         val preferences = navigationPreferencesRepository.contentPreferences.value
         val showAnime = preferences.showAnime
         val hideWatched = preferences.hideWatched
@@ -55,9 +64,11 @@ internal class ContentListInteractor(
                 config.id,
                 config.shortcut.orEmpty(),
                 config.type,
+                config.shortcutTypes.joinToString(separator = ",") { it.value },
                 config.sort,
                 config.quality,
                 config.genre.orEmpty(),
+                config.requiredGenreId,
                 config.animeFilterMode,
                 showAnime,
                 hideWatched,
@@ -143,6 +154,7 @@ internal class ContentListInteractor(
 
     fun invalidateFirstPageCache() {
         firstPageCache.clear()
+        freshPagers.clear()
     }
 
     /**

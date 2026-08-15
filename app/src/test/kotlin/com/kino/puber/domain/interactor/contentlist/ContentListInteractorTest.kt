@@ -36,27 +36,33 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
-class ContentListInteractorTest {
+/**
+ * Shared setup for the interactor's tests. They live in more than one class because the interactor
+ * answers two quite separate questions — how a filtered page is assembled and cached, and how a
+ * fresh section pages across several shortcut types — and one class holding both had outgrown what
+ * anyone can read at once.
+ */
+internal open class ContentListInteractorTestFixture {
 
-    private val api = mockk<KinoPubApiClient>()
-    private val contentPreferences = MutableStateFlow(defaultContentPreferences())
-    private val displaySettingsChanges = MutableSharedFlow<Unit>()
-    private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository> {
-        every { contentPreferences } returns this@ContentListInteractorTest.contentPreferences
-        every { displaySettingsChanges } returns this@ContentListInteractorTest.displaySettingsChanges
+    protected val api = mockk<KinoPubApiClient>()
+    protected val contentPreferences = MutableStateFlow(defaultContentPreferences())
+    protected val displaySettingsChanges = MutableSharedFlow<Unit>()
+    protected val navigationPreferencesRepository = mockk<NavigationPreferencesRepository> {
+        every { contentPreferences } returns this@ContentListInteractorTestFixture.contentPreferences
+        every { displaySettingsChanges } returns this@ContentListInteractorTestFixture.displaySettingsChanges
     }
     /** Item ids the local watch-state index reports as finished, on top of the items' own fields. */
-    private val indexedAsWatched = mutableSetOf<Int>()
-    private val settledWatchStateChanges = MutableSharedFlow<Long>()
-    private val watchStateRepository = mockk<WatchStateRepository> {
+    protected val indexedAsWatched = mutableSetOf<Int>()
+    protected val settledWatchStateChanges = MutableSharedFlow<Long>()
+    protected val watchStateRepository = mockk<WatchStateRepository> {
         every { isFullyWatched(any()) } answers {
             val item = firstArg<Item>()
             item.isFullyWatched() || item.id in indexedAsWatched
         }
         every { version } returns MutableStateFlow(0L)
-        every { settledChanges } returns this@ContentListInteractorTest.settledWatchStateChanges
+        every { settledChanges } returns this@ContentListInteractorTestFixture.settledWatchStateChanges
     }
-    private val interactor =
+    protected val interactor =
         ContentListInteractor(api, navigationPreferencesRepository, watchStateRepository)
 
     @BeforeEach
@@ -72,6 +78,58 @@ class ContentListInteractorTest {
     fun tearDown() {
         unmockkObject(KinoPubConfig)
     }
+
+    protected fun config(filterMode: AnimeFilterMode) = SectionConfig(
+        id = "section_${filterMode.name}",
+        title = filterMode.name,
+        type = "movie",
+        sort = "updated",
+        animeFilterMode = filterMode,
+    )
+
+    protected fun page(
+        vararg items: Item,
+        current: Int = 1,
+        total: Int = 1,
+        perpage: Int = items.size,
+    ) = PaginatedResponse(
+        items = items.toList(),
+        pagination = Pagination(current = current, perpage = perpage, total = total),
+    )
+
+    protected fun item(
+        id: Int,
+        title: String,
+        vararg genreIds: Int,
+        type: ItemType = ItemType.MOVIE,
+        watched: Int? = null,
+        new: Int? = null,
+        total: Int? = null,
+    ) = Item(
+        id = id,
+        title = title,
+        type = type,
+        genres = genreIds
+            .map { genreId -> Genre(id = genreId, title = "Genre $genreId") }
+            .takeIf(List<Genre>::isNotEmpty),
+        watched = watched,
+        new = new,
+        total = total,
+    )
+
+    /** Mirrors `ContentListInteractor.MAX_PAGES_PER_STEP`, which is private to the interactor. */
+    protected val maxPagesPerStepUnderTest = 5
+
+    protected fun defaultContentPreferences() = ContentPreferences(
+        showCartoonsTab = false,
+        showAnimeTab = false,
+        showAnime = true,
+        hideWatched = false,
+        showWatchedIndicators = true,
+    )
+}
+
+internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
 
     @Test
     fun invalidateFirstPageCache_clearsCachedFirstPages() = runTest {
@@ -635,53 +693,156 @@ class ContentListInteractorTest {
 
         coVerify(exactly = 2) { api.getItemDetails(42) }
     }
+}
 
-    private fun config(filterMode: AnimeFilterMode) = SectionConfig(
-        id = "section_${filterMode.name}",
-        title = filterMode.name,
-        type = "movie",
-        sort = "updated",
-        animeFilterMode = filterMode,
-    )
+internal class ContentListInteractorFreshSectionTest : ContentListInteractorTestFixture() {
 
-    private fun page(
-        vararg items: Item,
-        current: Int = 1,
-        total: Int = 1,
-        perpage: Int = items.size,
-    ) = PaginatedResponse(
-        items = items.toList(),
-        pagination = Pagination(current = current, perpage = perpage, total = total),
-    )
+    @Test
+    fun freshCartoonConfig_routesTypedFreshRequestsWithoutServerGenre() = runTest {
+        val config = TabTypeConfig.sectionsFor(TabType.Cartoons)
+            .single { it.id == "fresh_cartoon" }
+        val cartoon = item(id = 1, title = "Cartoon", CARTOON_GENRE_ID)
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        } returns Result.success(
+            page(
+                cartoon,
+                current = 1,
+                total = 1,
+                perpage = 2,
+            )
+        )
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        } returns Result.success(
+            page(
+                item(id = 2, title = "Anime", CARTOON_GENRE_ID, ANIME_GENRE_ID),
+                current = 1,
+                total = 1,
+                perpage = 2,
+            )
+        )
 
-    private fun item(
-        id: Int,
-        title: String,
-        vararg genreIds: Int,
-        type: ItemType = ItemType.MOVIE,
-        watched: Int? = null,
-        new: Int? = null,
-        total: Int? = null,
-    ) = Item(
-        id = id,
-        title = title,
-        type = type,
-        genres = genreIds
-            .map { genreId -> Genre(id = genreId, title = "Genre $genreId") }
-            .takeIf(List<Genre>::isNotEmpty),
-        watched = watched,
-        new = new,
-        total = total,
-    )
+        val result = interactor.loadPage(config, page = 1)
 
-    /** Mirrors `ContentListInteractor.MAX_PAGES_PER_STEP`, which is private to the interactor. */
-    private val maxPagesPerStepUnderTest = 5
+        assertEquals(listOf(cartoon), result.items)
+        coVerify(exactly = 1) {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        }
+        coVerify(exactly = 1) {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        }
+        coVerify(exactly = 0) { api.getItems(any(), any(), any(), any(), any()) }
+    }
 
-    private fun defaultContentPreferences() = ContentPreferences(
-        showCartoonsTab = false,
-        showAnimeTab = false,
-        showAnime = true,
-        hideWatched = false,
-        showWatchedIndicators = true,
-    )
+    @Test
+    fun freshAnimeConfig_routesTypedFreshRequestsWithoutServerGenre() = runTest {
+        val config = TabTypeConfig.sectionsFor(TabType.Anime)
+            .single { it.id == "fresh_anime" }
+        val anime = item(id = 1, title = "Anime", ANIME_GENRE_ID)
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        } returns Result.success(
+            page(
+                anime,
+                current = 1,
+                total = 1,
+                perpage = 2,
+            )
+        )
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        } returns Result.success(
+            page(
+                item(id = 2, title = "Cartoon", CARTOON_GENRE_ID),
+                current = 1,
+                total = 1,
+                perpage = 2,
+            )
+        )
+
+        val result = interactor.loadPage(config, page = 1)
+
+        assertEquals(listOf(anime), result.items)
+        coVerify(exactly = 1) {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        }
+        coVerify(exactly = 1) {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        }
+        coVerify(exactly = 0) { api.getItems(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun freshFirstPage_bypassesSharedCacheAndResetsSourcePaging() = runTest {
+        val config = TabTypeConfig.sectionsFor(TabType.Cartoons)
+            .single { it.id == "fresh_cartoon" }
+        val firstMovie = item(id = 1, title = "First movie", CARTOON_GENRE_ID)
+        val secondMovie = item(id = 2, title = "Second movie", CARTOON_GENRE_ID)
+        val firstSerial = item(id = 3, title = "First serial", CARTOON_GENRE_ID)
+        val secondSerial = item(id = 4, title = "Second serial", CARTOON_GENRE_ID)
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        } returns Result.success(page(firstMovie, perpage = 2)) andThen
+            Result.success(page(secondMovie, perpage = 2))
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        } returns Result.success(page(firstSerial, perpage = 2)) andThen
+            Result.success(page(secondSerial, perpage = 2))
+
+        assertEquals(
+            listOf(firstMovie, firstSerial),
+            interactor.loadPage(config, page = 1).items,
+        )
+        assertEquals(
+            listOf(secondMovie, secondSerial),
+            interactor.loadPage(config, page = 1).items,
+        )
+
+        coVerify(exactly = 2) {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        }
+        coVerify(exactly = 2) {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        }
+        coVerify(exactly = 0) { api.getItems(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun invalidateFirstPageCache_discardsFreshSourcePagingState() = runTest {
+        val config = TabTypeConfig.sectionsFor(TabType.Cartoons)
+            .single { it.id == "fresh_cartoon" }
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        } returns Result.success(
+            page(
+                item(id = 1, title = "Movie", CARTOON_GENRE_ID),
+                current = 1,
+                total = 2,
+                perpage = 2,
+            )
+        )
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        } returns Result.success(
+            page(
+                item(id = 2, title = "Serial", CARTOON_GENRE_ID),
+                current = 1,
+                total = 2,
+                perpage = 2,
+            )
+        )
+
+        interactor.loadPage(config, page = 1)
+        interactor.invalidateFirstPageCache()
+        val error = runCatching { interactor.loadPage(config, page = 2) }.exceptionOrNull()
+
+        assertEquals("Fresh logical page 2 did not match expected page 1", error?.message)
+        coVerify(exactly = 0) {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 2, null)
+        }
+        coVerify(exactly = 0) {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 2, null)
+        }
+    }
 }
