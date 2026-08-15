@@ -11,6 +11,7 @@ import androidx.lifecycle.Lifecycle
 import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
+import com.kino.puber.core.lifecycle.ReportAppForeground
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
@@ -128,6 +129,9 @@ fun App() {
                     )
                 },
             ) {
+                // Here rather than on the main screen: this composition outlives every screen, and
+                // the background walk has to stand down even when a fullscreen screen is on top.
+                ReportAppForeground(getKoin().get())
                 SessionExpiredHandler()
                 UpdatePromptHost()
             }

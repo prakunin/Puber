@@ -49,17 +49,19 @@ internal class ShowAllVM(
     override fun onStart() {
         init()
         launch {
-            interactor.displaySettingsChanges.collect {
-                interactor.invalidateFirstPageCache()
-                resetPaging()
-            }
+            // Same as the section rows: the settings that decide what a page contains are part of
+            // the first-page cache key, so re-paging already misses the old entry. Clearing the
+            // shared cache from here would only knock over the reloads other open lists are running
+            // off the same signal.
+            interactor.displaySettingsChanges.collect { resetPaging() }
         }
         launch {
             interactor.watchStateChanges.collect {
                 // Same split as the section rows: with watched titles shown the index changes how a
                 // card is drawn, not which cards belong, so the grid redraws instead of re-paging.
+                // Hidden, the re-page is needed — and the cache is dropped by the interactor, once
+                // for the index version rather than once per open list.
                 if (interactor.hideWatchedEnabled) {
-                    interactor.invalidateFirstPageCache()
                     resetPaging()
                 } else {
                     remapLoadedItems()

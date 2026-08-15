@@ -3,6 +3,7 @@ package com.kino.puber.domain.interactor.api
 import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.network.EndpointProbe
+import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.minutes
@@ -32,6 +34,7 @@ internal class ApiDomainInteractorTest {
     private var reachableDomains = emptySet<String>()
     private val probeCalls = mutableListOf<String>()
     private var now = 1_000_000L
+    private val reachability = EndpointReachability(clock = { now })
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
         itemDetailsRepository = itemDetailsRepository,
@@ -41,7 +44,7 @@ internal class ApiDomainInteractorTest {
             probeCalls += endpoint.domain
             endpoint.domain in reachableDomains
         },
-        clock = { now },
+        reachability = reachability,
     )
 
     private var domainOverride: String? = null
@@ -154,6 +157,59 @@ internal class ApiDomainInteractorTest {
         interactor.autoResolveWorkingDomain()
 
         assertEquals(listOf("service-kp.test", "service-kp.test"), probeCalls)
+    }
+
+    /**
+     * The window saves probes on the assumption that a domain which just answered still answers.
+     * A caller whose every request has since failed against it knows better, and saying so has to
+     * put the failover back within reach — otherwise a mirror that dies right after a probe holds
+     * the app for the rest of the window.
+     */
+    @Test
+    fun autoResolve_probesAgainAfterTheCurrentDomainIsReportedUnreachable() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(listOf("service-kp.test", "service-kp.test"), probeCalls)
+    }
+
+    /** Reporting a dead domain has to reach a live mirror, not merely cost an extra probe. */
+    @Test
+    fun autoResolve_failsOverToAMirrorAfterTheCurrentDomainIsReportedUnreachable() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        reachableDomains = setOf("api.alador.test")
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        val result = interactor.autoResolveWorkingDomain()
+
+        val success = result as? ApiDomainAutoResolveResult.Success
+            ?: error("Expected Success, got $result")
+        assertEquals("api.alador.test", success.state.domain)
+        assertTrue(success.changed)
+    }
+
+    /**
+     * The report names no domain, so it can only mean the one in use when it was made. A switch
+     * that happened in between leaves a verdict belonging to the new domain, and a report about the
+     * old one must not take it down.
+     */
+    @Test
+    fun autoResolve_keepsTheCacheWhenTheReportedDomainIsNoLongerTheCurrentOne() = runTest {
+        reachableDomains = setOf("service-kp.test", "api.custom.example")
+        interactor.saveCustomDomain("api.custom.example")
+        interactor.autoResolveWorkingDomain()
+        val callsBefore = probeCalls.size
+
+        domainOverride = "service-kp.test"
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        domainOverride = "api.custom.example"
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(callsBefore, probeCalls.size)
     }
 
     /**

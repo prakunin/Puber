@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
@@ -56,13 +57,48 @@ class WatchStateRepository(
      * Emits once the index has settled after a change — a sync landing, or the user marking
      * something watched.
      *
-     * Debounced because the first history walk writes a batch of rows per page for hundreds of
-     * pages; reacting to each one would redo every open screen hundreds of times over.
+     * Debounced because a write lands per batch of history pages; reacting to each one would redo
+     * every open screen many times over. The debounce alone is not enough for that, though: it only
+     * collapses writes closer together than [SETTLE_DELAY], and a walk deliberately spaces its
+     * chunks much further apart than that — so each chunk would settle separately and cost a full
+     * round of re-mapping and re-paging. What actually holds them together is the sync window; see
+     * [beginSyncWindow].
      */
     val settledChanges: Flow<Long> = version
         .drop(1)
         .debounce(SETTLE_DELAY)
         .conflate()
+
+    /**
+     * Everything the sync window decides with, behind one lock.
+     *
+     * A walk is minutes long and writes a chunk at a time. Every one of those writes is real and
+     * durable, but none of them is worth telling the screens about on its own: the index is only
+     * half-rebuilt, and the next chunk is seconds away. So the ticks they cause are held and paid
+     * out as a single one when the walk ends — completed, stopped, or cancelled alike.
+     *
+     * One lock rather than a field per question, because the decisions read one field and write
+     * another: separately atomic, the collector can find the window open just as the walk closes it,
+     * and then set a "held" flag nobody will ever look at again — losing the one signal the walk had
+     * to give. Whether to publish is a single decision and is taken as one.
+     */
+    private val windowLock = Any()
+    private var openSyncWindows = 0
+    private var syncChangeHeld = false
+
+    /**
+     * Marks the user has made that the index has not shown yet: item id to the `isFullyWatched` the
+     * write is expected to produce, or null where it is expected to leave no row at all.
+     *
+     * What is held is the expectation rather than a "something is pending" flag, because the flag
+     * cannot tell one emission from another. The database publishes asynchronously, so an emission
+     * already on its way when the user toggled carries the row from before it; a flag would be spent
+     * on that one — announcing nothing new — and the emission that does carry the toggle would then
+     * be held with the walk's own writes for the rest of a multi-minute pass. Comparing against what
+     * the write should produce answers the question that actually matters: can a screen reading the
+     * index right now see it?
+     */
+    private val marksAwaitingIndex = mutableMapOf<Int, Boolean?>()
 
     /**
      * Rows replaced by an unconfirmed optimistic mark, keyed by item id. A null value means there
@@ -79,7 +115,7 @@ class WatchStateRepository(
 
     init {
         scope.launch {
-            snapshot.collect { mutableVersion.value += 1 }
+            snapshot.collect(::onIndexChanged)
         }
         scope.launch {
             try {
@@ -91,6 +127,85 @@ class WatchStateRepository(
                 inheritedFlagsCleared.complete(Unit)
             }
         }
+    }
+
+    /**
+     * Decides what one change to the index is worth announcing, and announces it.
+     *
+     * Driven by [snapshot] rather than by the write that caused it, which is the only order that
+     * works: the database publishes asynchronously, so a tick sent from the write itself can reach
+     * a screen that then re-reads [snapshot] and finds the old value still there.
+     */
+    private fun onIndexChanged(index: Map<Int, WatchState>) {
+        val publish = synchronized(windowLock) {
+            // Cleared as they land rather than counted off: whichever emission finally carries a
+            // mark is the one that releases it, and an earlier one that does not carry it changes
+            // nothing here.
+            val aMarkLanded = marksAwaitingIndex.entries.removeAll { (itemId, expected) ->
+                index[itemId]?.isFullyWatched == expected
+            }
+            when {
+                // The user is waiting on this one, and this is the first moment the index actually
+                // shows it — so it goes out whatever a walk happens to be doing.
+                aMarkLanded -> true
+                openSyncWindows > 0 -> {
+                    syncChangeHeld = true
+                    false
+                }
+                else -> true
+            }
+        }
+        if (publish) mutableVersion.update { it + 1 }
+    }
+
+    /**
+     * Opens a window over a server sync walk, within which its own writes do not reach
+     * [settledChanges]. Must be paired with [endSyncWindow].
+     *
+     * This is about the *server* rebuilding the index behind the user's back, which is why it is
+     * scoped to the walk rather than applied to every write: what the user does to the index is
+     * something they are waiting to see, and [expectUserMark] keeps that immediate even with a
+     * walk in flight.
+     */
+    fun beginSyncWindow() {
+        synchronized(windowLock) { openSyncWindows += 1 }
+    }
+
+    /**
+     * Closes the window and pays out the one tick the walk earned, if it wrote anything at all.
+     *
+     * Runs for a walk that was cancelled or gave up as much as for one that finished: the rows it
+     * did write are durable either way, so the screens showing them are owed the signal regardless
+     * of how the walk ended.
+     */
+    fun endSyncWindow() {
+        val publish = synchronized(windowLock) {
+            openSyncWindows -= 1
+            if (openSyncWindows > 0) {
+                false
+            } else {
+                val held = syncChangeHeld
+                syncChangeHeld = false
+                held
+            }
+        }
+        if (publish) mutableVersion.update { it + 1 }
+    }
+
+    /**
+     * Registers what a mark the user is making should leave in the index, so the emission that
+     * carries it outruns any window a walk is holding open.
+     *
+     * Registered before the write rather than announced after it: the announcement still waits for
+     * the database to say the row is really there, so nothing is ever told about a change it cannot
+     * yet read. Without this a toggle made during a walk would be held with the walk's own writes
+     * and stay invisible for minutes.
+     *
+     * @param expectedFullyWatched what the index should show for [itemId] once the write lands, or
+     * null where the write is expected to leave no row.
+     */
+    private fun expectUserMark(itemId: Int, expectedFullyWatched: Boolean?) {
+        synchronized(windowLock) { marksAwaitingIndex[itemId] = expectedFullyWatched }
     }
 
     fun get(itemId: Int): WatchState? = snapshot.value[itemId]
@@ -167,6 +282,7 @@ class WatchStateRepository(
      */
     suspend fun markLocally(itemId: Int, isSeriesLike: Boolean, isFullyWatched: Boolean) {
         inheritedFlagsCleared.await()
+        expectUserMark(itemId, isFullyWatched)
         val existing = dao.get(itemId)
         // Kept so a rejected toggle can put back what was there instead of losing it.
         if (!rowsBeforeLocalMark.containsKey(itemId)) rowsBeforeLocalMark[itemId] = existing
@@ -193,7 +309,12 @@ class WatchStateRepository(
         )
     }
 
-    /** Drops the pending flag once the server has acknowledged the toggle. */
+    /**
+     * Drops the pending flag once the server has acknowledged the toggle.
+     *
+     * Nothing to announce: the flag is not part of [WatchState], so the snapshot this produces is
+     * equal to the one before it and never reaches a collector.
+     */
     suspend fun confirmLocalMark(itemId: Int) {
         rowsBeforeLocalMark.remove(itemId)
         dao.clearPending(itemId)
@@ -205,6 +326,7 @@ class WatchStateRepository(
      */
     suspend fun revertLocalMark(itemId: Int) {
         val previous = rowsBeforeLocalMark.remove(itemId)
+        expectUserMark(itemId, previous?.isFullyWatched)
         if (previous == null) dao.delete(itemId) else dao.upsert(listOf(previous))
     }
 

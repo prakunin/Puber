@@ -72,18 +72,56 @@ internal class MainVMWatchStateSyncTest {
     }
 
     /**
-     * Only the startup run waits. A resume has no burst of its own to stay out of, and the
-     * interactor's own spacing already decides whether that run is due at all.
+     * The first ON_RESUME arrives during the composition that starts this screen, so it is part of
+     * the cold start rather than a return to it. Letting it sync straight away is what used to make
+     * the startup wait meaningless: the resume run went out into the middle of the home screen's
+     * burst, and the delayed run then found the index already claimed and did nothing.
      */
     @Test
-    fun resumed_syncsWatchStateWithoutWaiting() = runTest(dispatcher) {
+    fun resumed_doesNotSyncWatchStateWhileTheStartupRequestsAreStillOut() = runTest(dispatcher) {
         val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
         val vm = vm(sync)
+
+        vm.testOnStart()
+        vm.onAction(MainAction.Resumed)
+        runCurrent()
+
+        coVerify(exactly = 0) { sync.syncIfStale(any()) }
+        vm.testCancelScope()
+    }
+
+    /**
+     * Both triggers coincide on a cold start, and between them they are owed one run — not one
+     * each. The screen starting and the first resume are the same arrival.
+     */
+    @Test
+    fun startupAndFirstResume_syncWatchStateOnceBetweenThem() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+
+        vm.testOnStart()
+        vm.onAction(MainAction.Resumed)
+        advanceTimeBy(MainVM.StartupSyncDelay.inWholeMilliseconds + 1)
+        runCurrent()
+
+        coVerify(exactly = 1) { sync.syncIfStale(any()) }
+        vm.testCancelScope()
+    }
+
+    /** Once the startup burst is behind us, a return to the screen syncs without waiting again. */
+    @Test
+    fun resumed_syncsWatchStateWithoutWaitingOnceTheStartupBurstHasPassed() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+
+        vm.testOnStart()
+        advanceTimeBy(MainVM.StartupSyncDelay.inWholeMilliseconds + 1)
+        runCurrent()
 
         vm.onAction(MainAction.Resumed)
         runCurrent()
 
-        coVerify(exactly = 1) { sync.syncIfStale(any()) }
+        coVerify(exactly = 2) { sync.syncIfStale(any()) }
         vm.testCancelScope()
     }
 

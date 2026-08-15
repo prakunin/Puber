@@ -5,6 +5,7 @@ import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.network.EndpointProbe
+import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -48,12 +49,8 @@ internal class ApiDomainInteractor(
     private val genreInteractor: GenreInteractor,
     private val store: PersistentPayloadStore,
     private val probe: EndpointProbe,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val reachability: EndpointReachability,
 ) {
-
-    /** Written from an IO thread, read from whichever one resolves next. */
-    @Volatile
-    private var lastReachable: ReachableDomain? = null
 
     fun initialize() {
         KinoPubConfig.setDomainOverride(
@@ -184,27 +181,22 @@ internal class ApiDomainInteractor(
 
     private fun isEndpointReachable(endpoint: ApiEndpointPreset): Boolean {
         val reachable = probe.isReachable(endpoint)
-        if (reachable) lastReachable = ReachableDomain(endpoint.domain, clock())
+        if (reachable) reachability.markReachable(endpoint.domain)
         return reachable
     }
 
     /**
      * Whether [domain] answered recently enough to be taken on trust.
      *
-     * Keyed by domain, not just by time: a switch made anywhere in the app — this interactor's own
-     * dialog, the device settings screen — leaves a verdict here that belongs to the domain the app
-     * has stopped talking to, and it must not stand in for the new one.
-     *
-     * The window is a tolerance for staleness rather than a claim the domain is still up. Once it
-     * lapses the failover walk runs again, so a domain blocked since the last probe still recovers.
+     * The verdict is shared with the network layer, which is what makes it worth trusting: a probe
+     * only ever saw one moment, while the client reports every request that failed to reach the
+     * host. Without those reports a mirror that went quiet just after a probe would be chosen for
+     * the rest of the window, and no screen can supply them — one with cached content to draw never
+     * learns whether the refresh behind it arrived, and screens past the home never had a say.
      */
     private fun isKnownReachable(domain: String): Boolean {
-        val known = lastReachable ?: return false
-        return known.domain == domain && clock() - known.at < ProbeCacheTtl.inWholeMilliseconds
+        return reachability.answeredWithin(domain, ProbeCacheTtl)
     }
-
-    /** The last domain a probe confirmed, and when it answered. */
-    private data class ReachableDomain(val domain: String, val at: Long)
 
     internal companion object {
         private const val MAX_HOSTNAME_LENGTH = 253

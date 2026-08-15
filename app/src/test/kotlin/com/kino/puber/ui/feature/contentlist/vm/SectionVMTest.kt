@@ -427,7 +427,10 @@ class SectionVMTest {
         testScheduler.advanceUntilIdle()
 
         coVerify(exactly = 2) { interactor.loadPage(any(), page = 1) }
-        verify(exactly = 1) { interactor.invalidateFirstPageCache() }
+        // Re-paging is the section's whole part in this. Dropping the shared cache is the
+        // interactor's, done once per index version — a section doing it too would land on the
+        // reloads every other open section started off this same signal.
+        verify(exactly = 0) { interactor.invalidateFirstPageCache() }
         vm.testCancelScope()
         paginator.close()
     }

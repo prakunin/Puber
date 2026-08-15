@@ -18,10 +18,10 @@ import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 internal class MainVM(
@@ -37,13 +37,19 @@ internal class MainVM(
     private val tabRefreshVersions = mutableMapOf<TabType, Int>()
     private var observedContentPreferences: ContentPreferences? = null
 
+    /** The one watch-state sync this screen will have in flight; see [syncWatchState]. */
+    private var watchStateSyncJob: Job? = null
+
+    /** Whether the startup wait has already been served, so only the first run pays it. */
+    private var startupSyncDelayServed = false
+
     override fun onStart() {
         val state = mainUIMapper.buildViewState()
         observedContentPreferences = navigationPreferencesRepository.contentPreferences.value
         updateViewState(state)
         tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
         reportDeviceInformation()
-        syncWatchState(startingAfter = StartupSyncDelay)
+        syncWatchState()
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }
@@ -54,13 +60,24 @@ internal class MainVM(
      * refreshed once the main screen is up — that is the first point where the session is known to
      * be authenticated.
      *
-     * @param startingAfter how long to hold off. The startup run waits out the home screen's own
-     * burst — see [StartupSyncDelay]. A resume passes nothing: it has no burst of that size to stay
-     * clear of, and whether the run is due at all is already the interactor's decision.
+     * Both triggers — this screen starting and the TV coming back to it — run through here, and one
+     * job serves them together. They are not alternatives that happen to overlap: the first
+     * ON_RESUME arrives during the very composition that starts this screen, so a startup run and a
+     * resume run always coincide on a cold start. Kept apart, the resume one has nothing to wait for
+     * and wins, which left [StartupSyncDelay] governing only a run that then found the index
+     * already claimed and did nothing — the wait was, in effect, never served.
+     *
+     * So the wait belongs to the first run rather than to the trigger that asked for it, and a
+     * trigger arriving while a run is in flight is dropped: the run under way is already the one it
+     * would have started, and whether a later one is due at all is the interactor's decision.
      */
-    private fun syncWatchState(startingAfter: Duration = Duration.ZERO) {
-        launch {
-            if (startingAfter > Duration.ZERO) delay(startingAfter)
+    private fun syncWatchState() {
+        if (watchStateSyncJob?.isActive == true) return
+        watchStateSyncJob = launch {
+            if (!startupSyncDelayServed) {
+                delay(StartupSyncDelay)
+                startupSyncDelayServed = true
+            }
             runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
         }

@@ -5,6 +5,7 @@ package com.kino.puber.data.di
 import android.net.ConnectivityManager
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.data.api.KinoPubApiClient
+import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.repository.AppUpdateDownloader
 import com.kino.puber.data.repository.AppUpdateInstaller
 import com.kino.puber.data.repository.AppUpdatePreferencesRepository
@@ -45,6 +46,9 @@ import androidx.media3.database.StandaloneDatabaseProvider
 
 val apiModule = module {
     single { SessionEventBus() }
+    // Shared: the client is what reports a domain going quiet, the domain interactor is what acts
+    // on it. Neither can see the other, so the verdict itself is the thing they hold in common.
+    single { EndpointReachability() }
     single {
         OkHttpClient.Builder()
             .dns(DnsOverHttpsFactory.create())
@@ -57,6 +61,7 @@ val apiModule = module {
             connectivityManager = androidContext().getSystemService(ConnectivityManager::class.java),
             cryptoPreferenceRepository = get(),
             sessionEventBus = get(),
+            reachability = get(),
         )
     }
     singleOf(::TmdbApiClient)

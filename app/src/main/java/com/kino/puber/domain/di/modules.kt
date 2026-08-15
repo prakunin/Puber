@@ -1,6 +1,8 @@
 package com.kino.puber.domain.di
 
+import com.kino.puber.core.lifecycle.AppForegroundState
 import com.kino.puber.data.api.network.HttpEndpointProbe
+import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.auth.AuthInteractor
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
@@ -36,8 +38,16 @@ val interactorModule = module {
             genreInteractor = get(),
             store = get(),
             probe = HttpEndpointProbe(get()),
+            reachability = get(),
         )
     }
-    single { WatchStateSyncInteractor(api = get(), repository = get()) }
+    singleOf(::AppForegroundState)
+    single {
+        WatchStateSyncInteractor(
+            api = get(),
+            repository = get(),
+            awaitForeground = get<AppForegroundState>()::awaitForeground,
+        )
+    }
     singleOf(::CardDisplayChanges)
 }

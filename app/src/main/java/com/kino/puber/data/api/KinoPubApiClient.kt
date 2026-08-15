@@ -13,6 +13,8 @@ import com.kino.puber.data.api.history.fetchHistoryPage
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.data.api.config.KinoPubConfig
+import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.api.network.meansHostUnreachable
 import com.kino.puber.data.api.config.UserAgentBuilder
 import com.kino.puber.data.api.models.ApiResponse
 import com.kino.puber.data.api.models.ApiResponseList
@@ -101,6 +103,12 @@ class KinoPubApiClient(
     private val cryptoPreferenceRepository: ICryptoPreferenceRepository,
     private val sessionEventBus: SessionEventBus,
     private val mainApiBaseUrl: String = KinoPubConfig.MAIN_API_BASE_URL,
+    /**
+     * Told which domain a request was talking to when the transport gave out, so the code that
+     * chooses mirrors stops trusting it. This client is the only thing in the app that finds out —
+     * a screen with cached content draws it without ever learning whether the refresh arrived.
+     */
+    private val reachability: EndpointReachability = EndpointReachability(),
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -869,7 +877,7 @@ class KinoPubApiClient(
 
     // App update API
 
-    suspend fun getLatestGitHubRelease(owner: String, repo: String): Result<GitHubReleaseResponse> = apiCall {
+    suspend fun getLatestGitHubRelease(owner: String, repo: String): Result<GitHubReleaseResponse> = thirdPartyApiCall {
         httpClient.get("https://api.github.com/repos/$owner/$repo/releases/latest") {
             headers {
                 append("Accept", "application/vnd.github+json")
@@ -989,13 +997,49 @@ class KinoPubApiClient(
 
     suspend inline fun <reified T> apiCall(
         block: suspend () -> HttpResponse
+    ): Result<T> {
+        // Read before the request rather than after it: a failure that takes a connect timeout to
+        // surface can easily outlive a domain switch made meanwhile, and the report has to name the
+        // domain this request actually went to.
+        val domain = KinoPubConfig.CURRENT_API_DOMAIN
+        return try {
+            val response = block()
+            Result.success(response.body<T>())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            reportIfDomainUnreachable(domain, e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * For hosts that are not the account's endpoint at all — the update check reads GitHub.
+     *
+     * Identical to [apiCall] except that it says nothing about domain reachability, because a
+     * failure here is not evidence about one: GitHub being unreachable would otherwise retire the
+     * API domain's verdict and cost the next home load a full probe for no reason.
+     *
+     * The extra API keeps using [apiCall]: its base URL comes from the same endpoint preset as the
+     * main one and moves with it, so a failure there really is news about the endpoint in use.
+     */
+    suspend inline fun <reified T> thirdPartyApiCall(
+        block: suspend () -> HttpResponse
     ): Result<T> = try {
-        val response = block()
-        Result.success(response.body<T>())
+        Result.success(block().body<T>())
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Result.failure(e)
+    }
+
+    /**
+     * Reports a failure that means the domain could not be reached at all. What counts as one, and
+     * why the device having no network does not, is [meansHostUnreachable].
+     */
+    @PublishedApi
+    internal fun reportIfDomainUnreachable(domain: String, error: Throwable) {
+        if (error.meansHostUnreachable()) reachability.markUnreachable(domain)
     }
 
     suspend fun getDeviceCode(): Result<DeviceCodeResponse> = try {
