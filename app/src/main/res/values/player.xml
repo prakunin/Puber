@@ -2,11 +2,18 @@
 <resources>
     <!-- Player Controls -->
     <string name="player_buffering">Буферизация…</string>
+    <string name="player_button_play">Воспроизвести</string>
+    <string name="player_button_pause">Пауза</string>
+    <string name="player_button_previous_episode">Предыдущая серия</string>
+    <string name="player_button_next_episode">Следующая серия</string>
     <string name="player_button_episodes">Серии</string>
+    <string name="player_episodes_title">Серии</string>
+    <string name="player_episodes_season_title">%1$s  ·  %2$s</string>
     <string name="player_button_mark_watched">Просмотрено</string>
     <string name="player_button_mark_watched_state_watched">Отмечено просмотренным</string>
     <string name="player_button_mark_watched_state_not_watched">Не просмотрено</string>
     <string name="player_button_audio_subtitles">Аудио и субтитры</string>
+    <string name="player_audio_subtitles_title">Аудио и субтитры</string>
     <string name="player_button_video">Видео</string>
     <string name="player_button_info">О потоке</string>
 
@@ -24,6 +31,9 @@
     <string name="player_info_dropped_frames">Пропущено кадров</string>
     <string name="player_info_unknown">—</string>
     <string name="player_info_close">Закрыть</string>
+    <string name="player_info_section_video">ВИДЕО</string>
+    <string name="player_info_section_audio">АУДИО</string>
+    <string name="player_info_section_playback">ВОСПРОИЗВЕДЕНИЕ</string>
 
     <!-- Audio & Subtitles Panel -->
     <string name="player_panel_sound">ЗВУК</string>
@@ -41,6 +51,11 @@
     <string name="player_panel_speed">СКОРОСТЬ</string>
     <string name="player_panel_aspect_ratio">СООТНОШЕНИЕ</string>
     <string name="player_panel_buffer">БУФЕР</string>
+    <string name="player_video_settings_title">Настройки видео</string>
+    <string name="player_panel_advanced">Дополнительно</string>
+    <string name="player_panel_network">СЕТЬ</string>
+    <string name="player_setting_enabled">Вкл.</string>
+    <string name="player_setting_disabled">Выкл.</string>
     <string name="player_buffer_auto">Авто</string>
     <string name="player_buffer_small">Малый (16 МБ / 60с)</string>
     <string name="player_buffer_medium">Средний (32 МБ / 120с)</string>

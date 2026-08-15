@@ -1,33 +1,20 @@
 package com.kino.puber.ui.feature.player.component
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.kino.puber.R
+import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.SoundModeUIState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
@@ -41,150 +28,102 @@ internal fun AudioSubtitlesPanel(
     selectedAudioTrackIndex: Int,
     subtitleTracks: List<SubtitleTrackUIState>,
     selectedSubtitleIndex: Int,
+    subtitleSize: SubtitleSize,
     onSoundModeSelected: (Int) -> Unit,
     onAudioTrackSelected: (Int) -> Unit,
     onSubtitleSelected: (Int) -> Unit,
     onSubtitleSizeClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AnimatedVisibility(
+    val initialFocusRequester = remember { FocusRequester() }
+    val initialItemIndex = when {
+        audioTracks.isNotEmpty() -> 1 + selectedAudioTrackIndex.coerceIn(audioTracks.indices)
+        subtitleTracks.isNotEmpty() -> 1 + selectedSubtitleIndex.coerceIn(subtitleTracks.indices)
+        else -> 1
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialItemIndex)
+    LaunchedEffect(visible) {
+        if (visible) {
+            listState.scrollToItem(initialItemIndex)
+            withFrameNanos { frameTimeNanos -> frameTimeNanos }
+            runCatching { initialFocusRequester.requestFocus() }
+        }
+    }
+
+    PlayerSidePanel(
         visible = visible,
-        modifier = modifier.fillMaxSize(),
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
+        title = stringResource(R.string.player_audio_subtitles_title),
+        modifier = modifier,
     ) {
-        AudioSubtitlesPanelContainer {
-            val panelFocusRequester = rememberRequestingFocusRequester()
-            AudioSubtitlesColumns(
-                soundModes = soundModes,
-                selectedSoundModeIndex = selectedSoundModeIndex,
-                audioTracks = audioTracks,
-                selectedAudioTrackIndex = selectedAudioTrackIndex,
-                subtitleTracks = subtitleTracks,
-                selectedSubtitleIndex = selectedSubtitleIndex,
-                panelFocusRequester = panelFocusRequester,
-                onSoundModeSelected = onSoundModeSelected,
-                onAudioTrackSelected = onAudioTrackSelected,
-                onSubtitleSelected = onSubtitleSelected,
-            )
-            SubtitleSizeButton(onClick = onSubtitleSizeClick)
-        }
-    }
-}
-
-@Composable
-private fun AudioSubtitlesPanelContainer(content: @Composable BoxScope.() -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp)
-                .padding(horizontal = 48.dp)
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+        LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(bottom = 20.dp),
         ) {
-            content()
+            if (audioTracks.isNotEmpty()) {
+                item(key = "audio_header") {
+                    PlayerPanelSectionHeader(stringResource(R.string.player_panel_audio))
+                }
+                itemsIndexed(audioTracks, key = { index, _ -> "audio_$index" }) { index, item ->
+                    PlayerPanelItem(
+                        text = item.label,
+                        selected = index == selectedAudioTrackIndex,
+                        onClick = { onAudioTrackSelected(index) },
+                        focusRequester = initialFocusRequester.takeIf {
+                            index == (selectedAudioTrackIndex.takeIf(audioTracks.indices::contains) ?: 0)
+                        },
+                    )
+                }
+            }
+
+            item(key = "subtitles_header") {
+                PlayerPanelSectionHeader(stringResource(R.string.player_panel_subtitles))
+            }
+            itemsIndexed(subtitleTracks, key = { index, _ -> "subtitle_$index" }) { index, item ->
+                PlayerPanelItem(
+                    text = item.label,
+                    selected = index == selectedSubtitleIndex,
+                    onClick = { onSubtitleSelected(index) },
+                    focusRequester = initialFocusRequester.takeIf {
+                        audioTracks.isEmpty() &&
+                            index == (selectedSubtitleIndex.takeIf(subtitleTracks.indices::contains) ?: 0)
+                    },
+                )
+            }
+            item(key = "subtitle_size") {
+                PlayerPanelItem(
+                    text = stringResource(R.string.player_subtitle_size),
+                    trailingText = subtitleSizeLabel(subtitleSize),
+                    onClick = onSubtitleSizeClick,
+                    focusRequester = initialFocusRequester.takeIf {
+                        audioTracks.isEmpty() && subtitleTracks.isEmpty()
+                    },
+                )
+            }
+
+            if (soundModes.isNotEmpty()) {
+                item(key = "sound_header") {
+                    PlayerPanelSectionHeader(stringResource(R.string.player_panel_sound))
+                }
+                itemsIndexed(soundModes, key = { index, _ -> "sound_$index" }) { index, item ->
+                    PlayerPanelItem(
+                        text = item.label,
+                        selected = index == selectedSoundModeIndex,
+                        onClick = { onSoundModeSelected(index) },
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun AudioSubtitlesColumns(
-    soundModes: List<SoundModeUIState>,
-    selectedSoundModeIndex: Int,
-    audioTracks: List<AudioTrackUIState>,
-    selectedAudioTrackIndex: Int,
-    subtitleTracks: List<SubtitleTrackUIState>,
-    selectedSubtitleIndex: Int,
-    panelFocusRequester: FocusRequester,
-    onSoundModeSelected: (Int) -> Unit,
-    onAudioTrackSelected: (Int) -> Unit,
-    onSubtitleSelected: (Int) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 24.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        SoundModeColumn(soundModes, selectedSoundModeIndex, onSoundModeSelected)
-        AudioTrackColumn(audioTracks, selectedAudioTrackIndex, panelFocusRequester, onAudioTrackSelected)
-        SubtitleColumn(subtitleTracks, selectedSubtitleIndex, onSubtitleSelected)
-    }
-}
-
-@Composable
-private fun RowScope.SoundModeColumn(
-    soundModes: List<SoundModeUIState>,
-    selectedSoundModeIndex: Int,
-    onSoundModeSelected: (Int) -> Unit,
-) {
-    if (soundModes.isEmpty()) return
-    val labels = remember(soundModes) { soundModes.map { it.label } }
-    SettingsPanelColumn(
-        header = stringResource(R.string.player_panel_sound),
-        items = labels,
-        selectedIndex = selectedSoundModeIndex,
-        onItemSelected = onSoundModeSelected,
-        modifier = Modifier.weight(1f),
+private fun subtitleSizeLabel(size: SubtitleSize): String {
+    return stringResource(
+        when (size) {
+            SubtitleSize.SMALL -> R.string.player_subtitle_size_small
+            SubtitleSize.MEDIUM -> R.string.player_subtitle_size_medium
+            SubtitleSize.LARGE -> R.string.player_subtitle_size_large
+        }
     )
-}
-
-@Composable
-private fun RowScope.AudioTrackColumn(
-    audioTracks: List<AudioTrackUIState>,
-    selectedAudioTrackIndex: Int,
-    panelFocusRequester: FocusRequester,
-    onAudioTrackSelected: (Int) -> Unit,
-) {
-    if (audioTracks.isEmpty()) return
-    val labels = remember(audioTracks) { audioTracks.map { it.label } }
-    SettingsPanelColumn(
-        header = stringResource(R.string.player_panel_audio),
-        items = labels,
-        selectedIndex = selectedAudioTrackIndex,
-        onItemSelected = onAudioTrackSelected,
-        modifier = Modifier.weight(1f),
-        firstItemFocusRequester = panelFocusRequester,
-    )
-}
-
-@Composable
-private fun RowScope.SubtitleColumn(
-    subtitleTracks: List<SubtitleTrackUIState>,
-    selectedSubtitleIndex: Int,
-    onSubtitleSelected: (Int) -> Unit,
-) {
-    val labels = remember(subtitleTracks) { subtitleTracks.map { it.label } }
-    SettingsPanelColumn(
-        header = stringResource(R.string.player_panel_subtitles),
-        items = labels,
-        selectedIndex = selectedSubtitleIndex,
-        onItemSelected = onSubtitleSelected,
-        modifier = Modifier.weight(1f),
-    )
-}
-
-@Composable
-private fun BoxScope.SubtitleSizeButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .align(Alignment.TopEnd)
-            .padding(top = 16.dp, end = 16.dp),
-        colors = ButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-    ) {
-        Text(
-            text = stringResource(R.string.player_subtitle_size),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
 }

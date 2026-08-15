@@ -92,6 +92,18 @@ class WatchStateSyncInteractorTest {
     }
 
     @Test
+    fun sync_exposesLastHistoryPageProgress() = runTest {
+        stubHistory(pages = 3)
+
+        assertTrue(interactor.syncIfStale())
+
+        assertFalse(interactor.progress.value.isSyncing)
+        assertEquals(3, interactor.progress.value.currentPage)
+        assertEquals(3, interactor.progress.value.totalPages)
+        assertEquals(3, interactor.progress.value.totalHistoryItems)
+    }
+
+    @Test
     fun sync_leavesTheHistoryAloneWhenTheSerialsListFailed() = runTest {
         // Without that list every series in the history would have to be skipped — guessing would
         // mark every show ever played as finished — and the pass could not record how far it got.
@@ -741,7 +753,12 @@ class WatchStateSyncInteractorTest {
             coEvery { api.getHistoryData(page) } returns Result.success(
                 PaginatedResponse(
                     items = listOf(historyEntry(itemId = page, lastSeen = lastSeenBase - page)),
-                    pagination = Pagination(current = page, perpage = 1, total = pages),
+                    pagination = Pagination(
+                        current = page,
+                        perpage = 1,
+                        total = pages,
+                        totalItems = pages,
+                    ),
                 )
             )
         }

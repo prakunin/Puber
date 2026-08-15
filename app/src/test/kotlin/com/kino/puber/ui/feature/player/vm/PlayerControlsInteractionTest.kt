@@ -48,19 +48,32 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.OkPressed)
 
         assertTrue(contentState(vm).controlsVisible)
-        // Not the button row: its first button is play/pause, and holding OK would click it.
-        assertEquals(FocusTarget.SeekBar, contentState(vm).controlsFocusTarget)
+        // Focus stays on the video until the matching key-up, preventing a phantom button click.
+        assertNull(contentState(vm).controlsFocusTarget)
     }
 
     @Test
-    fun okPressed_onVisibleControls_neverPauses_whenSettingDisabled() {
+    fun okReleased_focusesButtons_whenSettingDisabled() {
         givenOkTogglesPlayPause(enabled = false)
         val vm = startedVM()
 
-        repeat(3) { vm.onAction(PlayerAction.OkPressed) }
+        vm.onAction(PlayerAction.OkPressed)
+        vm.onAction(PlayerAction.OkReleased)
 
         verify(exactly = 0) { playbackController.pause() }
-        assertEquals(FocusTarget.SeekBar, contentState(vm).controlsFocusTarget)
+        assertEquals(FocusTarget.Buttons, contentState(vm).controlsFocusTarget)
+    }
+
+    @Test
+    fun okReleased_doesNotChangeFocus_whenSettingEnabled() {
+        givenOkTogglesPlayPause(enabled = true)
+        val vm = startedVM()
+        vm.onAction(PlayerAction.HideControls)
+
+        vm.onAction(PlayerAction.OkReleased)
+
+        assertFalse(contentState(vm).controlsVisible)
+        assertNull(contentState(vm).controlsFocusTarget)
     }
 
     @Test

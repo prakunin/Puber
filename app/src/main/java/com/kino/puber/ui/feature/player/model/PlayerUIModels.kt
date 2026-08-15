@@ -1,6 +1,19 @@
 package com.kino.puber.ui.feature.player.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+
+@Immutable
+internal data class EpisodesPanelUIState(
+    val seasons: List<EpisodeSeasonUIState>,
+)
+
+@Immutable
+internal data class EpisodeSeasonUIState(
+    val number: Int,
+    val title: String,
+    val episodes: List<VideoItemUIState>,
+)
 
 @Immutable
 internal data class AudioTrackUIState(

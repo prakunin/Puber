@@ -28,6 +28,7 @@ internal sealed interface DeviceSettingsState {
         val skipCreditsEnabled: Boolean = true,
         val debugOverlayEnabled: Boolean = false,
         val okTogglesPlayPause: Boolean = false,
+        val showMarkWatchedButton: Boolean = false,
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
         val navigationMode: NavigationMode = NavigationMode.TopTabs,
@@ -36,5 +37,17 @@ internal sealed interface DeviceSettingsState {
         val showAnime: Boolean = true,
         val hideWatched: Boolean = false,
         val autoUpdateCheckEnabled: Boolean = true,
+        val watchIndex: WatchIndexUiState = WatchIndexUiState(),
     ) : DeviceSettingsState
 }
+
+@Immutable
+internal data class WatchIndexUiState(
+    val fullyWatchedItems: Int = 0,
+    val indexedItems: Int = 0,
+    val isSyncing: Boolean = false,
+    val currentPage: Int? = null,
+    val totalPages: Int? = null,
+    val totalHistoryItems: Int? = null,
+    val fullHistoryWalkDone: Boolean = false,
+)

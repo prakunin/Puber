@@ -4,6 +4,9 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.data.repository.WatchState
+import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.repository.WatchStateSyncCursor
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
@@ -11,6 +14,8 @@ import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.util.FakeResourceProvider
@@ -43,6 +48,8 @@ class DeviceSettingsVMMirrorNavigationTest {
     private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository>(relaxed = true)
     private val apiDomainInteractor = mockk<ApiDomainInteractor>(relaxed = true)
     private val appUpdateInteractor = mockk<IAppUpdateInteractor>(relaxed = true)
+    private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
+    private val watchStateSyncInteractor = mockk<WatchStateSyncInteractor>(relaxed = true)
     private val errorHandler = mockk<ErrorHandler>(relaxed = true)
 
     @Test
@@ -111,6 +118,40 @@ class DeviceSettingsVMMirrorNavigationTest {
         verify { router wasNot Called }
     }
 
+    @Test
+    fun syncWatchIndex_requestsApplicationOwnedSync() {
+        val vm = createVM()
+
+        vm.onAction(DeviceSettingsActions.SyncWatchIndex)
+
+        verify { watchStateSyncInteractor.requestSync() }
+    }
+
+    @Test
+    fun buildWatchIndexUiState_countsFullyWatchedAndIndexedTitles() {
+        val state = buildWatchIndexUiState(
+            index = mapOf(
+                1 to WatchState(itemId = 1, isSeriesLike = false, isFullyWatched = true),
+                2 to WatchState(itemId = 2, isSeriesLike = true, isFullyWatched = false),
+            ),
+            progress = WatchStateSyncProgress(
+                isSyncing = true,
+                currentPage = 4,
+                totalPages = 10,
+                totalHistoryItems = 198,
+            ),
+            cursor = WatchStateSyncCursor(fullHistoryWalkDone = false),
+        )
+
+        assertEquals(1, state.fullyWatchedItems)
+        assertEquals(2, state.indexedItems)
+        assertEquals(4, state.currentPage)
+        assertEquals(10, state.totalPages)
+        assertEquals(198, state.totalHistoryItems)
+        assertTrue(state.isSyncing)
+        assertFalse(state.fullHistoryWalkDone)
+    }
+
     private fun createVM(): DeviceSettingsVM {
         every { apiDomainInteractor.getState() } returns ApiDomainState(
             domain = "service-kp.com",
@@ -124,6 +165,8 @@ class DeviceSettingsVMMirrorNavigationTest {
             navigationPreferencesRepository = navigationPreferencesRepository,
             apiDomainInteractor = apiDomainInteractor,
             appUpdateInteractor = appUpdateInteractor,
+            watchStateRepository = watchStateRepository,
+            watchStateSyncInteractor = watchStateSyncInteractor,
             errorHandler = errorHandler,
             resources = FakeResourceProvider(),
             router = router,

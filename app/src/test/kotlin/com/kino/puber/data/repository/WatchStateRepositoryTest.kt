@@ -6,6 +6,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.data.db.DatabaseTransaction
+import com.kino.puber.data.db.ItemLastWatched
 import com.kino.puber.data.db.WatchStateDao
 import com.kino.puber.data.db.WatchStateSyncDao
 import com.kino.puber.data.db.WatchStateSyncEntity
@@ -74,6 +75,24 @@ class WatchStateRepositoryTest {
         )
 
         assertEquals(listOf(2), dao.rows.value.map { it.itemId })
+    }
+
+    @Test
+    fun syncCursorState_tracksCursorWritesAndClear() = runTest {
+        val repository = repository(eagerScope())
+        val cursor = WatchStateSyncCursor(
+            lastSyncAt = 123L,
+            fullHistoryWalkDone = true,
+            historyResumePage = 7,
+        )
+
+        repository.saveSyncCursor(cursor)
+
+        assertEquals(cursor, repository.syncCursorState.value)
+
+        repository.clear()
+
+        assertEquals(WatchStateSyncCursor(), repository.syncCursorState.value)
     }
 
     /**
@@ -654,6 +673,10 @@ private class FakeWatchStateDao : WatchStateDao() {
 
     override suspend fun count(): Int = rows.value.size
 
+    override suspend fun lastWatchedAt(): List<ItemLastWatched> = rows.value
+        .filter { row -> row.historySeenAt > 0 }
+        .map { row -> ItemLastWatched(itemId = row.itemId, historySeenAt = row.historySeenAt) }
+
     /**
      * Holds the user-facing write, so a test can stand between the point the repository registers
      * what a mark will produce and the point that row actually lands. Only [upsert] waits on it —
@@ -803,15 +826,17 @@ private class FakeWatchStateDao : WatchStateDao() {
 
 private class FakeWatchStateSyncDao : WatchStateSyncDao {
 
-    private var row: WatchStateSyncEntity? = null
+    private val row = MutableStateFlow<WatchStateSyncEntity?>(null)
 
-    override suspend fun get(id: Int): WatchStateSyncEntity? = row
+    override fun observe(id: Int): Flow<WatchStateSyncEntity?> = row
+
+    override suspend fun get(id: Int): WatchStateSyncEntity? = row.value
 
     override suspend fun upsert(entity: WatchStateSyncEntity) {
-        row = entity
+        row.value = entity
     }
 
     override suspend fun clear() {
-        row = null
+        row.value = null
     }
 }

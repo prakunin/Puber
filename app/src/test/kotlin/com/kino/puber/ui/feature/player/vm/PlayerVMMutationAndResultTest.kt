@@ -2,13 +2,13 @@ package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorEntity
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.domain.interactor.player.WatchedDetailsRefreshException
 import com.kino.puber.ui.feature.player.model.PlayerAction
+import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState
 import com.kino.puber.ui.feature.player.model.SkipSegmentUIState
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
@@ -153,7 +153,7 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
     @Test
     fun markCurrentWatched_episodePassesSeasonAndEpisodeAndUpdatesEpisodes() {
         val updated = testItem.copy(watched = 1)
-        val updatedEpisodes = VideoGridUIState(emptyList())
+        val updatedEpisodes = EpisodesPanelUIState(emptyList())
         coEvery { interactor.markCurrentAsWatched(id = 42, season = 1, videoNumber = 1) } returns updated
         every { mapper.mapEpisodes(updated) } returns updatedEpisodes
         val vm = startedVM()
@@ -306,7 +306,7 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
     @Test
     fun episodeWatchedChanged_currentEpisodeUpdatesWatchedButtonState() {
         val updated = testItem.withCurrentEpisodeWatched(true)
-        val updatedEpisodes = VideoGridUIState(emptyList())
+        val updatedEpisodes = EpisodesPanelUIState(emptyList())
         coEvery { interactor.setEpisodeWatched(42, season = 1, episode = 1, watched = true) } returns updated
         every { mapper.mapEpisodes(updated) } returns updatedEpisodes
         val vm = startedVM()

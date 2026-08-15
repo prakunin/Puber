@@ -10,4 +10,15 @@
     <string name="device_settings_unlink">Отвязать устройство</string>
     <string name="device_settings_not_supported">Не поддерживается устройством</string>
     <string name="device_settings_restart_required">Нужно перезапустить приложение</string>
+    <string name="settings_watch_index_title">Индекс просмотров</string>
+    <string name="settings_watch_index_description">Локальные данные используются для отметок и скрытия просмотренного контента</string>
+    <string name="settings_watch_index_fully_watched">Просмотрено полностью</string>
+    <string name="settings_watch_index_local_total">Уникальных тайтлов в локальной базе</string>
+    <string name="settings_watch_index_account_total">Записей в истории аккаунта</string>
+    <string name="settings_watch_index_sync_action">Синхронизировать сейчас</string>
+    <string name="settings_watch_index_syncing">Синхронизация…</string>
+    <string name="settings_watch_index_progress">Страница %1$d из %2$d</string>
+    <string name="settings_watch_index_complete">Синхронизировано</string>
+    <string name="settings_watch_index_partial">Индекс заполнен частично</string>
+    <string name="settings_watch_index_not_built">Индекс ещё не построен</string>
 </resources>

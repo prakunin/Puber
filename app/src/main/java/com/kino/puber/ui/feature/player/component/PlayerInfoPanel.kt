@@ -1,60 +1,108 @@
 package com.kino.puber.ui.feature.player.component
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import android.view.KeyEvent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.ui.feature.player.model.PlayerContentState
+import kotlinx.coroutines.launch
 
-/**
- * Read-only summary of what is actually being played: the picked quality, what the decoder
- * reports about the stream, and how far ahead the buffer runs.
- */
+/** Read-only stream diagnostics shown without interrupting playback. */
 @Composable
 internal fun PlayerInfoPanel(
     visible: Boolean,
     entries: List<PlayerInfoEntry>,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AnimatedVisibility(
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(visible) {
+        if (visible) runCatching { focusRequester.requestFocus() }
+    }
+
+    PlayerSidePanel(
         visible = visible,
-        modifier = modifier.fillMaxSize(),
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
+        title = stringResource(R.string.player_info_title),
+        modifier = modifier,
     ) {
-        PlayerInfoPanelContainer {
-            Text(
-                text = stringResource(R.string.player_info_title),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 12.dp),
+        val scrollState = rememberScrollState()
+        val scope = rememberCoroutineScope()
+        val scrollStepPx = with(LocalDensity.current) { 88.dp.toPx() }
+        val interactionSource = remember { MutableInteractionSource() }
+        val isFocused by interactionSource.collectIsFocusedAsState()
+        val focusShape = RoundedCornerShape(12.dp)
+
+        Column(
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .border(
+                    width = 1.dp,
+                    color = if (isFocused) {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f)
+                    } else {
+                        Color.Transparent
+                    },
+                    shape = focusShape,
+                )
+                .background(
+                    color = if (isFocused) {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+                    } else {
+                        Color.Transparent
+                    },
+                    shape = focusShape,
+                )
+                .onPreviewKeyEvent { event ->
+                    if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                    val delta = when (event.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_DOWN -> scrollStepPx
+                        KeyEvent.KEYCODE_DPAD_UP -> -scrollStepPx
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    scope.launch { scrollState.animateScrollBy(delta) }
+                    true
+                }
+                .focusable(interactionSource = interactionSource)
+                .verticalScroll(scrollState)
+                .padding(4.dp),
+        ) {
+            InfoSection(
+                title = stringResource(R.string.player_info_section_video),
+                entries = entries.take(VIDEO_ENTRY_COUNT),
             )
-            InfoEntryColumns(entries = entries, modifier = Modifier.weight(1f))
-            CloseButton(onClose = onClose)
+            InfoSection(
+                title = stringResource(R.string.player_info_section_audio),
+                entries = entries.drop(VIDEO_ENTRY_COUNT).take(AUDIO_ENTRY_COUNT),
+            )
+            InfoSection(
+                title = stringResource(R.string.player_info_section_playback),
+                entries = entries.drop(VIDEO_ENTRY_COUNT + AUDIO_ENTRY_COUNT),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -87,76 +135,13 @@ internal fun playerInfoEntries(content: PlayerContentState): List<PlayerInfoEntr
 }
 
 @Composable
-private fun PlayerInfoPanelContainer(content: @Composable ColumnScope.() -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(320.dp)
-                .padding(horizontal = 48.dp)
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
-                // The only focusable here is the close button, and the video surface behind
-                // the panel stays focusable — without this the first sideways press would
-                // hand the D-pad back to the hidden player.
-                .focusProperties { onExit = { cancelFocusChange() } }
-                .focusGroup(),
-            content = content,
-        )
+private fun InfoSection(title: String, entries: List<PlayerInfoEntry>) {
+    if (entries.isEmpty()) return
+    PlayerPanelSectionHeader(text = title)
+    entries.forEach { entry ->
+        PlayerPanelReadOnlyRow(label = entry.label, value = entry.value)
     }
 }
 
-@Composable
-private fun InfoEntryColumns(entries: List<PlayerInfoEntry>, modifier: Modifier = Modifier) {
-    val half = (entries.size + 1) / 2
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
-    ) {
-        InfoEntryColumn(entries = entries.take(half), modifier = Modifier.weight(1f))
-        InfoEntryColumn(entries = entries.drop(half), modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun InfoEntryColumn(entries: List<PlayerInfoEntry>, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        entries.forEach { entry ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = entry.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = entry.value,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColumnScope.CloseButton(onClose: () -> Unit) {
-    // The panel has nothing else to focus; without this the D-pad would have no anchor.
-    Button(
-        onClick = onClose,
-        modifier = Modifier
-            .align(Alignment.CenterHorizontally)
-            .padding(vertical = 16.dp)
-            .focusRequester(rememberRequestingFocusRequester()),
-    ) {
-        Text(text = stringResource(R.string.player_info_close))
-    }
-}
+private const val VIDEO_ENTRY_COUNT = 5
+private const val AUDIO_ENTRY_COUNT = 2

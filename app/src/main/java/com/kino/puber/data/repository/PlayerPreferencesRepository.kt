@@ -86,6 +86,11 @@ class PlayerPreferencesRepository(context: Context) {
         get() = prefs.getBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, false)
         set(value) = prefs.edit().putBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, value).apply()
 
+    /** Shows the manual watched-state control in the player's secondary actions. */
+    var showMarkWatchedButton: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_MARK_WATCHED_BUTTON, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_MARK_WATCHED_BUTTON, value).apply()
+
     var preferSurroundAudio: Boolean
         get() = prefs.getBoolean(KEY_PREFER_SURROUND, false)
         set(value) = prefs.edit().putBoolean(KEY_PREFER_SURROUND, value).apply()
@@ -113,6 +118,7 @@ class PlayerPreferencesRepository(context: Context) {
         const val KEY_SKIP_CREDITS = "skip_credits_enabled"
         const val KEY_DEBUG_OVERLAY = "debug_overlay_enabled"
         const val KEY_OK_TOGGLES_PLAY_PAUSE = "ok_toggles_play_pause"
+        const val KEY_SHOW_MARK_WATCHED_BUTTON = "show_mark_watched_button"
         const val KEY_PREFER_SURROUND = "prefer_surround_audio"
         const val KEY_BUFFER_PRESET = "buffer_preset"
         const val KEY_FAST_DNS = "fast_dns_enabled"

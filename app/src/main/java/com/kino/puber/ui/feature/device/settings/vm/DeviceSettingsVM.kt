@@ -12,6 +12,9 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.data.repository.WatchState
+import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.repository.WatchStateSyncCursor
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
@@ -20,6 +23,8 @@ import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceCapabilities
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
@@ -27,7 +32,9 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
+import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.combine
 
 internal class DeviceSettingsVM(
     private val deviceSettingInteractor: IDeviceSettingInteractor,
@@ -37,10 +44,14 @@ internal class DeviceSettingsVM(
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val apiDomainInteractor: ApiDomainInteractor,
     private val appUpdateInteractor: IAppUpdateInteractor,
+    private val watchStateRepository: WatchStateRepository,
+    private val watchStateSyncInteractor: WatchStateSyncInteractor,
     override val errorHandler: ErrorHandler,
     private val resources: ResourceProvider,
     router: AppRouter,
 ) : PuberVM<DeviceSettingsViewState>(router) {
+
+    private var latestWatchIndex = WatchIndexUiState()
 
     private val capabilities by lazy {
         DeviceCapabilities(
@@ -54,7 +65,27 @@ internal class DeviceSettingsVM(
         get() = DeviceSettingsViewState(apiDomain = apiDomainInteractor.getState().toDialogState())
 
     override fun onStart() {
+        observeWatchIndex()
         loadDeviceSettings()
+    }
+
+    private fun observeWatchIndex() {
+        launch {
+            combine(
+                watchStateRepository.snapshot,
+                watchStateSyncInteractor.progress,
+                watchStateRepository.syncCursorState,
+            ) { index, progress, cursor -> Triple(index, progress, cursor) }
+                .collect { (index, progress, cursor) ->
+                    latestWatchIndex = buildWatchIndexUiState(index, progress, cursor)
+                    val currentState = stateValue.state as? DeviceSettingsState.Success
+                    if (currentState != null) {
+                        updateViewState(
+                            stateValue.copy(state = currentState.copy(watchIndex = latestWatchIndex))
+                        )
+                    }
+                }
+        }
     }
 
     private fun loadDeviceSettings() {
@@ -77,6 +108,7 @@ internal class DeviceSettingsVM(
                                 skipCreditsEnabled = playerPreferencesRepository.skipCreditsEnabled,
                                 debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
                                 okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
+                                showMarkWatchedButton = playerPreferencesRepository.showMarkWatchedButton,
                                 preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
                                 watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
                                 navigationMode = navigationPreferencesRepository.getNavigationMode(),
@@ -85,6 +117,7 @@ internal class DeviceSettingsVM(
                                 showAnime = contentPreferences.showAnime,
                                 hideWatched = contentPreferences.hideWatched,
                                 autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
+                                watchIndex = latestWatchIndex,
                             )
                         )
                     )
@@ -109,12 +142,14 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleDebugOverlay -> toggleDebugOverlay()
             DeviceSettingsActions.ToggleSurroundAudio -> toggleSurroundAudio()
             DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
+            DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
             DeviceSettingsActions.ToggleAnimeTab -> toggleAnimeTab()
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
+            DeviceSettingsActions.SyncWatchIndex -> watchStateSyncInteractor.requestSync()
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
@@ -285,6 +320,14 @@ internal class DeviceSettingsVM(
         updateViewState(stateValue.copy(state = currentState.copy(okTogglesPlayPause = newValue)))
     }
 
+    private fun toggleShowMarkWatchedButton() {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        val newValue = !currentState.showMarkWatchedButton
+        playerPreferencesRepository.showMarkWatchedButton = newValue
+        updateViewState(stateValue.copy(state = currentState.copy(showMarkWatchedButton = newValue)))
+    }
+
     private fun toggleWatchedIndicators() {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
@@ -416,4 +459,21 @@ internal class DeviceSettingsVM(
             customDomain = customDomain,
         )
     }
+
+}
+
+internal fun buildWatchIndexUiState(
+    index: Map<Int, WatchState>,
+    progress: WatchStateSyncProgress,
+    cursor: WatchStateSyncCursor,
+): WatchIndexUiState {
+    return WatchIndexUiState(
+        fullyWatchedItems = index.values.count { it.isFullyWatched },
+        indexedItems = index.size,
+        isSyncing = progress.isSyncing,
+        currentPage = progress.currentPage,
+        totalPages = progress.totalPages,
+        totalHistoryItems = progress.totalHistoryItems,
+        fullHistoryWalkDone = cursor.fullHistoryWalkDone,
+    )
 }

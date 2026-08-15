@@ -334,7 +334,7 @@ private const val SECONDS_PER_MINUTE = 60
 private const val SECONDS_PER_HOUR = 3_600
 
 private val BUFFERING_LABEL_BOTTOM_PADDING = 4.dp
-private val PROGRESS_HORIZONTAL_PADDING = 24.dp
+private val PROGRESS_HORIZONTAL_PADDING = 48.dp
 private val PROGRESS_ROW_SPACING = 12.dp
 private val TRACK_TOUCH_HEIGHT = 12.dp
 private val TRACK_HEIGHT = 4.dp

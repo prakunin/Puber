@@ -189,12 +189,13 @@ private fun ControlsBottomBar(
 private fun controlsScrimBrush(): Brush {
     return Brush.verticalGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.scrim.copy(alpha = CONTROLS_SCRIM_ALPHA),
+            MaterialTheme.colorScheme.scrim.copy(alpha = TOP_SCRIM_ALPHA),
             MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
             MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
-            MaterialTheme.colorScheme.scrim.copy(alpha = CONTROLS_SCRIM_ALPHA),
+            MaterialTheme.colorScheme.scrim.copy(alpha = BOTTOM_SCRIM_ALPHA),
         ),
     )
 }
 
-private const val CONTROLS_SCRIM_ALPHA = 0.7f
+private const val TOP_SCRIM_ALPHA = 0.55f
+private const val BOTTOM_SCRIM_ALPHA = 0.78f

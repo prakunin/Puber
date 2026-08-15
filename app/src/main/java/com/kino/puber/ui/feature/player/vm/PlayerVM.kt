@@ -287,14 +287,16 @@ internal class PlayerVM(
             PlayerStartMode.ResumeIfAvailable -> buildResumeDialog(resolved.watchingTime)
             PlayerStartMode.StartFromBeginning -> null
         }
-        val contentState = contentStateFactory.build(
+        val baseContentState = contentStateFactory.build(
             item = item,
             resolved = resolved,
             resumeDialog = resumeDialog,
             subtitleSize = interactor.getSubtitleSize(),
             savedBufferPreset = interactor.getBufferPreset(),
             fastDnsEnabled = interactor.isFastDnsEnabled(),
-        ).copy(
+        )
+        val contentState = baseContentState.copy(
+            showMarkWatchedButton = behaviourPreferences.showMarkWatchedButton,
             isMarkCurrentWatchedInFlight = watchedMutationsInFlight[token.key].orZero() > 0,
         )
 
@@ -383,6 +385,7 @@ internal class PlayerVM(
         when (action) {
             is PlayerAction.TogglePlayPause -> togglePlayPause()
             is PlayerAction.OkPressed -> onOkPressed()
+            is PlayerAction.OkReleased -> onOkReleased()
             is PlayerAction.SeekForward -> seekForward()
             is PlayerAction.SeekBackward -> seekBackward()
             is PlayerAction.ShowControls -> showControls(action.focusTarget)
@@ -490,13 +493,18 @@ internal class PlayerVM(
             togglePlayPause()
             return
         }
-        // Focus the seek bar rather than the button row: the row starts on play/pause, so a
-        // held OK — or a second press within the auto-hide window — would click it and pause
-        // anyway, which is exactly what this preference is meant to prevent.
-        showControls(FocusTarget.SeekBar)
+        // Reveal controls on key-down, but keep focus on the video until key-up. Otherwise the
+        // same physical OK press can be delivered to the newly focused Play/Pause button.
+        showControls(focusTarget = null)
     }
 
-    private fun showControls(focusTarget: FocusTarget) {
+    private fun onOkReleased() {
+        if (!behaviourPreferences.okTogglesPlayPause) {
+            showControls(FocusTarget.Buttons)
+        }
+    }
+
+    private fun showControls(focusTarget: FocusTarget?) {
         val effects = controlsStateMachine.showControls(focusTarget)
         applyControlsState()
         processEffects(effects)
@@ -518,7 +526,7 @@ internal class PlayerVM(
     }
 
     private fun openPanel(panel: ActivePanel) {
-        val effects = controlsStateMachine.openPanel(panel, playbackController.isPlaying)
+        val effects = controlsStateMachine.openPanel(panel)
         applyControlsState()
         if (panel == ActivePanel.Info) {
             // Fill the panel right away instead of waiting for the next position tick.
@@ -536,6 +544,9 @@ internal class PlayerVM(
             updateContent { copy(debugInfo = null) }
         }
         processEffects(effects)
+        // A countdown may have become eligible while the panel owned focus. Re-evaluate once the
+        // player is interactive again, including the case where playback already reached its end.
+        checkEarlyNextEpisode()
     }
 
     private fun applyControlsState() {
@@ -554,8 +565,6 @@ internal class PlayerVM(
             when (effect) {
                 is ControlsStateMachine.Effect.ScheduleHide -> scheduleControlsHide()
                 is ControlsStateMachine.Effect.CancelHide -> controlsHideJob?.cancel()
-                is ControlsStateMachine.Effect.PausePlayback -> playbackController.pause()
-                is ControlsStateMachine.Effect.ResumePlayback -> playbackController.play()
                 is ControlsStateMachine.Effect.SaveAndExit -> exitPlayer()
             }
         }
@@ -1007,6 +1016,7 @@ internal class PlayerVM(
         when {
             !content.isMovie &&
                 content.hasNextEpisode &&
+                content.activePanel == ActivePanel.None &&
                 content.nextEpisodeCountdown == null -> startNextEpisodeCountdown()
             // An open panel owns the screen; revealing the controls under it would also expose
             // the debug overlay the user may have switched off.
@@ -1191,6 +1201,7 @@ internal class PlayerVM(
     private fun shouldCheckEarlyNextEpisode(state: PlayerContentState, duration: Long): Boolean {
         return !state.isMovie &&
             state.hasNextEpisode &&
+            state.activePanel == ActivePanel.None &&
             state.nextEpisodeCountdown == null &&
             !countdownDismissed &&
             duration > 0
@@ -1231,13 +1242,18 @@ internal class PlayerVM(
     ): Boolean {
         return !state.isMovie &&
             state.hasNextEpisode &&
+            state.activePanel == ActivePanel.None &&
             state.nextEpisodeCountdown == null &&
             playbackController.currentPosition >= segment.startMs
     }
 
     private fun checkSkipSegment() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
-        if (state.nextEpisodeCountdown == null && state.resumeDialog == null) {
+        if (
+            state.activePanel == ActivePanel.None &&
+            state.nextEpisodeCountdown == null &&
+            state.resumeDialog == null
+        ) {
             val currentPos = playbackController.currentPosition
             if (!handlePositionJump(currentPos)) {
                 handleActiveSkipSegment(state, currentPos)
@@ -1460,7 +1476,7 @@ internal class PlayerVM(
     }
 
     private companion object {
-        const val CONTROLS_HIDE_DELAY_MS = 3000L
+        const val CONTROLS_HIDE_DELAY_MS = 4_500L
         const val SEEK_INDICATOR_HIDE_DELAY_MS = 1500L
         const val PROGRESS_SYNC_INTERVAL_MS = 30_000L
         const val POSITION_UPDATE_INTERVAL_MS = 500L

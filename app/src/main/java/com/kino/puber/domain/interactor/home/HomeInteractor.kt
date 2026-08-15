@@ -14,6 +14,7 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
+import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.builtins.ListSerializer
 
@@ -23,6 +24,7 @@ class HomeInteractor(
     private val bookmarkFolders: BookmarkFoldersInteractor,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val store: PersistentPayloadStore,
+    private val recentlyPlayedOrder: RecentlyPlayedOrder,
 ) {
 
     /**
@@ -112,7 +114,8 @@ class HomeInteractor(
     }
 
     suspend fun getWatchingItems(): Result<List<Item>> {
-        return api.getWatchingList(onlySubscribed = true).map { it.items.orEmpty() }
+        return api.getWatchingList(onlySubscribed = true)
+            .mapCatching { recentlyPlayedOrder.sort(it.items.orEmpty()) }
     }
 
     suspend fun getFreshItems(type: String): Result<List<Item>> {

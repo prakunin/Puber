@@ -1,17 +1,11 @@
 package com.kino.puber.ui.feature.player.component
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
+import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Pause
@@ -21,19 +15,19 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -42,7 +36,6 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
@@ -60,15 +53,42 @@ internal fun PlayerButtonRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .onPreviewKeyEvent { event ->
+                if (!shouldOpenEpisodesFromButtons(event.nativeKeyEvent.keyCode, state.isMovie)) {
+                    false
+                } else {
+                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                        actions.onEpisodesClick()
+                    }
+                    true
+                }
+            }
+            .padding(horizontal = 48.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PrimaryControls(state, actions, focusRequesters)
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        EpisodeNavigationButtons(state, actions)
+        EpisodeLibraryButton(
+            state = state,
+            actions = actions,
+            focusRequesters = focusRequesters,
+            modifier = Modifier.weight(1f),
+        )
+        TransportControls(
+            state = state,
+            actions = actions,
+            focusRequesters = focusRequesters,
+            modifier = Modifier.weight(1f),
+        )
+        SecondaryControls(
+            state = state,
+            actions = actions,
+            focusRequesters = focusRequesters,
+            modifier = Modifier.weight(1f),
+        )
     }
+}
+
+internal fun shouldOpenEpisodesFromButtons(keyCode: Int, isMovie: Boolean): Boolean {
+    return !isMovie && keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 }
 
 internal data class PlayerButtonRowState(
@@ -82,20 +102,94 @@ internal data class PlayerButtonRowState(
 )
 
 @Composable
-private fun PrimaryControls(
+private fun EpisodeLibraryButton(
     state: PlayerButtonRowState,
     actions: PlayerControlActions,
     focusRequesters: PlayerControlFocusRequesters,
+    modifier: Modifier = Modifier,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        if (!state.isMovie) {
+            ControlButton(
+                description = stringResource(R.string.player_button_episodes),
+                icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                onClick = actions.onEpisodesClick,
+                modifier = Modifier.focusRequester(focusRequesters.episodesButton),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransportControls(
+    state: PlayerButtonRowState,
+    actions: PlayerControlActions,
+    focusRequesters: PlayerControlFocusRequesters,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (!state.isMovie && state.hasPreviousEpisode) {
+            ControlButton(
+                description = stringResource(R.string.player_button_previous_episode),
+                icon = Icons.Default.SkipPrevious,
+                onClick = actions.onPreviousEpisodeClick,
+            )
+        }
         PlayPauseButton(
             isPlaying = state.isPlaying,
             onClick = actions.onTogglePlayPause,
             focusRequester = focusRequesters.firstButton,
         )
+        if (!state.isMovie && state.hasNextEpisode) {
+            ControlButton(
+                description = stringResource(R.string.player_button_next_episode),
+                icon = Icons.Default.SkipNext,
+                onClick = actions.onNextEpisodeClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SecondaryControls(
+    state: PlayerButtonRowState,
+    actions: PlayerControlActions,
+    focusRequesters: PlayerControlFocusRequesters,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ControlButton(
+            description = stringResource(R.string.player_button_audio_subtitles),
+            icon = Icons.Default.Subtitles,
+            onClick = actions.onAudioSubtitlesClick,
+            modifier = Modifier.focusRequester(focusRequesters.audioSubtitlesButton),
+        )
+        ControlButton(
+            description = stringResource(R.string.player_button_video),
+            icon = Icons.Default.Videocam,
+            onClick = actions.onVideoSettingsClick,
+            modifier = Modifier.focusRequester(focusRequesters.videoSettingsButton),
+        )
+        ControlButton(
+            description = stringResource(R.string.player_button_info),
+            icon = Icons.Outlined.Info,
+            onClick = actions.onInfoClick,
+            modifier = Modifier.focusRequester(focusRequesters.infoButton),
+        )
         if (state.canMarkCurrentWatched) {
-            PlayerButton(
-                text = stringResource(R.string.player_button_mark_watched),
+            ControlButton(
+                description = stringResource(R.string.player_button_mark_watched),
                 icon = if (state.isCurrentMediaWatched) {
                     PhosphorIcons.Fill.Eye
                 } else {
@@ -103,7 +197,7 @@ private fun PrimaryControls(
                 },
                 onClick = actions.onMarkCurrentWatchedClick,
                 selected = state.isCurrentMediaWatched,
-                enabled = !state.isMarkCurrentWatchedInFlight,
+                loading = state.isMarkCurrentWatchedInFlight,
                 stateDescription = stringResource(
                     if (state.isCurrentMediaWatched) {
                         R.string.player_button_mark_watched_state_watched
@@ -113,32 +207,6 @@ private fun PrimaryControls(
                 ),
             )
         }
-        if (!state.isMovie) {
-            PlayerButton(
-                text = stringResource(R.string.player_button_episodes),
-                icon = Icons.AutoMirrored.Filled.PlaylistPlay,
-                onClick = actions.onEpisodesClick,
-                modifier = Modifier.focusRequester(focusRequesters.episodesButton),
-            )
-        }
-        PlayerButton(
-            text = stringResource(R.string.player_button_audio_subtitles),
-            icon = Icons.Default.Subtitles,
-            onClick = actions.onAudioSubtitlesClick,
-            modifier = Modifier.focusRequester(focusRequesters.audioSubtitlesButton),
-        )
-        PlayerButton(
-            text = stringResource(R.string.player_button_video),
-            icon = Icons.Default.Videocam,
-            onClick = actions.onVideoSettingsClick,
-            modifier = Modifier.focusRequester(focusRequesters.videoSettingsButton),
-        )
-        PlayerButton(
-            text = stringResource(R.string.player_button_info),
-            icon = Icons.Outlined.Info,
-            onClick = actions.onInfoClick,
-            modifier = Modifier.focusRequester(focusRequesters.infoButton),
-        )
     }
 }
 
@@ -148,9 +216,14 @@ private fun PlayPauseButton(
     onClick: () -> Unit,
     focusRequester: FocusRequester,
 ) {
+    val description = stringResource(
+        if (isPlaying) R.string.player_button_pause else R.string.player_button_play,
+    )
     Button(
         onClick = onClick,
-        modifier = Modifier.focusRequester(focusRequester),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .semantics { contentDescription = description },
         colors = transparentButtonColors(),
     ) {
         Icon(
@@ -162,79 +235,37 @@ private fun PlayPauseButton(
 }
 
 @Composable
-private fun EpisodeNavigationButtons(
-    state: PlayerButtonRowState,
-    actions: PlayerControlActions,
-) {
-    if (state.isMovie) return
-    if (state.hasPreviousEpisode) {
-        IconOnlyButton(
-            icon = Icons.Default.SkipPrevious,
-            onClick = actions.onPreviousEpisodeClick,
-        )
-    }
-    if (state.hasNextEpisode) {
-        IconOnlyButton(
-            icon = Icons.Default.SkipNext,
-            onClick = actions.onNextEpisodeClick,
-        )
-    }
-}
-
-@Composable
-private fun IconOnlyButton(icon: ImageVector, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = transparentButtonColors(),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(24.dp),
-        )
-    }
-}
-
-@Composable
-private fun PlayerButton(
-    text: String,
+private fun ControlButton(
+    description: String,
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean? = null,
-    enabled: Boolean = true,
+    loading: Boolean = false,
     stateDescription: String? = null,
 ) {
-    var focused by remember { mutableStateOf(false) }
     Button(
         onClick = onClick,
         modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
             .semantics {
+                contentDescription = description
                 selected?.let { this.selected = it }
                 stateDescription?.let { this.stateDescription = it }
             },
-        enabled = enabled,
+        enabled = !loading,
         colors = if (selected == true) selectedButtonColors() else transparentButtonColors(),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = text,
-            modifier = Modifier.size(20.dp),
-        )
-        AnimatedVisibility(
-            visible = focused,
-            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-        ) {
-            Row {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = text,
-                    maxLines = 1,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }
@@ -242,15 +273,15 @@ private fun PlayerButton(
 @Composable
 private fun transparentButtonColors() = ButtonDefaults.colors(
     containerColor = Color.Transparent,
-    contentColor = MaterialTheme.colorScheme.onSurface,
-    focusedContainerColor = MaterialTheme.colorScheme.primary,
-    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+    focusedContentColor = MaterialTheme.colorScheme.surface,
 )
 
 @Composable
 private fun selectedButtonColors() = ButtonDefaults.colors(
     containerColor = Color.Transparent,
     contentColor = MaterialTheme.colorScheme.primary,
-    focusedContainerColor = MaterialTheme.colorScheme.primary,
-    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+    focusedContentColor = MaterialTheme.colorScheme.surface,
 )

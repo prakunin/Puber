@@ -2,8 +2,6 @@ package com.kino.puber.ui.feature.player.model
 
 import android.content.Context
 import com.kino.puber.R
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridItemUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Audio
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
@@ -104,18 +102,13 @@ internal class PlayerUIMapper(
         return result
     }
 
-    fun mapEpisodes(item: Item): VideoGridUIState? {
+    fun mapEpisodes(item: Item): EpisodesPanelUIState? {
         val seasons = item.seasons ?: return null
-        val gridItems = mutableListOf<VideoGridItemUIState>()
-        for (season in seasons) {
-            val episodeCount = season.episodes?.size ?: 0
-            gridItems.add(
-                VideoGridItemUIState.Title(
-                    context.getString(R.string.player_season_episodes_count, season.number, episodeCount)
-                )
-            )
-            val items = season.episodes?.map { episode ->
-                val isSeasonWatched = season.episodes.all { it.watched == 1 }
+        val mappedSeasons = seasons.mapNotNull { season ->
+            val sourceEpisodes = season.episodes.orEmpty()
+            if (sourceEpisodes.isEmpty()) return@mapNotNull null
+            val isSeasonWatched = sourceEpisodes.all { it.watched == 1 }
+            val episodes = sourceEpisodes.map { episode ->
                 val thumbnailUrls = mapPosterUrls(episode.thumbnail)
                 val title = buildString {
                     append(episode.number)
@@ -136,15 +129,20 @@ internal class PlayerUIMapper(
                     episodeNumber = episode.number,
                     isSeasonWatched = isSeasonWatched,
                 )
-            } ?: emptyList()
-            gridItems.add(
-                VideoGridItemUIState.Items(
-                    items = items,
-                    rowKey = "season_${season.number}",
-                )
+            }
+            EpisodeSeasonUIState(
+                number = season.number,
+                title = context.getString(
+                    R.string.player_season_episodes_count,
+                    season.number,
+                    episodes.size,
+                ),
+                episodes = episodes,
             )
         }
-        return VideoGridUIState(list = gridItems)
+        return mappedSeasons
+            .takeIf { it.isNotEmpty() }
+            ?.let(::EpisodesPanelUIState)
     }
 
     fun watchedIndicatorsEnabled(): Boolean {

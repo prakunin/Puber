@@ -72,6 +72,17 @@
     <string name="device_settings_unlink">Unlink device</string>
     <string name="device_settings_not_supported">Not supported by this device</string>
     <string name="device_settings_restart_required">Restart the app to apply</string>
+    <string name="settings_watch_index_title">Watch index</string>
+    <string name="settings_watch_index_description">Local data powers watched indicators and hiding watched content</string>
+    <string name="settings_watch_index_fully_watched">Fully watched</string>
+    <string name="settings_watch_index_local_total">Unique titles in the local database</string>
+    <string name="settings_watch_index_account_total">Entries in account history</string>
+    <string name="settings_watch_index_sync_action">Sync now</string>
+    <string name="settings_watch_index_syncing">Syncing…</string>
+    <string name="settings_watch_index_progress">Page %1$d of %2$d</string>
+    <string name="settings_watch_index_complete">Synced</string>
+    <string name="settings_watch_index_partial">Index is partially populated</string>
+    <string name="settings_watch_index_not_built">Index has not been built yet</string>
 
     <string name="item_type_movie">Movies</string>
     <string name="item_type_serial">Series</string>
@@ -158,11 +169,16 @@
     <string name="auth_mirror_content_hint">If the code doesn’t refresh or the site is unavailable, press and hold OK/Enter to change the mirror.</string>
 
     <string name="player_buffering">Buffering…</string>
+    <string name="player_button_play">Play</string>
+    <string name="player_button_pause">Pause</string>
+    <string name="player_button_previous_episode">Previous episode</string>
+    <string name="player_button_next_episode">Next episode</string>
     <string name="player_button_episodes">Episodes</string>
     <string name="player_button_mark_watched">Watched</string>
     <string name="player_button_mark_watched_state_watched">Marked as watched</string>
     <string name="player_button_mark_watched_state_not_watched">Not watched</string>
     <string name="player_button_audio_subtitles">Audio and subtitles</string>
+    <string name="player_audio_subtitles_title">Audio and subtitles</string>
     <string name="player_button_video">Video</string>
     <string name="player_button_info">Stream info</string>
     <string name="player_info_title">Stream info</string>
@@ -178,6 +194,9 @@
     <string name="player_info_dropped_frames">Dropped frames</string>
     <string name="player_info_unknown">—</string>
     <string name="player_info_close">Close</string>
+    <string name="player_info_section_video">VIDEO</string>
+    <string name="player_info_section_audio">AUDIO</string>
+    <string name="player_info_section_playback">PLAYBACK</string>
     <string name="player_panel_sound">SOUND</string>
     <string name="player_panel_audio">AUDIO</string>
     <string name="player_panel_subtitles">SUBTITLES</string>
@@ -191,6 +210,11 @@
     <string name="player_panel_speed">SPEED</string>
     <string name="player_panel_aspect_ratio">ASPECT RATIO</string>
     <string name="player_panel_buffer">BUFFER</string>
+    <string name="player_video_settings_title">Video settings</string>
+    <string name="player_panel_advanced">Advanced</string>
+    <string name="player_panel_network">NETWORK</string>
+    <string name="player_setting_enabled">On</string>
+    <string name="player_setting_disabled">Off</string>
     <string name="player_buffer_auto">Auto</string>
     <string name="player_buffer_small">Small (16 MB / 60s)</string>
     <string name="player_buffer_medium">Medium (32 MB / 120s)</string>
@@ -233,6 +257,8 @@
     <string name="settings_watched_indicators">Show watched indicators</string>
     <string name="settings_ok_toggles_play_pause">OK button pauses playback</string>
     <string name="settings_ok_toggles_play_pause_subtitle">When disabled, OK shows the controls. Pause remains available from the ⏯ button and the remote’s media keys.</string>
+    <string name="settings_show_mark_watched_button">Watched button in player</string>
+    <string name="settings_show_mark_watched_button_subtitle">Lets you manually mark the current movie or episode as watched.</string>
     <string name="settings_debug_title">Debug</string>
     <string name="settings_debug_overlay">Show stream information</string>
 

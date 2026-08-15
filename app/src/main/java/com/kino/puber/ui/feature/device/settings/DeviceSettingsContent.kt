@@ -333,12 +333,21 @@ private fun LazyListScope.localPreferencesItems(
     }
     item {
         LocalToggleItem(
+            label = stringResource(R.string.settings_show_mark_watched_button),
+            description = stringResource(R.string.settings_show_mark_watched_button_subtitle),
+            checked = state.showMarkWatchedButton,
+            onToggle = { onAction(DeviceSettingsActions.ToggleShowMarkWatchedButton) },
+        )
+    }
+    item {
+        LocalToggleItem(
             label = stringResource(R.string.settings_watched_indicators),
             checked = state.watchedIndicatorsEnabled,
             onToggle = { onAction(DeviceSettingsActions.ToggleWatchedIndicators) },
         )
     }
     contentPreferencesItems(state, onAction)
+    watchIndexItems(state, onAction)
 }
 
 private fun LazyListScope.contentPreferencesItems(
@@ -387,10 +396,75 @@ private fun LazyListScope.contentPreferencesItems(
     }
 }
 
+private fun LazyListScope.watchIndexItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item {
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+    item {
+        Column {
+            Text(
+                text = stringResource(R.string.settings_watch_index_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = stringResource(R.string.settings_watch_index_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    item {
+        LocalValueItem(
+            label = stringResource(R.string.settings_watch_index_fully_watched),
+            value = state.watchIndex.fullyWatchedItems.toString(),
+        )
+    }
+    item {
+        LocalValueItem(
+            label = stringResource(R.string.settings_watch_index_local_total),
+            value = state.watchIndex.indexedItems.toString(),
+        )
+    }
+    state.watchIndex.totalHistoryItems?.let { totalHistoryItems ->
+        item {
+            LocalValueItem(
+                label = stringResource(R.string.settings_watch_index_account_total),
+                value = totalHistoryItems.toString(),
+            )
+        }
+    }
+    item {
+        val status = when {
+            state.watchIndex.isSyncing &&
+                state.watchIndex.currentPage != null &&
+                state.watchIndex.totalPages != null -> stringResource(
+                    R.string.settings_watch_index_progress,
+                    state.watchIndex.currentPage,
+                    state.watchIndex.totalPages,
+                )
+            state.watchIndex.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
+            state.watchIndex.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
+            state.watchIndex.indexedItems > 0 -> stringResource(R.string.settings_watch_index_partial)
+            else -> stringResource(R.string.settings_watch_index_not_built)
+        }
+        LocalActionItem(
+            label = stringResource(R.string.settings_watch_index_sync_action),
+            value = status,
+            enabled = !state.watchIndex.isSyncing,
+            onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
+        )
+    }
+}
+
 @Composable
 private fun LocalActionItem(
     label: String,
     value: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -401,10 +475,36 @@ private fun LocalActionItem(
             .fillMaxWidth()
             .highlightOnFocus(isFocused)
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
             )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun LocalValueItem(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

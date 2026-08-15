@@ -11,13 +11,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridItemUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.BufferPresetUIState
+import com.kino.puber.ui.feature.player.model.EpisodeSeasonUIState
+import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
@@ -63,29 +63,44 @@ private val previewQualities = listOf(
     QualityUIState(2, "480p", 480, 854, 480),
 )
 
-private val previewEpisodes = VideoGridUIState(
-    list = listOf(
-        VideoGridItemUIState.Title("1 сезон, 10 серий"),
-        VideoGridItemUIState.Items(
-            items = listOf(
-                VideoItemUIState(1, "1. Привет фром Марс", "", "", showTitle = true),
-                VideoItemUIState(2, "2. Как мы поезд пропустили", "", "", showTitle = true),
-                VideoItemUIState(3, "3. Не шутите с плутонцами!", "", "", showTitle = true),
-                VideoItemUIState(4, "4. Как не надо спасать мир", "", "", showTitle = true),
+private val previewEpisodes = EpisodesPanelUIState(
+    seasons = listOf(
+        EpisodeSeasonUIState(
+            number = 1,
+            title = "1 сезон, 10 серий",
+            episodes = listOf(
+                previewEpisode(1, 1, 1, "Привет фром Марс"),
+                previewEpisode(2, 1, 2, "Как мы поезд пропустили"),
+                previewEpisode(3, 1, 3, "Не шутите с плутонцами!"),
+                previewEpisode(4, 1, 4, "Как не надо спасать мир"),
             ),
-            rowKey = "season_1",
         ),
-        VideoGridItemUIState.Title("2 сезон, 10 серий"),
-        VideoGridItemUIState.Items(
-            items = listOf(
-                VideoItemUIState(11, "1. Венеровский централ", "", "", showTitle = true),
-                VideoItemUIState(12, "2. Космический мусор", "", "", showTitle = true),
-                VideoItemUIState(13, "3. Извинигород", "", "", showTitle = true),
-                VideoItemUIState(14, "4. Дед-Код", "", "", showTitle = true),
+        EpisodeSeasonUIState(
+            number = 2,
+            title = "2 сезон, 10 серий",
+            episodes = listOf(
+                previewEpisode(11, 2, 1, "Венеровский централ"),
+                previewEpisode(12, 2, 2, "Космический мусор"),
+                previewEpisode(13, 2, 3, "Извинигород"),
+                previewEpisode(14, 2, 4, "Дед-Код"),
             ),
-            rowKey = "season_2",
         ),
     )
+)
+
+private fun previewEpisode(
+    id: Int,
+    seasonNumber: Int,
+    episodeNumber: Int,
+    title: String,
+) = VideoItemUIState(
+    id = id,
+    title = "$episodeNumber. $title",
+    imageUrl = "",
+    bigImageUrl = "",
+    showTitle = true,
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber,
 )
 
 private fun previewSeriesContent(
@@ -134,6 +149,7 @@ private fun previewSeriesContent(
     resumeDialog = resumeDialog,
     episodes = previewEpisodes,
     currentEpisodeId = 13,
+    showMarkWatchedButton = canMarkCurrentWatched,
 )
 
 private fun previewMovieContent(
@@ -180,6 +196,7 @@ private fun previewMovieContent(
     resumeDialog = resumeDialog,
     episodes = null,
     currentEpisodeId = null,
+    showMarkWatchedButton = canMarkCurrentWatched,
 )
 
 // endregion

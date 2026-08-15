@@ -331,6 +331,7 @@ internal class PlayerInteractor(
         return PlayerBehaviourPreferences(
             debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
             okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
+            showMarkWatchedButton = playerPreferencesRepository.showMarkWatchedButton,
         )
     }
 
@@ -360,4 +361,5 @@ internal class PlayerInteractor(
 data class PlayerBehaviourPreferences(
     val debugOverlayEnabled: Boolean,
     val okTogglesPlayPause: Boolean,
+    val showMarkWatchedButton: Boolean = false,
 )

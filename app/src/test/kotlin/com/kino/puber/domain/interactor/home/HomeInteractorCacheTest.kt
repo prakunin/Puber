@@ -10,8 +10,10 @@ import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.StoredPayload
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
+import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -35,6 +37,10 @@ class HomeInteractorCacheTest {
         bookmarkFolders = BookmarkFoldersInteractor(api),
         navigationPreferencesRepository = navigationPreferencesRepository,
         store = store,
+        recentlyPlayedOrder = RecentlyPlayedOrder(
+            api = api,
+            watchState = mockk<WatchStateRepository>(relaxed = true),
+        ),
     )
 
     @Test

@@ -1,5 +1,6 @@
 package com.kino.puber.domain.interactor.watchstate
 
+import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.ApiResponseList
 import com.kino.puber.data.api.models.History
@@ -7,13 +8,29 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+
+data class WatchStateSyncProgress(
+    val isSyncing: Boolean = false,
+    val currentPage: Int? = null,
+    val totalPages: Int? = null,
+    val totalHistoryItems: Int? = null,
+)
 
 /**
  * Fills the local watch-state index from the account's watching lists and its history.
@@ -31,6 +48,7 @@ class WatchStateSyncInteractor(
     private val minTimeBetweenRuns: Duration = 5.minutes,
     private val reconcileAfter: Duration = 7.days,
     private val pauseBetweenChunks: Duration = 20.seconds,
+    private val requestScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     /**
      * Held at the boundary between chunks while the app is off screen. A walk is minutes long, so
      * without this it keeps pulling history over the network well after the user has left — for a
@@ -41,6 +59,10 @@ class WatchStateSyncInteractor(
 ) {
 
     private val mutex = Mutex()
+    private val requestLock = Any()
+    private var requestedSync: Job? = null
+    private val mutableProgress = MutableStateFlow(WatchStateSyncProgress())
+    val progress: StateFlow<WatchStateSyncProgress> = mutableProgress.asStateFlow()
 
     /** Bumped on logout, so a sync started under the previous session cannot claim to be current. */
     @Volatile
@@ -69,9 +91,39 @@ class WatchStateSyncInteractor(
         // walk only parks while there is no screen.)
         if (force) mutex.lock() else if (!mutex.tryLock()) return false
         try {
+            mutableProgress.value = WatchStateSyncProgress(
+                isSyncing = true,
+                totalHistoryItems = mutableProgress.value.totalHistoryItems,
+            )
             return runSync(force)
         } finally {
+            mutableProgress.value = mutableProgress.value.copy(isSyncing = false)
             mutex.unlock()
+        }
+    }
+
+    /**
+     * Requests a sync owned by this application-wide interactor rather than by the screen that
+     * initiated it. Closing settings therefore does not abandon a large first history walk.
+     */
+    fun requestSync(force: Boolean = true) {
+        synchronized(requestLock) {
+            if (requestedSync?.isActive == true) return
+            requestedSync = requestScope.launch {
+                try {
+                    syncIfStale(force = force)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Throwable) {
+                    // Callers observe the run ending and retain the last durable cursor. The regular
+                    // foreground sync will retry; a settings screen must not own this scope's error.
+                    log(error, "Failed to sync watch state from settings")
+                } finally {
+                    synchronized(requestLock) {
+                        requestedSync = null
+                    }
+                }
+            }
         }
     }
 
@@ -200,6 +252,7 @@ class WatchStateSyncInteractor(
      */
     suspend fun invalidate() {
         generation += 1
+        mutableProgress.value = WatchStateSyncProgress()
         // A new account has to be indexed now, not after the previous one's run has cooled off.
         lastRunAt = null
         // The bookmark lives in the same database as the rows, so one wipe takes both.
@@ -216,6 +269,7 @@ class WatchStateSyncInteractor(
      */
     private suspend fun sessionSurvived(generation: Long): Boolean {
         if (generation == this.generation) return true
+        mutableProgress.value = WatchStateSyncProgress()
         repository.clear()
         return false
     }
@@ -296,6 +350,12 @@ class WatchStateSyncInteractor(
             // Whatever has been read so far is still true and its cursor still describes it, so the
             // remainder is written by the flush below rather than re-fetched by the next run.
             val response = api.getHistoryData(page).getOrNull() ?: break
+            mutableProgress.value = WatchStateSyncProgress(
+                isSyncing = true,
+                currentPage = response.pagination.current,
+                totalPages = response.pagination.total,
+                totalHistoryItems = response.pagination.totalItems,
+            )
             val outcome = current.advancedOver(response, walkEverything, knownUpTo)
             current = outcome.cursor
             pending += response.items

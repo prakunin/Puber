@@ -96,10 +96,15 @@ PUBER_API_DOMAIN=...
 ./gradlew :app:testDevDebugUnitTest
 ./gradlew :app:assembleDevDebug
 ./gradlew :app:detektAll
+make deploy DEVICE=<adb-serial>
 ```
 
-Готовый APK находится в `app/build/outputs/apk/dev/debug/`. Dev-сборка устанавливается как
-`com.kino.puber.stage`, production application ID — `com.kino.puber`.
+`make deploy` собирает `DevDeploy`: это dev-приложение `com.kino.puber.stage` с локальной debug-подписью,
+но с `BuildConfig.DEBUG=false`. Поэтому сетевые, image-loader и Timber debug-логгеры не включаются, а R8 и
+resource shrinking не замедляют локальную сборку. Обычный `make run` по-прежнему устанавливает `DevDebug`.
+
+Готовые APK находятся в `app/build/outputs/apk/dev/debug/` и `app/build/outputs/apk/dev/deploy/`.
+Dev-сборка устанавливается как `com.kino.puber.stage`, production application ID — `com.kino.puber`.
 
 Для работы агента, worktree-сборок и проверок на TV сначала прочитайте [`AGENTS.md`](AGENTS.md): там описаны Kent
 workflow, `./tools/agentw`, обязательная аренда эмулятора и безопасная установка APK. Процесс публикации описан в

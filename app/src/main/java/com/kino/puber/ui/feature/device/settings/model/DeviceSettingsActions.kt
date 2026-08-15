@@ -16,12 +16,14 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleDebugOverlay : DeviceSettingsActions
     data object ToggleSurroundAudio : DeviceSettingsActions
     data object ToggleOkTogglesPlayPause : DeviceSettingsActions
+    data object ToggleShowMarkWatchedButton : DeviceSettingsActions
     data object ToggleWatchedIndicators : DeviceSettingsActions
     data class ChangeNavigationMode(val mode: NavigationMode) : DeviceSettingsActions
     data object ToggleCartoonsTab : DeviceSettingsActions
     data object ToggleAnimeTab : DeviceSettingsActions
     data object ToggleShowAnime : DeviceSettingsActions
     data object ToggleHideWatched : DeviceSettingsActions
+    data object SyncWatchIndex : DeviceSettingsActions
     data object ToggleAutoUpdateCheck : DeviceSettingsActions
     data object OpenApiDomainDialog : DeviceSettingsActions
     data object CloseApiDomainDialog : DeviceSettingsActions

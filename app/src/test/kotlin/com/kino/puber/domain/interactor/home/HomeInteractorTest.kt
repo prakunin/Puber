@@ -5,6 +5,7 @@ import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.ApiResponseList
 import com.kino.puber.data.api.models.Bookmark
 import com.kino.puber.data.api.models.Genre
+import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.KCollection
@@ -13,8 +14,10 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
+import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,6 +34,7 @@ class HomeInteractorTest {
     private lateinit var watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor
     private lateinit var navigationPreferencesRepository: NavigationPreferencesRepository
     private lateinit var contentPreferences: MutableStateFlow<ContentPreferences>
+    private lateinit var watchState: WatchStateRepository
     private lateinit var interactor: HomeInteractor
 
     @BeforeEach
@@ -38,14 +42,17 @@ class HomeInteractorTest {
         api = mockk()
         watchLaterBookmarkInteractor = mockk()
         navigationPreferencesRepository = mockk()
+        watchState = mockk()
         contentPreferences = MutableStateFlow(defaultContentPreferences())
         every { navigationPreferencesRepository.contentPreferences } returns contentPreferences
+        coEvery { watchState.lastWatchedAt() } returns emptyMap()
         interactor = HomeInteractor(
             api = api,
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
             bookmarkFolders = BookmarkFoldersInteractor(api),
             navigationPreferencesRepository = navigationPreferencesRepository,
             store = mockk<PersistentPayloadStore>(relaxed = true),
+            recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )
     }
 
@@ -236,6 +243,7 @@ class HomeInteractorTest {
             bookmarkFolders = bookmarkFolders,
             navigationPreferencesRepository = navigationPreferencesRepository,
             store = mockk<PersistentPayloadStore>(relaxed = true),
+            recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )
 
         subject.getWatchLaterItems()
@@ -274,6 +282,44 @@ class HomeInteractorTest {
         assertEquals(emptyList<Item>(), result.getOrThrow())
         coVerify(exactly = 0) { api.getBookmarkItems(any(), any()) }
     }
+
+    /**
+     * The row means "carry on where you left off", so the title played last belongs at its front.
+     * `/watching/serials` returns an order of its own that has nothing to do with when anything was
+     * played, which is what this ordering replaces. The ordering itself is covered by
+     * `RecentlyPlayedOrderTest`; what this holds is that the row is actually put through it.
+     */
+    @Test
+    fun watchingRowLeadsWithTheTitlePlayedLast() = runTest {
+        val playedToday = item(id = 1)
+        val playedLastWeek = item(id = 2)
+        val neverPlayed = item(id = 3)
+        coEvery { api.getWatchingList(onlySubscribed = true) } returns Result.success(
+            ApiResponseList(items = listOf(neverPlayed, playedLastWeek, playedToday))
+        )
+        coEvery { api.getHistoryData(1) } returns Result.success(
+            historyPage(
+                // Two episodes of the same series, so the newest entry has an older one to beat.
+                historyEntry(itemId = playedToday.id, lastSeen = 500L),
+                historyEntry(itemId = playedToday.id, lastSeen = 1_000L),
+            )
+        )
+        coEvery { watchState.lastWatchedAt() } returns mapOf(playedLastWeek.id to 100L)
+
+        val result = interactor.getWatchingItems()
+
+        assertEquals(listOf(playedToday, playedLastWeek, neverPlayed), result.getOrThrow())
+    }
+
+    private fun historyPage(vararg entries: History) = PaginatedResponse(
+        items = entries.toList(),
+        pagination = Pagination(current = 1, perpage = entries.size, total = 1),
+    )
+
+    private fun historyEntry(itemId: Int, lastSeen: Long) = History(
+        item = item(id = itemId),
+        updated = lastSeen.toString(),
+    )
 
     private fun page(
         vararg items: Item,

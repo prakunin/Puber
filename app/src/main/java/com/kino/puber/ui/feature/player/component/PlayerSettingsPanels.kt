@@ -27,6 +27,7 @@ internal fun PlayerSettingsPanels(
         selectedAudioTrackIndex = content.selectedAudioTrackIndex,
         subtitleTracks = content.subtitleTracks,
         selectedSubtitleIndex = content.selectedSubtitleIndex,
+        subtitleSize = content.subtitleSize,
         onSoundModeSelected = rememberIndexedAction(onAction, PlayerAction::SelectSoundMode),
         onAudioTrackSelected = rememberIndexedAction(onAction, PlayerAction::SelectAudioTrack),
         onSubtitleSelected = rememberIndexedAction(onAction, PlayerAction::SelectSubtitle),
@@ -54,14 +55,15 @@ internal fun PlayerSettingsPanels(
     PlayerInfoPanel(
         visible = content.activePanel == ActivePanel.Info,
         entries = playerInfoEntries(content),
-        onClose = rememberAction(onAction, PlayerAction.ClosePanel),
     )
 
-    EpisodesPanel(
+    PlayerEpisodesPanel(
         visible = content.activePanel == ActivePanel.Episodes,
         episodes = content.episodes,
+        initialFocusedItemId = content.currentEpisodeId,
         onEpisodeSelected = { item -> onAction(PlayerAction.SelectEpisodeById(item.id)) },
         onEpisodeContextMenu = { episodeContextMenuItem = it },
+        onDismiss = rememberAction(onAction, PlayerAction.ClosePanel),
         allowFocusExit = episodeContextMenuItem != null,
     )
 

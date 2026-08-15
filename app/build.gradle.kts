@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.7.3"
+val currentVersion = "1.7.4"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
@@ -172,6 +172,18 @@ android {
         debug {
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = true
+        }
+
+        // Fast local TV deployment: keeps the dev flavor and debug signing, but disables all
+        // BuildConfig.DEBUG-only logging without paying the R8/resource-shrinking build cost.
+        create("deploy") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            versionNameSuffix = "-deploy"
+            matchingFallbacks += listOf("release")
         }
 
         create("nonMinifiedRelease") {

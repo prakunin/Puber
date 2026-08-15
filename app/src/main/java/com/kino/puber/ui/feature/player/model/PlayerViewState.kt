@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.player.model
 
 import androidx.compose.runtime.Immutable
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.FocusTarget
@@ -72,11 +71,14 @@ internal data class PlayerContentState(
     val resumeDialog: ResumeDialogState?,
 
     // Episodes grid (series only)
-    val episodes: VideoGridUIState?,
+    val episodes: EpisodesPanelUIState?,
     val currentEpisodeId: Int?,
 
     // Live playback readings (info panel + debug overlay)
     val debugInfo: PlaybackControl.DebugInfo? = null,
+
+    // Local player controls preference; does not affect automatic watched-state tracking.
+    val showMarkWatchedButton: Boolean = false,
 )
 
 @Immutable

@@ -50,6 +50,11 @@ class WatchStateRepository(
         .map { rows -> rows.associate { row -> row.itemId to row.toWatchState() } }
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
+    /** Observable bookmark for screens that must not race a sync finishing between separate reads. */
+    val syncCursorState: StateFlow<WatchStateSyncCursor> = syncDao.observe()
+        .map { entity -> entity?.toCursor() ?: WatchStateSyncCursor() }
+        .stateIn(scope, SharingStarted.Eagerly, WatchStateSyncCursor())
+
     private val mutableVersion = MutableStateFlow(0L)
     val version: StateFlow<Long> = mutableVersion.asStateFlow()
 
@@ -218,6 +223,21 @@ class WatchStateRepository(
     fun resolve(item: Item): WatchState? = item.toWatchStateOrNull() ?: get(item.id)
 
     fun isFullyWatched(item: Item): Boolean = resolve(item)?.isFullyWatched == true
+
+    /**
+     * When each item the index can date was last played, keyed by item id.
+     *
+     * Read from the database rather than from [snapshot], because this is not part of [WatchState]:
+     * nothing draws a card with it, and putting it there would make every history write that moves a
+     * timestamp — thousands of them during a walk — a change the snapshot publishes and every open
+     * screen re-reads.
+     *
+     * Only the history knows these times, so an item is missing here until the walk has reached it,
+     * and its stamp is as old as the last sync. A caller ordering by recency wants a fresher source
+     * in front of this one for what was played since.
+     */
+    suspend fun lastWatchedAt(): Map<Int, Long> =
+        dao.lastWatchedAt().associate { row -> row.itemId to row.historySeenAt }
 
     /**
      * Records whatever watch fields the given items happen to carry. Items without any (everything

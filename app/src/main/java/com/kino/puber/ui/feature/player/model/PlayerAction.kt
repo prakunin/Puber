@@ -13,6 +13,8 @@ internal sealed interface PlayerAction : UIAction {
      * [TogglePlayPause] or [ShowControls], depending on the user preference.
      */
     data object OkPressed : PlayerAction
+    /** Completes an OK press after the key-up can no longer activate a newly focused control. */
+    data object OkReleased : PlayerAction
     data object SeekForward : PlayerAction
     data object SeekBackward : PlayerAction
 

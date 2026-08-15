@@ -9,6 +9,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.SkipSegment
 import com.kino.puber.data.api.models.SkipSegmentType
+import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.player.model.ActivePanel
@@ -71,6 +72,22 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
         startedVM()
         verify { playbackController.setCallback(any()) }
         verify { playbackController.prepare("https://test/v.m3u8", any(), any()) }
+    }
+
+    @Test
+    fun onStart_hidesManualWatchedControlByDefault() {
+        assertFalse(contentState(startedVM()).showMarkWatchedButton)
+    }
+
+    @Test
+    fun onStart_showsManualWatchedControlWhenEnabled() {
+        every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
+            debugOverlayEnabled = false,
+            okTogglesPlayPause = false,
+            showMarkWatchedButton = true,
+        )
+
+        assertTrue(contentState(startedVM()).showMarkWatchedButton)
     }
 
     @Test
@@ -278,6 +295,29 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     fun playbackEnded_startsCountdown_forSeries() {
         val vm = startedVM()
         callbackSlot.captured.onPlaybackEnded()
+        assertEquals(15, contentState(vm).nextEpisodeCountdown)
+    }
+
+    @Test
+    fun playbackEnded_doesNotStartCountdown_whenPanelIsOpen() {
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
+
+        callbackSlot.captured.onPlaybackEnded()
+
+        assertNull(contentState(vm).nextEpisodeCountdown)
+        assertEquals(ActivePanel.AudioSubtitles, contentState(vm).activePanel)
+    }
+
+    @Test
+    fun closePanel_startsCountdownDeferredWhilePanelWasOpen() {
+        every { playbackController.currentPosition } returns 2_399_000L
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
+        callbackSlot.captured.onPlaybackEnded()
+
+        vm.onAction(PlayerAction.ClosePanel)
+
         assertEquals(15, contentState(vm).nextEpisodeCountdown)
     }
 

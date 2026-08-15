@@ -62,15 +62,49 @@ private fun handlePlayerKeyEvent(
     hasResumeDialog: Boolean,
     onAction: (UIAction) -> Unit,
 ): Boolean {
-    if (keyEvent.action != KeyEvent.ACTION_DOWN || hasResumeDialog) return false
-    if (keyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyEvent.keyCode == KeyEvent.KEYCODE_ENTER) {
-        // OK is resolved by the view model: it either toggles playback or reveals the controls.
-        // Auto-repeat from a held button must not fire it again; the arrow keys below keep
-        // repeating on purpose, so the guard stays scoped to OK.
-        if (keyEvent.repeatCount == 0) onAction(PlayerAction.OkPressed)
-        return true
+    val isOkKey = keyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyEvent.keyCode == KeyEvent.KEYCODE_ENTER
+    return when {
+        hasResumeDialog -> false
+        isOkKey -> handlePlayerOkKeyEvent(keyEvent, onAction)
+        else -> handlePlayerActionKeyEvent(keyEvent, onAction)
     }
-    val action = when (keyEvent.keyCode) {
+}
+
+private fun handlePlayerOkKeyEvent(keyEvent: KeyEvent, onAction: (UIAction) -> Unit): Boolean {
+    return when (keyEvent.action) {
+        KeyEvent.ACTION_DOWN -> {
+            // Auto-repeat from a held button must not fire OK again. Arrow keys below keep
+            // repeating on purpose, so the guard stays scoped to OK.
+            if (keyEvent.repeatCount == 0) {
+                onAction(PlayerAction.OkPressed)
+            }
+            true
+        }
+        KeyEvent.ACTION_UP -> {
+            // Keep focus on the video until this release is consumed. Moving focus to
+            // Play/Pause on key-down can make the same physical press pause playback.
+            onAction(PlayerAction.OkReleased)
+            true
+        }
+        else -> false
+    }
+}
+
+private fun handlePlayerActionKeyEvent(
+    keyEvent: KeyEvent,
+    onAction: (UIAction) -> Unit,
+): Boolean {
+    val action = if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+        playerActionForKeyCode(keyEvent.keyCode)
+    } else {
+        null
+    }
+    action?.let(onAction)
+    return action != null
+}
+
+internal fun playerActionForKeyCode(keyCode: Int): PlayerAction? {
+    return when (keyCode) {
         KeyEvent.KEYCODE_DPAD_LEFT -> PlayerAction.SeekBackward
         KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerAction.SeekForward
         KeyEvent.KEYCODE_DPAD_UP -> PlayerAction.ShowControls(FocusTarget.SeekBar)
@@ -84,8 +118,6 @@ private fun handlePlayerKeyEvent(
         KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> PlayerAction.SeekBackward
         else -> null
     }
-    action?.let(onAction)
-    return action != null
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)

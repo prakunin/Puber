@@ -18,6 +18,7 @@ import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.update.AppUpdateInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
+import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
@@ -52,6 +53,9 @@ val interactorModule = module {
         )
     }
     singleOf(::CardDisplayChanges)
+    // Shared by the home row and the "I'm watching" tab, which show the same list on two screens
+    // with a Koin scope each, so it cannot be scoped to either of them.
+    singleOf(::RecentlyPlayedOrder)
     // A single, and deliberately not screen-scoped: focus survives moves between tabs, and a warm
     // already on the network outlives the screen that asked for it.
     single {

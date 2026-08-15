@@ -1,6 +1,7 @@
 # Deploy Puber to an Android TV device over adb.
 #
-#   make run                             build, install and launch the dev app
+#   make deploy                          optimized non-debug dev build, install and launch
+#   make run                             debug build, install and launch the dev app
 #   make install FLAVOR=prod             install the prod flavor instead
 #   make logs                            follow the app log
 #   make DEVICE=192.168.1.106:5555 run   target another device
@@ -23,12 +24,12 @@ GRADLE ?= ./gradlew
 
 PACKAGE_dev := com.kino.puber.stage
 PACKAGE_prod := com.kino.puber
-PACKAGE := $(PACKAGE_$(FLAVOR))
+PACKAGE = $(PACKAGE_$(FLAVOR))
 ACTIVITY := com.kino.puber.MainActivity
 
 capitalize = $(shell echo $(1) | awk '{print toupper(substr($$0,1,1)) substr($$0,2)}')
-VARIANT := $(call capitalize,$(FLAVOR))$(call capitalize,$(BUILD_TYPE))
-APK := app/build/outputs/apk/$(FLAVOR)/$(BUILD_TYPE)/app-$(FLAVOR)-$(BUILD_TYPE).apk
+VARIANT = $(call capitalize,$(FLAVOR))$(call capitalize,$(BUILD_TYPE))
+APK = app/build/outputs/apk/$(FLAVOR)/$(BUILD_TYPE)/app-$(FLAVOR)-$(BUILD_TYPE).apk
 
 TARGET := $(ADB) -s $(DEVICE)
 
@@ -41,7 +42,7 @@ help:
 	@echo "  make devices     list adb devices"
 	@echo "  make connect     connect to \$$DEVICE over the network"
 	@echo "  make build       assemble$(VARIANT)"
-	@echo "  make deploy      build, install and launch (alias for run)"
+	@echo "  make deploy      optimized non-debug dev build, install and launch"
 	@echo "  make install     build and install, keeping app data"
 	@echo "  make run         install and launch"
 	@echo "  make restart     force-stop and launch again"
@@ -73,6 +74,8 @@ install: connect build
 run: install
 	$(TARGET) shell am start -n $(PACKAGE)/$(ACTIVITY)
 
+deploy: FLAVOR := dev
+deploy: BUILD_TYPE := deploy
 deploy: run
 
 stop: connect

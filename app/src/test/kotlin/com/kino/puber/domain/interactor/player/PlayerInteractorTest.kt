@@ -112,6 +112,22 @@ class PlayerInteractorTest {
 
     // endregion
 
+    @Test
+    fun getBehaviourPreferences_includesManualWatchedControlPreference() {
+        every { playerPreferencesRepository.debugOverlayEnabled } returns false
+        every { playerPreferencesRepository.okTogglesPlayPause } returns true
+        every { playerPreferencesRepository.showMarkWatchedButton } returns true
+
+        assertEquals(
+            PlayerBehaviourPreferences(
+                debugOverlayEnabled = false,
+                okTogglesPlayPause = true,
+                showMarkWatchedButton = true,
+            ),
+            interactor.getBehaviourPreferences(),
+        )
+    }
+
     // region findNextEpisode
 
     @Test

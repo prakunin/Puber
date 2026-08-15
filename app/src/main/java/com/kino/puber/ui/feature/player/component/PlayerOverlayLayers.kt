@@ -75,7 +75,7 @@ internal fun PlayerControlsLayer(
         isPlaying = content.isPlaying,
         hasNextEpisode = content.hasNextEpisode,
         hasPreviousEpisode = content.hasPreviousEpisode,
-        canMarkCurrentWatched = content.canMarkCurrentWatched,
+        canMarkCurrentWatched = content.canMarkCurrentWatched && content.showMarkWatchedButton,
         isCurrentMediaWatched = content.isCurrentMediaWatched,
         isMarkCurrentWatchedInFlight = content.isMarkCurrentWatchedInFlight,
         onEpisodesClick = rememberAction(onAction, PlayerAction.OpenEpisodesPanel),

@@ -21,6 +21,8 @@
     <!-- Player controls -->
     <string name="settings_ok_toggles_play_pause">Кнопка OK ставит на паузу</string>
     <string name="settings_ok_toggles_play_pause_subtitle">Если выключено, OK показывает панель управления. Пауза остаётся на кнопке ⏯ и медиаклавишах пульта.</string>
+    <string name="settings_show_mark_watched_button">Кнопка «Просмотрено» в плеере</string>
+    <string name="settings_show_mark_watched_button_subtitle">Позволяет вручную отмечать текущий фильм или серию просмотренными.</string>
 
     <!-- Debug -->
     <string name="settings_debug_title">Отладка</string>

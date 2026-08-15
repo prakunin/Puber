@@ -1,10 +1,17 @@
 package com.kino.puber.data.db
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Dao
 import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Upsert
 import kotlinx.coroutines.flow.Flow
+
+/** One row of [WatchStateDao.lastWatchedAt]: an item and the `last_seen` of its newest history entry. */
+data class ItemLastWatched(
+    @ColumnInfo(name = "item_id") val itemId: Int,
+    @ColumnInfo(name = "history_seen_at") val historySeenAt: Long,
+)
 
 /**
  * Two rules hold for every hand-written statement here.
@@ -29,6 +36,13 @@ abstract class WatchStateDao {
 
     @Query("SELECT COUNT(*) FROM watch_state")
     abstract suspend fun count(): Int
+
+    /**
+     * When each item was last played, for the items the history walk has actually dated. Rows the
+     * walk never reached carry a zero and are left out rather than returned as "never watched".
+     */
+    @Query("SELECT item_id, history_seen_at FROM watch_state WHERE history_seen_at > 0")
+    abstract suspend fun lastWatchedAt(): List<ItemLastWatched>
 
     @Upsert
     abstract suspend fun upsert(entities: List<WatchStateEntity>)
