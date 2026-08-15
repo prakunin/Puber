@@ -216,7 +216,13 @@ class CachedFeed<V : Any>(
     @Suppress("ReturnCount")
     private suspend fun readUsable(key: String): Usable<V>? {
         val stored = store.read(key) ?: return null
-        if (clock() - stored.updatedAt > HardCeiling.inWholeMilliseconds) return null
+        if (clock() - stored.updatedAt > HardCeiling.inWholeMilliseconds) {
+            // Past the ceiling nothing will read this row again, so keeping it only grows the
+            // table — a details payload carries the item's seasons, videos and files. Dropped for
+            // the same reason an undecodable one is.
+            store.remove(key)
+            return null
+        }
         val value = runCatching { json.decodeFromString(serializer, stored.payload) }.getOrElse {
             // Written by a build whose model differed. Nothing to salvage, and keeping it would make
             // every future read pay the same failed decode.

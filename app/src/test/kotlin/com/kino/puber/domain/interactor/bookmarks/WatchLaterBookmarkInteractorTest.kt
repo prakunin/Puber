@@ -23,7 +23,7 @@ class WatchLaterBookmarkInteractorTest {
 
     @BeforeEach
     fun setup() {
-        interactor = WatchLaterBookmarkInteractor(api)
+        interactor = WatchLaterBookmarkInteractor(api, BookmarkFoldersInteractor(api))
     }
 
     @Test

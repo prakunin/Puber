@@ -27,3 +27,19 @@ suspend inline fun <T> tryOrNull(crossinline call: suspend () -> T): T? {
         null
     }
 }
+
+/**
+ * [runCatching] catches [CancellationException] too, so a cancelled coroutine keeps running and
+ * reports the cancellation as an ordinary failure. This variant rethrows it and wraps only real
+ * failures into a [Result].
+ */
+@Suppress("TooGenericExceptionCaught")
+suspend inline fun <T> runCatchingCancellable(crossinline call: suspend () -> T): Result<T> {
+    return try {
+        Result.success(call())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
+}

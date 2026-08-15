@@ -137,14 +137,12 @@ private fun Modifier.onTvSelectClick(
                 setPressed(true)
                 true
             }
-            KeyEventType.KeyUp -> {
-                if (isPressed()) {
-                    setPressed(false)
-                    onClick()
-                    true
-                } else {
-                    false
-                }
+            KeyEventType.KeyUp -> if (isPressed()) {
+                setPressed(false)
+                onClick()
+                true
+            } else {
+                false
             }
             else -> false
         }

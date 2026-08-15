@@ -138,11 +138,11 @@ object Paginator {
         override fun toString(): String = javaClass.simpleName
     }
 
-    sealed class SideEffect {
-        data class LoadNextPage<T>(val key: T?) : SideEffect()
-        data class LoadPrevPage<T>(val key: T?) : SideEffect()
-        data object LoadFirstPage : SideEffect()
-        data class LoadFirstPageWithKey(val key: Any) : SideEffect()
+    sealed interface SideEffect {
+        data class LoadNextPage<T>(val key: T?) : SideEffect
+        data class LoadPrevPage<T>(val key: T?) : SideEffect
+        data object LoadFirstPage : SideEffect
+        data class LoadFirstPageWithKey(val key: Any) : SideEffect
     }
 
     private fun <T> reducer(
@@ -152,57 +152,31 @@ object Paginator {
         sideEffectListener: (SideEffect) -> Unit,
     ): State {
         return when (action) {
-            Action.Refresh -> {
-                executeRefreshAction<T>(sideEffectListener, state)
-            }
+            Action.Refresh -> executeRefreshAction<T>(sideEffectListener, state)
 
-            is Action.Restart -> {
-                executeRestartAction(sideEffectListener)
-            }
+            is Action.Restart -> executeRestartAction(sideEffectListener)
 
-            is Action.RestartWithKey -> {
-                executeRestartWithKeyAction(sideEffectListener, action.key)
-            }
+            is Action.RestartWithKey -> executeRestartWithKeyAction(sideEffectListener, action.key)
 
-            is Action.Replace<*> -> {
-                executeReplaceAction(action, sideEffectListener)
-            }
+            is Action.Replace<*> -> executeReplaceAction(action, sideEffectListener)
 
-            is Action.LoadPrev -> {
-                executeLoadPrevAction<T>(state, sideEffectListener)
-            }
+            is Action.LoadPrev -> executeLoadPrevAction<T>(state, sideEffectListener)
 
-            is Action.LoadNext -> {
-                executeLoadNextAction<T>(state, sideEffectListener)
-            }
+            is Action.LoadNext -> executeLoadNextAction<T>(state, sideEffectListener)
 
-            is Action.PrevPage<*> -> {
-                executePrevPageAction(action, state, comparator)
-            }
+            is Action.PrevPage<*> -> executePrevPageAction(action, state, comparator)
 
-            is Action.NextPage<*> -> {
-                executeNextPageAction(action, state, comparator, sideEffectListener)
-            }
+            is Action.NextPage<*> -> executeNextPageAction(action, state, comparator, sideEffectListener)
 
-            is Action.ItemUpdated<*> -> {
-                executeUpdateItem(action as Action.ItemUpdated<T>, state, comparator)
-            }
+            is Action.ItemUpdated<*> -> executeUpdateItem(action as Action.ItemUpdated<T>, state, comparator)
 
-            is Action.ItemDeleted<*> -> {
-                executeDeleteItem(action as Action.ItemDeleted<T>, state, comparator)
-            }
+            is Action.ItemDeleted<*> -> executeDeleteItem(action as Action.ItemDeleted<T>, state, comparator)
 
-            is Action.ItemAdded<*> -> {
-                executeAddedItem(action as Action.ItemAdded<T>, state, comparator)
-            }
+            is Action.ItemAdded<*> -> executeAddedItem(action as Action.ItemAdded<T>, state, comparator)
 
-            is Action.PageError -> {
-                executePageErrorAction<T>(state, action)
-            }
+            is Action.PageError -> executePageErrorAction<T>(state, action)
 
-            is Action.Error -> {
-                executeErrorAction<T>(state, action)
-            }
+            is Action.Error -> executeErrorAction<T>(state, action)
         }
     }
 
@@ -269,13 +243,9 @@ object Paginator {
                 State.LoadingPrev(state.data as List<T>)
             }
 
-            is State.LoadingPrev<*> -> {
-                State.LoadingPrev(state.data as List<T>)
-            }
+            is State.LoadingPrev<*> -> State.LoadingPrev(state.data as List<T>)
 
-            is State.LoadingNext<*> -> {
-                State.LoadingPrev(state.data as List<T>)
-            }
+            is State.LoadingNext<*> -> State.LoadingPrev(state.data as List<T>)
 
             is State.PageErrorNext<*> -> state
             is State.PageErrorPrev<*> -> state
@@ -307,9 +277,7 @@ object Paginator {
                 State.LoadingNext(state.data as List<T>)
             }
 
-            is State.LoadingNext<*> -> {
-                State.LoadingNext(state.data as List<T>)
-            }
+            is State.LoadingNext<*> -> State.LoadingNext(state.data as List<T>)
 
             is State.PageErrorNext<*> -> {
                 val key = state.data.lastOrNull()
@@ -328,12 +296,10 @@ object Paginator {
     ): State {
         val items = action.items as List<T>
         return when (state) {
-            is State.Empty -> {
-                if (items.isEmpty()) {
-                    State.Empty
-                } else {
-                    State.Data(items)
-                }
+            is State.Empty -> if (items.isEmpty()) {
+                State.Empty
+            } else {
+                State.Data(items)
             }
 
             is State.Data<*> -> {
@@ -371,12 +337,10 @@ object Paginator {
             return state
         }
         return when (state) {
-            is State.Empty -> {
-                if (items.isEmpty()) {
-                    State.Empty
-                } else {
-                    State.Data(items)
-                }
+            is State.Empty -> if (items.isEmpty()) {
+                State.Empty
+            } else {
+                State.Data(items)
             }
 
             is State.Data<*> -> {
@@ -503,7 +467,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.Data(Collections.unmodifiableList(newList))
-                } else State.Empty
+                } else {
+                    State.Empty
+                }
             }
 
             is State.LoadingNext<*> -> {
@@ -512,7 +478,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.LoadingNext(Collections.unmodifiableList(newList))
-                } else state
+                } else {
+                    state
+                }
             }
 
             is State.LoadingPrev<*> -> {
@@ -521,7 +489,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.LoadingPrev(Collections.unmodifiableList(newList))
-                } else state
+                } else {
+                    state
+                }
             }
 
             is State.Refreshing<*> -> {
@@ -530,7 +500,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.Refreshing(Collections.unmodifiableList(newList))
-                } else state
+                } else {
+                    state
+                }
             }
 
             is State.PageErrorNext<*> -> {
@@ -539,7 +511,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.PageErrorNext(Collections.unmodifiableList(newList), state.error)
-                } else state
+                } else {
+                    state
+                }
             }
 
             is State.PageErrorPrev<*> -> {
@@ -548,7 +522,9 @@ object Paginator {
                 newList.removeAll { comparator.isItemTheSame(it, item) }
                 if (newList.isNotEmpty()) {
                     State.PageErrorPrev(Collections.unmodifiableList(newList), state.error)
-                } else state
+                } else {
+                    state
+                }
             }
 
             else -> state
@@ -615,13 +591,9 @@ object Paginator {
 
     private fun <T> executePageErrorAction(state: State, action: Action.PageError): State {
         return when (state) {
-            is State.LoadingNext<*> -> {
-                State.PageErrorNext(state.data as List<T>, action.error)
-            }
+            is State.LoadingNext<*> -> State.PageErrorNext(state.data as List<T>, action.error)
 
-            is State.LoadingPrev<*> -> {
-                State.PageErrorPrev(state.data as List<T>, action.error)
-            }
+            is State.LoadingPrev<*> -> State.PageErrorPrev(state.data as List<T>, action.error)
 
             is State.Refreshing<*> -> {
                 val items = state.data as List<T>

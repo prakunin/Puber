@@ -2,8 +2,16 @@
     <string name="splash_version">версия %1$s</string>
     <string name="error_button_retry">Повторить</string>
     <string name="empty_state">Пусто</string>
+    <plurals name="items_count">
+        <item quantity="one">%d шт.</item>
+        <item quantity="few">%d шт.</item>
+        <item quantity="many">%d шт.</item>
+        <item quantity="other">%d шт.</item>
+    </plurals>
     <string name="show_all">Показать\nвсе</string>
     <string name="under_development">В разработке</string>
+    <string name="loading">Загрузка</string>
+    <string name="rating_content_description">Рейтинг</string>
     <string name="video_item_watched">Просмотрено</string>
     <string name="context_menu_close">Закрыть</string>
     <string name="context_menu_details">Подробнее</string>

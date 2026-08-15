@@ -74,23 +74,20 @@ internal fun SectionRowContent(
                 message = s.message,
                 onRetry = onRetry,
             )
-            is SectionState.Content -> {
-                ContentSectionCards(
-                    state = s,
-                    isTargetRow = isTargetRow,
-                    shouldRequestInitialFocus = hasFocusRef[0],
-                    rowHasFocusRef = hasFocusRef,
-                    contentFocusRequester = contentFocusRequester,
-                    rowKey = config.id,
-                    onItemClick = onItemClick,
-                    onItemContextMenu = onItemContextMenu,
-                    onItemFocused = onItemFocused,
-                    onSectionFocused = onSectionFocused,
-                    onLoadMore = onLoadMore,
-                    onShowAll = onShowAll,
-                    onRowEmpty = onRowEmpty,
-                )
-            }
+            is SectionState.Content -> ContentSectionCards(
+                state = s,
+                isTargetRow = isTargetRow,
+                shouldRequestInitialFocus = hasFocusRef[0],
+                contentFocusRequester = contentFocusRequester,
+                rowKey = config.id,
+                onItemClick = onItemClick,
+                onItemContextMenu = onItemContextMenu,
+                onItemFocused = onItemFocused,
+                onSectionFocused = onSectionFocused,
+                onLoadMore = onLoadMore,
+                onShowAll = onShowAll,
+                onRowEmpty = onRowEmpty,
+            )
         }
     }
 }
@@ -100,7 +97,6 @@ private fun ContentSectionCards(
     state: SectionState.Content,
     isTargetRow: Boolean,
     shouldRequestInitialFocus: Boolean,
-    rowHasFocusRef: BooleanArray,
     contentFocusRequester: FocusRequester,
     rowKey: String,
     onItemClick: (VideoItemUIState) -> Unit,
@@ -149,8 +145,11 @@ private fun ContentSectionCards(
                     VideoItemHorizontal(
                         modifier = Modifier
                             .then(
-                                if (isFallbackTarget) Modifier.focusRequester(itemFocus.focusRequester)
-                                else Modifier
+                                if (isFallbackTarget) {
+                                    Modifier.focusRequester(itemFocus.focusRequester)
+                                } else {
+                                    Modifier
+                                }
                             )
                             .then(focusModifier),
                         state = item,

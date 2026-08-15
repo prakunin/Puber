@@ -4,19 +4,19 @@ import androidx.compose.runtime.Immutable
 import com.kino.puber.domain.interactor.device.DeviceSettingType
 
 @Immutable
-sealed class DeviceSettingUIModel {
+sealed interface DeviceSettingUIModel {
     data class TypeValue(
         val type: DeviceSettingType,
         val value: Boolean,
         val label: String,
         val supported: Boolean = true,
-    ) : DeviceSettingUIModel()
+    ) : DeviceSettingUIModel
 
     data class TypeList(
         val type: DeviceSettingType,
         val values: List<SettingOptionUi>,
         val label: String,
-    ) : DeviceSettingUIModel()
+    ) : DeviceSettingUIModel
 }
 
 @Immutable

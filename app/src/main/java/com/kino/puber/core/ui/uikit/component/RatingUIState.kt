@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
@@ -65,7 +66,7 @@ fun Rating(
             modifier = Modifier
                 .size(14.dp),
             painter = painterResource(iconResource),
-            contentDescription = "Rating",
+            contentDescription = stringResource(R.string.rating_content_description),
             tint = Color.Unspecified,
         )
 
@@ -103,7 +104,7 @@ fun RatingVertical(
         Icon(
             modifier = Modifier.size(16.dp),
             painter = painterResource(iconResource),
-            contentDescription = "Rating",
+            contentDescription = stringResource(R.string.rating_content_description),
             tint = Color.Unspecified,
         )
 

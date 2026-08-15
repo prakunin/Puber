@@ -1,6 +1,9 @@
 package com.kino.puber.domain.interactor.api
 
+import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
+import com.kino.puber.data.api.network.EndpointProbe
+import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -13,12 +16,14 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
-import okhttp3.OkHttpClient
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.minutes
 
 internal class ApiDomainInteractorTest {
 
@@ -26,12 +31,20 @@ internal class ApiDomainInteractorTest {
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
     private val genreInteractor = mockk<GenreInteractor>(relaxed = true)
     private val store = mockk<PersistentPayloadStore>(relaxed = true)
+    private var reachableDomains = emptySet<String>()
+    private val probeCalls = mutableListOf<String>()
+    private var now = 1_000_000L
+    private val reachability = EndpointReachability(clock = { now })
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
         itemDetailsRepository = itemDetailsRepository,
         genreInteractor = genreInteractor,
         store = store,
-        okHttpClient = OkHttpClient(),
+        probe = EndpointProbe { endpoint ->
+            probeCalls += endpoint.domain
+            endpoint.domain in reachableDomains
+        },
+        reachability = reachability,
     )
 
     private var domainOverride: String? = null
@@ -46,7 +59,23 @@ internal class ApiDomainInteractorTest {
         every { KinoPubConfig.DEFAULT_API_DOMAIN } returns "service-kp.test"
         every { KinoPubConfig.CUSTOM_API_DOMAIN } answers { domainOverride }
         every { KinoPubConfig.setDomainOverride(any()) } answers { domainOverride = firstArg() }
+        every { KinoPubConfig.CURRENT_API_DOMAIN } answers { domainOverride ?: "service-kp.test" }
+        every { KinoPubConfig.CURRENT_ENDPOINT } answers { endpointFor(domainOverride ?: "service-kp.test") }
+        every { KinoPubConfig.BUILT_IN_ENDPOINTS } returns listOf(
+            endpointFor("service-kp.test"),
+            endpointFor("api.alador.test"),
+        )
+        reachableDomains = emptySet()
+        probeCalls.clear()
     }
+
+    private fun endpointFor(domain: String) = ApiEndpointPreset(
+        domain = domain,
+        apiHost = domain,
+        mainBaseUrl = "https://$domain/v1/",
+        oauthBaseUrl = "https://$domain/oauth2/",
+        extraBaseUrl = "https://$domain/",
+    )
 
     @AfterEach
     fun tearDown() {
@@ -85,6 +114,117 @@ internal class ApiDomainInteractorTest {
         assertEquals("api.custom.example", success.state.customDomain)
         verify(exactly = 1) { preferences.saveApiDomain("api.custom.example") }
         verify(exactly = 1) { genreInteractor.clearCache() }
+    }
+
+    /**
+     * The home screen auto-resolves on every load, including the one behind each ON_RESUME, and a
+     * probe is a full catalogue GET whose body is read and parsed. A domain that answered a moment
+     * ago is not worth asking again before anything has shown on screen.
+     */
+    @Test
+    fun autoResolve_doesNotReProbeADomainThatAnsweredWithinTheCacheWindow() = runTest {
+        reachableDomains = setOf("service-kp.test")
+
+        interactor.autoResolveWorkingDomain()
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(listOf("service-kp.test"), probeCalls)
+    }
+
+    @Test
+    fun autoResolve_stillReportsSuccessWhenItAnswersFromTheCache() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        val result = interactor.autoResolveWorkingDomain()
+
+        val success = result as? ApiDomainAutoResolveResult.Success
+            ?: error("Expected Success, got $result")
+        assertEquals("service-kp.test", success.state.domain)
+        assertFalse(success.changed)
+    }
+
+    /**
+     * The window is a tolerance for staleness, not a promise the domain is up. Once it lapses the
+     * failover has to be able to run again, or a domain that has since been blocked never recovers.
+     */
+    @Test
+    fun autoResolve_probesAgainOnceTheCacheWindowHasPassed() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        now += 16.minutes.inWholeMilliseconds
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(listOf("service-kp.test", "service-kp.test"), probeCalls)
+    }
+
+    /**
+     * The window saves probes on the assumption that a domain which just answered still answers.
+     * A caller whose every request has since failed against it knows better, and saying so has to
+     * put the failover back within reach — otherwise a mirror that dies right after a probe holds
+     * the app for the rest of the window.
+     */
+    @Test
+    fun autoResolve_probesAgainAfterTheCurrentDomainIsReportedUnreachable() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(listOf("service-kp.test", "service-kp.test"), probeCalls)
+    }
+
+    /** Reporting a dead domain has to reach a live mirror, not merely cost an extra probe. */
+    @Test
+    fun autoResolve_failsOverToAMirrorAfterTheCurrentDomainIsReportedUnreachable() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+
+        reachableDomains = setOf("api.alador.test")
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        val result = interactor.autoResolveWorkingDomain()
+
+        val success = result as? ApiDomainAutoResolveResult.Success
+            ?: error("Expected Success, got $result")
+        assertEquals("api.alador.test", success.state.domain)
+        assertTrue(success.changed)
+    }
+
+    /**
+     * The report names no domain, so it can only mean the one in use when it was made. A switch
+     * that happened in between leaves a verdict belonging to the new domain, and a report about the
+     * old one must not take it down.
+     */
+    @Test
+    fun autoResolve_keepsTheCacheWhenTheReportedDomainIsNoLongerTheCurrentOne() = runTest {
+        reachableDomains = setOf("service-kp.test", "api.custom.example")
+        interactor.saveCustomDomain("api.custom.example")
+        interactor.autoResolveWorkingDomain()
+        val callsBefore = probeCalls.size
+
+        domainOverride = "service-kp.test"
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        domainOverride = "api.custom.example"
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(callsBefore, probeCalls.size)
+    }
+
+    /**
+     * The cache answers for one domain only. A switch made anywhere — this interactor's own dialog,
+     * the device settings screen — must not be able to inherit the previous domain's verdict.
+     */
+    @Test
+    fun autoResolve_doesNotAnswerFromTheCacheAfterTheDomainChanged() = runTest {
+        reachableDomains = setOf("service-kp.test", "api.custom.example")
+        interactor.autoResolveWorkingDomain()
+
+        interactor.saveCustomDomain("api.custom.example")
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(listOf("service-kp.test", "api.custom.example"), probeCalls)
     }
 
     /**

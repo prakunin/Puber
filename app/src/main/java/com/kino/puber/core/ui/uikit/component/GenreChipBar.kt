@@ -9,11 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.kino.puber.R
 import com.kino.puber.data.api.models.Genre
 
 @Composable
@@ -32,7 +34,7 @@ fun GenreChipBar(
     ) {
         item(key = "all") {
             GenreChip(
-                label = "Все",
+                label = stringResource(R.string.genre_all),
                 isSelected = selectedGenreId == null,
                 onClick = { onGenreSelected(null) },
                 shape = chipShape,

@@ -221,13 +221,14 @@ internal class PlaybackController(
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        dataSourceFactory = createDataSourceFactory()
+        val sourceFactory = createDataSourceFactory()
+        dataSourceFactory = sourceFactory
 
         val player = ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory!!))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
             .setHandleAudioBecomingNoisy(true)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -424,16 +425,16 @@ internal class PlaybackController(
             videoCodec = codecName(videoFormat),
             videoBitrate = videoFormat?.bitrate
                 ?.takeIf { it > 0 }
-                ?.let { "%.1f Mbps".format(it / BITS_PER_MEGABIT) }
+                ?.let { String.format(Locale.US, "%.1f Mbps", it / BITS_PER_MEGABIT) }
                 ?: UNKNOWN_VALUE,
             videoFrameRate = videoFormat?.frameRate
                 ?.takeIf { it > 0f }
-                ?.let { "%.0f fps".format(it) }
+                ?.let { String.format(Locale.US, "%.0f fps", it) }
                 ?: UNKNOWN_VALUE,
             audioCodec = codecName(audioFormat),
             audioChannels = channelLayout(audioFormat?.channelCount),
             droppedFrames = dropped.toString(),
-            bufferedDuration = "%.1fs".format(bufferedSec),
+            bufferedDuration = String.format(Locale.US, "%.1fs", bufferedSec),
         )
     }
 

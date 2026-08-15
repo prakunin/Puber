@@ -151,7 +151,9 @@ internal fun SettingListItem(
                         if (event.key == Key.Back && event.type == KeyEventType.KeyUp) {
                             onToggleExpand()
                             true
-                        } else false
+                        } else {
+                            false
+                        }
                     }
                     .focusGroup()
                     .padding(start = 32.dp, end = 16.dp, bottom = 8.dp),

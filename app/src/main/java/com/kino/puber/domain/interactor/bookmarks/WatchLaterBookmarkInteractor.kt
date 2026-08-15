@@ -6,10 +6,11 @@ import com.kino.puber.data.api.models.Item
 
 class WatchLaterBookmarkInteractor(
     private val api: KinoPubApiClient,
+    private val bookmarkFolders: BookmarkFoldersInteractor,
 ) {
 
     suspend fun getItems(): Result<List<Item>> {
-        return api.getBookmarks().mapCatching { folders ->
+        return bookmarkFolders.folders().mapCatching { folders ->
             val folder = folders.findWatchLaterFolder() ?: return@mapCatching emptyList()
             api.getBookmarkItems(folder.id).getOrThrow().items
         }
@@ -29,15 +30,19 @@ class WatchLaterBookmarkInteractor(
     }
 
     suspend fun remove(itemId: Int): Result<Unit> {
-        return api.getBookmarks().mapCatching { folders ->
+        return bookmarkFolders.folders().mapCatching { folders ->
             val folder = folders.findWatchLaterFolder() ?: return@mapCatching
             api.removeBookmarkItem(itemId = itemId, folderId = folder.id).getOrThrow()
         }
     }
 
     private suspend fun ensureFolder(): Result<Bookmark> {
-        return api.getBookmarks().mapCatching { folders ->
-            folders.findWatchLaterFolder() ?: api.createBookmark(FOLDER_TITLE).getOrThrow()
+        return bookmarkFolders.folders().mapCatching { folders ->
+            folders.findWatchLaterFolder() ?: api.createBookmark(FOLDER_TITLE).getOrThrow().also {
+                // The cached list was read before this folder existed, and the very next reader
+                // would otherwise be told it still does not.
+                bookmarkFolders.invalidate()
+            }
         }
     }
 

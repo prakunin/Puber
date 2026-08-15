@@ -91,7 +91,8 @@ fun FlowComponent(
     },
     scopeName = scopeName,
 ) {
-    val router by LocalPuberKoinScope.current!!.inject<AppRouter>()
+    val scope = checkNotNull(LocalPuberKoinScope.current) { "FlowComponent needs an enclosing DIScope" }
+    val router by scope.inject<AppRouter>()
 
     FlowNavigator(
         scopeName = scopeName,

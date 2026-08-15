@@ -44,13 +44,13 @@ data class DeviceFlowResult(
 /**
  * Represents different states during OAuth Device Flow process
  */
-sealed class DeviceFlowState {
+sealed interface DeviceFlowState {
     /**
      * Device code successfully obtained, user should visit verification URL
      */
     data class DeviceCodeObtained(
         val deviceCode: DeviceCodeResponse
-    ) : DeviceFlowState()
+    ) : DeviceFlowState
 
     /**
      * Waiting for user authorization
@@ -59,14 +59,14 @@ sealed class DeviceFlowState {
         val attempt: Int,
         val maxAttempts: Int,
         val deviceCode: DeviceCodeResponse
-    ) : DeviceFlowState()
+    ) : DeviceFlowState
 
     /**
      * Authentication completed successfully
      */
     data class Completed(
         val result: DeviceFlowResult
-    ) : DeviceFlowState()
+    ) : DeviceFlowState
 
     /**
      * Error occurred during the process
@@ -74,5 +74,5 @@ sealed class DeviceFlowState {
     data class Error(
         val exception: Throwable,
         val isRecoverable: Boolean = false
-    ) : DeviceFlowState()
+    ) : DeviceFlowState
 } 

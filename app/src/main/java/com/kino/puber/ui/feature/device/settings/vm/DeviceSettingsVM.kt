@@ -27,6 +27,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
+import kotlinx.coroutines.CancellationException
 
 internal class DeviceSettingsVM(
     private val deviceSettingInteractor: IDeviceSettingInteractor,
@@ -163,6 +164,9 @@ internal class DeviceSettingsVM(
                 if (successState is DeviceSettingsState.Success) {
                     updateViewState(stateValue.copy(state = successState.copy(savingToggleType = null)))
                 }
+            } catch (cancellation: CancellationException) {
+                // The screen went away; reverting the toggle here would fight whatever replaced it.
+                throw cancellation
             } catch (e: Exception) {
                 // Revert on error + clear progress
                 val revertedSetting = setting.copy(value = !setting.value)

@@ -14,7 +14,7 @@ class LinkingDebugTree : Timber.DebugTree() {
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
         // DO NOT switchScreen this to Thread.getCurrentThread().getStackTrace(). The test will pass
         // because Robolectric runs them on the JVM but on Android the elements are different.
-        val stackTrace = Throwable().stackTrace
+        val stackTrace = Throwable("Log call-site probe").stackTrace
         val index = getIndex(stackTrace)
         super.log(priority, tag, "${createStackElementTag(stackTrace[index])} : $message", t)
     }

@@ -235,7 +235,7 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     @Test
     fun tracksUpdated_keepsDefault_whenSavedLangNotFound() {
         every { interactor.getPreferredAudioLang(42) } returns "deu"
-        val vm = startedVM()
+        startedVM()
 
         callbackSlot.captured.onTracksUpdated(
             listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus")),
@@ -248,7 +248,7 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     @Test
     fun tracksUpdated_restoresOnlyOnce_perEpisode() {
         every { interactor.getPreferredAudioLang(42) } returns "rus"
-        val vm = startedVM()
+        startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
         callbackSlot.captured.onTracksUpdated(tracks, 0)

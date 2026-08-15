@@ -139,6 +139,32 @@ internal abstract class ContentListPagingVM<VS>(
         }
     }
 
+    /**
+     * Whether the item is among the rows this list is currently showing.
+     *
+     * Read from the mapping cache rather than the paginator, because that is exactly the list the
+     * screen last drew.
+     */
+    protected fun isShowingItem(itemId: Int): Boolean =
+        cachedInput?.any { it.id == itemId } == true
+
+    /**
+     * Redraws the rows already loaded against whatever the index and display settings say now,
+     * without asking the server for them again.
+     *
+     * For a change that alters how a card looks but not which cards belong — a watched mark landing
+     * while watched titles are still shown — this is the whole of the work. Re-paging would spend a
+     * request per open list to arrive at the same items.
+     *
+     * The identity cache in [mapItems] has to be dropped first: the paginator hands back the very
+     * same list instance, which is exactly what that cache is keyed on. Assigning [Paginator.Store.render]
+     * re-invokes it with the state the store is already holding.
+     */
+    protected fun remapLoadedItems() {
+        cachedInput = null
+        paginator.render = ::dispatchListState
+    }
+
     private companion object {
         /**
          * How many blank pages in a row one load will walk past. Each of them already cost the

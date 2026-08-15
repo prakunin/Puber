@@ -1,5 +1,6 @@
 package com.kino.puber.data.api
 
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.data.api.models.SkipSegment
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.data.api.models.TheIntroDbMediaResponse
@@ -29,7 +30,11 @@ class TheIntroDbApiClient {
         }
     }
 
-    suspend fun getSegments(tmdbId: Int, season: Int?, episode: Int?): Result<List<SkipSegment>> = runCatching {
+    suspend fun getSegments(
+        tmdbId: Int,
+        season: Int?,
+        episode: Int?,
+    ): Result<List<SkipSegment>> = runCatchingCancellable {
         val response = httpClient.get("media") {
             parameter("tmdb_id", tmdbId)
             if (season != null) parameter("season", season)

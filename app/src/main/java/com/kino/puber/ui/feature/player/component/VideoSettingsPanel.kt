@@ -54,7 +54,6 @@ internal fun VideoSettingsPanel(
     onAspectRatioSelected: (Int) -> Unit,
     onBufferPresetSelected: (Int) -> Unit,
     onToggleFastDns: () -> Unit,
-    onBackPressed: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(

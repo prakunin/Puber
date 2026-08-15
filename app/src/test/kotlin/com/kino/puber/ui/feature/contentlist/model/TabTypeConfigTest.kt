@@ -1,7 +1,10 @@
 package com.kino.puber.ui.feature.contentlist.model
 
+import com.kino.puber.R
+
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
+import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.ui.feature.main.model.TabType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,14 +29,53 @@ class TabTypeConfigTest {
     fun cartoonsSections_useCartoonGenreAndAlwaysExcludeAnime() {
         val sections = TabTypeConfig.sectionsFor(TabType.Cartoons)
 
-        assertEquals(listOf("popular_cartoon", "all_cartoon"), sections.map(SectionConfig::id))
         assertEquals(
-            setOf(CARTOON_GENRE_ID.toString()),
-            sections.mapNotNull(SectionConfig::genre).toSet(),
+            listOf("fresh_cartoon", "popular_cartoon", "all_cartoon"),
+            sections.map(SectionConfig::id),
         )
         assertEquals(
-            setOf(AnimeFilterMode.Exclude),
-            sections.map(SectionConfig::animeFilterMode).toSet(),
+            listOf(
+                R.string.content_section_fresh,
+                R.string.content_section_popular,
+                R.string.content_section_all,
+            ),
+            sections.map(SectionConfig::titleRes),
+        )
+        assertEquals(
+            listOf("fresh", null, null),
+            sections.map(SectionConfig::shortcut),
+        )
+        assertEquals(
+            listOf(
+                listOf(ItemType.MOVIE, ItemType.SERIAL),
+                emptyList(),
+                emptyList(),
+            ),
+            sections.map(SectionConfig::shortcutTypes),
+        )
+        assertEquals(
+            listOf(null, "views-", "updated-"),
+            sections.map(SectionConfig::sort),
+        )
+        assertEquals(
+            listOf(null, null, null),
+            sections.map(SectionConfig::type),
+        )
+        assertEquals(
+            listOf(null, CARTOON_GENRE_ID.toString(), CARTOON_GENRE_ID.toString()),
+            sections.map(SectionConfig::genre),
+        )
+        assertEquals(
+            listOf(CARTOON_GENRE_ID, null, null),
+            sections.map(SectionConfig::requiredGenreId),
+        )
+        assertEquals(
+            listOf(
+                AnimeFilterMode.Exclude,
+                AnimeFilterMode.Exclude,
+                AnimeFilterMode.Exclude,
+            ),
+            sections.map(SectionConfig::animeFilterMode),
         )
     }
 
@@ -41,15 +83,53 @@ class TabTypeConfigTest {
     fun animeSections_useAnimeGenreAndOnlyMode() {
         val sections = TabTypeConfig.sectionsFor(TabType.Anime)
 
-        assertEquals(listOf("popular_anime", "all_anime"), sections.map(SectionConfig::id))
-        assertEquals(listOf("views-", "updated-"), sections.map(SectionConfig::sort))
         assertEquals(
-            setOf(ANIME_GENRE_ID.toString()),
-            sections.mapNotNull(SectionConfig::genre).toSet(),
+            listOf("fresh_anime", "popular_anime", "all_anime"),
+            sections.map(SectionConfig::id),
         )
         assertEquals(
-            setOf(AnimeFilterMode.Only),
-            sections.map(SectionConfig::animeFilterMode).toSet(),
+            listOf(
+                R.string.content_section_fresh,
+                R.string.content_section_popular,
+                R.string.content_section_all,
+            ),
+            sections.map(SectionConfig::titleRes),
+        )
+        assertEquals(
+            listOf("fresh", null, null),
+            sections.map(SectionConfig::shortcut),
+        )
+        assertEquals(
+            listOf(
+                listOf(ItemType.MOVIE, ItemType.SERIAL),
+                emptyList(),
+                emptyList(),
+            ),
+            sections.map(SectionConfig::shortcutTypes),
+        )
+        assertEquals(
+            listOf(null, "views-", "updated-"),
+            sections.map(SectionConfig::sort),
+        )
+        assertEquals(
+            listOf(null, null, null),
+            sections.map(SectionConfig::type),
+        )
+        assertEquals(
+            listOf(null, ANIME_GENRE_ID.toString(), ANIME_GENRE_ID.toString()),
+            sections.map(SectionConfig::genre),
+        )
+        assertEquals(
+            listOf(ANIME_GENRE_ID, null, null),
+            sections.map(SectionConfig::requiredGenreId),
+        )
+        assertEquals(
+            listOf(
+                AnimeFilterMode.Only,
+                AnimeFilterMode.Only,
+                AnimeFilterMode.Only,
+            ),
+            sections.map(SectionConfig::animeFilterMode),
         )
     }
 

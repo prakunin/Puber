@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.7.1"
+val currentVersion = "1.7.2"
 
 /**
  * Reads CLIENT_SECRET from local.properties or system environment variable
@@ -227,18 +227,25 @@ kotlin {
     }
 }
 
+// Shared settings for the variant-aware detekt tasks (detektMain, detektDevDebug, ...).
+// Those run with type resolution, so they see the rules that a source-set-only pass skips.
+detekt {
+    parallel = true
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+    baseline = file("$rootDir/config/detekt/detekt-baseline.xml")
+    buildUponDefaultConfig = false
+}
+
 tasks {
+    // Single entry point for the static-analysis gate. It delegates to the variant tasks rather
+    // than scanning the source tree directly: those compile the variant first, so detekt runs with
+    // type resolution and sees the rules a source-set-only pass silently skips (swallowed
+    // cancellation, unsafe !!, unused declarations, ...).
     @Suppress("unused")
-    val detektAll by registering(dev.detekt.gradle.Detekt::class) {
-        parallel = true
-        setSource(files(projectDir))
-        include("**/*.kt")
-        exclude("**/resources/**")
-        exclude("**/build/**")
-        exclude("**/androidTest/**")
-        config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
-        baseline.set(file("$rootDir/config/detekt/detekt-baseline.xml"))
-        buildUponDefaultConfig = false
+    val detektAll by registering {
+        group = "verification"
+        description = "Runs detekt with type resolution over the dev debug production and unit-test sources."
+        dependsOn("detektDevDebug", "detektDevDebugUnitTest")
     }
 }
 
@@ -293,7 +300,6 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
-    implementation(libs.media3.session)
     implementation(libs.media3.common)
     implementation(libs.media3.datasource.okhttp)
 

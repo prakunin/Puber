@@ -11,6 +11,10 @@ import com.kino.puber.data.api.KinoPubApiClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
+private const val UHD_WIDTH = 3840
+private const val UHD_HEIGHT = 2160
+private const val HEVC_MIME_TYPE = "video/hevc"
+
 internal class DeviceInfoRepository(
     private val context: Context,
     private val apiClient: KinoPubApiClient,
@@ -23,31 +27,32 @@ internal class DeviceInfoRepository(
         val display = getPrimaryDisplay(context)
         val modes = display?.supportedModes ?: return false
         return modes.any { mode ->
-            mode.physicalWidth >= 3840 && mode.physicalHeight >= 2160
+            mode.physicalWidth >= UHD_WIDTH && mode.physicalHeight >= UHD_HEIGHT
         }
     }
 
     private fun is4kHardwareDecoderSupported(): Boolean {
-        val codecList = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
-        for (codec in codecList) {
-            if (codec.isEncoder) continue
-            if (codec.supportedTypes.none { it.equals("video/hevc", ignoreCase = true) }) continue
-
-            val isHardware = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                codec.isHardwareAccelerated
-            } else {
-                !codec.name.contains("omx.google", ignoreCase = true)
-            }
-            if (!isHardware) continue
-
-            val caps = codec.getCapabilitiesForType("video/hevc")
-            val videoCaps = caps.videoCapabilities ?: continue
-            if (videoCaps.isSizeSupported(3840, 2160)) {
-                return true
-            }
+        return hevcDecoders().filter { it.isHardwareDecoder }.any { codec ->
+            codec.getCapabilitiesForType(HEVC_MIME_TYPE)
+                .videoCapabilities
+                ?.isSizeSupported(UHD_WIDTH, UHD_HEIGHT) == true
         }
-        return false
     }
+
+    /** Every non-encoder codec on the device that advertises HEVC. */
+    private fun hevcDecoders(): List<MediaCodecInfo> {
+        return MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.filter { codec ->
+            !codec.isEncoder && codec.supportedTypes.any { it.equals(HEVC_MIME_TYPE, ignoreCase = true) }
+        }
+    }
+
+    private val MediaCodecInfo.isHardwareDecoder: Boolean
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            isHardwareAccelerated
+        } else {
+            // Before Q there is no flag, so the software codecs are recognised by name.
+            !name.contains("omx.google", ignoreCase = true)
+        }
 
     override fun isHdrSupported(): Boolean {
         return isDisplayHdrSupported() && isHdrCodecSupported()
@@ -60,47 +65,18 @@ internal class DeviceInfoRepository(
     }
 
     private fun isHdrCodecSupported(): Boolean {
-        val codecList = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
-        for (codec in codecList) {
-            if (codec.isEncoder) continue
-            if (codec.supportedTypes.none { it.equals("video/hevc", ignoreCase = true) }) continue
-
-            val caps = codec.getCapabilitiesForType("video/hevc")
-            for (pl in caps.profileLevels) {
-                if (pl.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
-                    pl.profile == MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt
-                ) {
-                    return true
-                }
+        return hevcDecoders().any { codec ->
+            codec.getCapabilitiesForType(HEVC_MIME_TYPE).profileLevels.any { profileLevel ->
+                profileLevel.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+                    profileLevel.profile == MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt
             }
         }
-        return false
     }
 
     override fun isSslSupported(): Boolean = true
 
     override fun isHevcHardwareDecodingSupported(): Boolean {
-        val codecList = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
-
-        for (codecInfo in codecList) {
-            if (!codecInfo.isEncoder) {
-                codecInfo.supportedTypes.forEach { type ->
-                    if (type.equals("video/hevc", ignoreCase = true)) {
-                        val isHardwareAccelerated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            codecInfo.isHardwareAccelerated
-                        } else {
-                            !codecInfo.name.contains("omx.google", ignoreCase = true)
-                        }
-
-                        if (isHardwareAccelerated) {
-                            return true
-                        }
-                    }
-                }
-            }
-        }
-
-        return false
+        return hevcDecoders().any { it.isHardwareDecoder }
     }
 
     override fun getAndroidVersion(): String =

@@ -1,5 +1,6 @@
 package com.kino.puber.domain.interactor.watchstate
 
+import com.kino.puber.core.lifecycle.AppForegroundState
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.ApiResponseList
 import com.kino.puber.data.api.models.History
@@ -15,6 +16,10 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -28,6 +33,12 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 class WatchStateSyncInteractorTest {
+
+    /** Long enough that a case can tell "still parked" from "moved on" by advancing past it. */
+    private val chunkPause = 1.minutes
+
+    /** Comfortably more pauses than any walk in these cases takes, so none is left half-run. */
+    private val pastEveryPause = chunkPause.inWholeMilliseconds * 5
 
     private val api = mockk<KinoPubApiClient>()
     private val repository = mockk<WatchStateRepository>(relaxed = true)
@@ -47,6 +58,9 @@ class WatchStateSyncInteractorTest {
         // The cooldown between runs has its own test; here it would only stop back-to-back calls
         // these cases make on purpose.
         minTimeBetweenRuns = Duration.ZERO,
+        // Likewise the pacing: these cases are about what a walk reads and writes, not about how it
+        // is spread out, and a pause they never advance past would simply stall them.
+        pauseBetweenChunks = Duration.ZERO,
     )
 
     @BeforeEach
@@ -161,6 +175,244 @@ class WatchStateSyncInteractorTest {
         stubHistory(pages = 2)
         assertTrue(interactor.syncIfStale())
         coVerify(exactly = 1) { repository.pruneStaleRows(2L) }
+    }
+
+    /**
+     * Every write is a transaction, and every transaction re-runs the query behind the repository's
+     * snapshot, which rebuilds the whole id-to-state map. Paid once per page across a first walk of
+     * hundreds of pages, that dominates the cost of the walk — and none of it is visible until the
+     * walk finishes anyway.
+     */
+    @Test
+    fun theWalkWritesOncePerBatchOfPagesRatherThanOncePerPage() = runTest {
+        // Twenty pages fall as one full chunk of fifteen and a remainder of five — two writes where
+        // one per page would have been twenty.
+        stubHistory(pages = 20)
+
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 2) { repository.recordHistoryPage(any(), any(), any(), any()) }
+    }
+
+    /**
+     * OkHttp allows five requests in flight per host. A first walk is hundreds of pages long, so run
+     * flat out it holds those slots for its whole duration — in front of every request the screen
+     * the user is looking at is waiting on. Reading in chunks with a pause between them is what
+     * turns that burst into a trickle.
+     */
+    @Test
+    fun theWalkStandsDownBetweenChunksRatherThanRunningFlatOut() = runTest {
+        val interactor = pacedInteractor()
+        stubHistory(pages = 20)
+
+        backgroundScope.launch { interactor.syncIfStale() }
+        runCurrent()
+
+        // One chunk goes out, and then the walk waits rather than reaching for the next page.
+        coVerify(exactly = 1) { api.getHistoryData(15) }
+        coVerify(exactly = 0) { api.getHistoryData(16) }
+
+        advanceTimeBy(chunkPause.inWholeMilliseconds + 1)
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(16) }
+    }
+
+    /** The pause spreads the walk out; it must not cost it pages. */
+    @Test
+    fun aPacedWalkStillReadsEveryPage() = runTest {
+        val interactor = pacedInteractor()
+        stubHistory(pages = 20)
+
+        backgroundScope.launch { interactor.syncIfStale() }
+        // Advancing well past every pause the walk can take, rather than to idle: the walk runs in
+        // the background scope, which `advanceUntilIdle` does not drain.
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(20) }
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * A walk is minutes long, so the app can easily be left while one is running. Carrying on then
+     * spends the network on an index nothing is going to read until the user comes back.
+     *
+     * The chunk boundary is the granularity: the chunk already in flight finishes and is written,
+     * which is what leaves the walk somewhere it can be picked up from.
+     */
+    @Test
+    fun theWalkParksBetweenChunksWhileTheAppIsOffScreen() = runTest {
+        val foreground = AppForegroundState()
+        val interactor = pacedInteractor(awaitForeground = foreground::awaitForeground)
+        stubHistory(pages = 20)
+        backgroundScope.launch { interactor.syncIfStale() }
+        runCurrent()
+
+        // Left during the gap between chunks, which is the window the check before it cannot see.
+        foreground.onLeftForeground()
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        // The chunk in flight was finished; nothing past the boundary went out.
+        coVerify(exactly = 1) { api.getHistoryData(15) }
+        coVerify(exactly = 0) { api.getHistoryData(16) }
+    }
+
+    /**
+     * The startup wait is five seconds and the walk is minutes long, so the user leaving in between
+     * is ordinary. A run that went ahead anyway would spend both watching requests and a full chunk
+     * of history before reaching the first check.
+     */
+    @Test
+    fun theWalkSendsNothingAtAllWhileTheAppIsAlreadyOffScreen() = runTest {
+        val foreground = AppForegroundState()
+        foreground.onLeftForeground()
+        val interactor = pacedInteractor(awaitForeground = foreground::awaitForeground)
+        stubHistory(pages = 20)
+
+        backgroundScope.launch { interactor.syncIfStale() }
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        coVerify(exactly = 0) { api.getWatchingList(any()) }
+        coVerify(exactly = 0) { api.getWatchingMovies() }
+        coVerify(exactly = 0) { api.getHistoryData(any()) }
+    }
+
+    /** Parking has to be a wait, not an end: coming back continues the walk where it stopped. */
+    @Test
+    fun aParkedWalkCarriesOnWhenTheAppComesBack() = runTest {
+        val foreground = AppForegroundState()
+        foreground.onLeftForeground()
+        val interactor = pacedInteractor(awaitForeground = foreground::awaitForeground)
+        stubHistory(pages = 20)
+        backgroundScope.launch { interactor.syncIfStale() }
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        foreground.onEnteredForeground()
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(20) }
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * A walk now spans minutes of paced requests, so a trigger arriving mid-walk would queue behind
+     * one rather than brushing past it. It has nothing to add — the run under way is the one it
+     * would have started — so it has to leave immediately instead of waiting the walk out.
+     */
+    @Test
+    fun aTriggerArrivingMidWalkIsDroppedRatherThanQueuedBehindIt() = runTest {
+        val interactor = pacedInteractor()
+        stubHistory(pages = 20)
+        backgroundScope.launch { interactor.syncIfStale() }
+        runCurrent()
+
+        assertFalse(interactor.syncIfStale())
+
+        // Having waited would have let the first walk run on; it is still parked where it was.
+        coVerify(exactly = 0) { api.getHistoryData(16) }
+    }
+
+    /**
+     * A forced trigger wants the opposite. It is asking for a pass that has not happened — normally
+     * because what the index describes has changed underneath it — and the run in flight is not that
+     * pass. Dropping it the way an ordinary trigger is dropped would make `force` quietly mean
+     * nothing exactly when it is being relied on, so it waits its turn instead.
+     */
+    @Test
+    fun aForcedTriggerWaitsForTheWalkInFlightRatherThanGivingUp() = runTest {
+        val interactor = pacedInteractor()
+        stubHistory(pages = 20)
+        backgroundScope.launch { interactor.syncIfStale() }
+        runCurrent()
+
+        val forced = async { interactor.syncIfStale(force = true) }
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        assertTrue(forced.await())
+    }
+
+    /**
+     * A parked run can start hours after it was asked for, and the bookmark it walks from has to be
+     * the one on disk when it actually starts. A logout wipes that row; resurrecting the copy read
+     * before parking would tell the next account its history had already been indexed.
+     */
+    @Test
+    fun aParkedRunWalksFromTheBookmarkOnDiskWhenItFinallyStarts() = runTest {
+        val foreground = AppForegroundState()
+        foreground.onLeftForeground()
+        val interactor = pacedInteractor(awaitForeground = foreground::awaitForeground)
+        stubHistory(pages = 2)
+        backgroundScope.launch { interactor.syncIfStale() }
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        // Replaced while the run was parked: a pass is already done and page 1 holds nothing new.
+        cursor = WatchStateSyncCursor(historyNewestSeen = 999L, fullHistoryWalkDone = true)
+
+        foreground.onEnteredForeground()
+        advanceTimeBy(pastEveryPause)
+        runCurrent()
+
+        // Walking from the copy read before parking would have made this a full pass and read both
+        // pages; from the bookmark on disk, page 1 already says it has caught up.
+        coVerify(exactly = 0) { api.getHistoryData(2) }
+    }
+
+    /** Batching may not lose an entry: every page the walk read still has to reach the repository. */
+    @Test
+    fun aBatchedWalkStillWritesEveryEntryItRead() = runTest {
+        stubHistory(pages = 20)
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals((1..20).toList(), written.flatten().map { it.item.id }.sorted())
+    }
+
+    /**
+     * The walk ends when the server runs out, which lands wherever it lands — usually mid-batch. A
+     * remainder left unwritten would be re-read by every later run, because the cursor that would
+     * have said otherwise is written with it.
+     */
+    @Test
+    fun aWalkEndingMidBatchStillWritesTheRemainder() = runTest {
+        stubHistory(pages = 3)
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals((1..3).toList(), written.flatten().map { it.item.id }.sorted())
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * A page that fails ends the run, but what was already read is still good and its cursor is
+     * still true. Dropping it would make the next run fetch those pages again for nothing.
+     */
+    @Test
+    fun aWalkInterruptedMidBatchStillWritesWhatItHadRead() = runTest {
+        stubHistory(pages = 20)
+        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("interrupted"))
+        val written = mutableListOf<List<History>>()
+        coEvery {
+            repository.recordHistoryPage(capture(written), any(), any(), any())
+        } answers { cursor = arg(3) }
+
+        assertTrue(interactor.syncIfStale())
+
+        assertEquals(listOf(1, 2), written.flatten().map { it.item.id }.sorted())
     }
 
     @Test
@@ -473,6 +725,17 @@ class WatchStateSyncInteractorTest {
      * Page 1 carries the newest entries, so `last_seen` decreases as the page number grows — the
      * ordering the incremental pass relies on.
      */
+    /** For the cases about the pacing itself, which need a pause long enough to time against. */
+    private fun pacedInteractor(awaitForeground: suspend () -> Unit = {}) = WatchStateSyncInteractor(
+        api = api,
+        repository = repository,
+        clock = { now },
+        staleAfter = 1.hours,
+        minTimeBetweenRuns = Duration.ZERO,
+        pauseBetweenChunks = chunkPause,
+        awaitForeground = awaitForeground,
+    )
+
     private fun stubHistory(pages: Int, lastSeenBase: Long = 1_000L) {
         (1..pages).forEach { page ->
             coEvery { api.getHistoryData(page) } returns Result.success(

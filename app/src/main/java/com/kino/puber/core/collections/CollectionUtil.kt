@@ -115,9 +115,9 @@ inline fun <T : Any?, R : Any?> List<T>.fastMap(transform: (T) -> R): List<R> {
 
 fun <K, V> Map<K, V?>.filterNotNull(): Map<K, V> {
     val newMap = mutableMapOf<K, V>()
-    entries.forEach { entry ->
-        if (entry.key != null && entry.value != null) {
-            newMap[entry.key!!] = entry.value!!
+    forEach { (key, value) ->
+        if (key != null && value != null) {
+            newMap[key] = value
         }
     }
 

@@ -8,17 +8,14 @@ internal fun Navigator.puberPush(screen: Screen) {
 }
 
 internal fun Navigator.puberReplace(screen: Screen) {
-    val lastItem = lastItemOrNull
     replace(screen)
 }
 
 internal fun Navigator.puberReplaceAll(vararg screen: Screen) {
-    val items = items.toList()
     replaceAll(screen.toList())
 }
 
 internal fun Navigator.puberPop() {
-    val lastItem = lastItemOrNull
     pop()
 }
 

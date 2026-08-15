@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import cafe.adriel.voyager.core.screen.ScreenKey
@@ -12,6 +13,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.Tab
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
+import com.kino.puber.R
 import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.Screens
@@ -127,7 +129,7 @@ private object LoadingTab : Tab {
 
     override val options: TabOptions
         @Composable
-        get() = TabOptions(index = 0U, title = "Loading", icon = null)
+        get() = TabOptions(index = 0U, title = stringResource(R.string.loading), icon = null)
 
     @Composable
     override fun Content() {

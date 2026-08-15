@@ -27,6 +27,10 @@
     <string name="home_section_collections">Подборки</string>
     <string name="home_section_hot">Горячие</string>
     <string name="genre_all">Все</string>
+    <string name="content_section_fresh">Новинки</string>
+    <string name="content_section_popular">Популярные</string>
+    <string name="content_section_hot">Горячие</string>
+    <string name="content_section_all">Все</string>
     <string name="settings_navigation_mode">Вид навигации</string>
     <string name="settings_navigation_drawer">Боковое меню</string>
     <string name="settings_navigation_top_tabs">Верхние табы</string>

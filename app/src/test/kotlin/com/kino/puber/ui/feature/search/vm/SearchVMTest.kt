@@ -14,6 +14,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.search.SearchInteractor
+import com.kino.puber.ui.feature.search.model.SearchViewState
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,6 +22,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -31,6 +37,8 @@ class SearchVMTest {
         @JvmField
         @RegisterExtension
         val mainDispatcher = MainDispatcherExtension()
+
+        private const val DEBOUNCE_DELAY_MS = 1500L
     }
 
     private lateinit var router: AppRouter
@@ -74,6 +82,37 @@ class SearchVMTest {
 
         coVerify(exactly = 1) { interactor.search("query") }
     }
+
+    /**
+     * Typing continues while a slow search is still out, so the query the user has actually left in
+     * the box has to be the one on screen. Cancelling only the debounce leaves the older request
+     * alive, and it publishes over the newer answer whenever it happens to land second.
+     */
+    @Test
+    fun aSearchStillInFlightCannotOverwriteTheResultOfALaterQuery() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            val slowResponse = CompletableDeferred<Unit>()
+            coEvery { interactor.search("query") } coAnswers {
+                slowResponse.await()
+                listOf(Item(id = 42, title = "Stale", type = ItemType.MOVIE))
+            }
+            coEvery { interactor.search("query two") } returns
+                listOf(Item(id = 99, title = "Fresh", type = ItemType.MOVIE))
+            every { mapper.mapShortItemList(any()) } answers {
+                firstArg<List<Item>>().map { videoItem(it.id) }
+            }
+            val vm = createVM()
+
+            vm.onAction(CommonAction.TextChanged("query", tag = Unit))
+            advanceTimeBy(DEBOUNCE_DELAY_MS + 1)
+            vm.onAction(CommonAction.TextChanged("query two", tag = Unit))
+            advanceTimeBy(DEBOUNCE_DELAY_MS + 1)
+            slowResponse.complete(Unit)
+            runCurrent()
+
+            val state = vm.testStateValue as SearchViewState.Content
+            assertEquals(listOf(99), state.items.map { it.id })
+        }
 
     private fun createVM() = SearchVM(
         router = router,

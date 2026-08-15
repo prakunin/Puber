@@ -53,20 +53,37 @@ internal class SectionVM(
         val refreshRequests = contentListRefreshCoordinator.refreshRequests()
         init()
         launch {
-            refreshRequests.collect {
-                refreshFirstPage()
+            refreshRequests.collect { refresh ->
+                when (refresh) {
+                    SectionRefresh.All -> refreshFirstPage()
+                    // One title changed. Every section on the tab hears this, but only the ones
+                    // actually showing it have a badge to redraw.
+                    is SectionRefresh.ForItem -> if (isShowingItem(refresh.itemId)) refreshFirstPage()
+                }
             }
         }
         launch {
-            interactor.displaySettingsChanges.collect {
-                interactor.invalidateFirstPageCache()
-                refreshFirstPage()
-            }
+            // Re-paging is enough on its own: the first-page cache is keyed by the settings that
+            // decide what a page contains, so the reload below misses the old entry rather than
+            // finding it. Clearing here would be worse than redundant — every open section wakes on
+            // this same signal, and the cache is shared, so each one's clear lands on the reloads
+            // the others have already started and sends them back for a second round trip.
+            interactor.displaySettingsChanges.collect { refreshFirstPage() }
         }
         launch {
             interactor.watchStateChanges.collect {
-                interactor.invalidateFirstPageCache()
-                refreshFirstPage()
+                // Every section on the screen wakes on this same signal, so what it costs is paid
+                // once per open row. With watched titles shown the index only changes how a card is
+                // drawn, and the rows already fetched are still the right ones.
+                //
+                // Hidden, membership changes and the pages have to be re-fetched — but the clearing
+                // is the interactor's, done once for the index version rather than once per section
+                // for the same reason as above.
+                if (interactor.hideWatchedEnabled) {
+                    refreshFirstPage()
+                } else {
+                    remapLoadedItems()
+                }
             }
         }
     }
@@ -124,7 +141,7 @@ internal class SectionVM(
             ).onSuccess { actualSaved ->
                 updateSavedItem(item.id, actualSaved)
                 interactor.invalidateFirstPageCache()
-                contentListRefreshCoordinator.requestRefresh()
+                contentListRefreshCoordinator.requestRefreshForItem(item.id)
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it

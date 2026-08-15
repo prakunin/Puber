@@ -5,23 +5,23 @@ import com.kino.puber.data.repository.AvailableUpdate
 import java.io.File
 
 @Immutable
-internal sealed class UpdatePromptViewState {
-    data object Hidden : UpdatePromptViewState()
+internal sealed interface UpdatePromptViewState {
+    data object Hidden : UpdatePromptViewState
 
     @Immutable
-    data class Available(val update: AvailableUpdate) : UpdatePromptViewState()
+    data class Available(val update: AvailableUpdate) : UpdatePromptViewState
 
     @Immutable
     data class Downloading(
         val update: AvailableUpdate,
         val progressPercent: Int,
-    ) : UpdatePromptViewState()
+    ) : UpdatePromptViewState
 
     @Immutable
     data class PermissionRequired(
         val update: AvailableUpdate,
         val downloadedFile: File,
-    ) : UpdatePromptViewState()
+    ) : UpdatePromptViewState
 
     @Immutable
     data class Error(
@@ -29,5 +29,5 @@ internal sealed class UpdatePromptViewState {
         val downloadedFile: File?,
         val message: String,
         val canRetryInstall: Boolean,
-    ) : UpdatePromptViewState()
+    ) : UpdatePromptViewState
 }

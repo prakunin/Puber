@@ -34,7 +34,7 @@ import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
-internal abstract class PlayerVMTestFixture {
+internal open class PlayerVMTestFixture {
 
     protected lateinit var router: AppRouter
     protected lateinit var errorHandler: ErrorHandler
@@ -89,8 +89,8 @@ internal abstract class PlayerVMTestFixture {
         every { skipSegmentInteractor.findActiveSegment(any(), any()) } returns null
         every { mapper.formatTime(any()) } returns "00:00"
         every { mapper.formatSeekOffset(any(), any()) } returns "+10s"
-        every { mapper.buildTitle(any(), any(), any()) } returns "Title"
-        every { mapper.buildSubtitle(any(), any(), any(), any()) } returns "Sub"
+        every { mapper.buildTitle(any()) } returns "Title"
+        every { mapper.buildSubtitle(any(), any(), any()) } returns "Sub"
         every { mapper.mapEpisodes(any()) } returns null
         every { mapper.mapSkipSegmentLabel(any()) } returns "Skip"
         every { mapper.defaultSoundModeLabel() } returns "Stereo"

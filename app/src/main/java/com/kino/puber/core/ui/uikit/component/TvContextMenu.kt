@@ -32,7 +32,6 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import kotlinx.coroutines.delay
 
 private const val ACTION_WATCH = "watch"
-private const val ACTION_DETAILS = "details"
 private const val ACTION_ADD_TO_SAVED = "add_to_saved"
 private const val ACTION_REMOVE_FROM_SAVED = "remove_from_saved"
 private const val ACTION_REFRESH_TAB = "refresh_tab"

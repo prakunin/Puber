@@ -21,6 +21,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -33,6 +34,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.GearSix
 import com.adamglin.phosphoricons.duotone.MagnifyingGlass
+import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.TabType
@@ -59,7 +61,7 @@ internal fun TopTabBar(
     ) {
         ActionIcon(
             icon = PhosphorIcons.Duotone.MagnifyingGlass,
-            contentDescription = "Search",
+            contentDescription = stringResource(R.string.main_tabs_search),
             onClick = onSearchClick,
         )
 
@@ -107,7 +109,7 @@ internal fun TopTabBar(
 
         ActionIcon(
             icon = PhosphorIcons.Duotone.GearSix,
-            contentDescription = "Settings",
+            contentDescription = stringResource(R.string.main_tabs_settings),
             onClick = onSettingsClick,
         )
     }

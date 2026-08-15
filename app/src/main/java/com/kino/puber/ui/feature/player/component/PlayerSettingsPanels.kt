@@ -31,7 +31,6 @@ internal fun PlayerSettingsPanels(
         onAudioTrackSelected = rememberIndexedAction(onAction, PlayerAction::SelectAudioTrack),
         onSubtitleSelected = rememberIndexedAction(onAction, PlayerAction::SelectSubtitle),
         onSubtitleSizeClick = rememberAction(onAction, PlayerAction.CycleSubtitleSize),
-        onBackPressed = rememberAction(onAction, PlayerAction.ClosePanel),
     )
 
     VideoSettingsPanel(
@@ -50,7 +49,6 @@ internal fun PlayerSettingsPanels(
         onBufferPresetSelected = rememberIndexedAction(onAction, PlayerAction::SelectBufferPreset),
         fastDnsEnabled = content.fastDnsEnabled,
         onToggleFastDns = rememberAction(onAction, PlayerAction.ToggleFastDns),
-        onBackPressed = rememberAction(onAction, PlayerAction.ClosePanel),
     )
 
     PlayerInfoPanel(
@@ -64,7 +62,6 @@ internal fun PlayerSettingsPanels(
         episodes = content.episodes,
         onEpisodeSelected = { item -> onAction(PlayerAction.SelectEpisodeById(item.id)) },
         onEpisodeContextMenu = { episodeContextMenuItem = it },
-        onBackPressed = rememberAction(onAction, PlayerAction.ClosePanel),
         allowFocusExit = episodeContextMenuItem != null,
     )
 

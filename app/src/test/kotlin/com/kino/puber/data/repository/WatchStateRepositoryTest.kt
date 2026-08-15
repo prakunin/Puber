@@ -11,9 +11,14 @@ import com.kino.puber.data.db.WatchStateSyncDao
 import com.kino.puber.data.db.WatchStateSyncEntity
 import com.kino.puber.data.db.WatchStateEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -26,8 +31,21 @@ import org.junit.jupiter.api.Test
 
 class WatchStateRepositoryTest {
 
+    /** Enough chunks that "one change per chunk" and "one per walk" cannot be confused. */
+    private val chunksInAWalk = 3
+
     private val dao = FakeWatchStateDao()
     private var now = 42L
+
+    /** An item carrying watch fields, which is what makes the index actually record a row for it. */
+    private fun watchingItem(id: Int) = Item(
+        id = id,
+        title = "Watching item $id",
+        type = ItemType.SERIAL,
+        watched = 3,
+        new = 2,
+        total = 10,
+    )
 
     private fun repository(scope: CoroutineScope) = WatchStateRepository(
         dao = dao,
@@ -56,6 +74,129 @@ class WatchStateRepositoryTest {
         )
 
         assertEquals(listOf(2), dao.rows.value.map { it.itemId })
+    }
+
+    /**
+     * A walk writes a chunk at a time with a long pause between them — far longer than the settle
+     * debounce, so left to itself every chunk would settle separately and cost each open screen a
+     * re-map or a re-page. Held to one change, a walk costs what a single sync always did.
+     */
+    @Test
+    fun syncWindow_holdsAWalksOwnWritesToOneChange() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeWalk = repository.version.value
+
+        repository.beginSyncWindow()
+        repeat(chunksInAWalk) { chunk ->
+            repository.recordFromServer(listOf(watchingItem(id = chunk + 1)))
+            testScheduler.advanceUntilIdle()
+        }
+        val duringWalk = repository.version.value
+        repository.endSyncWindow()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeWalk, duringWalk)
+        assertEquals(beforeWalk + 1, repository.version.value)
+    }
+
+    /** A walk that wrote nothing has nothing to announce when it ends. */
+    @Test
+    fun syncWindow_announcesNothingForAWalkThatWroteNothing() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeWalk = repository.version.value
+
+        repository.beginSyncWindow()
+        repository.endSyncWindow()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeWalk, repository.version.value)
+    }
+
+    /**
+     * The window is for the server rebuilding the index behind the user's back. What the user does
+     * to it is something they are watching for, and a walk in flight can last minutes — so their own
+     * mark must not be held behind it.
+     */
+    @Test
+    fun syncWindow_stillPublishesTheUsersOwnMarkAtOnce() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        repository.beginSyncWindow()
+        repository.recordFromServer(listOf(watchingItem(id = 1)))
+        testScheduler.advanceUntilIdle()
+        val beforeMark = repository.version.value
+
+        repository.markLocally(itemId = 7, isSeriesLike = false, isFullyWatched = true)
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(repository.version.value > beforeMark)
+        repository.endSyncWindow()
+    }
+
+    /**
+     * The write commits before the query behind the snapshot re-runs, so announcing from the write
+     * itself wakes every open list to re-read an index that still holds the old value — and the
+     * emission that does carry the change is then held by the window for the rest of the walk.
+     */
+    @Test
+    fun syncWindow_waitsForTheIndexToShowTheMarkBeforeAnnouncingIt() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        repository.beginSyncWindow()
+        val beforeMark = repository.version.value
+
+        dao.emissionsFlowing.value = false
+        repository.markLocally(itemId = 7, isSeriesLike = false, isFullyWatched = true)
+        testScheduler.advanceUntilIdle()
+
+        // Durable, but nothing can read it yet — so nothing has been told.
+        assertEquals(beforeMark, repository.version.value)
+
+        dao.emissionsFlowing.value = true
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(repository.version.value > beforeMark)
+        assertTrue(repository.snapshot.value.getValue(7).isFullyWatched)
+        repository.endSyncWindow()
+    }
+
+    /**
+     * The gap between a mark being registered and its row landing is real — the repository has two
+     * database reads to do in between — and a walk writes chunks throughout. An emission from one of
+     * those chunks carries the walk's rows and not the user's, so taking it for the mark would
+     * announce nothing new and leave the emission that does carry the mark to be held with the rest
+     * of the walk, invisible for minutes.
+     */
+    @Test
+    fun syncWindow_doesNotMistakeAWalksEmissionForTheUsersMark() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        repository.beginSyncWindow()
+
+        // The mark registers what it will write, then stalls before the row lands.
+        dao.holdUserWrites()
+        // On the test's own scope, not backgroundScope: advanceUntilIdle drives this one, which is
+        // what parks it precisely at the gate.
+        launch {
+            repository.markLocally(itemId = 7, isSeriesLike = false, isFullyWatched = true)
+        }
+        testScheduler.advanceUntilIdle()
+        val beforeChunk = repository.version.value
+
+        // A chunk of the walk lands in that gap. Its emission does not carry item 7.
+        repository.recordFromServer(listOf(watchingItem(id = 1)))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeChunk, repository.version.value)
+
+        dao.releaseUserWrites()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(repository.version.value > beforeChunk)
+        assertTrue(repository.snapshot.value.getValue(7).isFullyWatched)
+        repository.endSyncWindow()
     }
 
     @Test
@@ -494,13 +635,48 @@ private class FakeWatchStateDao : WatchStateDao() {
 
     val rows = MutableStateFlow<List<WatchStateEntity>>(emptyList())
 
-    override fun observeAll(): Flow<List<WatchStateEntity>> = rows
+    /**
+     * Whether the query behind [observeAll] is keeping up with the writes.
+     *
+     * Room's write returns once it commits; the flow's query re-runs afterwards, so there is a
+     * moment where the row is durable and the snapshot still shows the old one. Set this to false to
+     * hold the flow there, and back to true to let the re-run land — a gap a flow that is simply the
+     * write target cannot reproduce.
+     */
+    val emissionsFlowing = MutableStateFlow(true)
+
+    override fun observeAll(): Flow<List<WatchStateEntity>> =
+        combine(rows, emissionsFlowing) { rows, flowing -> rows to flowing }
+            .filter { (_, flowing) -> flowing }
+            .map { (rows, _) -> rows }
 
     override suspend fun get(itemId: Int): WatchStateEntity? = rows.value.find { it.itemId == itemId }
 
     override suspend fun count(): Int = rows.value.size
 
+    /**
+     * Holds the user-facing write, so a test can stand between the point the repository registers
+     * what a mark will produce and the point that row actually lands. Only [upsert] waits on it —
+     * the sync paths write through [applyUpsert] and are free to land meanwhile, which is the whole
+     * interleaving being reproduced.
+     */
+    private var heldWrite: CompletableDeferred<Unit>? = null
+
+    fun holdUserWrites() {
+        heldWrite = CompletableDeferred()
+    }
+
+    fun releaseUserWrites() {
+        heldWrite?.complete(Unit)
+        heldWrite = null
+    }
+
     override suspend fun upsert(entities: List<WatchStateEntity>) {
+        heldWrite?.await()
+        applyUpsert(entities)
+    }
+
+    private fun applyUpsert(entities: List<WatchStateEntity>) {
         val byId = rows.value.associateBy { it.itemId }.toMutableMap()
         entities.forEach { entity -> byId[entity.itemId] = entity }
         rows.value = byId.values.toList()
@@ -521,7 +697,7 @@ private class FakeWatchStateDao : WatchStateDao() {
         val existing = rows.value.find { it.itemId == itemId }
         if (existing?.isLocalPending == true) return
         if (existing != null && updatedAt < existing.updatedAt) return
-        upsert(
+        applyUpsert(
             listOf(
                 WatchStateEntity(
                     itemId = itemId,
@@ -556,7 +732,7 @@ private class FakeWatchStateDao : WatchStateDao() {
         if (existing?.isLocalPending == true) return
         if (existing != null && historySeenAt < existing.historySeenAt) return
         if (existing != null && updatedAt < existing.updatedAt) return
-        upsert(
+        applyUpsert(
             listOf(
                 existing?.copy(
                     isFullyWatched = isFullyWatched,
@@ -588,7 +764,7 @@ private class FakeWatchStateDao : WatchStateDao() {
         val existing = rows.value.find { it.itemId == itemId }
         if (existing?.isLocalPending == true) return
         if (existing != null && updatedAt < existing.updatedAt) return
-        upsert(
+        applyUpsert(
             listOf(
                 existing?.copy(isFullyWatched = false, updatedAt = updatedAt, generation = generation)
                     ?: WatchStateEntity(

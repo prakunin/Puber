@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.main.vm
 
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
@@ -17,8 +18,11 @@ import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlin.time.Duration.Companion.seconds
 
 internal class MainVM(
     router: AppRouter,
@@ -32,6 +36,12 @@ internal class MainVM(
     internal val tabAppRouterHolder = TabAppRouterHolder(router.screens)
     private val tabRefreshVersions = mutableMapOf<TabType, Int>()
     private var observedContentPreferences: ContentPreferences? = null
+
+    /** The one watch-state sync this screen will have in flight; see [syncWatchState]. */
+    private var watchStateSyncJob: Job? = null
+
+    /** Whether the startup wait has already been served, so only the first run pays it. */
+    private var startupSyncDelayServed = false
 
     override fun onStart() {
         val state = mainUIMapper.buildViewState()
@@ -49,10 +59,26 @@ internal class MainVM(
      * The catalogue itself reports nothing about what has been watched, so the local index is
      * refreshed once the main screen is up — that is the first point where the session is known to
      * be authenticated.
+     *
+     * Both triggers — this screen starting and the TV coming back to it — run through here, and one
+     * job serves them together. They are not alternatives that happen to overlap: the first
+     * ON_RESUME arrives during the very composition that starts this screen, so a startup run and a
+     * resume run always coincide on a cold start. Kept apart, the resume one has nothing to wait for
+     * and wins, which left [StartupSyncDelay] governing only a run that then found the index
+     * already claimed and did nothing — the wait was, in effect, never served.
+     *
+     * So the wait belongs to the first run rather than to the trigger that asked for it, and a
+     * trigger arriving while a run is in flight is dropped: the run under way is already the one it
+     * would have started, and whether a later one is due at all is the interactor's decision.
      */
     private fun syncWatchState() {
-        launch {
-            runCatching { watchStateSyncInteractor.syncIfStale() }
+        if (watchStateSyncJob?.isActive == true) return
+        watchStateSyncJob = launch {
+            if (!startupSyncDelayServed) {
+                delay(StartupSyncDelay)
+                startupSyncDelayServed = true
+            }
+            runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
         }
     }
@@ -138,7 +164,17 @@ internal class MainVM(
         super.onCleared()
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * How long the startup watch-state sync waits before it starts.
+         *
+         * A heuristic, not a handshake: nothing here can observe the home screen's first frame, and
+         * the point is only to keep the history walk out of the way while the screen's own requests
+         * are competing for OkHttp's five-per-host budget. Overshooting costs a slightly later
+         * index; undershooting costs a slower first frame, which the user actually sees.
+         */
+        val StartupSyncDelay = 5.seconds
+
         val ANIME_FILTERED_TABS = setOf(
             TabType.Home,
             TabType.Movies,

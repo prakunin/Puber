@@ -75,7 +75,7 @@ internal class CryptoPreferenceRepository(
     }
 
     private fun decrypt(alias: String, encryptedText: String): String {
-        if (encryptedText.isNullOrEmpty()) return ""
+        if (encryptedText.isEmpty()) return ""
         val decoded = Base64.decode(encryptedText, Base64.DEFAULT)
         val iv = decoded.sliceArray(0 until 12) // IV всегда 12 байт для GCM
         val cipherBytes = decoded.sliceArray(12 until decoded.size)

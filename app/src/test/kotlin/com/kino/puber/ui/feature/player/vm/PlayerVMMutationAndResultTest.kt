@@ -184,7 +184,7 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
         coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
             isCurrentMediaWatched = true,
         )
-        val vm = startedVM()
+        startedVM()
 
         callbackSlot.captured.onPlaybackEnded()
 

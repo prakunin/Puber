@@ -88,6 +88,9 @@ internal class DetailsInteractor(
         )
     }
 
+    // Cancellation is rethrown, but the optimistic local mark has to be reverted first — detekt
+    // wants the throw to be the first statement, which would leave the movie hidden for good.
+    @Suppress("SuspendFunSwallowedCancellation")
     suspend fun setMovieWatched(id: Int, watched: Boolean): MovieWatchedUpdate {
         // Written before the call so the catalogue reflects the mark immediately; a sync cannot
         // undo it while the row stays pending.

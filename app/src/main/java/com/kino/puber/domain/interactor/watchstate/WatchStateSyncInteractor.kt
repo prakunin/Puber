@@ -7,12 +7,13 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Fills the local watch-state index from the account's watching lists and its history.
@@ -29,6 +30,14 @@ class WatchStateSyncInteractor(
     private val staleAfter: Duration = 1.hours,
     private val minTimeBetweenRuns: Duration = 5.minutes,
     private val reconcileAfter: Duration = 7.days,
+    private val pauseBetweenChunks: Duration = 20.seconds,
+    /**
+     * Held at the boundary between chunks while the app is off screen. A walk is minutes long, so
+     * without this it keeps pulling history over the network well after the user has left — for a
+     * result nothing is going to read until they come back. Defaults to never waiting, which is what
+     * the cases about the walk's own behaviour want.
+     */
+    private val awaitForeground: suspend () -> Unit = {},
 ) {
 
     private val mutex = Mutex()
@@ -47,12 +56,65 @@ class WatchStateSyncInteractor(
      * Refreshes the index when the last sync is older than [staleAfter]. Returns true when rows
      * were written, so a caller can refresh what it is showing.
      */
-    suspend fun syncIfStale(force: Boolean = false): Boolean = mutex.withLock {
-        val now = clock()
-        var cursor = repository.syncCursor()
-        if (!force && !isRunDue(now, cursor)) return false
-        lastRunAt = now
+    suspend fun syncIfStale(force: Boolean = false): Boolean {
+        // A walk now spans minutes of deliberately paced requests, so the two kinds of caller want
+        // opposite things from one already running.
+        //
+        // An ordinary trigger has nothing to add — the run under way is the one it would have
+        // started — so it leaves rather than waiting the walk out to find the index already fresh.
+        // A forced one is asking for a pass that has not happened yet, usually because what the
+        // index describes has changed underneath it, and the run in flight is not that pass; giving
+        // up would make `force` quietly mean nothing whenever it is most needed. So it waits its
+        // turn instead. (Cancellable, and cheap in practice: a force comes from the screen, and a
+        // walk only parks while there is no screen.)
+        if (force) mutex.lock() else if (!mutex.tryLock()) return false
+        try {
+            return runSync(force)
+        } finally {
+            mutex.unlock()
+        }
+    }
 
+    private suspend fun runSync(force: Boolean): Boolean {
+        if (!force && !isRunDue(clock(), repository.syncCursor())) return false
+
+        // Before the first request, not just between chunks. The startup wait is easily outlived by
+        // the user leaving, and a run that went ahead anyway would spend both watching requests and
+        // a whole chunk of history on an app that is no longer on screen.
+        awaitForeground()
+
+        // Both read after the wait rather than before it. Parked, this run can start hours after it
+        // was asked for: every stamp below is meant to say when it actually ran, and the bookmark it
+        // walks from has to be the one on disk now — a logout in between wipes it, and resurrecting
+        // the copy read earlier would tell the next account its history had already been indexed.
+        val now = clock()
+        lastRunAt = now
+        val cursor = repository.syncCursor()
+
+        // Held open for the whole walk, so the chunk writes below settle as one change rather than
+        // one per chunk. Without it the pauses between chunks are far enough apart to clear the
+        // repository's debounce, and every chunk would cost each open screen a re-map or a re-page.
+        repository.beginSyncWindow()
+        try {
+            return indexAccount(now, cursor)
+        } finally {
+            repository.endSyncWindow()
+        }
+    }
+
+    /**
+     * The walk itself, from the watching lists through the history to the prune. Split from
+     * [runSync] so the sync window has a body to wrap.
+     *
+     * Every exit here is a guard abandoning the run — a source that did not answer, or a session
+     * that ended under it — and each has to be taken at the point the run learns of it, because
+     * what follows would write rows for an account that is no longer signed in. Nesting them into
+     * one exit buries the writes several levels deep and puts each condition far from the step it
+     * protects.
+     */
+    @Suppress("ReturnCount")
+    private suspend fun indexAccount(now: Long, openingCursor: WatchStateSyncCursor): Boolean {
+        var cursor = openingCursor
         // Opened before anything is written, so every row this run stores belongs to the new pass.
         cursor = cursor.withReconciliationIfDue(now)
         repository.saveSyncCursor(cursor)
@@ -119,10 +181,10 @@ class WatchStateSyncInteractor(
      * Whether a run is due.
      *
      * [staleAfter] governs syncs that finished. A run that stopped early stamps nothing for that
-     * check to see, which is what [minTimeBetweenRuns] covers: without it the ON_RESUME following
-     * the main screen's first composition starts the next walk the instant the first one gives up
-     * its page budget, and a cold start spends hundreds of back-to-back requests rather than the
-     * single run's worth that budget exists to allow.
+     * check to see, which is what [minTimeBetweenRuns] covers: without it every resume that follows
+     * an interrupted walk starts the next one straight away, and a session spent switching in and
+     * out of the app pays a fresh page budget each time rather than the one run's worth that budget
+     * exists to allow.
      */
     private fun isRunDue(now: Long, cursor: WatchStateSyncCursor): Boolean {
         val lastSync = cursor.lastSyncAt
@@ -210,18 +272,41 @@ class WatchStateSyncInteractor(
         var current = cursor
         var page = firstPageToRead(walkEverything, cursor)
         var pagesRead = 0
+        val pending = mutableListOf<History>()
+        var pagesPending = 0
+
+        /**
+         * Stores what has accumulated, with the bookmark that covers exactly those pages. Returns
+         * whether the run still belongs to its session — the caller must stop if it does not.
+         *
+         * Rows and bookmark still travel together, for the reason they always did: a bookmark that
+         * outlived its rows would tell the next run this stretch of history is already indexed. That
+         * holds for a batch as much as for a page — a batch lost in full loses its cursor too, so the
+         * next run simply reads those pages again.
+         */
+        suspend fun flush(): Boolean {
+            if (pending.isEmpty()) return sessionSurvived(generation)
+            repository.recordHistoryPage(pending.toList(), seriesStillInProgress, observedAt, current)
+            pending.clear()
+            pagesPending = 0
+            return sessionSurvived(generation)
+        }
 
         while (pagesRead < MAX_HISTORY_PAGES_PER_RUN) {
-            val response = api.getHistoryData(page).getOrNull()
-                ?: return HistoryWalk(current, reachedTheEnd = false)
+            // Whatever has been read so far is still true and its cursor still describes it, so the
+            // remainder is written by the flush below rather than re-fetched by the next run.
+            val response = api.getHistoryData(page).getOrNull() ?: break
             val outcome = current.advancedOver(response, walkEverything, knownUpTo)
             current = outcome.cursor
-            // Rows and bookmark together: a bookmark that outlived its rows would tell the next run
-            // this stretch of history is already indexed, and those entries would never be re-read.
-            repository.recordHistoryPage(response.items, seriesStillInProgress, observedAt, current)
-            // The session ending mid-walk voids both, so nothing below may run for it.
-            if (!sessionSurvived(generation)) break
+            pending += response.items
+            pagesPending += 1
 
+            // The session ending mid-walk voids the rows and the cursor alike, so nothing below may
+            // run for it. `flush` is only reached when a write is actually due.
+            val chunkIsFull = pagesPending >= HISTORY_PAGES_PER_CHUNK
+            if ((chunkIsFull || outcome.walkIsOver) && !flush()) {
+                return HistoryWalk(current, reachedTheEnd = false)
+            }
             if (outcome.walkIsOver) {
                 return HistoryWalk(
                     cursor = current,
@@ -231,11 +316,38 @@ class WatchStateSyncInteractor(
             }
             page = outcome.nextPage
             pagesRead++
+
+            // Between chunks the walk stands down. OkHttp allows five requests in flight per host,
+            // and a first walk is hundreds of pages long: run flat out it holds those slots for its
+            // whole duration, in front of every request the screen the user is looking at needs.
+            // Pausing costs the index nothing that is observed — nothing reads it mid-walk, and the
+            // chunk just flushed is already durable — and it is what turns a burst that competes
+            // with the UI into a trickle that does not.
+            //
+            // Skipped once the budget is spent: the loop below is about to end, and a pause with no
+            // chunk on the other side of it is time spent waiting for nothing.
+            if (chunkIsFull && pagesRead < MAX_HISTORY_PAGES_PER_RUN) holdBeforeNextChunk()
         }
 
-        // Out of page budget for this run, or the session ended under it. Either way the next run
-        // resumes from where this stopped.
+        // Out of page budget for this run, or a page failed. Either way the next run resumes from
+        // where this stopped, which is what the final batch records.
+        flush()
         return HistoryWalk(current, reachedTheEnd = false)
+    }
+
+    /**
+     * Holds until the next chunk may go out.
+     *
+     * Foreground is checked on both sides of the gap, for two different reasons. Before, so that a
+     * walk left running does not carry on in the background, and so the gap is served on the way
+     * back — keeping the resumed walk clear of the reload the return itself sets off. After, because
+     * the app can leave *during* the gap, and a chunk that went out on the far side of it would be
+     * exactly the background traffic the first check just prevented.
+     */
+    private suspend fun holdBeforeNextChunk() {
+        awaitForeground()
+        delay(pauseBetweenChunks)
+        awaitForeground()
     }
 
     /** Where one page leaves the bookmark, and whether there is anything left to read. */
@@ -286,8 +398,23 @@ class WatchStateSyncInteractor(
         /**
          * How far one run will walk. A deep history is covered across several runs rather than in
          * one burst, so a cold start is never spent entirely on catching up.
+         *
+         * This is a ceiling on the whole run, not on how hard it pushes: the run is broken into
+         * [HISTORY_PAGES_PER_CHUNK] chunks with a pause between them, so reaching this number takes
+         * minutes of mostly idle time rather than hundreds of back-to-back requests.
          */
         const val MAX_HISTORY_PAGES_PER_RUN = 300
+
+        /**
+         * How many pages the walk reads back-to-back before it flushes and stands down.
+         *
+         * One number serves both jobs because both want the same boundary. Every write is a
+         * transaction, and every transaction re-runs the query behind [WatchStateRepository.snapshot],
+         * which rebuilds the whole id-to-state map — per page across a walk hundreds of pages long,
+         * that rebuild costs more than the requests do. And the pause has to fall where the pages
+         * already read are durable, so a chunk interrupted by the app closing is not re-read.
+         */
+        const val HISTORY_PAGES_PER_CHUNK = 15
 
         /** Pages re-read on resume, to absorb entries deleted since the walk stopped. */
         const val RESUME_OVERLAP_PAGES = 2

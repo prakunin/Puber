@@ -52,6 +52,7 @@
     <string name="player_aspect_auto">Авто</string>
     <string name="player_sound_stereo">Стерео 2.0</string>
     <string name="player_aspect_stretch">Растянуть</string>
+    <string name="player_aspect_crop">Заполнить</string>
 
     <!-- Next Episode -->
     <string name="player_next_episode_countdown">Следующая серия %d</string>

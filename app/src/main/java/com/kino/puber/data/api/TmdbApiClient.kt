@@ -1,6 +1,7 @@
 package com.kino.puber.data.api
 
 import com.kino.puber.BuildConfig
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.data.api.models.TmdbFindResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -29,13 +30,13 @@ class TmdbApiClient {
         }
     }
 
-    suspend fun findByImdbId(imdbId: String): Result<Int?> = runCatching {
+    suspend fun findByImdbId(imdbId: String): Result<Int?> = runCatchingCancellable {
         val formattedId = if (imdbId.startsWith("tt", ignoreCase = true)) imdbId else "tt$imdbId"
         val response = httpClient.get("find/$formattedId") {
             parameter("external_source", "imdb_id")
         }
         if (!response.status.isSuccess()) {
-            return@runCatching null
+            return@runCatchingCancellable null
         }
         val body = response.body<TmdbFindResponse>()
         body.tvResults?.firstOrNull()?.id ?: body.movieResults?.firstOrNull()?.id

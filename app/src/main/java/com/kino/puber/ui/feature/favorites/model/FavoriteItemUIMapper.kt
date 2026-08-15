@@ -15,8 +15,11 @@ internal class FavoriteItemUIMapper(
 
     fun mapToState(items: List<Item>, selectedItem: Item?): FavoriteViewState.Content {
         val seriesOnly = items.filter { it.type.isSeriesLike() }
-        val effectiveSelected = if (selectedItem?.type?.isSeriesLike() == true) selectedItem
-            else seriesOnly.firstOrNull()
+        val effectiveSelected = if (selectedItem?.type?.isSeriesLike() == true) {
+            selectedItem
+        } else {
+            seriesOnly.firstOrNull()
+        }
         return FavoriteViewState.Content(
             gridState = mapList(items),
             selectedItem = effectiveSelected?.let(::mapDetailedItem) ?: VideoDetailsUIState.Loading,
