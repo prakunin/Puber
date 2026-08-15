@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import androidx.media3.exoplayer.source.BehindLiveWindowException
+import androidx.media3.extractor.DefaultExtractorsFactory
 import okhttp3.OkHttpClient
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -339,15 +340,13 @@ internal class PlaybackController(
         val sourceFactory = createDataSourceFactory()
         dataSourceFactory = sourceFactory
 
+        val mediaSourceFactory = createMediaSourceFactory(sourceFactory)
+
         val player = ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(
-                // Covers the progressive fallback; the HLS source sets the same policy itself.
-                DefaultMediaSourceFactory(sourceFactory)
-                    .setLoadErrorHandlingPolicy(PlaybackErrorPolicy()),
-            )
+            .setMediaSourceFactory(mediaSourceFactory)
             .setHandleAudioBecomingNoisy(true)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -406,6 +405,19 @@ internal class PlaybackController(
      * at the one moment playback has nothing in reserve. Handing the position to `setMediaSource`
      * rather than seeking afterwards saves a second buffering round-trip on top.
      */
+    @OptIn(UnstableApi::class)
+    private fun createMediaSourceFactory(
+        dataSourceFactory: DataSource.Factory,
+    ): DefaultMediaSourceFactory {
+        return DefaultMediaSourceFactory(
+            dataSourceFactory,
+            DefaultExtractorsFactory().setDisableArtworkMetadata(true),
+        )
+            // Covers the progressive fallback; the HLS source sets the same policy itself.
+            .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
+            .setExperimentalEnableHagcPlayback(false)
+    }
+
     override fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         val player = exoPlayer ?: return
         val savedPosition = player.currentPosition
