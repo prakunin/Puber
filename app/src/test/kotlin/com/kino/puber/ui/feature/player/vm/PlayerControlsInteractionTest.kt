@@ -176,5 +176,7 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         audioChannels = "stereo",
         droppedFrames = "0",
         bufferedDuration = "12.0s",
+        bufferedBytes = "38.0 / 64 MB",
+        streamSource = "MSK01",
     )
 }

@@ -26,6 +26,7 @@
     <string name="player_info_frame_rate">Кадры в секунду</string>
     <string name="player_info_audio_track">Аудиодорожка</string>
     <string name="player_info_audio_codec">Аудиокодек</string>
+    <string name="player_info_source">Источник</string>
     <string name="player_info_buffer">Буфер</string>
     <string name="player_info_buffer_preset">Режим буфера</string>
     <string name="player_info_dropped_frames">Пропущено кадров</string>

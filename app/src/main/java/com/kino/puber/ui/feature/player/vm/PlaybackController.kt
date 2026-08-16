@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
@@ -59,6 +60,8 @@ internal interface PlaybackControl {
         val audioChannels: String,
         val droppedFrames: String,
         val bufferedDuration: String,
+        val bufferedBytes: String,
+        val streamSource: String,
     )
 
     val currentPosition: Long
@@ -98,6 +101,13 @@ internal class PlaybackController(
     private var ac3FallbackApplied = false
     private var useFastDns = true
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
+    private var currentStreamUrl: String? = null
+
+    // Owned rather than left to DefaultLoadControl, which keeps its allocator to itself: this is
+    // the only way to read how many bytes the buffer actually holds.
+    @OptIn(UnstableApi::class)
+    private var bufferAllocator: DefaultAllocator? = null
+    private var targetBufferBytes = 0
 
     @OptIn(UnstableApi::class)
     private val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
@@ -186,21 +196,7 @@ internal class PlaybackController(
         ac3FallbackApplied = false
         useFastDns = fastDns
 
-        val bufferParams = DeviceBufferConfig.resolve(context, bufferPreset)
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                bufferParams.minBufferMs,
-                bufferParams.maxBufferMs,
-                bufferParams.bufferForPlaybackMs,
-                bufferParams.bufferForPlaybackAfterRebufferMs,
-            )
-            .setBackBuffer(
-                bufferParams.backBufferDurationMs,
-                /* retainBackBufferFromKeyframe = */ false,
-            )
-            .setTargetBufferBytes(bufferParams.targetBufferBytes)
-            .setPrioritizeTimeOverSizeThresholds(bufferParams.prioritizeTimeOverSize)
-            .build()
+        val loadControl = buildLoadControl(bufferPreset)
 
         val adaptiveTrackSelectionFactory = AdaptiveTrackSelection.Factory(
             /* minDurationForQualityIncreaseMs = */ MIN_DURATION_FOR_QUALITY_INCREASE_MS,
@@ -237,6 +233,7 @@ internal class PlaybackController(
 
         val mediaItem = buildMediaItem(streamUrl, subtitles)
         setMediaSource(player, mediaItem, streamUrl)
+        currentStreamUrl = streamUrl
 
         player.prepare()
         if (startPosition != null) {
@@ -245,6 +242,30 @@ internal class PlaybackController(
             }
             player.playWhenReady = true
         }
+    }
+
+    /** Also records the buffer budget the info panel reports the current fill against. */
+    @OptIn(UnstableApi::class)
+    private fun buildLoadControl(bufferPreset: BufferPreset): DefaultLoadControl {
+        val bufferParams = DeviceBufferConfig.resolve(context, bufferPreset)
+        val allocator = DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE)
+        bufferAllocator = allocator
+        targetBufferBytes = bufferParams.targetBufferBytes
+        return DefaultLoadControl.Builder()
+            .setAllocator(allocator)
+            .setBufferDurationsMs(
+                bufferParams.minBufferMs,
+                bufferParams.maxBufferMs,
+                bufferParams.bufferForPlaybackMs,
+                bufferParams.bufferForPlaybackAfterRebufferMs,
+            )
+            .setBackBuffer(
+                bufferParams.backBufferDurationMs,
+                /* retainBackBufferFromKeyframe = */ false,
+            )
+            .setTargetBufferBytes(bufferParams.targetBufferBytes)
+            .setPrioritizeTimeOverSizeThresholds(bufferParams.prioritizeTimeOverSize)
+            .build()
     }
 
     override fun switchStream(streamUrl: String, subtitles: List<SubtitleLink>?) {
@@ -257,6 +278,7 @@ internal class PlaybackController(
 
         val mediaItem = buildMediaItem(streamUrl, subtitles)
         setMediaSource(player, mediaItem, streamUrl)
+        currentStreamUrl = streamUrl
 
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
@@ -321,6 +343,9 @@ internal class PlaybackController(
         exoPlayer = null
         trackSelector = null
         dataSourceFactory = null
+        currentStreamUrl = null
+        bufferAllocator = null
+        targetBufferBytes = 0
     }
 
     @OptIn(UnstableApi::class)
@@ -435,6 +460,11 @@ internal class PlaybackController(
             audioChannels = channelLayout(audioFormat?.channelCount),
             droppedFrames = dropped.toString(),
             bufferedDuration = String.format(Locale.US, "%.1fs", bufferedSec),
+            bufferedBytes = PlaybackDebugFormat.bufferFill(
+                allocatedBytes = bufferAllocator?.totalBytesAllocated ?: 0,
+                targetBytes = targetBufferBytes,
+            ),
+            streamSource = PlaybackDebugFormat.streamSource(currentStreamUrl),
         )
     }
 

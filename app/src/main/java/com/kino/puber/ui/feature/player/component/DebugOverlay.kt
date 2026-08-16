@@ -26,9 +26,10 @@ internal fun DebugOverlay(
             .background(Color.Black.copy(alpha = 0.6f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
+        DebugLine("Source", debugInfo.streamSource)
         DebugLine("Video", "${debugInfo.videoResolution}  ${debugInfo.videoCodec}  ${debugInfo.videoBitrate}")
         DebugLine("Audio", "${debugInfo.audioCodec}  ${debugInfo.audioChannels}")
-        DebugLine("Buffer", debugInfo.bufferedDuration)
+        DebugLine("Buffer", "${debugInfo.bufferedDuration}  ${debugInfo.bufferedBytes}")
         DebugLine("Dropped", debugInfo.droppedFrames)
     }
 }

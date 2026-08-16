@@ -190,6 +190,7 @@
     <string name="player_info_frame_rate">Frames per second</string>
     <string name="player_info_audio_track">Audio track</string>
     <string name="player_info_audio_codec">Audio codec</string>
+    <string name="player_info_source">Source</string>
     <string name="player_info_buffer">Buffer</string>
     <string name="player_info_buffer_preset">Buffer preset</string>
     <string name="player_info_dropped_frames">Dropped frames</string>

@@ -124,7 +124,9 @@ internal fun playerInfoEntries(content: PlayerContentState): List<PlayerInfoEntr
             content.audioTracks.getOrNull(content.selectedAudioTrackIndex)?.label,
         stringResource(R.string.player_info_audio_codec) to
             debug?.let { "${it.audioCodec} · ${it.audioChannels}" },
-        stringResource(R.string.player_info_buffer) to debug?.bufferedDuration,
+        stringResource(R.string.player_info_source) to debug?.streamSource,
+        stringResource(R.string.player_info_buffer) to
+            debug?.let { "${it.bufferedDuration} · ${it.bufferedBytes}" },
         stringResource(R.string.player_info_buffer_preset) to
             content.bufferPresets.getOrNull(content.selectedBufferPresetIndex)?.label,
         stringResource(R.string.player_info_dropped_frames) to debug?.droppedFrames,
