@@ -1,5 +1,10 @@
 package com.kino.puber.ui.feature.main.component
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -16,14 +21,16 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -34,13 +41,16 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
+import com.kino.puber.R
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
 import com.kino.puber.core.ui.navigation.component.PuberCurrentTab
 import com.kino.puber.core.ui.navigation.component.TabComponent
+import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
 import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
@@ -95,11 +105,23 @@ private fun DrawerMainContent(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val mainContentFocus = rememberFocusRequesterOnLaunch()
-    SideEffect { drawerState.contentFocusRequester = mainContentFocus }
+    val handoff = remember(drawerState, mainContentFocus) {
+        ContentFocusHandoff(drawerState, mainContentFocus)
+    }
+    val exitConfirmation = remember { ExitConfirmation() }
 
-    CompositionLocalProvider(LocalDrawerState provides drawerState) {
+    CompositionLocalProvider(
+        LocalDrawerState provides drawerState,
+        LocalContentFocusHandoff provides handoff,
+    ) {
+        // Registered BEFORE the tab content on purpose. OnBackPressedDispatcher gives the event to
+        // the last enabled callback, so a pushed tab screen — whose TabBackHandler registers later
+        // — keeps Back while the rail is closed. Only when there is nothing to pop does this fire.
+        RailClosedBackHandler(drawerState, exitConfirmation)
+
         ModalNavigationDrawer(
             drawerState = drawerState,
+            handoff = handoff,
             scrimBrush = Brush.horizontalGradient(
                 listOf(
                     MaterialTheme.colorScheme.scrim, Color.Transparent
@@ -110,19 +132,75 @@ private fun DrawerMainContent(
                     state = state,
                     onAction = onAction,
                     drawerState = drawerState,
-                    mainContentFocus = mainContentFocus,
                 )
             },
             content = { MainScreenContentBody(mainContentFocus, tabRouter, tabAppRouterHolder) },
         )
+
+        // Registered AFTER the tab content, which is the only way the rail can win over
+        // TabBackHandler while it is on top: the dispatcher picks the last enabled callback, and
+        // `enabled` alone cannot reorder that. Disabled while closed so the handler above governs.
+        RailOpenBackHandler(drawerState, exitConfirmation)
     }
+}
+
+/**
+ * Back while the rail is closed: reveal it, or leave the app when the previous Back closed the rail.
+ *
+ * The exit lives here because Back is the only way out of a TV app and the rail took over the
+ * gesture that used to provide it. Two presses rather than one so a stray press cannot drop the
+ * user onto the launcher.
+ */
+@Composable
+private fun RailClosedBackHandler(
+    drawerState: DrawerState,
+    exitConfirmation: ExitConfirmation,
+) {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+
+    BackHandler(enabled = drawerState.currentValue == DrawerValue.Closed) {
+        if (exitConfirmation.isArmed) {
+            activity?.finish()
+        } else {
+            drawerState.reveal()
+        }
+        exitConfirmation.disarm()
+    }
+}
+
+/** Back while the rail is open or handing off. Always consumed — the rail is what is on top. */
+@Composable
+private fun RailOpenBackHandler(
+    drawerState: DrawerState,
+    exitConfirmation: ExitConfirmation,
+) {
+    val context = LocalContext.current
+    val exitPrompt = stringResource(R.string.main_press_back_again_to_exit)
+
+    BackHandler(enabled = drawerState.currentValue != DrawerValue.Closed) {
+        // HandingOff is swallowed rather than acted on: the rail is already closing, and letting
+        // the event through would pop the screen arriving underneath it.
+        if (drawerState.currentValue != DrawerValue.Open) return@BackHandler
+
+        drawerState.beginHandoff(expectsNewContent = false)
+        // The user has just walked back out of the menu, so the next Back has nowhere left to go
+        // inside the app.
+        exitConfirmation.arm()
+        Toast.makeText(context, exitPrompt, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable
 internal fun NavigationDrawerScope.MainSideMenuContent(
     state: MainViewState,
     drawerState: DrawerState,
-    mainContentFocus: FocusRequester,
     onAction: (UIAction) -> Unit
 ) {
     val tabFocusRequesters = remember(state.tabs.map(MainTab::type)) {
@@ -139,10 +217,6 @@ internal fun NavigationDrawerScope.MainSideMenuContent(
             MaterialTheme.colorScheme.surface
         }
     )
-
-    BackHandler(enabled = drawerState.isOpen.not()) {
-        drawerState.setValue(DrawerValue.Open)
-    }
 
     Column(
         Modifier
@@ -162,7 +236,6 @@ internal fun NavigationDrawerScope.MainSideMenuContent(
                     tab = tab,
                     onAction = onAction,
                     drawerState = drawerState,
-                    mainContentFocus = mainContentFocus,
                 )
             }
         }
@@ -178,7 +251,6 @@ private fun NavigationDrawerScope.MainSideMenuItem(
     tab: MainTab,
     drawerState: DrawerState,
     tabFocusRequester: FocusRequester,
-    mainContentFocus: FocusRequester,
     onAction: (UIAction) -> Unit
 ) {
     val modifier = Modifier
@@ -190,8 +262,9 @@ private fun NavigationDrawerScope.MainSideMenuItem(
         selected = tab.isSelected,
         onClick = {
             onAction(CommonAction.ItemSelected(tab))
-            drawerState.setValue(DrawerValue.Closed)
-            mainContentFocus.requestFocus()
+            // Re-picking the active tab composes no new content, so the tab already on screen is
+            // the one that has to confirm the handoff.
+            drawerState.beginHandoff(expectsNewContent = !tab.isSelected)
         },
         leadingContent = {
             Icon(
@@ -228,13 +301,6 @@ private fun MainScreenContentBody(
     tabAppRouterHolder: TabAppRouterHolder,
 ) {
     val closeDrawerWidth = 60.dp
-    // Re-request focus on content after navigation return (push/pop).
-    // MainScreenContentBody stays in composition during tab switches,
-    // so this only fires on push/pop — safe for tab switching.
-    LaunchedEffect(Unit) {
-        delay(100)
-        focusRequester.requestFocus()
-    }
     TabComponent(
         tabRouter = tabRouter,
         tabAppRouterHolder = tabAppRouterHolder,

@@ -2,10 +2,10 @@
  * Forked from androidx.tv.material3 (tv-material:1.1.0-beta01)
  * Original: https://android.googlesource.com/platform/frameworks/support/+/refs/heads/main/tv/tv-material/src/main/java/androidx/tv/material3/NavigationDrawer.kt
  *
- * Reason: DrawerSheet unconditionally opens the drawer on any focus gain (onFocusChanged → setValue(Open)).
- * When an overlay (bottom sheet) is dismissed, focus escapes to the drawer before any external
- * workaround can restore it. The fix adds an `isOverlayActive` guard to DrawerState that suppresses
- * focus-driven drawer opening while an overlay is visible.
+ * Reason: DrawerSheet derived the drawer's value from focus (onFocusChanged → setValue), so a focus
+ * request that missed read as the user reopening the menu. The fork gives DrawerState an explicit
+ * state machine and demotes focus to one input among several, with a transient HandingOff state
+ * covering the window in which focus is travelling to freshly composed content.
  *
  * Licensed under the Apache License, Version 2.0
  */
@@ -50,54 +50,115 @@ val LocalDrawerState = staticCompositionLocalOf<DrawerState?> { null }
 enum class DrawerValue {
     Closed,
     Open,
+
+    /**
+     * The user has chosen — the rail is logically closed, but focus has not landed in the
+     * content yet.
+     *
+     * It exists to tell apart "focus left the rail because the user decided so" from "focus came
+     * back to the rail because there was nowhere to land". Without it the rail's value is a
+     * projection of focus, and a `requestFocus()` that misses reads as the user reopening the menu.
+     */
+    HandingOff,
 }
 
 /**
- * State of the [ModalNavigationDrawer].
+ * State of the [ModalNavigationDrawer], and the authority on whether the rail is open.
  *
- * Adds [isOverlayActive] — when `true`, focus-driven opening is suppressed inside [DrawerSheet].
+ * Transitions happen only through the intents below. Focus is an input to them, never the value
+ * itself — that inversion is the whole point of the fork.
+ *
+ * The transient [DrawerValue.HandingOff] exists because the focus system cannot be trusted to hold
+ * a handover on its own:
+ * - `focusRestorer()` does not save focus state when focus jumps away, only on D-pad exit:
+ *   [#296551299](https://issuetracker.google.com/issues/296551299)
+ * - `saveFocusedChild`/`restoreFocusedChild` are unreliable with `LazyColumn`:
+ *   [#290645002](https://issuetracker.google.com/issues/290645002)
+ *
+ * so focus may bounce between rail and content several times before settling, and every bounce
+ * would otherwise be read as the user reopening the menu.
  */
 class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
-    var currentValue by mutableStateOf(initialValue)
+    var currentValue by mutableStateOf(persistedValue(initialValue))
         private set
 
     /**
-     * Guards against the drawer opening when an overlay (bottom sheet) is dismissed.
+     * Identifies the handoff currently waiting on the content, or `null` when none is.
      *
-     * ## Problem
-     * The original [DrawerSheet] unconditionally opens the drawer on any `hasFocus=true`
-     * event via `onFocusChanged`. When a bottom sheet closes, the focused composable is removed
-     * from composition, and the Android TV focus system sends focus to the drawer's focus group
-     * before any external mechanism can intercept it.
-     *
-     * ## Solution
-     * Set to `true` when showing a full-screen overlay.
-     * While active, [DrawerSheet] swallows all focus events and redirects `hasFocus=true`
-     * to [contentFocusRequester]. The flag stays active through focus bounces (the TV focus
-     * system may bounce focus between drawer and content several times before settling).
-     *
-     * ## Related issues
-     * - `focusRestorer()` does not save focus state when focus jumps to an overlay
-     *   (only on D-pad exit): [#296551299](https://issuetracker.google.com/issues/296551299)
-     * - `saveFocusedChild/restoreFocusedChild` unreliable with LazyColumn:
-     *   [#290645002](https://issuetracker.google.com/issues/290645002)
+     * Monotonic on purpose: the user can press again while a handoff is in flight, and a
+     * confirmation belonging to the abandoned attempt must not close a rail that a newer intent
+     * has just reopened.
      */
-    var isOverlayActive by mutableStateOf(false)
+    var pendingHandoffId: Long? by mutableStateOf(null)
+        private set
 
     /**
-     * Focus requester for the main content area. Set via `SideEffect` in `MainScreenContent`.
-     * Used by [DrawerSheet] to redirect escaped focus when [isOverlayActive] is `true`.
+     * Whether the pending handoff is waiting on content that does not exist yet.
+     *
+     * Picking a different tab dispatches the swap asynchronously, so for a short window the
+     * *outgoing* tab is still composed and still focusable. Without this flag it would take the
+     * focus the handoff was aiming at the arriving tab, report the landing, and close the rail
+     * over content that is about to be torn down — reproducing the very bug this state machine
+     * exists to prevent. When `true`, only content composed after the handoff began may confirm it.
      */
-    var contentFocusRequester: FocusRequester? = null
+    var handoffExpectsNewContent: Boolean by mutableStateOf(false)
+        private set
 
-    fun setValue(drawerValue: DrawerValue) {
-        currentValue = drawerValue
+    private var lastHandoffId = 0L
+
+    /** Focus entered the rail, or Back was pressed in the content. */
+    fun reveal() {
+        if (currentValue == DrawerValue.Closed) {
+            currentValue = DrawerValue.Open
+        }
+    }
+
+    /**
+     * A rail item was clicked, or Back was pressed while the rail was open — both change the rail
+     * without moving focus, so focus has to be handed over explicitly.
+     *
+     * @param expectsNewContent `true` when the handoff accompanies a tab change, so the content
+     *   that must confirm it is not composed yet. See [handoffExpectsNewContent].
+     * @return the request id to confirm against, or `null` if the rail was not open.
+     */
+    fun beginHandoff(expectsNewContent: Boolean): Long? {
+        if (currentValue != DrawerValue.Open) return null
+        lastHandoffId += 1
+        pendingHandoffId = lastHandoffId
+        handoffExpectsNewContent = expectsNewContent
+        currentValue = DrawerValue.HandingOff
+        return lastHandoffId
+    }
+
+    /** D-pad right carried focus into the content, which needs no handoff. */
+    fun focusExited() {
+        if (currentValue == DrawerValue.Open) {
+            currentValue = DrawerValue.Closed
+        }
+    }
+
+    /** The content confirmed it holds focus. */
+    fun settleHandoff(requestId: Long) {
+        if (pendingHandoffId != requestId) return
+        pendingHandoffId = null
+        currentValue = DrawerValue.Closed
+    }
+
+    /** The content never took focus. Reopening beats stranding focus in nothing. */
+    fun failHandoff(requestId: Long) {
+        if (pendingHandoffId != requestId) return
+        pendingHandoffId = null
+        currentValue = DrawerValue.Open
     }
 
     companion object {
+        /** [DrawerValue.HandingOff] is transient and must not survive process death. */
+        fun persistedValue(value: DrawerValue): DrawerValue =
+            if (value == DrawerValue.HandingOff) DrawerValue.Closed else value
+
         val Saver =
             Saver<DrawerState, DrawerValue>(
-                save = { it.currentValue },
+                save = { persistedValue(it.currentValue) },
                 restore = { DrawerState(it) },
             )
     }
@@ -113,6 +174,7 @@ fun ModalNavigationDrawer(
     drawerContent: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
     modifier: Modifier = Modifier,
     drawerState: DrawerState = rememberDrawerState(DrawerValue.Closed),
+    handoff: ContentFocusHandoff? = null,
     scrimBrush: Brush = SolidColor(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
     content: @Composable () -> Unit,
 ) {
@@ -129,6 +191,7 @@ fun ModalNavigationDrawer(
         DrawerSheet(
             modifier = internalDrawerModifier.align(Alignment.CenterStart),
             drawerState = drawerState,
+            handoff = handoff,
             sizeAnimationFinishedListener = { _, targetSize ->
                 if (drawerState.currentValue == DrawerValue.Closed) {
                     with(localDensity) { closedDrawerWidth.value = targetSize.width.toDp() }
@@ -149,6 +212,7 @@ fun ModalNavigationDrawer(
 private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
+    handoff: ContentFocusHandoff? = null,
     sizeAnimationFinishedListener: ((initialValue: IntSize, targetValue: IntSize) -> Unit)? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
@@ -170,18 +234,16 @@ private fun DrawerSheet(
             .onFocusChanged {
                 focusState = it
 
-                if (initializationComplete) {
-                    // While an overlay (bottom sheet) is active, suppress all focus-driven
-                    // drawer state changes. On hasFocus=true, redirect focus to content area.
-                    // The guard stays active through focus bounces (drawer↔content) until
-                    // reset by FlowComponent after the overlay is fully dismissed + settled.
-                    if (drawerState.isOverlayActive) {
-                        if (it.hasFocus) {
-                            drawerState.contentFocusRequester?.requestFocus()
-                        }
-                        return@onFocusChanged
-                    }
-                    drawerState.setValue(if (it.hasFocus) DrawerValue.Open else DrawerValue.Closed)
+                if (!initializationComplete) return@onFocusChanged
+
+                when {
+                    // A handoff is in flight: focus arriving here is the bounce we are guarding
+                    // against, not the user coming back. Send it where it was headed.
+                    drawerState.currentValue == DrawerValue.HandingOff ->
+                        if (it.hasFocus) handoff?.redirectFocusToContent() else Unit
+
+                    it.hasFocus -> drawerState.reveal()
+                    else -> drawerState.focusExited()
                 }
             }
             .focusGroup()

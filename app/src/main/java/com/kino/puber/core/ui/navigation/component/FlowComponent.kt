@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.screen.ScreenKey
@@ -45,6 +46,8 @@ import com.kino.puber.core.ui.navigation.puberPush
 import com.kino.puber.core.ui.navigation.puberReplace
 import com.kino.puber.core.ui.navigation.puberReplaceAll
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
+import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
+import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.yield
 import kotlinx.parcelize.IgnoredOnParcel
@@ -525,6 +528,10 @@ private fun TabFlowNavigator(
     rootRouter: AppRouter?,
 ) {
     val contentFocusRequester = remember { FocusRequester() }
+    val contentFocusHandoff = LocalContentFocusHandoff.current
+    // Read by the handoff rather than pushed to it: a handoff can begin while this content already
+    // holds focus, and then no focus change will ever arrive to report the landing.
+    val contentHasFocus = remember { booleanArrayOf(false) }
     val rootAnchorCaptureRegistry = LocalRootAnchorCaptureRegistry.current
     Navigator(
         screen = rootScreen,
@@ -547,6 +554,9 @@ private fun TabFlowNavigator(
         Box(
             Modifier
                 .focusRequester(contentFocusRequester)
+                // The rail closes on this, not on requestFocus() returning true: what matters is
+                // that focus settled here rather than bouncing back into the rail.
+                .onFocusChanged { contentHasFocus[0] = it.hasFocus }
                 .focusRestorer()
                 .focusGroup()
         ) {
@@ -565,6 +575,13 @@ private fun TabFlowNavigator(
         RestoreTabContentFocusEffect(
             stackSize = navigator.items.size,
             contentFocusRequester = contentFocusRequester,
+        )
+
+        ContentFocusHandoffEffect(
+            handoff = contentFocusHandoff,
+            restartKey = contentInstanceKey,
+            contentFocusRequester = contentFocusRequester,
+            contentHasFocus = { contentHasFocus[0] },
         )
     }
 }

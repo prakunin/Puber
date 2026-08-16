@@ -3,8 +3,10 @@ package com.kino.puber.core.ui.uikit.component.moviesList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
@@ -13,6 +15,7 @@ import com.kino.puber.core.ui.navigation.component.LocalRootAnchorFocusRestored
 import com.kino.puber.core.ui.navigation.component.LocalRootAnchorRestoreCompletion
 import com.kino.puber.core.ui.navigation.component.LocalScreenKey
 import com.kino.puber.core.ui.navigation.component.RootAnchorRestoreCompletion
+import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 
 internal class ReconciledItemFocusState(
@@ -49,6 +52,7 @@ internal fun rememberReconciledItemFocus(
     }
     val onRootFocusRestored = LocalRootAnchorFocusRestored.current
     val rootAnchorRestoreCompletion = LocalRootAnchorRestoreCompletion.current
+    val handoffRequestId = LocalContentFocusHandoff.current?.pendingRequestId
     val screenKey = LocalScreenKey.current
     val targetItemId = resolveFocusedItemId(
         previousItems = previousItems.value,
@@ -86,6 +90,14 @@ internal fun rememberReconciledItemFocus(
         contentFocusActive = contentFocusActive,
         rootAnchorRestoreCompletion = rootAnchorRestoreCompletion,
         screenKey = screenKey,
+    )
+    RestoreItemFocusOnTabReentryEffect(
+        isTargetRow = isTargetRow,
+        targetItemId = targetItemId,
+        focusRequester = focusRequester,
+        contentFocusActive = contentFocusActive,
+        rowHasFocusRef = rowHasFocusRef,
+        handoffRequestId = handoffRequestId,
     )
 
     return reconciledItemFocusState(
@@ -200,6 +212,42 @@ private fun RequestReconciledItemFocusEffects(
                 rootAnchorRestoreCompletion.version > 0
         val targetCanReceiveFocus = isTargetRow && contentFocusActive && targetItemId != null
         if (matchingCompletedRestore && targetCanReceiveFocus) {
+            focusRequester.requestAfterAnchorRestore()
+        }
+    }
+}
+
+/**
+ * Restores focus into the row and card the user left when a tab is re-entered, the way returning
+ * from a details screen already does.
+ *
+ * The position itself was never lost — it is the `rememberSaveable` state the tab keeps across a
+ * switch. Only the trigger was missing, and an in-flight focus handoff is it.
+ *
+ * The handoff id is latched rather than used directly. Read directly it is null again the moment
+ * the handoff settles, which cancels this effect; and a tab whose first page has not arrived yet
+ * has no `targetItemId` to aim at on the first pass, so the one attempt would be spent on nothing.
+ * Latched, the effect re-runs when the target does appear. [rowHasFocusRef] is what stops it from
+ * yanking focus back later: once this row holds focus the restore has either happened or been
+ * overtaken by the user.
+ */
+@Composable
+private fun RestoreItemFocusOnTabReentryEffect(
+    isTargetRow: Boolean,
+    targetItemId: Int?,
+    focusRequester: FocusRequester,
+    contentFocusActive: Boolean,
+    rowHasFocusRef: BooleanArray,
+    handoffRequestId: Long?,
+) {
+    var latchedRequestId by remember { mutableStateOf<Long?>(null) }
+    if (handoffRequestId != null && handoffRequestId != latchedRequestId) {
+        latchedRequestId = handoffRequestId
+    }
+
+    LaunchedEffect(latchedRequestId, targetItemId, isTargetRow, contentFocusActive) {
+        val targetCanReceiveFocus = isTargetRow && contentFocusActive && targetItemId != null
+        if (latchedRequestId != null && targetCanReceiveFocus && !rowHasFocusRef[0]) {
             focusRequester.requestAfterAnchorRestore()
         }
     }
