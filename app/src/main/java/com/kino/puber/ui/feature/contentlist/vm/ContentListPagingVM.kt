@@ -14,6 +14,7 @@ import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -44,10 +45,30 @@ internal abstract class ContentListPagingVM<VS>(
     private var cachedOutput: List<VideoItemUIState> = emptyList()
 
     /**
-     * Set by [refreshFirstPage] and consumed by the next first-page load, which still draws the
-     * stored page first and merely guarantees the request behind it.
+     * How many times a caller has demanded that the next first-page load reach the server, against
+     * how many of those demands a load has carried out.
+     *
+     * A single flag cannot express this. [resetPaging] restarts through the paginator, so the load a
+     * demand belongs to only starts after a round trip through the store's dispatcher — and a second
+     * signal arriving inside that window restarts again and cancels the first load. A flag consumed
+     * when the load starts would leave with that cancelled load, and the load that survives would
+     * serve the stored page for the rest of its TTL after an event that was supposed to guarantee a
+     * request. Counting instead, the demand stands until a load has run to completion with it.
      */
-    private var forceNextFirstPage = false
+    private val forcedReadsDemanded = AtomicInteger(0)
+    private val forcedReadsServed = AtomicInteger(0)
+
+    /**
+     * Which first-page publication the walk currently belongs to.
+     *
+     * Both publications of one load — the stored page and the fresh one behind it — arrive in the same
+     * collection, with no paginator restart in between, so nothing cancels the walk the first of them
+     * started. Its outstanding request can therefore land after the second has replaced the list, and
+     * would otherwise append to it, drag [currentPage] back to where the old walk had got to and
+     * spend the new walk's budget. Each publication takes the next number and a walk step only
+     * publishes under the number it was started with.
+     */
+    private val walkGeneration = AtomicInteger(0)
 
     /** How this list names itself in the log — "Section", "Show all". */
     protected abstract val logName: String
@@ -58,16 +79,16 @@ internal abstract class ContentListPagingVM<VS>(
      *
      * This is what every signal that knows the server's answer has changed goes through — a retry, a
      * return from details or the player with a content change, a display-setting flip. The stored
-     * page is still drawn first; what the flag adds is the request behind it.
+     * page is still drawn first; what the demand adds is the request behind it.
      */
     fun refreshFirstPage() {
-        forceNextFirstPage = true
+        forcedReadsDemanded.incrementAndGet()
         resetPaging()
     }
 
     final override fun onLoadFirstPage() {
-        val force = forceNextFirstPage
-        forceNextFirstPage = false
+        val demanded = forcedReadsDemanded.get()
+        val force = demanded > forcedReadsServed.get()
         pagingLaunch(errorHandlerGeneral) {
             interactor.observeFirstPage(config, force = force).collect { cached ->
                 when (cached) {
@@ -80,15 +101,33 @@ internal abstract class ContentListPagingVM<VS>(
                     )
                 }
             }
+            // Only a load that got this far has made the request the demand asked for. One cancelled
+            // by the next restart, or one that failed, leaves the demand standing for its successor.
+            // The highest wins, so a slower load settling after a newer one cannot revive a demand
+            // that newer one has already served.
+            if (force) {
+                forcedReadsServed.accumulateAndGet(demanded) { served, carried -> maxOf(served, carried) }
+            }
         }
     }
 
     final override fun onLoadNextPage(key: Item?) {
-        pagingLaunch(errorHandlerPaging) { loadNextPage(page = currentPage + 1) }
+        walkStep(page = currentPage + 1)
     }
 
-    private suspend fun loadNextPage(page: Int) {
-        publish(interactor.loadPage(config, page), isFirstPage = false)
+    /**
+     * One step of the walk, tied to the publication that started it. A step whose generation has
+     * moved on belongs to a list that is no longer on screen, so its page is dropped rather than
+     * published.
+     */
+    private fun walkStep(page: Int) {
+        pagingLaunch(errorHandlerPaging) { publishWalkStep(page, walkGeneration.get()) }
+    }
+
+    private suspend fun publishWalkStep(page: Int, generation: Int) {
+        val response = interactor.loadPage(config, page)
+        if (generation != walkGeneration.get()) return
+        publish(response, isFirstPage = false)
     }
 
     /**
@@ -103,6 +142,9 @@ internal abstract class ContentListPagingVM<VS>(
      */
     private fun publish(response: PaginatedResponse<Item>, isFirstPage: Boolean) {
         if (isFirstPage) {
+            // Ahead of everything else, so a walk this publication starts belongs to it and the one
+            // the previous publication started is left behind.
+            walkGeneration.incrementAndGet()
             emptyPageChain = 0
             resumeRounds = 0
             publishedAnyItems = false
@@ -161,10 +203,14 @@ internal abstract class ContentListPagingVM<VS>(
             "$logName ${config.id}: nothing to show in $emptyPageChain pages, " +
                 "resuming from page $resumeFrom (round $resumeRounds)"
         )
+        val generation = walkGeneration.get()
         pagingLaunch(errorHandlerPaging) {
             delay(WALK_RESUME_PAUSE)
+            // A first page published during the pause starts a walk of its own, and this round is
+            // part of the one it replaced — including the counter it would otherwise reset.
+            if (generation != walkGeneration.get()) return@pagingLaunch
             emptyPageChain = 0
-            loadNextPage(page = resumeFrom)
+            publishWalkStep(page = resumeFrom, generation = generation)
         }
     }
 
