@@ -33,6 +33,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.kino.puber.core.model.NavigationMode
+import com.kino.puber.ui.feature.main.model.TabType
 
 private const val FocusTimeoutMillis = 3_000L
 
@@ -135,6 +137,60 @@ internal class DeviceSettingsContentFocusTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Automatic").assertDoesNotExist()
+    }
+
+    @Test
+    fun navigationStyleOpensAsChoiceListAndBackCollapsesIt() {
+        setSuccessContent(initialSection = SettingsSection.Navigation)
+        val navigation = composeRule.onNodeWithTag(
+            SettingsTestTags.section(SettingsSection.Navigation.name)
+        )
+        val sideMenu = context.getString(R.string.settings_navigation_drawer)
+        val topTabs = context.getString(R.string.settings_navigation_top_tabs)
+
+        navigation.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.settings_navigation_mode))
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        focusedItem(topTabs).assertIsFocused()
+        composeRule.onNodeWithText(sideMenu).assertExists()
+
+        focusedNode().press(Key.Back)
+
+        composeRule.onNodeWithText(sideMenu).assertDoesNotExist()
+        focusedItem(context.getString(R.string.settings_navigation_mode)).assertIsFocused()
+    }
+
+    @Test
+    fun startupTabOpensAsChoiceListAndFocusesCurrentValue() {
+        setSuccessContent(
+            state = successState().copy(
+                navigationMode = NavigationMode.TopTabs,
+                startupTab = TabType.Home,
+                startupTabOptions = listOf(TabType.Home, TabType.Movies),
+            ),
+            initialSection = SettingsSection.Navigation,
+        )
+        val navigation = composeRule.onNodeWithTag(
+            SettingsTestTags.section(SettingsSection.Navigation.name)
+        )
+        val home = context.getString(R.string.main_tabs_home)
+        val movies = context.getString(R.string.main_tabs_movies)
+
+        navigation.requestFocus().press(Key.DirectionRight)
+        focusedNode().press(Key.DirectionDown)
+        focusedItem(context.getString(R.string.settings_startup_tab))
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        focusedItem(home).assertIsFocused()
+        composeRule.onNodeWithText(movies).assertExists()
+
+        focusedNode().press(Key.Back)
+
+        composeRule.onNodeWithText(movies).assertDoesNotExist()
+        focusedItem(context.getString(R.string.settings_startup_tab)).assertIsFocused()
     }
 
     @Test

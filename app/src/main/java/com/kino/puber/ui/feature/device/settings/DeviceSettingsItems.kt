@@ -53,7 +53,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
-import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
+import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 
 @Composable
 internal fun SettingsListItem(
@@ -232,19 +232,55 @@ internal fun SettingListItem(
     listState: LazyListState? = null,
     lazyItemIndex: Int = 0,
 ) {
-    val headerFocusRequester = remember { FocusRequester() }
-    val optionFocusRequesters = remember(setting.values.map(SettingOptionUi::id)) {
-        setting.values.associate { it.id to FocusRequester() }
+    val options = remember(setting.values) {
+        setting.values.map { option ->
+            SettingsChoiceOption(
+                key = option.id.toString(),
+                label = option.label,
+                description = option.description,
+                selected = option.selected,
+            )
+        }
     }
-    val selectedOption = setting.values.firstOrNull(SettingOptionUi::selected)
+    SettingsChoiceItem(
+        label = setting.label,
+        options = options,
+        isExpanded = isExpanded,
+        savingOptionKey = savingOptionId?.toString(),
+        onToggleExpand = onToggleExpand,
+        onOptionSelect = { onOptionSelect(it.toInt()) },
+        listState = listState,
+        lazyItemIndex = lazyItemIndex,
+    )
+}
+
+@Composable
+internal fun SettingsChoiceItem(
+    label: String,
+    options: List<SettingsChoiceOption>,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onOptionSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    savingOptionKey: String? = null,
+    listState: LazyListState? = null,
+    lazyItemIndex: Int = 0,
+) {
+    val headerFocusRequester = remember { FocusRequester() }
+    val optionFocusRequesters = remember(options.map(SettingsChoiceOption::key)) {
+        options.associate { it.key to FocusRequester() }
+    }
+    val selectedOption = options.firstOrNull(SettingsChoiceOption::selected)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .focusRestorer(headerFocusRequester)
             .focusGroup(),
     ) {
         SettingsListItem(
-            headline = setting.label,
+            headline = label,
+            supportingText = description,
             trailingText = selectedOption?.label.orEmpty(),
             onClick = onToggleExpand,
             modifier = Modifier.focusRequester(headerFocusRequester),
@@ -269,16 +305,16 @@ internal fun SettingListItem(
                     .padding(start = 24.dp, top = 4.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                setting.values.forEach { option ->
+                options.forEach { option ->
                     OptionItem(
                         option = option,
-                        isSaving = savingOptionId == option.id,
-                        enabled = savingOptionId == null,
+                        isSaving = savingOptionKey == option.key,
+                        enabled = savingOptionKey == null,
                         onClick = {
                             headerFocusRequester.requestFocus()
-                            onOptionSelect(option.id)
+                            onOptionSelect(option.key)
                         },
-                        modifier = Modifier.focusRequester(optionFocusRequesters.getValue(option.id)),
+                        modifier = Modifier.focusRequester(optionFocusRequesters.getValue(option.key)),
                     )
                 }
             }
@@ -288,7 +324,7 @@ internal fun SettingListItem(
             if (isExpanded) {
                 listState?.animateScrollToItem(lazyItemIndex)
                 val requester = selectedOption
-                    ?.let { optionFocusRequesters[it.id] }
+                    ?.let { optionFocusRequesters[it.key] }
                     ?: optionFocusRequesters.values.firstOrNull()
                 requester?.requestFocus()
             }
@@ -298,7 +334,7 @@ internal fun SettingListItem(
 
 @Composable
 private fun OptionItem(
-    option: SettingOptionUi,
+    option: SettingsChoiceOption,
     isSaving: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,

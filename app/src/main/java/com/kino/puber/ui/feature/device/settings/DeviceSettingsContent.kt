@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -39,7 +38,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -61,12 +59,18 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
+import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import com.kino.puber.ui.feature.main.model.TabType
 
 private val ScreenHorizontalPadding = 48.dp
 private val ScreenVerticalPadding = 28.dp
 private val NavigationWidth = 264.dp
+
+private enum class NavigationChoice {
+    Mode,
+    StartupTab,
+}
 
 @Composable
 internal fun DeviceSettingsContent(
@@ -348,6 +352,9 @@ private fun SettingsSectionContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    var expandedNavigationChoice by rememberSaveable(section) {
+        mutableStateOf<NavigationChoice?>(null)
+    }
     LazyColumn(
         state = listState,
         modifier = modifier
@@ -370,7 +377,13 @@ private fun SettingsSectionContent(
             SettingsSection.General -> generalItems(state, onAction)
             SettingsSection.Playback -> playbackItems(state, onAction)
             SettingsSection.Content -> contentItems(state, onAction)
-            SettingsSection.Navigation -> navigationItems(state, onAction)
+            SettingsSection.Navigation -> navigationItems(
+                state = state,
+                onAction = onAction,
+                listState = listState,
+                expandedChoice = expandedNavigationChoice,
+                onExpandedChoiceChange = { expandedNavigationChoice = it },
+            )
             SettingsSection.Network -> networkItems(state, apiDomain, onAction, listState)
             SettingsSection.Data -> watchHistoryItems(state, onAction)
             SettingsSection.Developer -> developerItems(state, onAction)
@@ -500,29 +513,74 @@ private fun LazyListScope.contentItems(
 private fun LazyListScope.navigationItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    expandedChoice: NavigationChoice?,
+    onExpandedChoiceChange: (NavigationChoice?) -> Unit,
 ) {
-    item(key = "navigation-mode-heading") {
-        SectionHeading(
-            title = stringResource(R.string.settings_navigation_mode),
-            description = stringResource(R.string.settings_navigation_restart_hint),
-        )
-    }
     item(key = "navigation-mode") {
-        NavigationModeRadioGroup(
-            currentMode = state.navigationMode,
-            onModeSelected = { onAction(DeviceSettingsActions.ChangeNavigationMode(it)) },
+        SettingsChoiceItem(
+            label = stringResource(R.string.settings_navigation_mode),
+            description = stringResource(R.string.settings_navigation_restart_hint),
+            options = navigationModeOptions(state.navigationMode),
+            isExpanded = expandedChoice == NavigationChoice.Mode,
+            onToggleExpand = {
+                onExpandedChoiceChange(
+                    if (expandedChoice == NavigationChoice.Mode) null else NavigationChoice.Mode
+                )
+            },
+            onOptionSelect = { key ->
+                onExpandedChoiceChange(null)
+                onAction(DeviceSettingsActions.ChangeNavigationMode(NavigationMode.valueOf(key)))
+            },
+            listState = listState,
+            lazyItemIndex = 0,
         )
-    }
-    item(key = "startup-heading") {
-        SectionHeading(stringResource(R.string.settings_startup_tab))
     }
     item(key = "startup-tab") {
-        StartupTabRadioGroup(
-            options = state.startupTabOptions,
-            currentTab = state.startupTab,
-            onTabSelected = { onAction(DeviceSettingsActions.ChangeStartupTab(it)) },
+        SettingsChoiceItem(
+            label = stringResource(R.string.settings_startup_tab),
+            options = startupTabOptions(state.startupTabOptions, state.startupTab),
+            isExpanded = expandedChoice == NavigationChoice.StartupTab,
+            onToggleExpand = {
+                onExpandedChoiceChange(
+                    if (expandedChoice == NavigationChoice.StartupTab) {
+                        null
+                    } else {
+                        NavigationChoice.StartupTab
+                    }
+                )
+            },
+            onOptionSelect = { key ->
+                onExpandedChoiceChange(null)
+                onAction(DeviceSettingsActions.ChangeStartupTab(TabType.valueOf(key)))
+            },
+            listState = listState,
+            lazyItemIndex = 1,
         )
     }
+}
+
+@Composable
+private fun navigationModeOptions(currentMode: NavigationMode) = NavigationMode.entries.map { mode ->
+    SettingsChoiceOption(
+        key = mode.name,
+        label = stringResource(
+            when (mode) {
+                NavigationMode.SideDrawer -> R.string.settings_navigation_drawer
+                NavigationMode.TopTabs -> R.string.settings_navigation_top_tabs
+            }
+        ),
+        selected = mode == currentMode,
+    )
+}
+
+@Composable
+private fun startupTabOptions(options: List<TabType>, currentTab: TabType) = options.map { tab ->
+    SettingsChoiceOption(
+        key = tab.name,
+        label = stringResource(tab.title),
+        selected = tab == currentTab,
+    )
 }
 
 private fun LazyListScope.networkItems(
@@ -694,46 +752,6 @@ private fun SectionHeading(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 3.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun NavigationModeRadioGroup(
-    currentMode: NavigationMode,
-    onModeSelected: (NavigationMode) -> Unit,
-) {
-    Column(modifier = Modifier.selectableGroup()) {
-        NavigationMode.entries.forEach { mode ->
-            SettingsListItem(
-                headline = stringResource(
-                    when (mode) {
-                        NavigationMode.SideDrawer -> R.string.settings_navigation_drawer
-                        NavigationMode.TopTabs -> R.string.settings_navigation_top_tabs
-                    }
-                ),
-                selected = mode == currentMode,
-                role = Role.RadioButton,
-                onClick = { onModeSelected(mode) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun StartupTabRadioGroup(
-    options: List<TabType>,
-    currentTab: TabType,
-    onTabSelected: (TabType) -> Unit,
-) {
-    Column(modifier = Modifier.selectableGroup()) {
-        options.forEach { tab ->
-            SettingsListItem(
-                headline = stringResource(tab.title),
-                selected = tab == currentTab,
-                role = Role.RadioButton,
-                onClick = { onTabSelected(tab) },
             )
         }
     }
