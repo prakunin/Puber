@@ -1,7 +1,6 @@
 package com.kino.puber.data.cache
 
-import com.kino.puber.data.repository.PersistentPayloadStore
-import com.kino.puber.data.repository.StoredPayload
+import com.kino.puber.util.FakePayloadStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
@@ -594,45 +593,4 @@ class CachedFeedTest {
 
     @Serializable
     private data class Boxed(val value: Int)
-
-    private class FakePayloadStore : PersistentPayloadStore {
-        private val rows = mutableMapOf<String, StoredPayload>()
-        var readCount: Int = 0
-        var onRead: (suspend (String) -> Unit)? = null
-
-        override var generation: Long = 0L
-            private set
-
-        override suspend fun read(key: String): StoredPayload? {
-            readCount += 1
-            val stored = rows[key]
-            onRead?.invoke(key)
-            return stored
-        }
-
-        override suspend fun write(key: String, payload: String, updatedAt: Long) {
-            rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
-        }
-
-        override suspend fun touch(key: String, updatedAt: Long) {
-            rows[key]?.let { rows[key] = it.copy(updatedAt = updatedAt) }
-        }
-
-        override suspend fun remove(key: String) {
-            rows.remove(key)
-        }
-
-        override suspend fun removeByPrefix(prefix: String) {
-            rows.keys.filter { it.startsWith(prefix) }.forEach(rows::remove)
-        }
-
-        override suspend fun clear() {
-            generation += 1
-            try {
-                rows.clear()
-            } finally {
-                generation += 1
-            }
-        }
-    }
 }
