@@ -9,7 +9,7 @@
 
     <!-- Settings -->
     <string name="settings_skip_segments_title">Пропуск сегментов</string>
-    <string name="settings_skip_segments_subtitle">"Экспериментальная функция.\nДанные о заставках и титрах берутся из открытых сервисов\nTheIntroDB, IntroDB и TMDB — они могут быть неточными или отсутствовать для некоторых фильмов.\nНастройки хранятся только на этом устройстве."</string>
+    <string name="settings_skip_segments_subtitle">Автоматически пропускать найденные заставки, пересказы и титры. Результат зависит от доступности данных.</string>
     <string name="settings_skip_intro">Заставки (intro)</string>
     <string name="settings_skip_recap">Пересказ (recap)</string>
     <string name="settings_skip_credits">Титры (credits)</string>

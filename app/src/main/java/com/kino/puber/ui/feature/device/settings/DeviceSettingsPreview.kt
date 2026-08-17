@@ -12,6 +12,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
+import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import com.kino.puber.ui.feature.main.model.TabType
 
 private val previewDevice = DeviceUi(
@@ -121,7 +122,7 @@ private fun ErrorPreview() = PuberTheme {
     )
 }
 
-@Preview(name = "Success — collapsed", device = TV_1080p)
+@Preview(name = "Success — general", device = TV_1080p)
 @Composable
 private fun SuccessCollapsedPreview() = PuberTheme {
     DeviceSettingsContent(
@@ -135,6 +136,32 @@ private fun SuccessCollapsedPreview() = PuberTheme {
     )
 }
 
+@Preview(name = "Success — playback", device = TV_1080p)
+@Composable
+private fun SuccessPlaybackPreview() = PuberTheme {
+    DeviceSettingsContent(
+        state = DeviceSettingsState.Success(
+            settings = previewAllSettings,
+            device = previewDevice,
+        ),
+        apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Playback,
+    )
+}
+
+@Preview(name = "Success — network", device = TV_1080p)
+@Composable
+private fun SuccessNetworkPreview() = PuberTheme {
+    DeviceSettingsContent(
+        state = DeviceSettingsState.Success(
+            settings = previewAllSettings,
+            device = previewDevice,
+        ),
+        apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Network,
+    )
+}
+
 @Preview(name = "Success — content defaults", device = TV_1080p)
 @Composable
 private fun SuccessContentDefaultsPreview() = PuberTheme {
@@ -144,6 +171,7 @@ private fun SuccessContentDefaultsPreview() = PuberTheme {
             device = previewDevice,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Content,
     )
 }
 
@@ -159,6 +187,7 @@ private fun SuccessAnimeHiddenPreview() = PuberTheme {
             showAnime = false,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Content,
     )
 }
 
@@ -172,6 +201,7 @@ private fun SuccessExpandedPreview() = PuberTheme {
             expandedType = DeviceSettingType.STREAMING_TYPE,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Network,
     )
 }
 
@@ -186,6 +216,7 @@ private fun SuccessSavingPreview() = PuberTheme {
             savingOptionId = 2,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Network,
     )
 }
 
@@ -199,6 +230,7 @@ private fun SuccessSavingTogglePreview() = PuberTheme {
             savingToggleType = DeviceSettingType.SUPPORT_SSL,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Network,
     )
 }
 
@@ -244,5 +276,6 @@ private fun UnsupportedPreview() = PuberTheme {
             device = previewDevice,
         ),
         apiDomain = previewApiDomain,
+        initialSection = SettingsSection.Network,
     )
 }
