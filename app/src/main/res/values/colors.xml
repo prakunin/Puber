@@ -3,7 +3,6 @@
 
     <!-- Brand background used by the splash screen and by the window itself,
          so the app never flashes the platform default white. -->
-    <color name="splash_background">#FF1A0E2E</color>
-    <color name="splash_title">#FFEDE6F4</color>
-    <color name="splash_version">#B3D0BCFF</color>
+    <color name="splash_background">#FF000000</color>
+    <color name="splash_signature">#B3FFFFFF</color>
 </resources>

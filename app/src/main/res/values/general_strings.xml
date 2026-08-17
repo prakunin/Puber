@@ -1,5 +1,5 @@
 <resources>
-    <string name="splash_version">версия %1$s</string>
+    <string name="splash_signature">Puber</string>
     <string name="error_button_retry">Повторить</string>
     <string name="empty_state">Пусто</string>
     <plurals name="items_count">

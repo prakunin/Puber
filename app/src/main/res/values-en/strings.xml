@@ -31,7 +31,6 @@
     <string name="update_prompt_install_failed">Couldn’t open the Android installer. Try again.</string>
     <string name="update_prompt_storage_unavailable">The update download folder isn’t accessible. Check device storage and try again.</string>
 
-    <string name="splash_version">version %1$s</string>
     <string name="error_button_retry">Retry</string>
     <string name="empty_state">Empty</string>
     <plurals name="items_count">
