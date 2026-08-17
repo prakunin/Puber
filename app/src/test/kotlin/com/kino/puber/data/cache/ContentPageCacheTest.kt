@@ -64,6 +64,33 @@ class ContentPageCacheTest {
     }
 
     @Test
+    fun aMovedWatchStateVersionRevalidatesEverySectionKeyNotJustTheFirstAsked() = runTest {
+        // A catalogue tab renders several sections at once. A move must not be consumed by
+        // whichever one happens to ask first, leaving the rest to serve stale-by-index pages.
+        subject.sectionPage("a", watchStateVersion = 1L) { page(1) }.toList()
+        subject.sectionPage("b", watchStateVersion = 1L) { page(11) }.toList()
+
+        val emissionsA = subject.sectionPage("a", watchStateVersion = 2L) { page(2) }.toList()
+        val emissionsB = subject.sectionPage("b", watchStateVersion = 2L) { page(12) }.toList()
+
+        assertEquals(listOf(1, 2), emissionsA.map { (it as Cached.Value).value.items.single().id })
+        assertEquals(listOf(11, 12), emissionsB.map { (it as Cached.Value).value.items.single().id })
+    }
+
+    @Test
+    fun buildingASectionPageFlowWithoutCollectingItDoesNotConsumeTheMove() = runTest {
+        // The version check has to run when the flow is collected, not when sectionPage() is called
+        // — building a flow and dropping it is not a read, and must not burn the one forced read.
+        subject.sectionPage("s", watchStateVersion = 1L) { page(1) }.toList()
+
+        subject.sectionPage("s", watchStateVersion = 2L) { page(2) } // built, never collected
+
+        val emissions = subject.sectionPage("s", watchStateVersion = 2L) { page(3) }.toList()
+
+        assertEquals(listOf(1, 3), emissions.map { (it as Cached.Value).value.items.single().id })
+    }
+
+    @Test
     fun aSectionPagePastTheHardCeilingCountsAsAbsent() = runTest {
         subject.sectionPage("s", watchStateVersion = 1L) { page(1) }.toList()
         now += 8.days.inWholeMilliseconds
