@@ -1,66 +1,83 @@
 package com.kino.puber.ui.feature.device.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.core.model.NavigationMode
+import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
+import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.core.ui.uikit.theme.highlightOnFocus
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
+import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
+import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import com.kino.puber.ui.feature.main.model.TabType
+
+private val ScreenHorizontalPadding = 48.dp
+private val ScreenVerticalPadding = 28.dp
+private val NavigationWidth = 264.dp
+
+private enum class NavigationChoice {
+    Mode,
+    StartupTab,
+}
 
 @Composable
 internal fun DeviceSettingsContent(
     state: DeviceSettingsState,
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit = {},
+    initialSection: SettingsSection = SettingsSection.General,
 ) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+    Surface(modifier = Modifier.fillMaxSize()) {
         when (state) {
             is DeviceSettingsState.Error -> ErrorView(
                 error = state.error,
@@ -68,10 +85,11 @@ internal fun DeviceSettingsContent(
                 onConfigureApiDomain = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
             )
             is DeviceSettingsState.Loading -> LoadingView()
-            is DeviceSettingsState.Success -> DeviceSettingsList(
+            is DeviceSettingsState.Success -> DeviceSettingsPane(
                 state = state,
                 apiDomain = apiDomain,
                 onAction = onAction,
+                initialSection = initialSection,
             )
         }
     }
@@ -79,7 +97,17 @@ internal fun DeviceSettingsContent(
 
 @Composable
 private fun LoadingView() {
-    CircularProgressIndicator()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.settings_screen_title),
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.padding(
+                horizontal = ScreenHorizontalPadding,
+                vertical = ScreenVerticalPadding,
+            ),
+        )
+        FullScreenProgressIndicator()
+    }
 }
 
 @Composable
@@ -88,324 +116,388 @@ private fun ErrorView(
     onRetry: () -> Unit,
     onConfigureApiDomain: () -> Unit,
 ) {
+    val retryFocusRequester = rememberFocusRequesterOnLaunch()
+
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = ScreenHorizontalPadding, vertical = ScreenVerticalPadding),
     ) {
         Text(
-            text = error,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
-            textAlign = TextAlign.Center,
+            text = stringResource(R.string.settings_screen_title),
+            style = MaterialTheme.typography.headlineLarge,
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onRetry) {
-            Text(stringResource(R.string.device_settings_retry))
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = onConfigureApiDomain) {
-            Text(stringResource(R.string.api_domain_open_action))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .focusGroup(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onRetry,
+                    modifier = Modifier
+                        .focusRequester(retryFocusRequester)
+                        .testTag(SettingsTestTags.ErrorRetry),
+                ) {
+                    Text(stringResource(R.string.device_settings_retry))
+                }
+                Button(onClick = onConfigureApiDomain) {
+                    Text(stringResource(R.string.api_domain_open_action))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun DeviceSettingsList(
+private fun DeviceSettingsPane(
     state: DeviceSettingsState.Success,
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
+    initialSection: SettingsSection,
 ) {
-    val listState = rememberLazyListState()
-    val focusRequester = remember { FocusRequester() }
-    val headerItemsCount = 5
-
-    LaunchedEffect(Unit) {
-        delay(100)
-        focusRequester.requestFocus()
+    var selectedSection by rememberSaveable { mutableStateOf(initialSection) }
+    val sections = remember {
+        SettingsSection.entries.filter { it != SettingsSection.Developer || BuildConfig.DEBUG }
+    }
+    val initialFocusRequester = rememberFocusRequesterOnLaunch()
+    val sectionFocusRequesters = remember(sections, initialSection, initialFocusRequester) {
+        sections.associateWith { section ->
+            if (section == initialSection) initialFocusRequester else FocusRequester()
+        }
     }
 
-    LazyColumn(
-        state = listState,
+    Row(
         modifier = Modifier
-            .focusRequester(focusRequester)
-            .focusGroup()
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = ScreenHorizontalPadding, vertical = ScreenVerticalPadding),
+        horizontalArrangement = Arrangement.spacedBy(28.dp),
     ) {
-        item {
-            Column(modifier = Modifier.selectableGroup()) {
-                Text(
-                    text = stringResource(R.string.device_settings_current_device),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                DeviceInfoCard(device = state.device)
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        item {
-            Column {
-                Text(
-                    text = stringResource(R.string.api_domain_settings_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(R.string.api_domain_settings_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        item {
-            LocalActionItem(
-                label = stringResource(R.string.api_domain_open_action),
-                value = apiDomain.currentDomain,
-                onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
-            )
-        }
-        item {
+        Column(
+            modifier = Modifier
+                .width(NavigationWidth)
+                .fillMaxHeight(),
+        ) {
             Text(
-                text = stringResource(R.string.device_settings_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
+                text = stringResource(R.string.settings_screen_title),
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.testTag(SettingsTestTags.ScreenTitle),
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            SettingsNavigation(
+                sections = sections,
+                selectedSection = selectedSection,
+                sectionFocusRequesters = sectionFocusRequesters,
+                onSectionSelected = { selectedSection = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             )
         }
-
-        itemsIndexed(state.settings.settingsList) { index, setting ->
-            when (setting) {
-                is DeviceSettingUIModel.TypeValue -> SettingSwitchItem(
-                    setting = setting,
-                    isSaving = state.savingToggleType == setting.type,
-                    onToggle = {
-                        onAction(DeviceSettingsActions.ChangeSettingValue(setting.copy(value = !setting.value)))
-                    },
-                )
-
-                is DeviceSettingUIModel.TypeList -> SettingListItem(
-                    setting = setting,
-                    isExpanded = setting.type == state.expandedType,
-                    savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
-                    onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
-                    onOptionSelect = { optionId ->
-                        onAction(DeviceSettingsActions.SelectOption(setting.type, optionId))
-                    },
-                    listState = listState,
-                    lazyItemIndex = headerItemsCount + index,
-                )
-            }
-        }
-        localPreferencesItems(state, onAction)
-
-        // Skip segments section (local-only preferences)
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        item {
-            Column {
-                Text(
-                    text = stringResource(R.string.settings_skip_segments_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(R.string.settings_skip_segments_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        item {
-            LocalToggleItem(
-                label = stringResource(R.string.settings_skip_intro),
-                checked = state.skipIntroEnabled,
-                onToggle = { onAction(DeviceSettingsActions.ToggleSkipIntro) },
-            )
-        }
-        item {
-            LocalToggleItem(
-                label = stringResource(R.string.settings_skip_recap),
-                checked = state.skipRecapEnabled,
-                onToggle = { onAction(DeviceSettingsActions.ToggleSkipRecap) },
-            )
-        }
-        item {
-            LocalToggleItem(
-                label = stringResource(R.string.settings_skip_credits),
-                checked = state.skipCreditsEnabled,
-                onToggle = { onAction(DeviceSettingsActions.ToggleSkipCredits) },
-            )
-        }
-
-        // Navigation mode section
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        item {
-            Column {
-                Text(
-                    text = stringResource(R.string.settings_navigation_mode),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(R.string.settings_navigation_restart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        item {
-            NavigationModeRadioGroup(
-                currentMode = state.navigationMode,
-                onModeSelected = { mode ->
-                    onAction(DeviceSettingsActions.ChangeNavigationMode(mode))
-                },
-            )
-        }
-        item {
-            Text(
-                text = stringResource(R.string.settings_startup_tab),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        item {
-            StartupTabRadioGroup(
-                options = state.startupTabOptions,
-                currentTab = state.startupTab,
-                onTabSelected = { tab ->
-                    onAction(DeviceSettingsActions.ChangeStartupTab(tab))
-                },
-            )
-        }
-
-        // App updates section
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        item {
-            Text(
-                text = stringResource(R.string.settings_updates_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        item {
-            LocalToggleItem(
-                label = stringResource(R.string.settings_auto_update_check),
-                description = stringResource(R.string.settings_auto_update_check_subtitle),
-                checked = state.autoUpdateCheckEnabled,
-                onToggle = { onAction(DeviceSettingsActions.ToggleAutoUpdateCheck) },
-            )
-        }
-
-        // Debug section
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        item {
-            Text(
-                text = stringResource(R.string.settings_debug_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        item {
-            LocalToggleItem(
-                label = stringResource(R.string.settings_debug_overlay),
-                checked = state.debugOverlayEnabled,
-                onToggle = { onAction(DeviceSettingsActions.ToggleDebugOverlay) },
+        key(selectedSection) {
+            SettingsSectionPanel(
+                section = selectedSection,
+                state = state,
+                apiDomain = apiDomain,
+                onAction = onAction,
+                leftFocusRequester = sectionFocusRequesters.getValue(selectedSection),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             )
         }
     }
 }
 
-private fun LazyListScope.localPreferencesItems(
+@Composable
+private fun SettingsNavigation(
+    sections: List<SettingsSection>,
+    selectedSection: SettingsSection,
+    sectionFocusRequesters: Map<SettingsSection, FocusRequester>,
+    onSectionSelected: (SettingsSection) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .focusRestorer()
+            .focusGroup()
+            .testTag(SettingsTestTags.Navigation),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(2.dp),
+    ) {
+        itemsIndexed(
+            items = sections,
+            key = { _, section -> section.name },
+        ) { _, section ->
+            val selected = section == selectedSection
+            Surface(
+                onClick = { onSectionSelected(section) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(sectionFocusRequesters.getValue(section))
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) onSectionSelected(section)
+                    }
+                    .semantics { this.selected = selected }
+                    .testTag(SettingsTestTags.section(section.name)),
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    } else {
+                        Color.Transparent
+                    },
+                    contentColor = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+                    focusedContentColor = MaterialTheme.colorScheme.surface,
+                    pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                    pressedContentColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                Text(
+                    text = stringResource(section.titleRes),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionPanel(
+    section: SettingsSection,
+    state: DeviceSettingsState.Success,
+    apiDomain: ApiDomainDialogState,
+    onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+    ) {
+        Text(
+            text = stringResource(section.titleRes),
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.testTag(SettingsTestTags.SectionTitle),
+        )
+        Text(
+            text = sectionDescription(section),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                .padding(top = 8.dp),
+        ) {
+            SettingsSectionContent(
+                section = section,
+                state = state,
+                apiDomain = apiDomain,
+                onAction = onAction,
+                leftFocusRequester = leftFocusRequester,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(SettingsTestTags.Content),
+            )
+        }
+    }
+}
+
+@Composable
+private fun sectionDescription(section: SettingsSection): String = stringResource(
+    when (section) {
+        SettingsSection.General -> R.string.settings_general_description
+        SettingsSection.Playback -> R.string.settings_playback_description
+        SettingsSection.Content -> R.string.settings_content_description
+        SettingsSection.Navigation -> R.string.settings_navigation_description
+        SettingsSection.Network -> R.string.settings_network_description
+        SettingsSection.Data -> R.string.settings_data_description
+        SettingsSection.Developer -> R.string.settings_developer_description
+    }
+)
+
+@Composable
+private fun SettingsSectionContent(
+    section: SettingsSection,
+    state: DeviceSettingsState.Success,
+    apiDomain: ApiDomainDialogState,
+    onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+    var expandedNavigationChoice by rememberSaveable(section) {
+        mutableStateOf<NavigationChoice?>(null)
+    }
+    CompositionLocalProvider(LocalSettingsLeftFocusRequester provides leftFocusRequester) {
+        LazyColumn(
+            state = listState,
+            modifier = modifier
+                .focusRestorer()
+                .focusGroup(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            when (section) {
+                SettingsSection.General -> generalItems(state, onAction)
+                SettingsSection.Playback -> playbackItems(state, onAction)
+                SettingsSection.Content -> contentItems(state, onAction)
+                SettingsSection.Navigation -> navigationItems(
+                    state = state,
+                    onAction = onAction,
+                    listState = listState,
+                    leftFocusRequester = leftFocusRequester,
+                    expandedChoice = expandedNavigationChoice,
+                    onExpandedChoiceChange = { expandedNavigationChoice = it },
+                )
+                SettingsSection.Network -> networkItems(
+                    state,
+                    apiDomain,
+                    onAction,
+                    listState,
+                    leftFocusRequester,
+                )
+                SettingsSection.Data -> watchHistoryItems(state, onAction)
+                SettingsSection.Developer -> developerItems(state, onAction)
+            }
+        }
+    }
+}
+
+private fun LazyListScope.generalItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
 ) {
-    item {
-        LocalToggleItem(
+    item(key = "auto-update") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_auto_update_check),
+            description = stringResource(R.string.settings_auto_update_check_subtitle),
+            checked = state.autoUpdateCheckEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleAutoUpdateCheck) },
+        )
+    }
+    item(key = "about-heading") {
+        SectionHeading(stringResource(R.string.settings_about_device_title))
+    }
+    item(key = "device") {
+        DeviceInfoCard(device = state.device)
+    }
+}
+
+private fun LazyListScope.playbackItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item(key = "surround") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_prefer_surround_audio),
             checked = state.preferSurroundAudio,
             onToggle = { onAction(DeviceSettingsActions.ToggleSurroundAudio) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "ok-play-pause") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_ok_toggles_play_pause),
             description = stringResource(R.string.settings_ok_toggles_play_pause_subtitle),
             checked = state.okTogglesPlayPause,
             onToggle = { onAction(DeviceSettingsActions.ToggleOkTogglesPlayPause) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "mark-watched") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_show_mark_watched_button),
             description = stringResource(R.string.settings_show_mark_watched_button_subtitle),
             checked = state.showMarkWatchedButton,
             onToggle = { onAction(DeviceSettingsActions.ToggleShowMarkWatchedButton) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "skip-heading") {
+        SectionHeading(
+            title = stringResource(R.string.settings_skip_segments_title),
+            description = stringResource(R.string.settings_skip_segments_subtitle),
+        )
+    }
+    item(key = "skip-intro") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_skip_intro),
+            checked = state.skipIntroEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleSkipIntro) },
+        )
+    }
+    item(key = "skip-recap") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_skip_recap),
+            checked = state.skipRecapEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleSkipRecap) },
+        )
+    }
+    item(key = "skip-credits") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_skip_credits),
+            checked = state.skipCreditsEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleSkipCredits) },
+        )
+    }
+}
+
+private fun LazyListScope.contentItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item(key = "watched-indicators") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_watched_indicators),
             checked = state.watchedIndicatorsEnabled,
             onToggle = { onAction(DeviceSettingsActions.ToggleWatchedIndicators) },
         )
     }
-    contentPreferencesItems(state, onAction)
-    watchIndexItems(state, onAction)
-}
-
-private fun LazyListScope.contentPreferencesItems(
-    state: DeviceSettingsState.Success,
-    onAction: (UIAction) -> Unit,
-) {
-    item {
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-    item {
-        Text(
-            text = stringResource(R.string.settings_content_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
-    item {
-        LocalToggleItem(
+    item(key = "cartoons-tab") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_show_cartoons_tab),
             checked = state.showCartoonsTab,
             onToggle = { onAction(DeviceSettingsActions.ToggleCartoonsTab) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "anime-tab") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_show_anime_tab),
             checked = state.showAnimeTab,
             onToggle = { onAction(DeviceSettingsActions.ToggleAnimeTab) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "show-anime") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_show_anime),
             description = stringResource(R.string.settings_show_anime_description),
             checked = state.showAnime,
             onToggle = { onAction(DeviceSettingsActions.ToggleShowAnime) },
         )
     }
-    item {
-        LocalToggleItem(
+    item(key = "hide-watched") {
+        SettingsToggleItem(
             label = stringResource(R.string.settings_hide_watched),
             description = stringResource(R.string.settings_hide_watched_description),
             checked = state.hideWatched,
@@ -414,263 +506,255 @@ private fun LazyListScope.contentPreferencesItems(
     }
 }
 
-private fun LazyListScope.watchIndexItems(
+private fun LazyListScope.navigationItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    leftFocusRequester: FocusRequester,
+    expandedChoice: NavigationChoice?,
+    onExpandedChoiceChange: (NavigationChoice?) -> Unit,
+) {
+    item(key = "navigation-mode") {
+        SettingsChoiceItem(
+            label = stringResource(R.string.settings_navigation_mode),
+            description = stringResource(R.string.settings_navigation_restart_hint),
+            options = navigationModeOptions(state.navigationMode),
+            isExpanded = expandedChoice == NavigationChoice.Mode,
+            leftFocusRequester = leftFocusRequester,
+            onToggleExpand = {
+                onExpandedChoiceChange(
+                    if (expandedChoice == NavigationChoice.Mode) null else NavigationChoice.Mode
+                )
+            },
+            onOptionSelect = { key ->
+                onExpandedChoiceChange(null)
+                onAction(DeviceSettingsActions.ChangeNavigationMode(NavigationMode.valueOf(key)))
+            },
+            listState = listState,
+            lazyItemIndex = 0,
+        )
+    }
+    item(key = "startup-tab") {
+        SettingsChoiceItem(
+            label = stringResource(R.string.settings_startup_tab),
+            options = startupTabOptions(state.startupTabOptions, state.startupTab),
+            isExpanded = expandedChoice == NavigationChoice.StartupTab,
+            leftFocusRequester = leftFocusRequester,
+            onToggleExpand = {
+                onExpandedChoiceChange(
+                    if (expandedChoice == NavigationChoice.StartupTab) {
+                        null
+                    } else {
+                        NavigationChoice.StartupTab
+                    }
+                )
+            },
+            onOptionSelect = { key ->
+                onExpandedChoiceChange(null)
+                onAction(DeviceSettingsActions.ChangeStartupTab(TabType.valueOf(key)))
+            },
+            listState = listState,
+            lazyItemIndex = 1,
+        )
+    }
+}
+
+@Composable
+private fun navigationModeOptions(currentMode: NavigationMode) = NavigationMode.entries.map { mode ->
+    SettingsChoiceOption(
+        key = mode.name,
+        label = stringResource(
+            when (mode) {
+                NavigationMode.SideDrawer -> R.string.settings_navigation_drawer
+                NavigationMode.TopTabs -> R.string.settings_navigation_top_tabs
+            }
+        ),
+        selected = mode == currentMode,
+    )
+}
+
+@Composable
+private fun startupTabOptions(options: List<TabType>, currentTab: TabType) = options.map { tab ->
+    SettingsChoiceOption(
+        key = tab.name,
+        label = stringResource(tab.title),
+        selected = tab == currentTab,
+    )
+}
+
+private fun LazyListScope.networkItems(
+    state: DeviceSettingsState.Success,
+    apiDomain: ApiDomainDialogState,
+    onAction: (UIAction) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    leftFocusRequester: FocusRequester,
+) {
+    item(key = "api-domain") {
+        SettingsListItem(
+            headline = stringResource(R.string.api_domain_open_action),
+            supportingText = stringResource(R.string.api_domain_settings_subtitle),
+            trailingText = apiDomain.currentDomain,
+            onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
+        )
+    }
+    item(key = "device-settings-heading") {
+        SectionHeading(stringResource(R.string.device_settings_title))
+    }
+    itemsIndexed(
+        items = state.settings.settingsList,
+        key = { _, setting ->
+            when (setting) {
+                is DeviceSettingUIModel.TypeList -> setting.type.name
+                is DeviceSettingUIModel.TypeValue -> setting.type.name
+            }
+        },
+    ) { index, setting ->
+        when (setting) {
+            is DeviceSettingUIModel.TypeValue -> SettingSwitchItem(
+                setting = setting,
+                isSaving = state.savingToggleType == setting.type,
+                onToggle = {
+                    onAction(DeviceSettingsActions.ChangeSettingValue(setting.copy(value = !setting.value)))
+                },
+            )
+            is DeviceSettingUIModel.TypeList -> SettingListItem(
+                setting = setting,
+                isExpanded = setting.type == state.expandedType,
+                savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
+                leftFocusRequester = leftFocusRequester,
+                onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
+                onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
+                listState = listState,
+                lazyItemIndex = index + 2,
+            )
+        }
+    }
+}
+
+private fun LazyListScope.watchHistoryItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
 ) {
-    item {
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-    item {
-        Column {
-            Text(
-                text = stringResource(R.string.settings_watch_index_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = stringResource(R.string.settings_watch_index_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-    item {
-        LocalValueItem(
-            label = stringResource(R.string.settings_watch_index_fully_watched),
-            value = state.watchIndex.fullyWatchedItems.toString(),
+    item(key = "watch-history-heading") {
+        SectionHeading(
+            title = stringResource(R.string.settings_watch_index_title),
+            description = stringResource(R.string.settings_watch_index_description),
         )
     }
-    item {
-        LocalValueItem(
-            label = stringResource(R.string.settings_watch_index_local_total),
-            value = state.watchIndex.indexedItems.toString(),
-        )
+    item(key = "watch-summary") {
+        WatchHistorySummary(state)
     }
-    state.watchIndex.totalHistoryItems?.let { totalHistoryItems ->
-        item {
-            LocalValueItem(
-                label = stringResource(R.string.settings_watch_index_account_total),
-                value = totalHistoryItems.toString(),
-            )
-        }
-    }
-    item {
+    item(key = "sync") {
         val status = when {
             state.watchIndex.isSyncing &&
                 state.watchIndex.currentPage != null &&
                 state.watchIndex.totalPages != null -> stringResource(
-                    R.string.settings_watch_index_progress,
-                    state.watchIndex.currentPage,
-                    state.watchIndex.totalPages,
-                )
+                R.string.settings_watch_index_progress,
+                state.watchIndex.currentPage,
+                state.watchIndex.totalPages,
+            )
             state.watchIndex.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
             state.watchIndex.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
             state.watchIndex.indexedItems > 0 -> stringResource(R.string.settings_watch_index_partial)
             else -> stringResource(R.string.settings_watch_index_not_built)
         }
-        LocalActionItem(
-            label = stringResource(R.string.settings_watch_index_sync_action),
-            value = status,
+        SettingsListItem(
+            headline = stringResource(R.string.settings_watch_index_sync_action),
+            trailingText = status,
             enabled = !state.watchIndex.isSyncing,
+            focusableWhenDisabled = true,
             onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
         )
     }
 }
 
 @Composable
-private fun LocalActionItem(
-    label: String,
-    value: String,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
+private fun WatchHistorySummary(state: DeviceSettingsState.Success) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .highlightOnFocus(isFocused)
-            .clickable(
-                enabled = enabled,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
+            .testTag(SettingsTestTags.WatchSummary)
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+                shape = RoundedCornerShape(14.dp),
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
+        InformationMetric(
+            label = stringResource(R.string.settings_watch_index_fully_watched),
+            value = state.watchIndex.fullyWatchedItems.toString(),
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        InformationMetric(
+            label = stringResource(R.string.settings_watch_index_local_total),
+            value = state.watchIndex.indexedItems.toString(),
+            modifier = Modifier.weight(1f),
         )
+        state.watchIndex.totalHistoryItems?.let { total ->
+            InformationMetric(
+                label = stringResource(R.string.settings_watch_index_account_total),
+                value = total.toString(),
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 @Composable
-private fun LocalValueItem(
+private fun InformationMetric(
     label: String,
     value: String,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.weight(1f),
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = value,
+            text = label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
+private fun LazyListScope.developerItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item(key = "debug-overlay") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_debug_overlay),
+            checked = state.debugOverlayEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleDebugOverlay) },
+        )
+    }
+}
+
 @Composable
-private fun LocalToggleItem(
-    label: String,
+private fun SectionHeading(
+    title: String,
     description: String? = null,
-    checked: Boolean,
-    onToggle: () -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .highlightOnFocus(isFocused)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onToggle,
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            if (description != null) {
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = null,
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
         )
-    }
-}
-
-@Composable
-private fun NavigationModeRadioGroup(
-    currentMode: NavigationMode,
-    onModeSelected: (NavigationMode) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectableGroup(),
-    ) {
-        NavigationMode.entries.forEach { mode ->
-            val label = when (mode) {
-                NavigationMode.SideDrawer -> stringResource(R.string.settings_navigation_drawer)
-                NavigationMode.TopTabs -> stringResource(R.string.settings_navigation_top_tabs)
-            }
-            val isSelected = mode == currentMode
-            val interactionSource = remember { MutableInteractionSource() }
-            val isFocused by interactionSource.collectIsFocusedAsState()
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .highlightOnFocus(isFocused)
-                    .selectable(
-                        selected = isSelected,
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = { onModeSelected(mode) },
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.RadioButton(
-                    selected = isSelected,
-                    onClick = null,
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(start = 12.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StartupTabRadioGroup(
-    options: List<TabType>,
-    currentTab: TabType,
-    onTabSelected: (TabType) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectableGroup(),
-    ) {
-        options.forEach { tab ->
-            val isSelected = tab == currentTab
-            val interactionSource = remember { MutableInteractionSource() }
-            val isFocused by interactionSource.collectIsFocusedAsState()
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .highlightOnFocus(isFocused)
-                    .selectable(
-                        selected = isSelected,
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = { onTabSelected(tab) },
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.RadioButton(
-                    selected = isSelected,
-                    onClick = null,
-                )
-                Text(
-                    text = stringResource(tab.title),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(start = 12.dp),
-                )
-            }
+        if (!description.isNullOrBlank()) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp),
+            )
         }
     }
 }
@@ -680,31 +764,33 @@ private fun DeviceInfoCard(
     device: DeviceUi,
     appVersionName: String = BuildConfig.VERSION_NAME,
 ) {
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(true, interactionSource = null, indication = null) {}
-            .focusable(false)
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.device_settings_name_with_version, device.title, appVersionName),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Text(
-                text = stringResource(R.string.device_settings_hardware, device.hardware),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Text(
-                text = stringResource(R.string.device_settings_software, device.software),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
+        Text(
+            text = stringResource(R.string.device_settings_name, device.title),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = stringResource(R.string.device_settings_app_version, appVersionName),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = stringResource(R.string.device_settings_hardware, device.hardware),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(R.string.device_settings_software, device.software),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

@@ -2,6 +2,8 @@ package com.kino.puber.data.db
 
 import androidx.room3.ColumnInfo
 import androidx.room3.Dao
+import androidx.room3.Insert
+import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Upsert
@@ -48,23 +50,32 @@ abstract class WatchStateDao {
     abstract suspend fun upsert(entities: List<WatchStateEntity>)
 
     /**
+     * Uses SQLite's legacy conflict syntax, which is supported by the older SQLite bundled with
+     * Fire OS. The newer `ON CONFLICT DO UPDATE` form is not available on those devices.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertIfAbsent(entity: WatchStateEntity): Long
+
+    /**
      * Writes a batch of rows a sync produced. Runs as one transaction so observers see a single
      * change rather than one per row, and leaves rows with an unconfirmed local toggle alone.
      */
     @Transaction
     open suspend fun upsertAllFromServer(rows: List<WatchStateEntity>) {
         rows.forEach { row ->
-            upsertFromServer(
-                generation = row.generation,
-                itemId = row.itemId,
-                isSeriesLike = row.isSeriesLike,
-                isFullyWatched = row.isFullyWatched,
-                watchedEpisodes = row.watchedEpisodes,
-                totalEpisodes = row.totalEpisodes,
-                progressTime = row.progressTime,
-                progressDuration = row.progressDuration,
-                updatedAt = row.updatedAt,
-            )
+            if (insertIfAbsent(row) == INSERT_FAILED) {
+                upsertFromServer(
+                    generation = row.generation,
+                    itemId = row.itemId,
+                    isSeriesLike = row.isSeriesLike,
+                    isFullyWatched = row.isFullyWatched,
+                    watchedEpisodes = row.watchedEpisodes,
+                    totalEpisodes = row.totalEpisodes,
+                    progressTime = row.progressTime,
+                    progressDuration = row.progressDuration,
+                    updatedAt = row.updatedAt,
+                )
+            }
         }
     }
 
@@ -75,46 +86,39 @@ abstract class WatchStateDao {
     @Transaction
     open suspend fun upsertAllFromHistory(rows: List<WatchStateEntity>) {
         rows.forEach { row ->
-            upsertFromHistory(
-                generation = row.generation,
-                itemId = row.itemId,
-                isSeriesLike = row.isSeriesLike,
-                isFullyWatched = row.isFullyWatched,
-                progressTime = row.progressTime,
-                progressDuration = row.progressDuration,
-                updatedAt = row.updatedAt,
-                historySeenAt = row.historySeenAt,
-            )
+            if (insertIfAbsent(row) == INSERT_FAILED) {
+                upsertFromHistory(
+                    generation = row.generation,
+                    itemId = row.itemId,
+                    isFullyWatched = row.isFullyWatched,
+                    progressTime = row.progressTime,
+                    progressDuration = row.progressDuration,
+                    updatedAt = row.updatedAt,
+                    historySeenAt = row.historySeenAt,
+                )
+            }
         }
     }
 
     @Query(
         """
-        INSERT INTO watch_state (
-            item_id, is_series_like, is_fully_watched, progress_time, progress_duration,
-            updated_at, history_seen_at, is_local_pending, generation
-        )
-        VALUES (
-            :itemId, :isSeriesLike, :isFullyWatched, :progressTime, :progressDuration,
-            :updatedAt, :historySeenAt, 0, :generation
-        )
-        ON CONFLICT(item_id) DO UPDATE SET
-            is_fully_watched = excluded.is_fully_watched,
-            progress_time = excluded.progress_time,
-            progress_duration = excluded.progress_duration,
-            updated_at = excluded.updated_at,
-            history_seen_at = excluded.history_seen_at,
-            generation = excluded.generation
-        WHERE watch_state.is_local_pending = 0
-          AND excluded.history_seen_at >= watch_state.history_seen_at
-          AND excluded.updated_at >= watch_state.updated_at
+        UPDATE watch_state SET
+            is_fully_watched = :isFullyWatched,
+            progress_time = :progressTime,
+            progress_duration = :progressDuration,
+            updated_at = :updatedAt,
+            history_seen_at = :historySeenAt,
+            generation = :generation
+        WHERE item_id = :itemId
+          AND is_local_pending = 0
+          AND :historySeenAt >= history_seen_at
+          AND :updatedAt >= updated_at
         """
     )
     @Suppress("LongParameterList")
     protected abstract suspend fun upsertFromHistory(
         generation: Long,
         itemId: Int,
-        isSeriesLike: Boolean,
         isFullyWatched: Boolean,
         progressTime: Int?,
         progressDuration: Int?,
@@ -124,26 +128,18 @@ abstract class WatchStateDao {
 
     @Query(
         """
-        INSERT INTO watch_state (
-            item_id, is_series_like, is_fully_watched, watched_episodes, total_episodes,
-            progress_time, progress_duration, updated_at, history_seen_at, is_local_pending,
-            generation
-        )
-        VALUES (
-            :itemId, :isSeriesLike, :isFullyWatched, :watchedEpisodes, :totalEpisodes,
-            :progressTime, :progressDuration, :updatedAt, 0, 0, :generation
-        )
-        ON CONFLICT(item_id) DO UPDATE SET
-            is_series_like = excluded.is_series_like,
-            is_fully_watched = excluded.is_fully_watched,
-            watched_episodes = excluded.watched_episodes,
-            total_episodes = excluded.total_episodes,
-            progress_time = excluded.progress_time,
-            progress_duration = excluded.progress_duration,
-            updated_at = excluded.updated_at,
-            generation = excluded.generation
-        WHERE watch_state.is_local_pending = 0
-          AND excluded.updated_at >= watch_state.updated_at
+        UPDATE watch_state SET
+            is_series_like = :isSeriesLike,
+            is_fully_watched = :isFullyWatched,
+            watched_episodes = :watchedEpisodes,
+            total_episodes = :totalEpisodes,
+            progress_time = :progressTime,
+            progress_duration = :progressDuration,
+            updated_at = :updatedAt,
+            generation = :generation
+        WHERE item_id = :itemId
+          AND is_local_pending = 0
+          AND :updatedAt >= updated_at
         """
     )
     @Suppress("LongParameterList")
@@ -163,25 +159,41 @@ abstract class WatchStateDao {
      * Marks an item as started-but-not-finished without touching whatever progress numbers are
      * already stored. Used for sources that only report "this is in progress" and nothing else.
      */
-    @Query(
-        """
-        INSERT INTO watch_state (
-            item_id, is_series_like, is_fully_watched, updated_at, history_seen_at,
-            is_local_pending, generation
-        )
-        VALUES (:itemId, :isSeriesLike, 0, :updatedAt, 0, 0, :generation)
-        ON CONFLICT(item_id) DO UPDATE SET
-            is_fully_watched = 0,
-            updated_at = excluded.updated_at,
-            generation = excluded.generation
-        WHERE watch_state.is_local_pending = 0
-          AND excluded.updated_at >= watch_state.updated_at
-        """
-    )
-    abstract suspend fun markInProgress(
+    @Transaction
+    open suspend fun markInProgress(
         generation: Long,
         itemId: Int,
         isSeriesLike: Boolean,
+        updatedAt: Long,
+    ) {
+        val inserted = insertIfAbsent(
+            WatchStateEntity(
+                itemId = itemId,
+                isSeriesLike = isSeriesLike,
+                isFullyWatched = false,
+                updatedAt = updatedAt,
+                generation = generation,
+            )
+        )
+        if (inserted == INSERT_FAILED) {
+            updateInProgress(generation, itemId, updatedAt)
+        }
+    }
+
+    @Query(
+        """
+        UPDATE watch_state SET
+            is_fully_watched = 0,
+            updated_at = :updatedAt,
+            generation = :generation
+        WHERE item_id = :itemId
+          AND is_local_pending = 0
+          AND :updatedAt >= updated_at
+        """
+    )
+    protected abstract suspend fun updateInProgress(
+        generation: Long,
+        itemId: Int,
         updatedAt: Long,
     )
 
@@ -210,4 +222,8 @@ abstract class WatchStateDao {
 
     @Query("DELETE FROM watch_state")
     abstract suspend fun clear()
+
+    private companion object {
+        const val INSERT_FAILED = -1L
+    }
 }

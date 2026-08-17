@@ -49,6 +49,17 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     internal val testStateValue: ViewState
         get() = mutableViewState.value
 
+    /**
+     * Every state this view model publishes, not just the current one.
+     *
+     * [testStateValue] can only be sampled between suspension points, and the claim that matters for
+     * a cached-then-fresh load is about the states *between* two samples: that no loading state
+     * appears once content has been drawn. That is only observable as a sequence.
+     */
+    @VisibleForTesting
+    internal val testStateFlow: Flow<ViewState>
+        get() = mutableViewState
+
     @VisibleForTesting
     internal val testMessageValue: SnackbarMessage?
         get() = snackBarMessageFlow.value

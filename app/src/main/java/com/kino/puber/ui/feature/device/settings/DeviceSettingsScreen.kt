@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.device.settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.uikit.component.ApiDomainDialog
@@ -34,12 +35,13 @@ internal class DeviceSettingsScreen : PuberScreen {
         val viewModel = puberViewModel<DeviceSettingsVM>()
         val state by viewModel.collectViewState()
         val message by viewModel.collectMessage()
+        val onAction = remember(viewModel) { viewModel::onAction }
 
         Box {
             DeviceSettingsContent(
                 state = state.state,
                 apiDomain = state.apiDomain,
-                onAction = viewModel::onAction,
+                onAction = onAction,
             )
             ApiDomainDialog(
                 state = state.apiDomain.takeIf { state.isApiDomainDialogOpen },
@@ -50,7 +52,7 @@ internal class DeviceSettingsScreen : PuberScreen {
             )
             ScaffoldMessage(
                 message = message,
-                onAction = viewModel::onAction,
+                onAction = onAction,
             )
         }
     }

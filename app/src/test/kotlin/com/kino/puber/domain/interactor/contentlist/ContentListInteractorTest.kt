@@ -1,7 +1,6 @@
 package com.kino.puber.domain.interactor.contentlist
 
 import com.kino.puber.data.api.KinoPubApiClient
-import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.data.api.models.Genre
@@ -9,6 +8,9 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.CacheTtl
+import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentPageCache
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchStateRepository
@@ -18,21 +20,20 @@ import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
 import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.util.FakePayloadStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -54,30 +55,32 @@ internal open class ContentListInteractorTestFixture {
     /** Item ids the local watch-state index reports as finished, on top of the items' own fields. */
     protected val indexedAsWatched = mutableSetOf<Int>()
     protected val settledWatchStateChanges = MutableSharedFlow<Long>()
+    protected val watchStateVersion = MutableStateFlow(0L)
     protected val watchStateRepository = mockk<WatchStateRepository> {
         every { isFullyWatched(any()) } answers {
             val item = firstArg<Item>()
             item.isFullyWatched() || item.id in indexedAsWatched
         }
-        every { version } returns MutableStateFlow(0L)
+        every { version } returns this@ContentListInteractorTestFixture.watchStateVersion
         every { settledChanges } returns this@ContentListInteractorTestFixture.settledWatchStateChanges
     }
     protected val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
-    protected val interactor =
-        ContentListInteractor(api, navigationPreferencesRepository, watchStateRepository, itemDetailsRepository)
+
+    /** The cache reads its clock rather than the wall, so a test can age an entry past its TTL. */
+    protected var now = 0L
+    protected val contentPageCache = ContentPageCache(store = FakePayloadStore(), clock = { now })
+    protected val interactor = ContentListInteractor(
+        api,
+        navigationPreferencesRepository,
+        watchStateRepository,
+        itemDetailsRepository,
+        contentPageCache,
+    )
 
     @BeforeEach
     fun setup() {
-        mockkObject(KinoPubConfig)
-        every { KinoPubConfig.CURRENT_API_DOMAIN } returns "unit.test"
         contentPreferences.value = defaultContentPreferences()
         indexedAsWatched.clear()
-        interactor.invalidateFirstPageCache()
-    }
-
-    @AfterEach
-    fun tearDown() {
-        unmockkObject(KinoPubConfig)
     }
 
     protected fun config(filterMode: AnimeFilterMode) = SectionConfig(
@@ -118,6 +121,14 @@ internal open class ContentListInteractorTestFixture {
         total = total,
     )
 
+    /** The pages one first-page observation published, the stored one first where there is one. */
+    protected suspend fun observedPages(
+        config: SectionConfig,
+        force: Boolean = false,
+    ): List<PaginatedResponse<Item>> = interactor.observeFirstPage(config, force)
+        .toList()
+        .map { cached -> (cached as Cached.Value).value }
+
     /** Mirrors `ContentListInteractor.MAX_PAGES_PER_STEP`, which is private to the interactor. */
     protected val maxPagesPerStepUnderTest = 5
 
@@ -133,19 +144,92 @@ internal open class ContentListInteractorTestFixture {
 internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
 
     @Test
-    fun invalidateFirstPageCache_clearsCachedFirstPages() = runTest {
+    fun observeFirstPage_servesTheStoredPageWithoutTheServerWhileItIsFresh() = runTest {
         val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
         val firstPage = page(item(id = 1, title = "Before"))
         val refreshedPage = page(item(id = 2, title = "After"))
         coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
             Result.success(refreshedPage)
 
-        assertEquals(firstPage, interactor.loadPage(config, page = 1))
-        assertEquals(firstPage, interactor.loadPage(config, page = 1))
-        interactor.invalidateFirstPageCache()
-        assertEquals(refreshedPage, interactor.loadPage(config, page = 1))
+        assertEquals(listOf(firstPage), observedPages(config))
+        assertEquals(listOf(firstPage), observedPages(config))
 
+        coVerify(exactly = 1) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    @Test
+    fun observeFirstPage_pastTheTtl_drawsTheStoredPageAndThenTheFreshOne() = runTest {
+        val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
+        val firstPage = page(item(id = 1, title = "Before"))
+        val refreshedPage = page(item(id = 2, title = "After"))
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
+            Result.success(refreshedPage)
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        now += CacheTtl.CatalogueSection.inWholeMilliseconds + 1
+
+        assertEquals(listOf(firstPage, refreshedPage), observedPages(config))
         coVerify(exactly = 2) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    /**
+     * What the refresh signals carry: the stored page is still worth drawing, but the caller knows
+     * the server's answer has changed, so the request behind it is not optional.
+     */
+    @Test
+    fun observeFirstPage_forced_drawsTheStoredPageAndStillAsksTheServer() = runTest {
+        val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
+        val firstPage = page(item(id = 1, title = "Before"))
+        val refreshedPage = page(item(id = 2, title = "After"))
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
+            Result.success(refreshedPage)
+
+        assertEquals(listOf(firstPage), observedPages(config))
+
+        assertEquals(listOf(firstPage, refreshedPage), observedPages(config, force = true))
+        coVerify(exactly = 2) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    /**
+     * A stored page was filtered against one version of the watch-state index, so a move makes it
+     * wrong however fresh the clock says it is.
+     */
+    @Test
+    fun observeFirstPage_revalidatesWhenTheWatchStateIndexHasMoved() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
+        val firstPage = page(item(id = 1, title = "Before"))
+        val refreshedPage = page(item(id = 2, title = "After"))
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
+            Result.success(refreshedPage)
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        watchStateVersion.value = 1L
+
+        assertEquals(listOf(firstPage, refreshedPage), observedPages(config))
+        coVerify(exactly = 2) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    /**
+     * The index decides page *membership* only while watched titles are hidden — `fetchFilteredPage`
+     * does not consult it otherwise, and `hideWatched` is part of the cache key, so an unfiltered
+     * page is index-independent by construction. Forcing a read for one would spend a request per
+     * section on every catalogue tab entered after any playback, for a page nothing about the move
+     * could have changed.
+     */
+    @Test
+    fun observeFirstPage_withWatchedTitlesShown_doesNotRevalidateWhenTheIndexMoves() = runTest {
+        val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
+        val firstPage = page(item(id = 1, title = "Before"))
+        val refreshedPage = page(item(id = 2, title = "After"))
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
+            Result.success(refreshedPage)
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        watchStateVersion.value = 1L
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        coVerify(exactly = 1) { api.getItems("movie", "updated", 1, null, null) }
     }
 
     @Test
@@ -492,11 +576,13 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
             Result.success(page(movie)) andThen
             Result.success(page(movie))
 
-        assertEquals(listOf(anime), interactor.loadPage(followPreference, page = 1).items)
+        assertEquals(listOf(anime), observedPages(followPreference).single().items)
         contentPreferences.value = defaultContentPreferences().copy(showAnime = false)
-        assertEquals(listOf(movie), interactor.loadPage(followPreference, page = 1).items)
-        assertEquals(listOf(movie), interactor.loadPage(exclude, page = 1).items)
+        assertEquals(listOf(movie), observedPages(followPreference).single().items)
+        assertEquals(listOf(movie), observedPages(exclude).single().items)
 
+        // Three keys, three reads: no setting that decides what a page contains can serve another's
+        // stored page.
         coVerify(exactly = 3) { api.getItems("movie", "updated", 1, null, null) }
     }
 
@@ -673,9 +759,9 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
         val fresh = item(id = 2, title = "Fresh")
         coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(page(watched, fresh))
 
-        assertEquals(listOf(watched, fresh), interactor.loadPage(config, page = 1).items)
+        assertEquals(listOf(watched, fresh), observedPages(config).single().items)
         contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
-        assertEquals(listOf(fresh), interactor.loadPage(config, page = 1).items)
+        assertEquals(listOf(fresh), observedPages(config).single().items)
     }
 
     // endregion
@@ -803,6 +889,41 @@ internal class ContentListInteractorFreshSectionTest : ContentListInteractorTest
             api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
         }
         coVerify(exactly = 0) { api.getItems(any(), any(), any(), any(), any()) }
+    }
+
+    /**
+     * A fresh section's page one is also what primes its pager: page two is built out of the state
+     * page one left behind, and the pager refuses a cursor it never issued. Served from the store,
+     * the section would draw its first page and then fail on its second.
+     */
+    @Test
+    fun observeFirstPage_forAFreshSection_isNeverServedFromTheStore() = runTest {
+        val config = TabTypeConfig.sectionsFor(TabType.Cartoons)
+            .single { it.id == "fresh_cartoon" }
+        val firstMovie = item(id = 1, title = "First movie", CARTOON_GENRE_ID)
+        val firstSerial = item(id = 2, title = "First serial", CARTOON_GENRE_ID)
+        val secondMovie = item(id = 3, title = "Second movie", CARTOON_GENRE_ID)
+        val secondSerial = item(id = 4, title = "Second serial", CARTOON_GENRE_ID)
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        } returns Result.success(page(firstMovie, current = 1, total = 2, perpage = 2))
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 1, null)
+        } returns Result.success(page(firstSerial, current = 1, total = 2, perpage = 2))
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 2, null)
+        } returns Result.success(page(secondMovie, current = 2, total = 2, perpage = 2))
+        coEvery {
+            api.getItemsByShortcut("fresh", ItemType.SERIAL.value, 2, null)
+        } returns Result.success(page(secondSerial, current = 2, total = 2, perpage = 2))
+
+        assertEquals(listOf(firstMovie, firstSerial), observedPages(config).single().items)
+        assertEquals(listOf(firstMovie, firstSerial), observedPages(config).single().items)
+
+        assertEquals(listOf(secondMovie, secondSerial), interactor.loadPage(config, page = 2).items)
+        coVerify(exactly = 2) {
+            api.getItemsByShortcut("fresh", ItemType.MOVIE.value, 1, null)
+        }
     }
 
     @Test

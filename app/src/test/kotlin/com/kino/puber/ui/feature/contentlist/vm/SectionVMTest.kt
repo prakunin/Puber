@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.contentlist.vm
 
+import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -12,6 +13,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -22,27 +24,142 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import kotlin.coroutines.CoroutineContext
 
-class SectionVMTest {
+/**
+ * Shared setup for the section view model's tests. They live in more than one class because the view
+ * model answers two separate questions — how a section pages and walks past pages emptied by
+ * filtering, and how it draws a first page that arrives from the store before the server — and one
+ * class holding both had outgrown what anyone can read at once.
+ */
+internal open class SectionVMTestFixture {
 
     companion object {
         @JvmField
         @RegisterExtension
         val mainDispatcher = MainDispatcherExtension()
     }
+
+    /** The store publishes through [Paginator.Store.render], which replays the current state. */
+    protected fun paginatorState(paginator: Paginator.Store<Item>): Paginator.State {
+        lateinit var current: Paginator.State
+        paginator.render = { current = it }
+        return current
+    }
+
+    /**
+     * Wires the cached-first-page flow onto the page loads these tests stub: one fresh emission per
+     * subscription, which is what the interactor's own loader produces when nothing is stored.
+     */
+    protected fun servesFirstPageFromTheNetwork(interactor: ContentListInteractor) {
+        every { interactor.observeFirstPage(any(), any()) } answers {
+            val config = firstArg<SectionConfig>()
+            flow { emit(Cached.Value(interactor.loadPage(config, page = 1), isStale = false)) }
+        }
+    }
+
+    /**
+     * An error handler that maps and forwards instead of swallowing, which is what the paginator's
+     * error state needs to be reachable at all.
+     */
+    protected fun mappingErrorHandler(): ErrorHandler = mockk<ErrorHandler>(relaxed = true).also { handler ->
+        every { handler.map(any()) } answers {
+            ErrorEntity(message = firstArg<Throwable>().message.orEmpty(), code = "test")
+        }
+        every { handler.proceed(any()) } answers {
+            val action = firstArg<((ErrorEntity) -> Unit)?>()
+            val consumer: (Throwable) -> Unit = { error -> action?.invoke(handler.map(error)) }
+            consumer
+        }
+    }
+
+    protected fun createVM(
+        paginator: Paginator.Store<Item>,
+        config: SectionConfig,
+        interactor: ContentListInteractor,
+        coordinator: ContentListRefreshCoordinator,
+        pagingCoroutineContext: CoroutineContext,
+        savedItemInteractor: SavedItemInteractor = mockk(relaxed = true),
+        mapper: VideoItemUIMapper = mockk(relaxed = true),
+        errorHandler: ErrorHandler = mockk<ErrorHandler> { every { proceed(any()) } returns { } },
+    ) = SectionVM(
+        paginator = paginator,
+        config = config,
+        interactor = interactor,
+        savedItemInteractor = savedItemInteractor,
+        mapper = mapper,
+        router = mockk<AppRouter>(relaxed = true),
+        errorHandler = errorHandler,
+        contentListRefreshCoordinator = coordinator,
+        pagingCoroutineContext = pagingCoroutineContext,
+    )
+
+    protected fun paginator(coroutineContext: CoroutineContext) = Paginator.Store<Item>(
+        comparator = { old, new -> old.id == new.id },
+        coroutineContext = coroutineContext,
+    )
+
+    protected fun config(id: String) = SectionConfig(
+        id = id,
+        title = id,
+    )
+
+    protected fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
+
+    /** A mapper that preserves ids, so a section can tell whether it is holding a given item. */
+    protected fun mapperFor(vararg ids: Int) = mockk<VideoItemUIMapper>(relaxed = true).also { mapper ->
+        every { mapper.mapShortItemList(any()) } answers {
+            firstArg<List<Item>>().filter { it.id in ids }.map { videoItem(it.id) }
+        }
+    }
+
+    protected fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
+
+    /** Mirrors ContentListPagingVM.MAX_EMPTY_PAGE_CHAIN. */
+    protected val maxEmptyPageChainUnderTest = 3
+
+    /** Mirrors ContentListPagingVM.MAX_RESUME_ROUNDS. */
+    protected val maxResumeRoundsUnderTest = 3
+
+    /** Mirrors ContentListPagingVM.WALK_RESUME_PAUSE, in milliseconds. */
+    protected val walkResumePauseUnderTest = 500L
+
+    protected fun emptyPage(
+        current: Int = 1,
+        total: Int = 1,
+    ) = PaginatedResponse<Item>(
+        items = emptyList(),
+        pagination = Pagination(current = current, perpage = 50, total = total),
+    )
+
+    protected fun page(
+        item: Item,
+        current: Int = 1,
+        total: Int = 1,
+    ) = PaginatedResponse(
+        items = listOf(item),
+        pagination = Pagination(current = current, perpage = 50, total = total),
+    )
+}
+
+internal class SectionVMTest : SectionVMTestFixture() {
 
     @Test
     fun coordinatorRefresh_restartsPagingWithoutClearingSharedCache() = runTest {
@@ -55,6 +172,7 @@ class SectionVMTest {
             paginator.sideEffects.collect(sideEffects::add)
         }
         coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage()
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, coordinator, dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -98,6 +216,7 @@ class SectionVMTest {
         coEvery {
             savedItemInteractor.setSaved(itemId = 42, isSeriesLike = false, saved = false)
         } returns Result.success(false)
+        servesFirstPageFromTheNetwork(interactor)
         val holding = createVM(
             paginator = holdingPaginator,
             config = holdingConfig,
@@ -144,6 +263,7 @@ class SectionVMTest {
         val coordinator = ContentListRefreshCoordinator()
         val sectionConfig = config("popular")
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(7))
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, sectionConfig, interactor, coordinator, dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -174,6 +294,7 @@ class SectionVMTest {
         every { interactor.displaySettingsChanges } returns emptyFlow()
         every { interactor.watchStateChanges } returns emptyFlow()
         every { mapper.mapShortItemList(listOf(item)) } returns listOf(mappedItem)
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(
             paginator = paginator,
             config = config("anime"),
@@ -202,6 +323,7 @@ class SectionVMTest {
         val visible = item(id = 7)
         coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage(current = 1, total = 3)
         coEvery { interactor.loadPage(any(), page = 2) } returns page(visible, current = 2, total = 3)
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -223,6 +345,7 @@ class SectionVMTest {
         coEvery { interactor.loadPage(any(), any()) } answers {
             emptyPage(current = secondArg<Int>(), total = 100)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -253,6 +376,7 @@ class SectionVMTest {
                 page(visible, current = requested, total = 100)
             }
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -282,6 +406,7 @@ class SectionVMTest {
             pagesRead++
             emptyPage(current = secondArg<Int>(), total = 10_000)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -319,6 +444,7 @@ class SectionVMTest {
                 emptyPage(current = requested, total = 10_000)
             }
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -345,6 +471,7 @@ class SectionVMTest {
             pagesRead += requested
             emptyPage(current = requested, total = 100)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
         vm.testOnStart()
         testScheduler.runCurrent()
@@ -359,13 +486,6 @@ class SectionVMTest {
         assertEquals(1, pagesRead.count { it == firstResumedPage })
         vm.testCancelScope()
         paginator.close()
-    }
-
-    /** The store publishes through [Paginator.Store.render], which replays the current state. */
-    private fun paginatorState(paginator: Paginator.Store<Item>): Paginator.State {
-        lateinit var current: Paginator.State
-        paginator.render = { current = it }
-        return current
     }
 
     /**
@@ -383,6 +503,7 @@ class SectionVMTest {
         every { interactor.watchStateChanges } returns watchStateChanges
         every { interactor.hideWatchedEnabled } returns false
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        servesFirstPageFromTheNetwork(interactor)
         val mapper = mockk<VideoItemUIMapper>(relaxed = true)
         every { mapper.mapShortItemList(any()) } returns listOf(videoItem(1))
         val vm = createVM(
@@ -419,6 +540,7 @@ class SectionVMTest {
         every { interactor.watchStateChanges } returns watchStateChanges
         every { interactor.hideWatchedEnabled } returns true
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -427,78 +549,370 @@ class SectionVMTest {
         testScheduler.advanceUntilIdle()
 
         coVerify(exactly = 2) { interactor.loadPage(any(), page = 1) }
-        // Re-paging is the section's whole part in this. Dropping the shared cache is the
-        // interactor's, done once per index version — a section doing it too would land on the
-        // reloads every other open section started off this same signal.
+        // Re-paging is the section's whole part in this. The stored page was filtered against the
+        // index this signal has just moved, and the cache answers that move by revalidating — a
+        // section dropping anything here would land on the reloads every other open section started
+        // off this same signal.
         verify(exactly = 0) { interactor.invalidateFirstPageCache() }
         vm.testCancelScope()
         paginator.close()
     }
+}
 
-    private fun createVM(
-        paginator: Paginator.Store<Item>,
-        config: SectionConfig,
-        interactor: ContentListInteractor,
-        coordinator: ContentListRefreshCoordinator,
-        pagingCoroutineContext: CoroutineContext,
-        savedItemInteractor: SavedItemInteractor = mockk(relaxed = true),
-        mapper: VideoItemUIMapper = mockk(relaxed = true),
-    ) = SectionVM(
-        paginator = paginator,
-        config = config,
-        interactor = interactor,
-        savedItemInteractor = savedItemInteractor,
-        mapper = mapper,
-        router = mockk<AppRouter>(relaxed = true),
-        errorHandler = mockk<ErrorHandler> { every { proceed(any()) } returns { } },
-        contentListRefreshCoordinator = coordinator,
-        pagingCoroutineContext = pagingCoroutineContext,
-    )
+/** The stale-while-revalidate half: a stored first page, the fresh one behind it, and the demand that
+ * guarantees the second. */
+internal class SectionVMFirstPageTest : SectionVMTestFixture() {
 
-    private fun paginator(coroutineContext: CoroutineContext) = Paginator.Store<Item>(
-        comparator = { old, new -> old.id == new.id },
-        coroutineContext = coroutineContext,
-    )
-
-    private fun config(id: String) = SectionConfig(
-        id = id,
-        title = id,
-    )
-
-    private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
-
-    /** A mapper that preserves ids, so a section can tell whether it is holding a given item. */
-    private fun mapperFor(vararg ids: Int) = mockk<VideoItemUIMapper>(relaxed = true).also { mapper ->
-        every { mapper.mapShortItemList(any()) } answers {
-            firstArg<List<Item>>().filter { it.id in ids }.map { videoItem(it.id) }
+    /**
+     * A refresh is one of the signals that knows the server's answer has changed, so it may not
+     * settle for whatever the store happens to hold: the stored page is still drawn, and the request
+     * behind it is guaranteed. Opening the section is not such a signal, and asks for nothing when
+     * the entry is fresh.
+     */
+    @Test
+    fun refresh_forcesTheFirstPageRead_whereOpeningTheSectionDoesNot() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val coordinator = ContentListRefreshCoordinator()
+        val sectionConfig = config("popular")
+        val forced = mutableListOf<Boolean>()
+        every { interactor.observeFirstPage(any(), any()) } answers {
+            forced += secondArg<Boolean>()
+            flow { emit(Cached.Value(page(item(7)), isStale = false)) }
         }
+        val vm = createVM(paginator, sectionConfig, interactor, coordinator, dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        vm.onAction(CommonAction.RetryClicked)
+        testScheduler.advanceUntilIdle()
+        coordinator.requestRefresh()
+        testScheduler.advanceUntilIdle()
+
+        // The whole sequence, not just the forced reads: the load that opens the section must not
+        // force, and one signal must not leave a demand behind that forces a load after it.
+        assertEquals(listOf(false, true, true), forced)
+        vm.testCancelScope()
+        paginator.close()
     }
 
-    private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
+    /**
+     * `resetPaging` restarts through the paginator, so the load a refresh belongs to only starts after
+     * a round trip through the store's dispatcher. A second signal arriving inside that window
+     * restarts again and cancels the first load — and the guarantee must travel with the load that
+     * survives rather than with the one that was cancelled, or the row serves stored pages for the
+     * rest of the TTL after an event that was supposed to reach the server.
+     */
+    @Test
+    fun refresh_keepsForcingWhenItsOwnLoadIsCancelledByTheNextRefresh() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val sectionConfig = config("popular")
+        val forced = mutableListOf<Boolean>()
+        val release = CompletableDeferred<Unit>()
+        every { interactor.observeFirstPage(any(), any()) } answers {
+            forced += secondArg<Boolean>()
+            flow {
+                release.await()
+                emit(Cached.Value(page(item(7)), isStale = false))
+            }
+        }
+        val vm = createVM(paginator, sectionConfig, interactor, ContentListRefreshCoordinator(), dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
 
-    /** Mirrors ContentListPagingVM.MAX_EMPTY_PAGE_CHAIN. */
-    private val maxEmptyPageChainUnderTest = 3
+        vm.refreshFirstPage()
+        vm.refreshFirstPage()
+        testScheduler.advanceUntilIdle()
+        release.complete(Unit)
+        testScheduler.advanceUntilIdle()
 
-    /** Mirrors ContentListPagingVM.MAX_RESUME_ROUNDS. */
-    private val maxResumeRoundsUnderTest = 3
+        // How many loads the two restarts produce is the paginator's business; what matters is that
+        // the opening one is the only unforced load, so whichever survives carries the guarantee.
+        assertTrue(forced.size > 1, "the refreshes produced no load at all")
+        assertEquals(false, forced.first())
+        assertEquals(List(forced.size - 1) { true }, forced.drop(1))
+        vm.testCancelScope()
+        paginator.close()
+    }
 
-    /** Mirrors ContentListPagingVM.WALK_RESUME_PAUSE, in milliseconds. */
-    private val walkResumePauseUnderTest = 500L
+    @Test
+    fun firstPage_drawsTheCachedPageThenTheFreshOneWithNoLoadingInBetween() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1, 2),
+        )
+        val states = mutableListOf<SectionState>()
+        // Unconfined so the recorder runs the moment a state is published. Queued behind the
+        // scheduler it would sample the state flow instead, and a conflated sequence cannot answer
+        // what appeared between two publications — which is the whole claim under test.
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            vm.testStateFlow.collect(states::add)
+        }
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
 
-    private fun emptyPage(
-        current: Int = 1,
-        total: Int = 1,
-    ) = PaginatedResponse<Item>(
-        items = emptyList(),
-        pagination = Pagination(current = current, perpage = 50, total = total),
-    )
+        emissions.emit(Cached.Value(page(item(1)), isStale = true))
+        testScheduler.advanceUntilIdle()
+        emissions.emit(Cached.Value(page(item(2)), isStale = false))
+        testScheduler.advanceUntilIdle()
 
-    private fun page(
-        item: Item,
-        current: Int = 1,
-        total: Int = 1,
-    ) = PaginatedResponse(
-        items = listOf(item),
-        pagination = Pagination(current = current, perpage = 50, total = total),
-    )
+        assertEquals(
+            listOf(1, 2),
+            states.filterIsInstance<SectionState.Content>().map { it.items.single().id },
+        )
+        val firstContentAt = states.indexOfFirst { it is SectionState.Content }
+        assertEquals(
+            emptyList<SectionState>(),
+            states.drop(firstContentAt).filterIsInstance<SectionState.Loading>(),
+        )
+        collector.cancel()
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun firstPage_aFailedBackgroundRefreshLeavesTheCachedContentStanding() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(page(item(1)), isStale = true))
+        testScheduler.advanceUntilIdle()
+        emissions.emit(Cached.RefreshFailed(IllegalStateException("network")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * The two publications of one load share a collection, so nothing restarts the paginator between
+     * them and nothing cancels the walk the cached page started. Its outstanding page therefore lands
+     * on a list that has already been replaced, where it must be dropped rather than appended —
+     * otherwise the row shows a page the fresh list never asked for and pages on from the wrong
+     * cursor.
+     */
+    @Test
+    fun firstPage_aWalkStartedByTheCachedPageCannotPublishOntoTheFreshOne() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        val releaseSecondPage = CompletableDeferred<PaginatedResponse<Item>>()
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), page = 2) } coAnswers { releaseSecondPage.await() }
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1, 2),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        // The stored page came back emptied by filtering, so the section walks on to page two.
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 9), isStale = true))
+        testScheduler.advanceUntilIdle()
+        // The fresh page arrives while that request is still outstanding, and only then does it answer.
+        emissions.emit(Cached.Value(page(item(1), current = 1, total = 9), isStale = false))
+        testScheduler.advanceUntilIdle()
+        releaseSecondPage.complete(page(item(2), current = 2, total = 9))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.onAction(CommonAction.LoadMore)
+        testScheduler.advanceUntilIdle()
+        // The fresh list pages on from its own page one rather than from where the old walk had got to.
+        coVerify(exactly = 2) { interactor.loadPage(any(), page = 2) }
+        coVerify(exactly = 0) { interactor.loadPage(any(), page = 3) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /** The same for the round a spent walk left waiting: the pause is not a way back onto a new list. */
+    @Test
+    fun firstPage_aWalkPausedByTheCachedPageDoesNotResumeUnderTheFreshOne() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        val pagesRead = mutableListOf<Int>()
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            pagesRead += requested
+            emptyPage(current = requested, total = 100)
+        }
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 100), isStale = true))
+        // Runs everything that is due now, which stops short of the paused continuation.
+        testScheduler.runCurrent()
+        val walkedForTheCachedPage = pagesRead.toList()
+        emissions.emit(Cached.Value(page(item(1), current = 1, total = 100), isStale = false))
+        testScheduler.advanceTimeBy(walkResumePauseUnderTest * 2)
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(walkedForTheCachedPage.isNotEmpty(), "the cached page never started a walk")
+        assertEquals(walkedForTheCachedPage, pagesRead)
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * Nothing stored and the load fails is the one case that still belongs on the error state, and it
+     * takes the route it took before the cache: `errorHandlerGeneral` into the paginator.
+     */
+    @Test
+    fun firstPage_withNothingStoredAndAFailingLoad_stillShowsTheError() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        every { interactor.observeFirstPage(any(), any()) } returns flow {
+            throw IllegalStateException("no network")
+        }
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            errorHandler = mappingErrorHandler(),
+        )
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SectionState.Error("no network"), vm.testStateValue)
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun firstPage_walkCountersResetBetweenTheCachedAndTheFreshEmission() = runTest {
+        // Both emissions are first pages, and each starts a walk of its own. Counted as one, the
+        // fresh page inherits a budget the cached page has already spent and the section gives up
+        // without looking past page one.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        val pagesRead = mutableListOf<Int>()
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            pagesRead += requested
+            emptyPage(current = requested, total = 100)
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 100), isStale = true))
+        testScheduler.advanceUntilIdle()
+        val walkedForTheCachedPage = pagesRead.toList()
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 100), isStale = false))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(walkedForTheCachedPage, pagesRead.drop(walkedForTheCachedPage.size))
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * The same walk step, this time overtaken by the publication rather than outlasting it.
+     *
+     * A step is launched from the paginator's side-effect thread and its body starts later, on the
+     * paging dispatcher. Its cursor is the old list's; its generation must be too. Read inside the
+     * body, the generation would be whatever the fresh publication had already set, so the step
+     * would pass its own guard and append a page built from the old cursor to the new list.
+     */
+    @Test
+    fun firstPage_aWalkStepOvertakenByTheFreshPageIsStillDropped() = runTest {
+        val paging = ManualDispatcher()
+        val paginatorDispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(paginatorDispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), page = 2) } returns page(item(2), current = 2, total = 9)
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), paging,
+            mapper = mapperFor(1, 2),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+        paging.runAll()
+
+        // The stored page came back emptied by filtering, so the section walks on to page two — and
+        // that step is left waiting for its dispatcher.
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 9), isStale = true))
+        paging.runAll()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, paging.pendingCount(), "the stored page never started a walk")
+
+        emissions.emit(Cached.Value(page(item(1), current = 1, total = 9), isStale = false))
+        assertEquals(2, paging.pendingCount())
+        // The fresh publication was queued second and runs first: the walk step's body starts after
+        // the list it belongs to has already been replaced.
+        paging.runQueued(index = 1)
+        testScheduler.advanceUntilIdle()
+        paging.runAll()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.testCancelScope()
+        paginator.close()
+    }
+}
+
+/**
+ * A paging dispatcher that runs nothing by itself, so a test can choose which of the blocks waiting
+ * on it goes first.
+ *
+ * The race it exists for is an ordering rather than a timing: a walk step is launched on one thread
+ * and its body starts on another, so a publication landing in between overtakes it. Every dispatcher
+ * backed by the test scheduler delivers in the order blocks were queued, which is the one order in
+ * which that cannot happen.
+ */
+private class ManualDispatcher : CoroutineDispatcher() {
+
+    private val pending = mutableListOf<Runnable>()
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        synchronized(pending) { pending += block }
+    }
+
+    fun pendingCount(): Int = synchronized(pending) { pending.size }
+
+    /** Runs the block queued at [index], letting it overtake everything queued before it. */
+    fun runQueued(index: Int) {
+        synchronized(pending) { pending.removeAt(index) }.run()
+    }
+
+    fun runAll() {
+        while (true) {
+            val block = synchronized(pending) {
+                pending.firstOrNull()?.also { pending.removeAt(0) }
+            } ?: return
+            block.run()
+        }
+    }
 }

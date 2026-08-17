@@ -23,6 +23,7 @@ import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubContentPageCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -240,6 +241,7 @@ class HistoryVMContentPublicationTest {
                     api = api,
                     itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true),
                     navigationPreferencesRepository = stubNavigationPreferences(),
+                    contentPageCache = stubContentPageCache(),
                 ),
             ),
             mapper = mapper,

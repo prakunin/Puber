@@ -13,6 +13,7 @@ import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.History
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.history.HistoryInteractor
 import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.domain.interactor.history.HistoryTraversal
@@ -73,9 +74,74 @@ internal class HistoryVM(
     @VisibleForTesting
     internal var testBeforeFocusPublicationLockAcquire: (() -> Unit)? = null
 
+    /**
+     * Fires between the reads that choose the spinner in [dispatchLoadingState] and the write that
+     * publishes it — inside the publication lock, which is the whole point: it is the window in
+     * which a concurrent publication used to be able to slip past and be overwritten.
+     */
+    @VisibleForTesting
+    internal var testBeforeLoadingStatePublication: (() -> Unit)? = null
+
     override fun onStart() {
         init()
+        drawStoredFirstPage()
         launch { interactor.displaySettingsChanges.collect { requestResumeRefresh() } }
+    }
+
+    /**
+     * Draws the stored first page while the depth walk is still out.
+     *
+     * A publication and nothing more: [showContent] leaves [runtime] holding the walk's own view of
+     * the list, so these rows are replaced by the first page the walk publishes and no part of the
+     * state machine has to know they were ever there. Once the walk has settled the rows are its
+     * own, so a stored page arriving late is dropped rather than drawn over them.
+     *
+     * The flow is collected to the end even when nothing is drawn: the collection is what carries
+     * the revalidation that leaves a fresh page behind for the next visit. Its failures stay here.
+     * With nothing stored, `CachedFeed` rethrows the loader's failure rather than reporting
+     * `RefreshFailed`, and this is not the load the user is waiting on — letting it reach the
+     * shared exception handler would reset the runtime under a walk that is still out and turn a
+     * successful load into a full-screen error.
+     */
+    private fun drawStoredFirstPage() {
+        launch {
+            try {
+                interactor.observeFirstPage().collect { cached ->
+                    when (cached) {
+                        is Cached.Value -> drawStoredRows(cached.value.items)
+                        is Cached.RefreshFailed ->
+                            log(cached.error, "Failed to refresh the history first page")
+                    }
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                log(error, "Failed to read the stored history first page")
+            }
+        }
+    }
+
+    /**
+     * The stored page goes through the same filter the walk applies: one server page can carry two
+     * records of the same episode, and the list keys its rows by media identity, so an unfiltered
+     * page would hand it a duplicate key. A page with nothing left to draw is not drawn at all —
+     * the spinner says more than a blank list, and the walk decides between rows and empty soon
+     * enough.
+     *
+     * The check that the walk has not published yet, and the publication itself, are one critical
+     * section. The walk publishes from `pagingScope` on another thread, so a check made outside the
+     * lock could pass, wait for the walk's own [showContent] to finish inside it, and then draw the
+     * stored page over the rows the walk had just published — leaving the view a page behind the
+     * runtime, which answers `hasMorePages` and `LoadMore` from the full depth. The monitor is
+     * reentrant, so [showContent] takes it again from here.
+     */
+    private fun drawStoredRows(stored: List<History>) {
+        val rows = HistoryTraversal().filterFirstOccurrences(stored)
+        if (rows.isEmpty()) return
+        synchronized(contentPublicationLock) {
+            if (runtime.snapshot().hasCompletedInitialLoad) return
+            showContent(rows, isRefreshing = true)
+        }
     }
 
     override fun onAction(action: UIAction) {
@@ -222,15 +288,37 @@ internal class HistoryVM(
         }
     }
 
+    /**
+     * Under [contentPublicationLock] like every other writer of this state, and for the same reason.
+     * It runs on the paginator's actor thread and decides what to write from what it reads — the
+     * runtime and the state on screen — while [showContent] holds the monitor across a
+     * read-modify-write of its own. Outside it, a decision taken against an empty screen could be
+     * carried out after the stored page had been drawn, blanking those rows back into the spinner
+     * this whole path exists to avoid.
+     *
+     * No new lock ordering: everything reached from here takes the runtime store's monitor after
+     * this one, never before, which is the order the rest of the class already keeps.
+     */
     private fun dispatchLoadingState() {
-        val runtimeState = runtime.snapshot()
-        if (runtimeState.stableHistory.isEmpty()) {
-            updateViewState(HistoryViewState.Loading)
-        } else {
-            showContent(
-                history = runtimeState.stableHistory,
-                isRefreshing = true,
-            )
+        synchronized(contentPublicationLock) {
+            val runtimeState = runtime.snapshot()
+            when {
+                runtimeState.stableHistory.isNotEmpty() -> showContent(
+                    history = runtimeState.stableHistory,
+                    isRefreshing = true,
+                )
+                // Rows on screen with nothing stable behind them are the stored first page and
+                // nothing else. This state reaches us from the paginator's own actor thread, so it
+                // can arrive after the publication that drew them; blanking them back to a spinner
+                // would be exactly the flicker the stored page exists to remove. The walk replaces
+                // them when it lands, and a walk that fails still reaches the error through
+                // handleFirstPageFailure.
+                stateValue is HistoryViewState.Content -> Unit
+                else -> {
+                    testBeforeLoadingStatePublication?.invoke()
+                    updateViewState(HistoryViewState.Loading)
+                }
+            }
         }
     }
 
@@ -577,6 +665,15 @@ internal class HistoryVM(
         }
     }
 
+    /**
+     * A stored first page on screen does not soften this, deliberately. It was drawn as a
+     * publication and never entered `stableHistory`, so a failed walk still finds no stable rows
+     * and replaces them with the full-screen error — rows then error, where before the stored page
+     * existed it was spinner then error. The alternative is to let the stored page write
+     * `stableHistory`, or to teach this path about rows the runtime does not hold, and both make
+     * the machine responsible for content no page ever produced. The failing load here is the one
+     * the user is waiting on, not a background revalidation, so an error is the honest answer.
+     */
     private fun handleFirstPageFailure(
         operationId: Long,
         error: ErrorEntity,

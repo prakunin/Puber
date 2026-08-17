@@ -17,6 +17,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -30,6 +31,7 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -180,6 +182,7 @@ class ShowAllVMTest {
         val mappedItem = videoItem(25)
         val mapper = mockk<VideoItemUIMapper>()
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item)
+        servesFirstPageFromTheNetwork(interactor)
         every { mapper.mapShortItemList(listOf(item)) } returns listOf(mappedItem)
         val paginator = Paginator.Store<Item> { old, new -> old.id == new.id }
         val vm = createVM(paginator = paginator, mapper = mapper)
@@ -193,6 +196,34 @@ class ShowAllVMTest {
 
         assertEquals(ShowAllViewState.Content(listOf(mappedItem)), vm.testStateValue)
         verify(exactly = 1) { mapper.mapShortItemList(listOf(item)) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * A retry is one of the signals that knows the server's answer has changed, so it may not settle
+     * for whatever the store happens to hold: the stored page is still drawn, and the request behind
+     * it is guaranteed. Opening the grid is not such a signal, and asks for nothing when the entry
+     * is fresh.
+     */
+    @Test
+    fun retry_forcesTheFirstPageRead_whereOpeningTheGridDoesNot() = runBlocking {
+        val config = SectionConfig(id = "popular", title = "Popular")
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item(7))
+        servesFirstPageFromTheNetwork(interactor)
+        val paginator = Paginator.Store<Item> { old, new -> old.id == new.id }
+        val vm = createVM(config = config, paginator = paginator)
+        vm.testOnStart()
+        withTimeout(2_000) {
+            while (vm.testStateValue !is ShowAllViewState.Content) {
+                delay(10)
+            }
+        }
+        verify(exactly = 1) { interactor.observeFirstPage(config, force = false) }
+
+        vm.onAction(CommonAction.RetryClicked)
+
+        verify(timeout = 2_000) { interactor.observeFirstPage(config, force = true) }
         vm.testCancelScope()
         paginator.close()
     }
@@ -211,6 +242,7 @@ class ShowAllVMTest {
                 page(visible, current = requested, total = 100)
             }
         }
+        servesFirstPageFromTheNetwork(interactor)
         val paginator = Paginator.Store<Item> { old, new -> old.id == new.id }
         val vm = createVM(paginator = paginator)
 
@@ -226,6 +258,17 @@ class ShowAllVMTest {
         coVerify(exactly = 1) { interactor.loadPage(any(), page = 1) }
         vm.testCancelScope()
         paginator.close()
+    }
+
+    /**
+     * Wires the cached-first-page flow onto the page loads these tests stub: one fresh emission per
+     * subscription, which is what the interactor's own loader produces when nothing is stored.
+     */
+    private fun servesFirstPageFromTheNetwork(interactor: ContentListInteractor) {
+        every { interactor.observeFirstPage(any(), any()) } answers {
+            val config = firstArg<SectionConfig>()
+            flow { emit(Cached.Value(interactor.loadPage(config, page = 1), isStale = false)) }
+        }
     }
 
     private fun createVM(
@@ -244,6 +287,8 @@ class ShowAllVMTest {
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
+
+    private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
 
     private fun page(
         item: Item,

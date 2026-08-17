@@ -21,6 +21,7 @@ import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubContentPageCache
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -68,6 +69,7 @@ internal class HistoryVMLifecycleTest {
                 navigationPreferencesRepository = mockk {
                     every { displaySettingsChanges } returns this@HistoryVMLifecycleTest.displaySettingsChanges
                 },
+                contentPageCache = stubContentPageCache(),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = mockk<AppRouter>(relaxed = true),

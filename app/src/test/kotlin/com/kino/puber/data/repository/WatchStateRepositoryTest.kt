@@ -699,6 +699,12 @@ private class FakeWatchStateDao : WatchStateDao() {
         applyUpsert(entities)
     }
 
+    override suspend fun insertIfAbsent(entity: WatchStateEntity): Long {
+        if (rows.value.any { it.itemId == entity.itemId }) return -1L
+        applyUpsert(listOf(entity))
+        return entity.itemId.toLong()
+    }
+
     private fun applyUpsert(entities: List<WatchStateEntity>) {
         val byId = rows.value.associateBy { it.itemId }.toMutableMap()
         entities.forEach { entity -> byId[entity.itemId] = entity }
@@ -744,7 +750,6 @@ private class FakeWatchStateDao : WatchStateDao() {
     override suspend fun upsertFromHistory(
         generation: Long,
         itemId: Int,
-        isSeriesLike: Boolean,
         isFullyWatched: Boolean,
         progressTime: Int?,
         progressDuration: Int?,
@@ -764,19 +769,12 @@ private class FakeWatchStateDao : WatchStateDao() {
                     updatedAt = updatedAt,
                     historySeenAt = historySeenAt,
                     generation = generation,
-                ) ?: WatchStateEntity(
-                    itemId = itemId,
-                    isSeriesLike = isSeriesLike,
-                    isFullyWatched = isFullyWatched,
-                    progressTime = progressTime,
-                    progressDuration = progressDuration,
-                    updatedAt = updatedAt,
-                    historySeenAt = historySeenAt,
-                    generation = generation,
-                )
+                ) ?: error("Missing row must be inserted before it is updated")
             )
         )
     }
+
+    override suspend fun updateInProgress(generation: Long, itemId: Int, updatedAt: Long) = Unit
 
     override suspend fun markInProgress(
         generation: Long,

@@ -63,11 +63,10 @@ internal class SectionVM(
             }
         }
         launch {
-            // Re-paging is enough on its own: the first-page cache is keyed by the settings that
-            // decide what a page contains, so the reload below misses the old entry rather than
-            // finding it. Clearing here would be worse than redundant — every open section wakes on
-            // this same signal, and the cache is shared, so each one's clear lands on the reloads
-            // the others have already started and sends them back for a second round trip.
+            // The stored first page is keyed by the settings that decide what a page contains, so
+            // the reload below misses the old entry rather than finding it. Nothing is dropped from
+            // here — every open section wakes on this same signal, and the cache is shared, so each
+            // one's clear would land on the reloads the others have already started.
             interactor.displaySettingsChanges.collect { refreshFirstPage() }
         }
         launch {
@@ -76,9 +75,9 @@ internal class SectionVM(
                 // once per open row. With watched titles shown the index only changes how a card is
                 // drawn, and the rows already fetched are still the right ones.
                 //
-                // Hidden, membership changes and the pages have to be re-fetched — but the clearing
-                // is the interactor's, done once for the index version rather than once per section
-                // for the same reason as above.
+                // Hidden, membership changes and the pages have to be re-fetched — the stored page
+                // was filtered against the index this signal has just moved, and the cache answers
+                // that move by revalidating rather than by discarding what it can still draw.
                 if (interactor.hideWatchedEnabled) {
                     refreshFirstPage()
                 } else {
@@ -88,14 +87,10 @@ internal class SectionVM(
         }
     }
 
-    fun refreshFirstPage() {
-        resetPaging()
-    }
-
     override fun onAction(action: UIAction) {
         when (action) {
             is CommonAction.LoadMore -> notifyLoadNextPage()
-            is CommonAction.RetryClicked -> resetPaging()
+            is CommonAction.RetryClicked -> refreshFirstPage()
             is CommonAction.ItemSavedChanged<*> -> {
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)

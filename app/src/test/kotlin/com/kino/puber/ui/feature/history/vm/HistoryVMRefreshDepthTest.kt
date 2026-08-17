@@ -25,6 +25,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.stubContentPageCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -339,7 +340,12 @@ internal class HistoryVMRefreshDepthTest {
     private fun createVM(): HistoryVM {
         return HistoryVM(
             paginator = Paginator.Store(comparator = HistoryRowComparator),
-            interactor = HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences()),
+            interactor = HistoryInteractor(
+                api = api,
+                itemDetailsRepository = itemDetailsRepository,
+                navigationPreferencesRepository = stubNavigationPreferences(),
+                contentPageCache = stubContentPageCache(),
+            ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = router,
             errorHandler = errorHandler,

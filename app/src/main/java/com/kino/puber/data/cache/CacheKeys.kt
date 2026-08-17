@@ -15,12 +15,21 @@ object CacheKeys {
     const val HomePrefix = "home:"
     const val ItemPrefix = "item:"
     const val SimilarPrefix = "similar:"
+    const val SectionPrefix = "section:"
+    const val WatchlistPrefix = "watchlist:"
+    const val HistoryPrefix = "history:"
 
     fun home(section: String): String = HomePrefix + section
 
     fun item(id: Int): String = ItemPrefix + id
 
     fun similar(id: Int): String = SimilarPrefix + id
+
+    fun section(id: String): String = SectionPrefix + id
+
+    fun watchlist(): String = WatchlistPrefix + "subscribed"
+
+    fun historyPage(page: Int): String = HistoryPrefix + page
 }
 
 /** How long each kind of payload is served without consulting the server. */
@@ -35,4 +44,11 @@ object CacheTtl {
     val ItemDetails: Duration = 10.minutes
 
     val SimilarItems: Duration = 30.minutes
+
+    /** Catalogue rows move on the server's schedule, like the editorial rows on home. */
+    val CatalogueSection: Duration = 30.minutes
+
+    /** Both of these are rewritten by the user's own playback, so they revalidate quickly. */
+    val Watchlist: Duration = 2.minutes
+    val HistoryPage: Duration = 2.minutes
 }

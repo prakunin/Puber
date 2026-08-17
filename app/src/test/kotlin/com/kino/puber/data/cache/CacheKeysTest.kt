@@ -30,4 +30,31 @@ class CacheKeysTest {
         assertEquals(2.minutes, CacheTtl.ContinueWatching)
         assertTrue(CacheTtl.ContinueWatching < CacheTtl.HomeSection)
     }
+
+    @Test
+    fun sectionKeysCarryTheSectionNamespace() {
+        assertEquals("section:popular", CacheKeys.section("popular"))
+        assertTrue(CacheKeys.section("popular").startsWith(CacheKeys.SectionPrefix))
+    }
+
+    @Test
+    fun watchlistKeyCarriesTheWatchlistNamespace() {
+        assertEquals("watchlist:subscribed", CacheKeys.watchlist())
+        assertTrue(CacheKeys.watchlist().startsWith(CacheKeys.WatchlistPrefix))
+    }
+
+    @Test
+    fun historyPageKeysCarryTheHistoryNamespace() {
+        assertEquals("history:1", CacheKeys.historyPage(1))
+        assertTrue(CacheKeys.historyPage(1).startsWith(CacheKeys.HistoryPrefix))
+    }
+
+    @Test
+    fun watchlistAndHistoryRevalidateFarSoonerThanCatalogueSections() {
+        // Both are rewritten by the user's own playback, unlike the catalogue rows.
+        assertEquals(2.minutes, CacheTtl.Watchlist)
+        assertEquals(2.minutes, CacheTtl.HistoryPage)
+        assertTrue(CacheTtl.Watchlist < CacheTtl.CatalogueSection)
+        assertTrue(CacheTtl.HistoryPage < CacheTtl.CatalogueSection)
+    }
 }

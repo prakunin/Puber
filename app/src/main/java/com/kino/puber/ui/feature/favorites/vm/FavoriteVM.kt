@@ -8,6 +8,9 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.core.content.ContentChangeSet
+import com.kino.puber.core.logger.log
+import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.favorites.FavoritesInteractor
 import com.kino.puber.ui.feature.favorites.model.FavoriteItemUIMapper
@@ -22,24 +25,46 @@ internal class FavoriteVM(
 ) : PuberVM<FavoriteViewState>(router) {
 
     override val initialViewState = FavoriteViewState.Loading
+    private var loadDataJob: Job? = null
     private var focusedItemJob: Job? = null
 
     override fun onStart() {
         loadData()
     }
 
-    private fun loadData() {
-        launch {
-            val items = interactor.getWatchlist()
-            val selectedItem = items.firstOrNull()?.let { item ->
-                interactor.getItemDetails(item.id)
+    /**
+     * Every signal that reloads the watching list comes through here, and each one replaces the
+     * collection before it. Two left alive at once settle in whatever order their emissions arrive
+     * in — the forced one is on `reload` while the one before it is still on `getOrPut` — so the
+     * older list can land last and win.
+     */
+    private fun loadData(force: Boolean = false) {
+        loadDataJob?.cancel()
+        loadDataJob = launch {
+            interactor.observeWatchlist(force = force).collect { cached ->
+                when (cached) {
+                    is Cached.Value -> publish(interactor.sortByRecentlyPlayed(cached.value))
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh the watching list")
+                }
             }
-            updateViewState(
-                favoriteItemUIMapper.mapToState(
-                    items = items,
-                    selectedItem = selectedItem,
-                )
-            )
+        }
+    }
+
+    /**
+     * Rows first, side panel second — the shape [onItemFocused] already uses.
+     *
+     * The details go through `ItemDetailsRepository`, which waits for the last emission of its own
+     * feed: the network, whenever that entry is stale or absent. A cold start is exactly that, so a
+     * grid published only after the details had answered would come off disk in milliseconds and
+     * then wait for a request anyway — which is the one thing serving this list from the cache was
+     * for.
+     */
+    private suspend fun publish(items: List<Item>) {
+        updateViewState(favoriteItemUIMapper.mapToState(items = items, selectedItem = null))
+        val firstItem = items.firstOrNull() ?: return
+        val details = interactor.getItemDetails(firstItem.id)
+        updateViewState<FavoriteViewState.Content> {
+            copy(selectedItem = favoriteItemUIMapper.mapSelectedItem(items, details))
         }
     }
 
@@ -52,7 +77,7 @@ internal class FavoriteVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-            is CommonAction.RetryClicked -> loadData()
+            is CommonAction.RetryClicked -> loadData(force = true)
             else -> super.onAction(action)
         }
     }
@@ -75,7 +100,7 @@ internal class FavoriteVM(
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
         if (changes == null || changes.isEmpty) return
-        loadData()
+        loadData(force = true)
     }
 
     private fun onItemFocused(selectedItem: VideoItemUIState) {
@@ -100,7 +125,7 @@ internal class FavoriteVM(
                 isSeriesLike = item.isSeriesLike,
                 saved = saved,
             ).getOrThrow()
-            loadData()
+            loadData(force = true)
         }
     }
 }

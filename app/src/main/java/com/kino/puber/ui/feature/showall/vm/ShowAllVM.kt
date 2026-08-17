@@ -50,19 +50,19 @@ internal class ShowAllVM(
         init()
         launch {
             // Same as the section rows: the settings that decide what a page contains are part of
-            // the first-page cache key, so re-paging already misses the old entry. Clearing the
-            // shared cache from here would only knock over the reloads other open lists are running
-            // off the same signal.
-            interactor.displaySettingsChanges.collect { resetPaging() }
+            // the stored first page's key, so re-paging already misses the old entry. Nothing is
+            // dropped from here — that would only knock over the reloads other open lists are
+            // running off the same signal.
+            interactor.displaySettingsChanges.collect { refreshFirstPage() }
         }
         launch {
             interactor.watchStateChanges.collect {
                 // Same split as the section rows: with watched titles shown the index changes how a
                 // card is drawn, not which cards belong, so the grid redraws instead of re-paging.
-                // Hidden, the re-page is needed — and the cache is dropped by the interactor, once
-                // for the index version rather than once per open list.
+                // Hidden, the re-page is needed, and the stored page — filtered against the index
+                // this signal has just moved — is revalidated rather than discarded.
                 if (interactor.hideWatchedEnabled) {
-                    resetPaging()
+                    refreshFirstPage()
                 } else {
                     remapLoadedItems()
                 }
@@ -74,7 +74,7 @@ internal class ShowAllVM(
         if (closing) return
         when (action) {
             is CommonAction.LoadMore -> notifyLoadNextPage()
-            is CommonAction.RetryClicked -> resetPaging()
+            is CommonAction.RetryClicked -> refreshFirstPage()
             is CommonAction.ItemSelected<*> -> {
                 val item = action.item as VideoItemUIState
                 openDetails(item.id)
@@ -110,7 +110,7 @@ internal class ShowAllVM(
         if (changes == null || changes.isEmpty) return
         contentChanges = contentChanges.merge(changes)
         interactor.invalidateFirstPageCache()
-        resetPaging()
+        refreshFirstPage()
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -161,7 +161,7 @@ internal class ShowAllVM(
                     )
                 )
                 interactor.invalidateFirstPageCache()
-                resetPaging()
+                refreshFirstPage()
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it
