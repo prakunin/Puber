@@ -13,6 +13,7 @@ import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.History
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.history.HistoryInteractor
 import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.domain.interactor.history.HistoryTraversal
@@ -75,7 +76,45 @@ internal class HistoryVM(
 
     override fun onStart() {
         init()
+        drawStoredFirstPage()
         launch { interactor.displaySettingsChanges.collect { requestResumeRefresh() } }
+    }
+
+    /**
+     * Draws the stored first page while the depth walk is still out.
+     *
+     * A publication and nothing more: [showContent] leaves [runtime] holding the walk's own view of
+     * the list, so these rows are replaced by the first page the walk publishes and no part of the
+     * state machine has to know they were ever there. Once the walk has settled the rows are its
+     * own, so a stored page arriving late is dropped rather than drawn over them.
+     *
+     * Started after [init] so the paginator's opening `Loading` state cannot land on top of these
+     * rows, and collected to the end even when nothing is drawn: the collection carries the
+     * revalidation that leaves a fresh page behind for the next visit.
+     */
+    private fun drawStoredFirstPage() {
+        launch {
+            interactor.observeFirstPage().collect { cached ->
+                when (cached) {
+                    is Cached.Value -> drawStoredRows(cached.value.items)
+                    is Cached.RefreshFailed ->
+                        log(cached.error, "Failed to refresh the history first page")
+                }
+            }
+        }
+    }
+
+    /**
+     * The stored page goes through the same filter the walk applies: one server page can carry two
+     * records of the same episode, and the list keys its rows by media identity, so an unfiltered
+     * page would hand it a duplicate key. A page with nothing left to draw is not drawn at all —
+     * the spinner says more than a blank list, and the walk decides between rows and empty soon
+     * enough.
+     */
+    private fun drawStoredRows(stored: List<History>) {
+        val rows = HistoryTraversal().filterFirstOccurrences(stored)
+        if (rows.isEmpty() || runtime.snapshot().hasCompletedInitialLoad) return
+        showContent(rows, isRefreshing = true)
     }
 
     override fun onAction(action: UIAction) {

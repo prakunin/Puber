@@ -7,12 +7,16 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentPageCache
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.util.FakePayloadStore
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.mockk
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -23,7 +27,40 @@ class HistoryInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
     private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
-    private val interactor = HistoryInteractor(api, itemDetailsRepository, stubNavigationPreferences())
+    private val store = FakePayloadStore()
+    private val now = 1_000_000L
+    private val interactor = HistoryInteractor(
+        api = api,
+        itemDetailsRepository = itemDetailsRepository,
+        navigationPreferencesRepository = stubNavigationPreferences(),
+        contentPageCache = ContentPageCache(store = store, clock = { now }),
+    )
+
+    /**
+     * The point of storing the first page: the next visit draws it without waiting for the server.
+     */
+    @Test
+    fun observeFirstPage_servesTheStoredPageOnTheNextVisitWithoutAskingTheServerAgain() = runTest {
+        val stored = PaginatedResponse(
+            items = listOf(movie(recordId = 1, videoId = 11, videoNumber = 2)),
+            pagination = Pagination(current = 1, perpage = 20, total = 3, totalItems = 41),
+        )
+        coEvery { api.getHistoryData(page = 1) } returns Result.success(stored)
+        interactor.observeFirstPage().toList()
+        // A cache over the same store but with its own memory tier, as a new app start would have,
+        // so the page comes back off disk and through the serializer rather than out of memory.
+        val nextVisit = HistoryInteractor(
+            api = api,
+            itemDetailsRepository = itemDetailsRepository,
+            navigationPreferencesRepository = stubNavigationPreferences(),
+            contentPageCache = ContentPageCache(store = store, clock = { now }),
+        )
+
+        val emissions = nextVisit.observeFirstPage().toList()
+
+        assertEquals(Cached.Value(stored, isStale = false, updatedAt = now), emissions.single())
+        coVerify(exactly = 1) { api.getHistoryData(page = 1) }
+    }
 
     @Test
     fun getPage_returnsVerifiedPaginatedResponse() = runTest {

@@ -6,14 +6,19 @@ import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentPageCache
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import kotlinx.coroutines.flow.Flow
+
+private const val FIRST_PAGE = 1
 
 internal class HistoryInteractor(
     private val api: KinoPubApiClient,
     private val itemDetailsRepository: ItemDetailsRepository,
     navigationPreferencesRepository: NavigationPreferencesRepository,
+    private val contentPageCache: ContentPageCache,
 ) {
 
     /**
@@ -24,6 +29,14 @@ internal class HistoryInteractor(
      * activity, so coming back from the settings screen brings no resume with it.
      */
     val displaySettingsChanges: Flow<Unit> = navigationPreferencesRepository.displaySettingsChanges
+
+    /**
+     * The first page of history, stored and revalidated. The rest of the depth the list needs is
+     * read straight from the server by [getPage] as before — only the page the user looks at first
+     * is worth keeping.
+     */
+    fun observeFirstPage(force: Boolean = false): Flow<Cached<PaginatedResponse<History>>> =
+        contentPageCache.historyFirstPage(force = force) { getPage(FIRST_PAGE) }
 
     suspend fun getPage(page: Int): PaginatedResponse<History> {
         return api.getHistoryData(page).getOrThrow()
