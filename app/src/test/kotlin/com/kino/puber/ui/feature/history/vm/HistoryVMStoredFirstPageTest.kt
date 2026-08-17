@@ -34,11 +34,15 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.api.fail
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -130,6 +134,50 @@ internal class HistoryVMStoredFirstPageTest {
         assertEquals(listOf(1), (vm.testStateValue as HistoryViewState.Content).itemIds())
         scheduler.advanceUntilIdle()
         assertEquals(listOf(1), (vm.testStateValue as HistoryViewState.Content).itemIds())
+        vm.testCancelScope()
+    }
+
+    /**
+     * The same opening `Loading`, raced rather than stepped. It is a read-modify-write of the view
+     * state on the paginator's actor thread, so without the publication lock it can decide on the
+     * spinner while the screen is empty and write it after the stored page has been drawn — which is
+     * the flicker the stored page is there to remove. The stored publication is held at the lock
+     * here and must be the state that survives.
+     */
+    @Test
+    fun theOpeningLoadingStateCannotBlankRowsPublishedBesideIt() {
+        val scheduler = TestCoroutineScheduler()
+        val storedPage = CompletableDeferred<Unit>()
+        val walk = CompletableDeferred<PaginatedResponse<History>>()
+        every { interactor.observeFirstPage(any()) } returns flow {
+            storedPage.await()
+            emit(Cached.Value(page(listOf(movie(1))), isStale = true))
+        }
+        coEvery { api.getHistoryData(1) } coAnswers { Result.success(walk.await()) }
+        val vm = createVM(paginatorContext = StandardTestDispatcher(scheduler))
+        val atLoadingPublication = CountDownLatch(1)
+        val storedRowsPublished = CountDownLatch(1)
+        vm.testBeforeLoadingStatePublication = {
+            vm.testBeforeLoadingStatePublication = null
+            atLoadingPublication.countDown()
+            // Long enough for the stored publication to land if nothing is stopping it, and a wait
+            // rather than a join so that a lock which does stop it cannot deadlock the test.
+            storedRowsPublished.await(SETTLE_MILLIS, TimeUnit.MILLISECONDS)
+        }
+        vm.testOnStart()
+
+        // The paginator's own thread, so the stored page can be published from another one.
+        val loadingThread = thread { scheduler.advanceUntilIdle() }
+        assertTrue(atLoadingPublication.await(2, TimeUnit.SECONDS))
+        val storedThread = thread {
+            // Resumes the stored-page collection inline, so the publication runs on this thread.
+            storedPage.complete(Unit)
+            storedRowsPublished.countDown()
+        }
+
+        loadingThread.join(2_000)
+        storedThread.join(2_000)
+        assertEquals(listOf(1), awaitContent(vm).itemIds())
         vm.testCancelScope()
     }
 

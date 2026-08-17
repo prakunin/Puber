@@ -74,6 +74,14 @@ internal class HistoryVM(
     @VisibleForTesting
     internal var testBeforeFocusPublicationLockAcquire: (() -> Unit)? = null
 
+    /**
+     * Fires between the reads that choose the spinner in [dispatchLoadingState] and the write that
+     * publishes it — inside the publication lock, which is the whole point: it is the window in
+     * which a concurrent publication used to be able to slip past and be overwritten.
+     */
+    @VisibleForTesting
+    internal var testBeforeLoadingStatePublication: (() -> Unit)? = null
+
     override fun onStart() {
         init()
         drawStoredFirstPage()
@@ -280,20 +288,37 @@ internal class HistoryVM(
         }
     }
 
+    /**
+     * Under [contentPublicationLock] like every other writer of this state, and for the same reason.
+     * It runs on the paginator's actor thread and decides what to write from what it reads — the
+     * runtime and the state on screen — while [showContent] holds the monitor across a
+     * read-modify-write of its own. Outside it, a decision taken against an empty screen could be
+     * carried out after the stored page had been drawn, blanking those rows back into the spinner
+     * this whole path exists to avoid.
+     *
+     * No new lock ordering: everything reached from here takes the runtime store's monitor after
+     * this one, never before, which is the order the rest of the class already keeps.
+     */
     private fun dispatchLoadingState() {
-        val runtimeState = runtime.snapshot()
-        when {
-            runtimeState.stableHistory.isNotEmpty() -> showContent(
-                history = runtimeState.stableHistory,
-                isRefreshing = true,
-            )
-            // Rows on screen with nothing stable behind them are the stored first page and nothing
-            // else. This state reaches us from the paginator's own actor thread, so it can arrive
-            // after the publication that drew them; blanking them back to a spinner would be
-            // exactly the flicker the stored page exists to remove. The walk replaces them when it
-            // lands, and a walk that fails still reaches the error through handleFirstPageFailure.
-            stateValue is HistoryViewState.Content -> Unit
-            else -> updateViewState(HistoryViewState.Loading)
+        synchronized(contentPublicationLock) {
+            val runtimeState = runtime.snapshot()
+            when {
+                runtimeState.stableHistory.isNotEmpty() -> showContent(
+                    history = runtimeState.stableHistory,
+                    isRefreshing = true,
+                )
+                // Rows on screen with nothing stable behind them are the stored first page and
+                // nothing else. This state reaches us from the paginator's own actor thread, so it
+                // can arrive after the publication that drew them; blanking them back to a spinner
+                // would be exactly the flicker the stored page exists to remove. The walk replaces
+                // them when it lands, and a walk that fails still reaches the error through
+                // handleFirstPageFailure.
+                stateValue is HistoryViewState.Content -> Unit
+                else -> {
+                    testBeforeLoadingStatePublication?.invoke()
+                    updateViewState(HistoryViewState.Loading)
+                }
+            }
         }
     }
 
