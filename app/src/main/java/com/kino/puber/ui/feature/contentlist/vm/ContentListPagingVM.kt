@@ -101,10 +101,10 @@ internal abstract class ContentListPagingVM<VS>(
                     )
                 }
             }
-            // Only a load that got this far has made the request the demand asked for. One cancelled
-            // by the next restart, or one that failed, leaves the demand standing for its successor.
-            // The highest wins, so a slower load settling after a newer one cannot revive a demand
-            // that newer one has already served.
+            // Only a load that ran to completion counts against the demand. One cancelled by the
+            // next restart, or one that failed, leaves the demand standing for its successor. The
+            // highest wins, so a slower load settling after a newer one cannot revive a demand that
+            // newer one has already served.
             if (force) {
                 forcedReadsServed.accumulateAndGet(demanded) { served, carried -> maxOf(served, carried) }
             }
@@ -119,9 +119,18 @@ internal abstract class ContentListPagingVM<VS>(
      * One step of the walk, tied to the publication that started it. A step whose generation has
      * moved on belongs to a list that is no longer on screen, so its page is dropped rather than
      * published.
+     *
+     * The generation is read beside the cursor, at the call, rather than inside the coroutine. Both
+     * describe the same publication, and [onLoadNextPage] runs on the paginator's side-effect thread
+     * while the body starts later on the paging dispatcher: read there, a step started under one
+     * publication would see the generation of the next one, pass its own guard, and append a page
+     * built from the old cursor to the new list. Reading them together does not make the pair
+     * atomic — a publication can still land between the two reads — and is not meant to. What it
+     * removes is the dispatch boundary, which is what makes that interleaving likely rather than
+     * theoretical.
      */
-    private fun walkStep(page: Int) {
-        pagingLaunch(errorHandlerPaging) { publishWalkStep(page, walkGeneration.get()) }
+    private fun walkStep(page: Int, generation: Int = walkGeneration.get()) {
+        pagingLaunch(errorHandlerPaging) { publishWalkStep(page, generation) }
     }
 
     private suspend fun publishWalkStep(page: Int, generation: Int) {

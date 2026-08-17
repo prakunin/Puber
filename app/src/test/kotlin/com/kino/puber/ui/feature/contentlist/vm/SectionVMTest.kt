@@ -25,6 +25,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -833,5 +834,85 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         assertEquals(walkedForTheCachedPage, pagesRead.drop(walkedForTheCachedPage.size))
         vm.testCancelScope()
         paginator.close()
+    }
+
+    /**
+     * The same walk step, this time overtaken by the publication rather than outlasting it.
+     *
+     * A step is launched from the paginator's side-effect thread and its body starts later, on the
+     * paging dispatcher. Its cursor is the old list's; its generation must be too. Read inside the
+     * body, the generation would be whatever the fresh publication had already set, so the step
+     * would pass its own guard and append a page built from the old cursor to the new list.
+     */
+    @Test
+    fun firstPage_aWalkStepOvertakenByTheFreshPageIsStillDropped() = runTest {
+        val paging = ManualDispatcher()
+        val paginatorDispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(paginatorDispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), page = 2) } returns page(item(2), current = 2, total = 9)
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), paging,
+            mapper = mapperFor(1, 2),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+        paging.runAll()
+
+        // The stored page came back emptied by filtering, so the section walks on to page two — and
+        // that step is left waiting for its dispatcher.
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 9), isStale = true))
+        paging.runAll()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, paging.pendingCount(), "the stored page never started a walk")
+
+        emissions.emit(Cached.Value(page(item(1), current = 1, total = 9), isStale = false))
+        assertEquals(2, paging.pendingCount())
+        // The fresh publication was queued second and runs first: the walk step's body starts after
+        // the list it belongs to has already been replaced.
+        paging.runQueued(index = 1)
+        testScheduler.advanceUntilIdle()
+        paging.runAll()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.testCancelScope()
+        paginator.close()
+    }
+}
+
+/**
+ * A paging dispatcher that runs nothing by itself, so a test can choose which of the blocks waiting
+ * on it goes first.
+ *
+ * The race it exists for is an ordering rather than a timing: a walk step is launched on one thread
+ * and its body starts on another, so a publication landing in between overtakes it. Every dispatcher
+ * backed by the test scheduler delivers in the order blocks were queued, which is the one order in
+ * which that cannot happen.
+ */
+private class ManualDispatcher : CoroutineDispatcher() {
+
+    private val pending = mutableListOf<Runnable>()
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        synchronized(pending) { pending += block }
+    }
+
+    fun pendingCount(): Int = synchronized(pending) { pending.size }
+
+    /** Runs the block queued at [index], letting it overtake everything queued before it. */
+    fun runQueued(index: Int) {
+        synchronized(pending) { pending.removeAt(index) }.run()
+    }
+
+    fun runAll() {
+        while (true) {
+            val block = synchronized(pending) {
+                pending.firstOrNull()?.also { pending.removeAt(0) }
+            } ?: return
+            block.run()
+        }
     }
 }
