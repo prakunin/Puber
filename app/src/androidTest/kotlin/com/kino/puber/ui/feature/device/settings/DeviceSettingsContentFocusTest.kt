@@ -92,6 +92,18 @@ internal class DeviceSettingsContentFocusTest {
     }
 
     @Test
+    fun leftFromLowerSettingReturnsToTheActiveMenuSection() {
+        setSuccessContent(initialSection = SettingsSection.Playback)
+        val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
+        playback.requestFocus().press(Key.DirectionRight)
+        repeat(5) { focusedNode().press(Key.DirectionDown) }
+
+        focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
+
+        playback.assertIsFocused()
+    }
+
+    @Test
     fun expandedNetworkListFocusesSelectedOptionAndBackCollapsesIt() {
         var state by mutableStateOf(successState(settings = listOf(serverSetting())))
         composeRule.setContent {

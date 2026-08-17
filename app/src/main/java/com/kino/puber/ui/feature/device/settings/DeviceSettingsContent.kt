@@ -28,8 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -165,6 +168,12 @@ private fun DeviceSettingsPane(
     val sections = remember {
         SettingsSection.entries.filter { it != SettingsSection.Developer || BuildConfig.DEBUG }
     }
+    val initialFocusRequester = rememberFocusRequesterOnLaunch()
+    val sectionFocusRequesters = remember(sections, initialSection, initialFocusRequester) {
+        sections.associateWith { section ->
+            if (section == initialSection) initialFocusRequester else FocusRequester()
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -186,6 +195,7 @@ private fun DeviceSettingsPane(
             SettingsNavigation(
                 sections = sections,
                 selectedSection = selectedSection,
+                sectionFocusRequesters = sectionFocusRequesters,
                 onSectionSelected = { selectedSection = it },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -198,6 +208,7 @@ private fun DeviceSettingsPane(
                 state = state,
                 apiDomain = apiDomain,
                 onAction = onAction,
+                leftFocusRequester = sectionFocusRequesters.getValue(selectedSection),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -210,11 +221,10 @@ private fun DeviceSettingsPane(
 private fun SettingsNavigation(
     sections: List<SettingsSection>,
     selectedSection: SettingsSection,
+    sectionFocusRequesters: Map<SettingsSection, FocusRequester>,
     onSectionSelected: (SettingsSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val initialFocusRequester = rememberFocusRequesterOnLaunch()
-
     LazyColumn(
         modifier = modifier
             .focusRestorer()
@@ -232,9 +242,7 @@ private fun SettingsNavigation(
                 onClick = { onSectionSelected(section) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(
-                        if (selected) Modifier.focusRequester(initialFocusRequester) else Modifier
-                    )
+                    .focusRequester(sectionFocusRequesters.getValue(section))
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) onSectionSelected(section)
                     }
@@ -274,6 +282,7 @@ private fun SettingsSectionPanel(
     state: DeviceSettingsState.Success,
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -306,6 +315,7 @@ private fun SettingsSectionPanel(
                 state = state,
                 apiDomain = apiDomain,
                 onAction = onAction,
+                leftFocusRequester = leftFocusRequester,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(SettingsTestTags.Content),
@@ -328,11 +338,13 @@ private fun sectionDescription(section: SettingsSection): String = stringResourc
 )
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 private fun SettingsSectionContent(
     section: SettingsSection,
     state: DeviceSettingsState.Success,
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -340,6 +352,16 @@ private fun SettingsSectionContent(
         state = listState,
         modifier = modifier
             .focusRestorer()
+            .focusProperties {
+                @Suppress("DEPRECATION")
+                exit = { direction ->
+                    if (direction == FocusDirection.Left) {
+                        leftFocusRequester
+                    } else {
+                        FocusRequester.Default
+                    }
+                }
+            }
             .focusGroup(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
