@@ -560,25 +560,8 @@ private fun LazyListScope.watchHistoryItems(
             description = stringResource(R.string.settings_watch_index_description),
         )
     }
-    item(key = "fully-watched") {
-        SettingsListItem(
-            headline = stringResource(R.string.settings_watch_index_fully_watched),
-            trailingText = state.watchIndex.fullyWatchedItems.toString(),
-        )
-    }
-    item(key = "local-total") {
-        SettingsListItem(
-            headline = stringResource(R.string.settings_watch_index_local_total),
-            trailingText = state.watchIndex.indexedItems.toString(),
-        )
-    }
-    state.watchIndex.totalHistoryItems?.let { total ->
-        item(key = "account-total") {
-            SettingsListItem(
-                headline = stringResource(R.string.settings_watch_index_account_total),
-                trailingText = total.toString(),
-            )
-        }
+    item(key = "watch-summary") {
+        WatchHistorySummary(state)
     }
     item(key = "sync") {
         val status = when {
@@ -599,6 +582,62 @@ private fun LazyListScope.watchHistoryItems(
             trailingText = status,
             enabled = !state.watchIndex.isSyncing,
             onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
+        )
+    }
+}
+
+@Composable
+private fun WatchHistorySummary(state: DeviceSettingsState.Success) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(SettingsTestTags.WatchSummary)
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+                shape = RoundedCornerShape(14.dp),
+            )
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        InformationMetric(
+            label = stringResource(R.string.settings_watch_index_fully_watched),
+            value = state.watchIndex.fullyWatchedItems.toString(),
+            modifier = Modifier.weight(1f),
+        )
+        InformationMetric(
+            label = stringResource(R.string.settings_watch_index_local_total),
+            value = state.watchIndex.indexedItems.toString(),
+            modifier = Modifier.weight(1f),
+        )
+        state.watchIndex.totalHistoryItems?.let { total ->
+            InformationMetric(
+                label = stringResource(R.string.settings_watch_index_account_total),
+                value = total.toString(),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun InformationMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

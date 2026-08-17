@@ -167,6 +167,15 @@ internal class DeviceSettingsContentFocusTest {
         assertEquals(screenTitle.boundsInRoot.top, sectionTitle.boundsInRoot.top, 1f)
     }
 
+    @Test
+    fun dataSectionSkipsInformationBlockWhenMovingFocusRight() {
+        setSuccessContent(initialSection = SettingsSection.Data)
+        val dataSection = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Data.name))
+        dataSection.requestFocus().press(Key.DirectionRight)
+
+        focusedItem(context.getString(R.string.settings_watch_index_sync_action)).assertIsFocused()
+    }
+
     private fun setSuccessContent(
         state: DeviceSettingsState.Success = successState(),
         initialSection: SettingsSection = SettingsSection.General,
