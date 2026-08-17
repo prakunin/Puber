@@ -227,6 +227,7 @@ internal fun SettingListItem(
     setting: DeviceSettingUIModel.TypeList,
     isExpanded: Boolean,
     savingOptionId: Int?,
+    leftFocusRequester: FocusRequester,
     onToggleExpand: () -> Unit,
     onOptionSelect: (Int) -> Unit,
     listState: LazyListState? = null,
@@ -247,6 +248,7 @@ internal fun SettingListItem(
         options = options,
         isExpanded = isExpanded,
         savingOptionKey = savingOptionId?.toString(),
+        leftFocusRequester = leftFocusRequester,
         onToggleExpand = onToggleExpand,
         onOptionSelect = { onOptionSelect(it.toInt()) },
         listState = listState,
@@ -259,6 +261,7 @@ internal fun SettingsChoiceItem(
     label: String,
     options: List<SettingsChoiceOption>,
     isExpanded: Boolean,
+    leftFocusRequester: FocusRequester,
     onToggleExpand: () -> Unit,
     onOptionSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -283,7 +286,12 @@ internal fun SettingsChoiceItem(
             supportingText = description,
             trailingText = selectedOption?.label.orEmpty(),
             onClick = onToggleExpand,
-            modifier = Modifier.focusRequester(headerFocusRequester),
+            modifier = Modifier
+                .focusRequester(headerFocusRequester)
+                .focusProperties {
+                    @Suppress("DEPRECATION")
+                    left = leftFocusRequester
+                },
         )
 
         AnimatedVisibility(
@@ -314,7 +322,12 @@ internal fun SettingsChoiceItem(
                             headerFocusRequester.requestFocus()
                             onOptionSelect(option.key)
                         },
-                        modifier = Modifier.focusRequester(optionFocusRequesters.getValue(option.key)),
+                        modifier = Modifier
+                            .focusRequester(optionFocusRequesters.getValue(option.key))
+                            .focusProperties {
+                                @Suppress("DEPRECATION")
+                                left = leftFocusRequester
+                            },
                     )
                 }
             }

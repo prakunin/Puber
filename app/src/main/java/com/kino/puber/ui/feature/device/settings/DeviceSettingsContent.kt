@@ -381,10 +381,17 @@ private fun SettingsSectionContent(
                 state = state,
                 onAction = onAction,
                 listState = listState,
+                leftFocusRequester = leftFocusRequester,
                 expandedChoice = expandedNavigationChoice,
                 onExpandedChoiceChange = { expandedNavigationChoice = it },
             )
-            SettingsSection.Network -> networkItems(state, apiDomain, onAction, listState)
+            SettingsSection.Network -> networkItems(
+                state,
+                apiDomain,
+                onAction,
+                listState,
+                leftFocusRequester,
+            )
             SettingsSection.Data -> watchHistoryItems(state, onAction)
             SettingsSection.Developer -> developerItems(state, onAction)
         }
@@ -514,6 +521,7 @@ private fun LazyListScope.navigationItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    leftFocusRequester: FocusRequester,
     expandedChoice: NavigationChoice?,
     onExpandedChoiceChange: (NavigationChoice?) -> Unit,
 ) {
@@ -523,6 +531,7 @@ private fun LazyListScope.navigationItems(
             description = stringResource(R.string.settings_navigation_restart_hint),
             options = navigationModeOptions(state.navigationMode),
             isExpanded = expandedChoice == NavigationChoice.Mode,
+            leftFocusRequester = leftFocusRequester,
             onToggleExpand = {
                 onExpandedChoiceChange(
                     if (expandedChoice == NavigationChoice.Mode) null else NavigationChoice.Mode
@@ -541,6 +550,7 @@ private fun LazyListScope.navigationItems(
             label = stringResource(R.string.settings_startup_tab),
             options = startupTabOptions(state.startupTabOptions, state.startupTab),
             isExpanded = expandedChoice == NavigationChoice.StartupTab,
+            leftFocusRequester = leftFocusRequester,
             onToggleExpand = {
                 onExpandedChoiceChange(
                     if (expandedChoice == NavigationChoice.StartupTab) {
@@ -588,6 +598,7 @@ private fun LazyListScope.networkItems(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    leftFocusRequester: FocusRequester,
 ) {
     item(key = "api-domain") {
         SettingsListItem(
@@ -621,6 +632,7 @@ private fun LazyListScope.networkItems(
                 setting = setting,
                 isExpanded = setting.type == state.expandedType,
                 savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
+                leftFocusRequester = leftFocusRequester,
                 onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
                 onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
                 listState = listState,

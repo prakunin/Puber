@@ -163,6 +163,22 @@ internal class DeviceSettingsContentFocusTest {
     }
 
     @Test
+    fun leftFromExpandedNavigationChoiceReturnsToNavigationSection() {
+        setSuccessContent(initialSection = SettingsSection.Navigation)
+        val navigation = composeRule.onNodeWithTag(
+            SettingsTestTags.section(SettingsSection.Navigation.name)
+        )
+
+        navigation.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.settings_navigation_mode)).press(Key.Enter)
+        focusedItem(context.getString(R.string.settings_navigation_top_tabs))
+            .assertIsFocused()
+            .press(Key.DirectionLeft)
+
+        navigation.assertIsFocused()
+    }
+
+    @Test
     fun startupTabOpensAsChoiceListAndFocusesCurrentValue() {
         setSuccessContent(
             state = successState().copy(
