@@ -29,6 +29,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,7 +59,7 @@ internal class DeviceSettingsContentFocusTest {
     }
 
     @Test
-    fun dpadSelectsPlaybackSectionAndMovesIntoItsFirstSetting() {
+    fun dpadFocusSelectsPlaybackSectionWithoutClickAndMovesIntoItsFirstSetting() {
         val actions = mutableListOf<UIAction>()
         setSuccessContent(onAction = actions::add)
         val general = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.General.name))
@@ -67,7 +68,6 @@ internal class DeviceSettingsContentFocusTest {
         general.press(Key.DirectionDown)
         composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
             .assertIsFocused()
-            .press(Key.Enter)
             .press(Key.DirectionRight)
 
         focusedItem(context.getString(R.string.settings_prefer_surround_audio))
@@ -84,7 +84,7 @@ internal class DeviceSettingsContentFocusTest {
         setSuccessContent()
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
         playback.requestFocus()
-        playback.press(Key.Enter).press(Key.DirectionRight)
+        playback.press(Key.DirectionRight)
 
         repeat(5) { focusedNode().press(Key.DirectionDown) }
 
@@ -116,7 +116,7 @@ internal class DeviceSettingsContentFocusTest {
         }
         val network = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Network.name))
         network.requestFocus()
-        network.press(Key.Enter).press(Key.DirectionRight)
+        network.press(Key.DirectionRight)
         focusedNode().press(Key.DirectionDown).press(Key.Enter)
 
         focusedItem("Automatic").assertIsFocused().press(Key.Back)
@@ -155,6 +155,16 @@ internal class DeviceSettingsContentFocusTest {
             composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag(SettingsTestTags.ErrorRetry).assertIsFocused()
+    }
+
+    @Test
+    fun screenAndSectionTitlesShareTheSameTopPosition() {
+        setSuccessContent()
+
+        val screenTitle = composeRule.onNodeWithTag(SettingsTestTags.ScreenTitle).fetchSemanticsNode()
+        val sectionTitle = composeRule.onNodeWithTag(SettingsTestTags.SectionTitle).fetchSemanticsNode()
+
+        assertEquals(screenTitle.boundsInRoot.top, sectionTitle.boundsInRoot.top, 1f)
     }
 
     private fun setSuccessContent(

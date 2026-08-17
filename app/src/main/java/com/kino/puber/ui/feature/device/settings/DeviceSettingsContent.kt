@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -165,41 +166,42 @@ private fun DeviceSettingsPane(
         SettingsSection.entries.filter { it != SettingsSection.Developer || BuildConfig.DEBUG }
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = ScreenHorizontalPadding, vertical = ScreenVerticalPadding),
+        horizontalArrangement = Arrangement.spacedBy(28.dp),
     ) {
-        Text(
-            text = stringResource(R.string.settings_screen_title),
-            style = MaterialTheme.typography.headlineLarge,
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
+                .width(NavigationWidth)
+                .fillMaxHeight(),
         ) {
+            Text(
+                text = stringResource(R.string.settings_screen_title),
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.testTag(SettingsTestTags.ScreenTitle),
+            )
+            Spacer(modifier = Modifier.height(20.dp))
             SettingsNavigation(
                 sections = sections,
                 selectedSection = selectedSection,
                 onSectionSelected = { selectedSection = it },
                 modifier = Modifier
-                    .width(NavigationWidth)
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+        }
+        key(selectedSection) {
+            SettingsSectionPanel(
+                section = selectedSection,
+                state = state,
+                apiDomain = apiDomain,
+                onAction = onAction,
+                modifier = Modifier
+                    .weight(1f)
                     .fillMaxHeight(),
             )
-            key(selectedSection) {
-                SettingsSectionPanel(
-                    section = selectedSection,
-                    state = state,
-                    apiDomain = apiDomain,
-                    onAction = onAction,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-            }
         }
     }
 }
@@ -224,15 +226,18 @@ private fun SettingsNavigation(
         itemsIndexed(
             items = sections,
             key = { _, section -> section.name },
-        ) { index, section ->
+        ) { _, section ->
             val selected = section == selectedSection
             Surface(
                 onClick = { onSectionSelected(section) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (index == 0) Modifier.focusRequester(initialFocusRequester) else Modifier
+                        if (selected) Modifier.focusRequester(initialFocusRequester) else Modifier
                     )
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) onSectionSelected(section)
+                    }
                     .semantics { this.selected = selected }
                     .testTag(SettingsTestTags.section(section.name)),
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
@@ -272,35 +277,40 @@ private fun SettingsSectionPanel(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(20.dp),
-            )
-            .padding(top = 20.dp),
+        modifier = modifier,
     ) {
         Text(
             text = stringResource(section.titleRes),
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 24.dp),
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.testTag(SettingsTestTags.SectionTitle),
         )
         Text(
             text = sectionDescription(section),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            modifier = Modifier.padding(top = 4.dp),
         )
-        Spacer(modifier = Modifier.height(10.dp))
-        SettingsSectionContent(
-            section = section,
-            state = state,
-            apiDomain = apiDomain,
-            onAction = onAction,
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .testTag(SettingsTestTags.Content),
-        )
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                .padding(top = 8.dp),
+        ) {
+            SettingsSectionContent(
+                section = section,
+                state = state,
+                apiDomain = apiDomain,
+                onAction = onAction,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(SettingsTestTags.Content),
+            )
+        }
     }
 }
 
