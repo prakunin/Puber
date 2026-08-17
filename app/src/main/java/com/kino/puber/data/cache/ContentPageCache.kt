@@ -61,6 +61,10 @@ class ContentPageCache(
      */
     private val seenWatchStateVersions = ConcurrentHashMap<String, Long>()
 
+    /**
+     * @param watchStateVersion the index version the page about to be stored under [key] is filtered
+     * against, or [INDEX_INDEPENDENT] for a page whose contents the index cannot decide.
+     */
     fun sectionPage(
         key: String,
         watchStateVersion: Long,
@@ -84,7 +88,17 @@ class ContentPageCache(
     ): Flow<Cached<PaginatedResponse<History>>> =
         history.load(key = CacheKeys.historyPage(FIRST_PAGE), force = force, loader = loader)
 
-    private companion object {
-        const val FIRST_PAGE = 1
+    companion object {
+        /**
+         * The version to pass for a page the watch-state index cannot decide the contents of.
+         *
+         * Never a real version — those start at zero and only ever rise — so a key first read under
+         * it never sees a move, and never forces a read it has nothing to gain from. It is the
+         * caller that knows whether its page depends on the index; see `ContentListInteractor`,
+         * where hiding watched titles is what decides that and is itself part of the key.
+         */
+        const val INDEX_INDEPENDENT: Long = -1L
+
+        private const val FIRST_PAGE = 1
     }
 }

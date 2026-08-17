@@ -196,6 +196,7 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
      */
     @Test
     fun observeFirstPage_revalidatesWhenTheWatchStateIndexHasMoved() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
         val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
         val firstPage = page(item(id = 1, title = "Before"))
         val refreshedPage = page(item(id = 2, title = "After"))
@@ -207,6 +208,28 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
 
         assertEquals(listOf(firstPage, refreshedPage), observedPages(config))
         coVerify(exactly = 2) { api.getItems("movie", "updated", 1, null, null) }
+    }
+
+    /**
+     * The index decides page *membership* only while watched titles are hidden — `fetchFilteredPage`
+     * does not consult it otherwise, and `hideWatched` is part of the cache key, so an unfiltered
+     * page is index-independent by construction. Forcing a read for one would spend a request per
+     * section on every catalogue tab entered after any playback, for a page nothing about the move
+     * could have changed.
+     */
+    @Test
+    fun observeFirstPage_withWatchedTitlesShown_doesNotRevalidateWhenTheIndexMoves() = runTest {
+        val config = SectionConfig(id = "fresh", title = "Fresh", type = "movie", sort = "updated")
+        val firstPage = page(item(id = 1, title = "Before"))
+        val refreshedPage = page(item(id = 2, title = "After"))
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns Result.success(firstPage) andThen
+            Result.success(refreshedPage)
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        watchStateVersion.value = 1L
+
+        assertEquals(listOf(firstPage), observedPages(config))
+        coVerify(exactly = 1) { api.getItems("movie", "updated", 1, null, null) }
     }
 
     @Test

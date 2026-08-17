@@ -68,7 +68,17 @@ internal class ContentListInteractor(
         val preferences = navigationPreferencesRepository.contentPreferences.value
         return contentPageCache.sectionPage(
             key = CacheKeys.section(cacheKey(config, preferences.showAnime, preferences.hideWatched)),
-            watchStateVersion = watchStateRepository.version.value,
+            // Only a page filtered against the index is baked against a version of it — see
+            // [hideWatchedEnabled] and [fetchFilteredPage], which does not consult the index at all
+            // otherwise, and the watched marks an unfiltered page draws come from the index at
+            // mapping time rather than from the stored payload. `hideWatched` is part of the key, so
+            // such a page is index-independent by construction, and forcing a read for it would cost
+            // a request per section on every catalogue tab entered after any playback.
+            watchStateVersion = if (preferences.hideWatched) {
+                watchStateRepository.version.value
+            } else {
+                ContentPageCache.INDEX_INDEPENDENT
+            },
             force = force,
         ) {
             loadPage(config, page = FIRST_PAGE)
