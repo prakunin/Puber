@@ -1,25 +1,27 @@
 package com.kino.puber.domain.interactor.contentlist
 
-import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.data.api.KinoPubApiClient
-import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isAnime
+import com.kino.puber.data.cache.CacheKeys
+import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentPageCache
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.time.Duration.Companion.minutes
 
 internal class ContentListInteractor(
     private val api: KinoPubApiClient,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val watchStateRepository: WatchStateRepository,
     private val itemDetailsRepository: ItemDetailsRepository,
+    private val contentPageCache: ContentPageCache,
 ) {
 
     private val freshPagers = ConcurrentHashMap<String, FreshSectionPager>()
@@ -46,39 +48,69 @@ internal class ContentListInteractor(
     val hideWatchedEnabled: Boolean
         get() = navigationPreferencesRepository.contentPreferences.value.hideWatched
 
+    /**
+     * The first page of a section: whatever is stored is emitted at once, and the network is
+     * consulted behind it when the entry is stale, when the watch-state index has moved, or when
+     * [force] says the caller knows the server's answer has changed.
+     */
+    fun observeFirstPage(
+        config: SectionConfig,
+        force: Boolean = false,
+    ): Flow<Cached<PaginatedResponse<Item>>> {
+        // A fresh section's page one is also what primes its FreshSectionPager: the pager builds
+        // page two out of the state page one left behind, and refuses a cursor it never issued.
+        // Served from the store, the section would draw its first page and then fail on its second.
+        if (config.shortcutTypes.isNotEmpty()) {
+            return flow {
+                emit(Cached.Value(loadPage(config, page = FIRST_PAGE), isStale = false))
+            }
+        }
+        val preferences = navigationPreferencesRepository.contentPreferences.value
+        return contentPageCache.sectionPage(
+            key = CacheKeys.section(cacheKey(config, preferences.showAnime, preferences.hideWatched)),
+            watchStateVersion = watchStateRepository.version.value,
+            force = force,
+        ) {
+            loadPage(config, page = FIRST_PAGE)
+        }
+    }
+
     suspend fun loadPage(config: SectionConfig, page: Int): PaginatedResponse<Item> {
-        // Kept ahead of the fresh-section branch below so the version bookkeeping happens on any
-        // page load, whichever kind of section asked for it.
-        dropFirstPageCacheIfWatchStateMoved()
         if (config.shortcutTypes.isNotEmpty()) {
             return freshPagers
                 .computeIfAbsent(config.id) { FreshSectionPager(api, config) }
                 .loadPage(page)
         }
         val preferences = navigationPreferencesRepository.contentPreferences.value
-        val showAnime = preferences.showAnime
-        val hideWatched = preferences.hideWatched
-        if (page == 1) {
-            val cacheKey = listOf(
-                KinoPubConfig.CURRENT_API_DOMAIN,
-                config.id,
-                config.shortcut.orEmpty(),
-                config.type,
-                config.shortcutTypes.joinToString(separator = ",") { it.value },
-                config.sort,
-                config.quality,
-                config.genre.orEmpty(),
-                config.requiredGenreId,
-                config.animeFilterMode,
-                showAnime,
-                hideWatched,
-            ).joinToString(separator = "_")
-            return firstPageCache.getOrPut(cacheKey) {
-                fetchFilteredPage(config, page, showAnime, hideWatched)
-            }
-        }
-        return fetchFilteredPage(config, page, showAnime, hideWatched)
+        return fetchFilteredPage(config, page, preferences.showAnime, preferences.hideWatched)
     }
+
+    /**
+     * Everything that decides what a page contains, so flipping one of them cannot serve another's
+     * cache.
+     *
+     * `KinoPubConfig.CURRENT_API_DOMAIN` is deliberately absent, though the in-memory cache this
+     * replaced had it: a domain switch goes through `ApiDomainInteractor.clearDomainSensitiveCaches`,
+     * which empties the whole table and moves the store generation every cached feed already watches.
+     * Kept in the key, the domain would only leave dead rows behind.
+     */
+    private fun cacheKey(
+        config: SectionConfig,
+        showAnime: Boolean,
+        hideWatched: Boolean,
+    ): String = listOf(
+        config.id,
+        config.shortcut.orEmpty(),
+        config.type,
+        config.shortcutTypes.joinToString(separator = ",") { it.value },
+        config.sort,
+        config.quality,
+        config.genre.orEmpty(),
+        config.requiredGenreId,
+        config.animeFilterMode,
+        showAnime,
+        hideWatched,
+    ).joinToString(separator = "_")
 
     private suspend fun fetchFilteredPage(
         config: SectionConfig,
@@ -149,31 +181,14 @@ internal class ContentListInteractor(
         return itemDetailsRepository.getItemDetailsCacheOnly(id)
     }
 
+    /** Drops the pagination cursors the fresh-section pagers hold. */
     fun invalidateFirstPageCache() {
-        firstPageCache.clear()
         freshPagers.clear()
     }
 
-    /**
-     * Pages are cached with the watch state they were filtered against baked in. Putting the index
-     * version in the cache key would leave an entry behind on every write, so the cache is dropped
-     * once when the version moves instead — which also covers a change that happened while every
-     * list was closed and nothing was listening.
-     */
-    private fun dropFirstPageCacheIfWatchStateMoved() {
-        val version = watchStateRepository.version.value
-        if (cachedWatchStateVersion.getAndSet(version) != version) {
-            firstPageCache.clear()
-        }
-    }
+    private companion object {
+        const val FIRST_PAGE = 1
 
-    companion object {
-        private val cachedWatchStateVersion = java.util.concurrent.atomic.AtomicLong(0L)
-
-        private const val MAX_PAGES_PER_STEP = 5
-
-        private val firstPageCache = TypedTtlCacheImpl<String, PaginatedResponse<Item>>(
-            defaultTtl = 3.minutes,
-        )
+        const val MAX_PAGES_PER_STEP = 5
     }
 }

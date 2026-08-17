@@ -8,6 +8,8 @@ import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.PaginatedResponse
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import kotlinx.coroutines.Dispatchers
@@ -41,19 +43,52 @@ internal abstract class ContentListPagingVM<VS>(
     private var cachedInput: List<Item>? = null
     private var cachedOutput: List<VideoItemUIState> = emptyList()
 
+    /**
+     * Set by [refreshFirstPage] and consumed by the next first-page load, which still draws the
+     * stored page first and merely guarantees the request behind it.
+     */
+    private var forceNextFirstPage = false
+
     /** How this list names itself in the log — "Section", "Show all". */
     protected abstract val logName: String
 
+    /**
+     * Restarts paging and guarantees that the first page is asked of the server rather than only of
+     * the cache.
+     *
+     * This is what every signal that knows the server's answer has changed goes through — a retry, a
+     * return from details or the player with a content change, a display-setting flip. The stored
+     * page is still drawn first; what the flag adds is the request behind it.
+     */
+    fun refreshFirstPage() {
+        forceNextFirstPage = true
+        resetPaging()
+    }
+
     final override fun onLoadFirstPage() {
-        currentPage = 0
-        emptyPageChain = 0
-        resumeRounds = 0
-        publishedAnyItems = false
-        pagingLaunch(errorHandlerGeneral) { loadPage(page = 1, isFirstPage = true) }
+        val force = forceNextFirstPage
+        forceNextFirstPage = false
+        pagingLaunch(errorHandlerGeneral) {
+            interactor.observeFirstPage(config, force = force).collect { cached ->
+                when (cached) {
+                    is Cached.Value -> publish(cached.value, isFirstPage = true)
+                    // Nobody asked for this refresh and there is already content on screen, so a
+                    // failure is not the user's problem: the stored page stands.
+                    is Cached.RefreshFailed -> log(
+                        cached.error,
+                        "$logName ${config.id}: background refresh failed",
+                    )
+                }
+            }
+        }
     }
 
     final override fun onLoadNextPage(key: Item?) {
-        pagingLaunch(errorHandlerPaging) { loadPage(page = currentPage + 1, isFirstPage = false) }
+        pagingLaunch(errorHandlerPaging) { loadNextPage(page = currentPage + 1) }
+    }
+
+    private suspend fun loadNextPage(page: Int) {
+        publish(interactor.loadPage(config, page), isFirstPage = false)
     }
 
     /**
@@ -61,9 +96,17 @@ internal abstract class ContentListPagingVM<VS>(
      * several in a row. The paginator is told to keep walking in that case rather than reading the
      * blank page as the end of the list — but only so far, or one load could walk the catalogue in
      * a single burst. What is left over is picked up by [resumeWalkAfterPause].
+     *
+     * @param isFirstPage a page-one publication — of which there are now two per load, the stored
+     * one and the fresh one. Each starts its own walk, so the counters reset here rather than once
+     * per load: counted together, two pages emptied by filtering would read as four.
      */
-    private suspend fun loadPage(page: Int, isFirstPage: Boolean) {
-        val response = interactor.loadPage(config, page)
+    private fun publish(response: PaginatedResponse<Item>, isFirstPage: Boolean) {
+        if (isFirstPage) {
+            emptyPageChain = 0
+            resumeRounds = 0
+            publishedAnyItems = false
+        }
         currentPage = response.pagination.current
         val serverHasMore = currentPage < response.pagination.total
         if (response.items.isEmpty()) {
@@ -121,7 +164,7 @@ internal abstract class ContentListPagingVM<VS>(
         pagingLaunch(errorHandlerPaging) {
             delay(WALK_RESUME_PAUSE)
             emptyPageChain = 0
-            loadPage(page = resumeFrom, isFirstPage = false)
+            loadNextPage(page = resumeFrom)
         }
     }
 

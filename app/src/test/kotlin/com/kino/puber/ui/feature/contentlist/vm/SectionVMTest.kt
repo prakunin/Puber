@@ -12,6 +12,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -26,9 +27,11 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -55,6 +58,7 @@ class SectionVMTest {
             paginator.sideEffects.collect(sideEffects::add)
         }
         coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage()
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, coordinator, dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -98,6 +102,7 @@ class SectionVMTest {
         coEvery {
             savedItemInteractor.setSaved(itemId = 42, isSeriesLike = false, saved = false)
         } returns Result.success(false)
+        servesFirstPageFromTheNetwork(interactor)
         val holding = createVM(
             paginator = holdingPaginator,
             config = holdingConfig,
@@ -144,6 +149,7 @@ class SectionVMTest {
         val coordinator = ContentListRefreshCoordinator()
         val sectionConfig = config("popular")
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(7))
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, sectionConfig, interactor, coordinator, dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -152,6 +158,36 @@ class SectionVMTest {
         testScheduler.advanceUntilIdle()
 
         coVerify(exactly = 2) { interactor.loadPage(sectionConfig, page = 1) }
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    /**
+     * A refresh is one of the signals that knows the server's answer has changed, so it may not
+     * settle for whatever the store happens to hold: the stored page is still drawn, and the request
+     * behind it is guaranteed. Opening the section is not such a signal, and asks for nothing when
+     * the entry is fresh.
+     */
+    @Test
+    fun refresh_forcesTheFirstPageRead_whereOpeningTheSectionDoesNot() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val coordinator = ContentListRefreshCoordinator()
+        val sectionConfig = config("popular")
+        coEvery { interactor.loadPage(any(), page = 1) } returns page(item(7))
+        servesFirstPageFromTheNetwork(interactor)
+        val vm = createVM(paginator, sectionConfig, interactor, coordinator, dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+        verify(exactly = 1) { interactor.observeFirstPage(sectionConfig, force = false) }
+
+        vm.onAction(CommonAction.RetryClicked)
+        testScheduler.advanceUntilIdle()
+        coordinator.requestRefresh()
+        testScheduler.advanceUntilIdle()
+
+        verify(exactly = 2) { interactor.observeFirstPage(sectionConfig, force = true) }
         vm.testCancelScope()
         paginator.close()
     }
@@ -174,6 +210,7 @@ class SectionVMTest {
         every { interactor.displaySettingsChanges } returns emptyFlow()
         every { interactor.watchStateChanges } returns emptyFlow()
         every { mapper.mapShortItemList(listOf(item)) } returns listOf(mappedItem)
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(
             paginator = paginator,
             config = config("anime"),
@@ -202,6 +239,7 @@ class SectionVMTest {
         val visible = item(id = 7)
         coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage(current = 1, total = 3)
         coEvery { interactor.loadPage(any(), page = 2) } returns page(visible, current = 2, total = 3)
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -223,6 +261,7 @@ class SectionVMTest {
         coEvery { interactor.loadPage(any(), any()) } answers {
             emptyPage(current = secondArg<Int>(), total = 100)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -253,6 +292,7 @@ class SectionVMTest {
                 page(visible, current = requested, total = 100)
             }
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -282,6 +322,7 @@ class SectionVMTest {
             pagesRead++
             emptyPage(current = secondArg<Int>(), total = 10_000)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -319,6 +360,7 @@ class SectionVMTest {
                 emptyPage(current = requested, total = 10_000)
             }
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
 
         vm.testOnStart()
@@ -345,6 +387,7 @@ class SectionVMTest {
             pagesRead += requested
             emptyPage(current = requested, total = 100)
         }
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
         vm.testOnStart()
         testScheduler.runCurrent()
@@ -357,6 +400,101 @@ class SectionVMTest {
         // The page the first walk was paused on is read once — by the restarted walk alone.
         val firstResumedPage = maxEmptyPageChainUnderTest + 2
         assertEquals(1, pagesRead.count { it == firstResumedPage })
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun firstPage_drawsTheCachedPageThenTheFreshOneWithNoLoadingInBetween() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1, 2),
+        )
+        val states = mutableListOf<SectionState>()
+        // Unconfined so the recorder runs the moment a state is published. Queued behind the
+        // scheduler it would sample the state flow instead, and a conflated sequence cannot answer
+        // what appeared between two publications — which is the whole claim under test.
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            vm.testStateFlow.collect(states::add)
+        }
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(page(item(1)), isStale = true))
+        testScheduler.advanceUntilIdle()
+        emissions.emit(Cached.Value(page(item(2)), isStale = false))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(
+            listOf(1, 2),
+            states.filterIsInstance<SectionState.Content>().map { it.items.single().id },
+        )
+        val firstContentAt = states.indexOfFirst { it is SectionState.Content }
+        assertEquals(
+            emptyList<SectionState>(),
+            states.drop(firstContentAt).filterIsInstance<SectionState.Loading>(),
+        )
+        collector.cancel()
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun firstPage_aFailedBackgroundRefreshLeavesTheCachedContentStanding() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        val vm = createVM(
+            paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
+            mapper = mapperFor(1),
+        )
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(page(item(1)), isStale = true))
+        testScheduler.advanceUntilIdle()
+        emissions.emit(Cached.RefreshFailed(IllegalStateException("network")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(1), (vm.testStateValue as SectionState.Content).items.map { it.id })
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun firstPage_walkCountersResetBetweenTheCachedAndTheFreshEmission() = runTest {
+        // Both emissions are first pages, and each starts a walk of its own. Counted as one, the
+        // fresh page inherits a budget the cached page has already spent and the section gives up
+        // without looking past page one.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
+        val pagesRead = mutableListOf<Int>()
+        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        coEvery { interactor.loadPage(any(), any()) } answers {
+            val requested = secondArg<Int>()
+            pagesRead += requested
+            emptyPage(current = requested, total = 100)
+        }
+        val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 100), isStale = true))
+        testScheduler.advanceUntilIdle()
+        val walkedForTheCachedPage = pagesRead.toList()
+        emissions.emit(Cached.Value(emptyPage(current = 1, total = 100), isStale = false))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(walkedForTheCachedPage, pagesRead.drop(walkedForTheCachedPage.size))
         vm.testCancelScope()
         paginator.close()
     }
@@ -383,6 +521,7 @@ class SectionVMTest {
         every { interactor.watchStateChanges } returns watchStateChanges
         every { interactor.hideWatchedEnabled } returns false
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        servesFirstPageFromTheNetwork(interactor)
         val mapper = mockk<VideoItemUIMapper>(relaxed = true)
         every { mapper.mapShortItemList(any()) } returns listOf(videoItem(1))
         val vm = createVM(
@@ -419,6 +558,7 @@ class SectionVMTest {
         every { interactor.watchStateChanges } returns watchStateChanges
         every { interactor.hideWatchedEnabled } returns true
         coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+        servesFirstPageFromTheNetwork(interactor)
         val vm = createVM(paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher)
         vm.testOnStart()
         testScheduler.advanceUntilIdle()
@@ -433,6 +573,17 @@ class SectionVMTest {
         verify(exactly = 0) { interactor.invalidateFirstPageCache() }
         vm.testCancelScope()
         paginator.close()
+    }
+
+    /**
+     * Wires the cached-first-page flow onto the page loads these tests stub: one fresh emission per
+     * subscription, which is what the interactor's own loader produces when nothing is stored.
+     */
+    private fun servesFirstPageFromTheNetwork(interactor: ContentListInteractor) {
+        every { interactor.observeFirstPage(any(), any()) } answers {
+            val config = firstArg<SectionConfig>()
+            flow { emit(Cached.Value(interactor.loadPage(config, page = 1), isStale = false)) }
+        }
     }
 
     private fun createVM(
