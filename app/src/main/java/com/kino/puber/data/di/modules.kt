@@ -22,6 +22,7 @@ import com.kino.puber.data.repository.IDeviceSettingsRepository
 import com.kino.puber.data.repository.IKinoPubRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.KinoPubRepository
+import com.kino.puber.data.cache.ContentPageCache
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.data.repository.RoomPersistentPayloadStore
@@ -92,6 +93,7 @@ val repositoryModule = module {
     single { get<PuberDatabase>().watchStateSyncDao() }
     single { get<PuberDatabase>().cachedPayloadDao() }
     single<PersistentPayloadStore> { RoomPersistentPayloadStore(dao = get()) }
+    single { ContentPageCache(store = get()) }
     single { get<PuberDatabase>().transactions() }
     single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
     single<androidx.media3.datasource.cache.Cache> {
