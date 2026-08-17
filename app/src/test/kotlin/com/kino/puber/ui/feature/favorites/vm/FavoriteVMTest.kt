@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.favorites.FavoritesInteractor
 import com.kino.puber.ui.feature.favorites.model.FavoriteItemUIMapper
@@ -23,6 +24,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -49,7 +51,9 @@ class FavoriteVMTest {
         interactor = mockk(relaxed = true)
         savedItemInteractor = mockk(relaxed = true)
         mapper = mockk(relaxed = true)
-        coEvery { interactor.getWatchlist() } returns listOf(item())
+        coEvery { interactor.observeWatchlist(force = any()) } returns
+            flowOf(Cached.Value(listOf(item()), isStale = false))
+        coEvery { interactor.sortByRecentlyPlayed(any()) } answers { firstArg() }
         coEvery { interactor.getItemDetails(42) } returns item()
         every { mapper.mapToState(any(), any()) } returns FavoriteViewState.Content(
             gridState = VideoGridUIState(emptyList()),
@@ -79,7 +83,8 @@ class FavoriteVMTest {
 
         listener.captured(ContentChangeSet.single(42, ContentChangeType.Watched))
 
-        coVerify(exactly = 2) { interactor.getWatchlist() }
+        coVerify(exactly = 1) { interactor.observeWatchlist(force = false) }
+        coVerify(exactly = 1) { interactor.observeWatchlist(force = true) }
     }
 
     private fun createVM() = FavoriteVM(router, interactor, savedItemInteractor, mapper)

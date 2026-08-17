@@ -8,6 +8,9 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.core.content.ContentChangeSet
+import com.kino.puber.core.logger.log
+import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.favorites.FavoritesInteractor
 import com.kino.puber.ui.feature.favorites.model.FavoriteItemUIMapper
@@ -28,19 +31,25 @@ internal class FavoriteVM(
         loadData()
     }
 
-    private fun loadData() {
+    private fun loadData(force: Boolean = false) {
         launch {
-            val items = interactor.getWatchlist()
-            val selectedItem = items.firstOrNull()?.let { item ->
-                interactor.getItemDetails(item.id)
+            interactor.observeWatchlist(force = force).collect { cached ->
+                when (cached) {
+                    is Cached.Value -> publish(interactor.sortByRecentlyPlayed(cached.value))
+                    is Cached.RefreshFailed -> log(cached.error, "Failed to refresh the watching list")
+                }
             }
-            updateViewState(
-                favoriteItemUIMapper.mapToState(
-                    items = items,
-                    selectedItem = selectedItem,
-                )
-            )
         }
+    }
+
+    private suspend fun publish(items: List<Item>) {
+        val selectedItem = items.firstOrNull()?.let { item -> interactor.getItemDetails(item.id) }
+        updateViewState(
+            favoriteItemUIMapper.mapToState(
+                items = items,
+                selectedItem = selectedItem,
+            )
+        )
     }
 
     override fun onAction(action: UIAction) {
@@ -52,7 +61,7 @@ internal class FavoriteVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-            is CommonAction.RetryClicked -> loadData()
+            is CommonAction.RetryClicked -> loadData(force = true)
             else -> super.onAction(action)
         }
     }
@@ -75,7 +84,7 @@ internal class FavoriteVM(
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
         if (changes == null || changes.isEmpty) return
-        loadData()
+        loadData(force = true)
     }
 
     private fun onItemFocused(selectedItem: VideoItemUIState) {
@@ -100,7 +109,7 @@ internal class FavoriteVM(
                 isSeriesLike = item.isSeriesLike,
                 saved = saved,
             ).getOrThrow()
-            loadData()
+            loadData(force = true)
         }
     }
 }
