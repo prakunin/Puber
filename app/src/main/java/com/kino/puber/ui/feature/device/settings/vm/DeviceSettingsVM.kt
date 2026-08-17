@@ -33,6 +33,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
 import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
+import com.kino.puber.ui.feature.main.model.TabType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 
@@ -95,6 +96,12 @@ internal class DeviceSettingsVM(
                 if (currentDevice.isSuccess) {
                     val device = currentDevice.getOrThrow()
                     val contentPreferences = navigationPreferencesRepository.contentPreferences.value
+                    val navigationMode = navigationPreferencesRepository.getNavigationMode()
+                    val startupTabOptions =
+                        navigationPreferencesRepository.getStartupTabOptions(navigationMode)
+                    val startupTab = navigationPreferencesRepository.getStartupTab()
+                        .takeIf(startupTabOptions::contains)
+                        ?: TabType.Home
                     updateViewState(
                         stateValue.copy(
                             state = DeviceSettingsState.Success(
@@ -111,7 +118,9 @@ internal class DeviceSettingsVM(
                                 showMarkWatchedButton = playerPreferencesRepository.showMarkWatchedButton,
                                 preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
                                 watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
-                                navigationMode = navigationPreferencesRepository.getNavigationMode(),
+                                navigationMode = navigationMode,
+                                startupTab = startupTab,
+                                startupTabOptions = startupTabOptions,
                                 showCartoonsTab = contentPreferences.showCartoonsTab,
                                 showAnimeTab = contentPreferences.showAnimeTab,
                                 showAnime = contentPreferences.showAnime,
@@ -145,6 +154,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
+            is DeviceSettingsActions.ChangeStartupTab -> onChangeStartupTab(action.tab)
             DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
             DeviceSettingsActions.ToggleAnimeTab -> toggleAnimeTab()
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
@@ -341,7 +351,31 @@ internal class DeviceSettingsVM(
         if (currentState !is DeviceSettingsState.Success) return
         if (currentState.navigationMode == mode) return
         navigationPreferencesRepository.setNavigationMode(mode)
+        val startupTabOptions = navigationPreferencesRepository.getStartupTabOptions(mode)
+        val startupTab = currentState.startupTab
+            .takeIf(startupTabOptions::contains)
+            ?: TabType.Home
+        if (startupTab != currentState.startupTab) {
+            navigationPreferencesRepository.setStartupTab(startupTab)
+        }
+        updateViewState(
+            stateValue.copy(
+                state = currentState.copy(
+                    navigationMode = mode,
+                    startupTab = startupTab,
+                    startupTabOptions = startupTabOptions,
+                )
+            )
+        )
         showMessage(resources.getString(R.string.device_settings_restart_required))
+    }
+
+    private fun onChangeStartupTab(tab: TabType) {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        if (tab !in currentState.startupTabOptions || currentState.startupTab == tab) return
+        navigationPreferencesRepository.setStartupTab(tab)
+        updateViewState(stateValue.copy(state = currentState.copy(startupTab = tab)))
     }
 
     private fun toggleCartoonsTab() {

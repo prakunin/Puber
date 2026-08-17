@@ -38,7 +38,8 @@ internal class MainUIMapper(
         val tabs = navPrefs.getVisibleTabs(mode)
         val selectedTab = previousSelectedTab
             ?.takeIf(tabs::contains)
-            ?: getDefaultSelectedTab(mode)
+            ?: navPrefs.getStartupTab().takeIf(tabs::contains)
+            ?: TabType.Home
         return MainViewState(
             navigationMode = mode,
             tabs = tabs.map { type ->
@@ -52,10 +53,6 @@ internal class MainUIMapper(
             },
             selectedTab = selectedTab,
         )
-    }
-
-    private fun getDefaultSelectedTab(mode: NavigationMode): TabType {
-        return if (mode == NavigationMode.TopTabs) TabType.Home else TabType.Favourites
     }
 
     private val TabType.icon: ImageVector

@@ -78,7 +78,8 @@ internal class MainUIMapperTest {
         every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
         every {
             navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
-        } returns listOf(TabType.Favourites, TabType.History, TabType.Movies)
+        } returns listOf(TabType.Home, TabType.Favourites, TabType.History, TabType.Movies)
+        every { navPrefs.getStartupTab() } returns TabType.Home
         val screens = mockk<Screens>()
         every { screens.history(any()) } answers { HistoryScreen(firstArg()) }
         val sideDrawerMapper = createMapper(navPrefs, screens)
@@ -86,12 +87,12 @@ internal class MainUIMapperTest {
         val state = sideDrawerMapper.buildViewState()
 
         assertEquals(NavigationMode.SideDrawer, state.navigationMode)
-        assertEquals(TabType.Favourites, state.selectedTab)
+        assertEquals(TabType.Home, state.selectedTab)
         assertEquals(
-            listOf(TabType.Favourites, TabType.History, TabType.Movies),
+            listOf(TabType.Home, TabType.Favourites, TabType.History, TabType.Movies),
             state.tabs.map(MainTab::type),
         )
-        assertEquals(listOf(true, false, false), state.tabs.map(MainTab::isSelected))
+        assertEquals(listOf(true, false, false, false), state.tabs.map(MainTab::isSelected))
         assertHistoryTab(
             tab = sideDrawerMapper.buildTabContent(
                 type = TabType.History,
@@ -144,19 +145,36 @@ internal class MainUIMapperTest {
     }
 
     @Test
-    fun buildViewState_fallsBackToModeStartWhenSelectedTabDisappears() {
+    fun buildViewState_usesConfiguredStartupTab() {
         val navPrefs = mockk<NavigationPreferencesRepository>()
         every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
         every {
             navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
-        } returns listOf(TabType.Favourites, TabType.Movies, TabType.Settings)
+        } returns listOf(TabType.Home, TabType.Favourites, TabType.Movies)
+        every { navPrefs.getStartupTab() } returns TabType.Favourites
+        val stateMapper = createMapper(navPrefs)
+
+        val state = stateMapper.buildViewState()
+
+        assertEquals(TabType.Favourites, state.selectedTab)
+        assertEquals(listOf(false, true, false), state.tabs.map(MainTab::isSelected))
+    }
+
+    @Test
+    fun buildViewState_fallsBackToHomeWhenSelectedTabDisappears() {
+        val navPrefs = mockk<NavigationPreferencesRepository>()
+        every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
+        every {
+            navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
+        } returns listOf(TabType.Home, TabType.Favourites, TabType.Movies, TabType.Settings)
+        every { navPrefs.getStartupTab() } returns TabType.Anime
         val stateMapper = createMapper(navPrefs)
 
         val state = stateMapper.buildViewState(previousSelectedTab = TabType.Anime)
 
-        assertEquals(TabType.Favourites, state.selectedTab)
+        assertEquals(TabType.Home, state.selectedTab)
         assertEquals(
-            listOf(true, false, false),
+            listOf(true, false, false, false),
             state.tabs.map(MainTab::isSelected),
         )
     }

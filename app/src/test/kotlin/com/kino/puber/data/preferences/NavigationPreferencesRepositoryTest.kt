@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test
 
 private const val TOP_TABS_KEY = "toptabs_tabs_visible"
 private const val SIDE_DRAWER_KEY = "drawer_tabs_visible"
+private const val STARTUP_TAB_KEY = "startup_tab"
 private const val TOP_TABS_SCHEMA_VERSION_KEY = "toptabs_schema_version"
 private const val SHOW_CARTOONS_TAB_KEY = "show_cartoons_tab"
 private const val SHOW_ANIME_TAB_KEY = "show_anime_tab"
@@ -31,6 +32,43 @@ private const val LEGACY_WATCHED_INDICATORS_KEY = "watched_indicators_enabled"
 private const val HISTORY_SCHEMA_VERSION = 1
 
 internal class NavigationPreferencesRepositoryTest {
+
+    @Test
+    fun startupTab_defaultsToHomeWithoutWritingPreferences() {
+        val fixture = fixture()
+
+        assertEquals(TabType.Home, fixture.repository.getStartupTab())
+        assertTrue(fixture.preferences.transactions.isEmpty())
+    }
+
+    @Test
+    fun startupTab_persistsTheSelectedTab() {
+        val fixture = fixture()
+
+        fixture.repository.setStartupTab(TabType.Favourites)
+
+        assertEquals(TabType.Favourites, fixture.repository.getStartupTab())
+        assertEquals(TabType.Favourites.name, fixture.preferences.values[STARTUP_TAB_KEY])
+    }
+
+    @Test
+    fun startupTab_fallsBackToHomeForAnUnknownStoredValue() {
+        val fixture = fixture(startupTab = "RemovedTab")
+
+        assertEquals(TabType.Home, fixture.repository.getStartupTab())
+    }
+
+    @Test
+    fun startupTabOptions_excludeUtilityDestinations() {
+        val fixture = fixture()
+
+        val options = fixture.repository.getStartupTabOptions(NavigationMode.SideDrawer)
+
+        assertFalse(TabType.Search in options)
+        assertFalse(TabType.Settings in options)
+        assertTrue(TabType.Home in options)
+        assertTrue(TabType.Favourites in options)
+    }
 
     @Test
     fun defaultSideDrawer_includesHomeInEnabledDeclarationOrder() {
@@ -412,6 +450,7 @@ internal class NavigationPreferencesRepositoryTest {
     private fun fixture(
         storedTabs: String? = null,
         storedDrawerTabs: String? = null,
+        startupTab: String? = null,
         showCartoonsTab: Boolean? = null,
         showAnimeTab: Boolean? = null,
         showAnime: Boolean? = null,
@@ -422,6 +461,7 @@ internal class NavigationPreferencesRepositoryTest {
         val preferences = TestPreferences()
         storedTabs?.let { preferences.values[TOP_TABS_KEY] = it }
         storedDrawerTabs?.let { preferences.values[SIDE_DRAWER_KEY] = it }
+        startupTab?.let { preferences.values[STARTUP_TAB_KEY] = it }
         showCartoonsTab?.let { preferences.values[SHOW_CARTOONS_TAB_KEY] = it }
         showAnimeTab?.let { preferences.values[SHOW_ANIME_TAB_KEY] = it }
         showAnime?.let { preferences.values[SHOW_ANIME_KEY] = it }

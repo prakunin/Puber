@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.ui.feature.main.model.TabType
 
 @Immutable
 internal data class DeviceSettingsViewState(
@@ -32,6 +33,8 @@ internal sealed interface DeviceSettingsState {
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
         val navigationMode: NavigationMode = NavigationMode.TopTabs,
+        val startupTab: TabType = TabType.Home,
+        val startupTabOptions: List<TabType> = listOf(TabType.Home),
         val showCartoonsTab: Boolean = false,
         val showAnimeTab: Boolean = false,
         val showAnime: Boolean = true,

@@ -12,6 +12,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
+import com.kino.puber.ui.feature.main.model.TabType
 
 private val previewDevice = DeviceUi(
     title = "Android TV",
@@ -127,6 +128,8 @@ private fun SuccessCollapsedPreview() = PuberTheme {
         state = DeviceSettingsState.Success(
             settings = previewAllSettings,
             device = previewDevice,
+            startupTab = TabType.Favourites,
+            startupTabOptions = listOf(TabType.Home, TabType.Favourites, TabType.Movies),
         ),
         apiDomain = previewApiDomain,
     )

@@ -55,6 +55,21 @@ class NavigationPreferencesRepository(context: Context) {
         prefs.edit().putString(KEY_NAVIGATION_MODE, mode.name).apply()
     }
 
+    fun getStartupTab(): TabType {
+        val name = prefs.getString(KEY_STARTUP_TAB, TabType.Home.name)
+        return TabType.entries.find { it.name == name } ?: TabType.Home
+    }
+
+    fun setStartupTab(tab: TabType) {
+        prefs.edit().putString(KEY_STARTUP_TAB, tab.name).apply()
+    }
+
+    fun getStartupTabOptions(mode: NavigationMode): List<TabType> {
+        return getVisibleTabs(mode).filterNot { tab ->
+            tab == TabType.Search || tab == TabType.Settings
+        }
+    }
+
     fun getVisibleTabs(mode: NavigationMode): List<TabType> {
         if (mode == NavigationMode.TopTabs) {
             migrateTopTabsIfNeeded()
@@ -216,6 +231,7 @@ class NavigationPreferencesRepository(context: Context) {
     private companion object {
         const val PREFS_NAME = "navigation_preferences"
         const val KEY_NAVIGATION_MODE = "navigation_mode"
+        const val KEY_STARTUP_TAB = "startup_tab"
         const val KEY_DRAWER_TABS = "drawer_tabs_visible"
         const val KEY_TOP_TABS = "toptabs_tabs_visible"
         const val KEY_TOP_TABS_SCHEMA_VERSION = "toptabs_schema_version"

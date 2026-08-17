@@ -49,6 +49,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
+import com.kino.puber.ui.feature.main.model.TabType
 
 @Composable
 internal fun DeviceSettingsContent(
@@ -267,6 +268,23 @@ private fun DeviceSettingsList(
                 currentMode = state.navigationMode,
                 onModeSelected = { mode ->
                     onAction(DeviceSettingsActions.ChangeNavigationMode(mode))
+                },
+            )
+        }
+        item {
+            Text(
+                text = stringResource(R.string.settings_startup_tab),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        item {
+            StartupTabRadioGroup(
+                options = state.startupTabOptions,
+                currentTab = state.startupTab,
+                onTabSelected = { tab ->
+                    onAction(DeviceSettingsActions.ChangeStartupTab(tab))
                 },
             )
         }
@@ -604,6 +622,50 @@ private fun NavigationModeRadioGroup(
                 )
                 Text(
                     text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartupTabRadioGroup(
+    options: List<TabType>,
+    currentTab: TabType,
+    onTabSelected: (TabType) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+    ) {
+        options.forEach { tab ->
+            val isSelected = tab == currentTab
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .highlightOnFocus(isFocused)
+                    .selectable(
+                        selected = isSelected,
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = { onTabSelected(tab) },
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.RadioButton(
+                    selected = isSelected,
+                    onClick = null,
+                )
+                Text(
+                    text = stringResource(tab.title),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(start = 12.dp),
