@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,11 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -342,7 +340,6 @@ private fun sectionDescription(section: SettingsSection): String = stringResourc
 )
 
 @Composable
-@OptIn(ExperimentalComposeUiApi::class)
 private fun SettingsSectionContent(
     section: SettingsSection,
     state: DeviceSettingsState.Success,
@@ -355,45 +352,37 @@ private fun SettingsSectionContent(
     var expandedNavigationChoice by rememberSaveable(section) {
         mutableStateOf<NavigationChoice?>(null)
     }
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .focusRestorer()
-            .focusProperties {
-                @Suppress("DEPRECATION")
-                exit = { direction ->
-                    if (direction == FocusDirection.Left) {
-                        leftFocusRequester
-                    } else {
-                        FocusRequester.Default
-                    }
-                }
+    CompositionLocalProvider(LocalSettingsLeftFocusRequester provides leftFocusRequester) {
+        LazyColumn(
+            state = listState,
+            modifier = modifier
+                .focusRestorer()
+                .focusGroup(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            when (section) {
+                SettingsSection.General -> generalItems(state, onAction)
+                SettingsSection.Playback -> playbackItems(state, onAction)
+                SettingsSection.Content -> contentItems(state, onAction)
+                SettingsSection.Navigation -> navigationItems(
+                    state = state,
+                    onAction = onAction,
+                    listState = listState,
+                    leftFocusRequester = leftFocusRequester,
+                    expandedChoice = expandedNavigationChoice,
+                    onExpandedChoiceChange = { expandedNavigationChoice = it },
+                )
+                SettingsSection.Network -> networkItems(
+                    state,
+                    apiDomain,
+                    onAction,
+                    listState,
+                    leftFocusRequester,
+                )
+                SettingsSection.Data -> watchHistoryItems(state, onAction)
+                SettingsSection.Developer -> developerItems(state, onAction)
             }
-            .focusGroup(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        when (section) {
-            SettingsSection.General -> generalItems(state, onAction)
-            SettingsSection.Playback -> playbackItems(state, onAction)
-            SettingsSection.Content -> contentItems(state, onAction)
-            SettingsSection.Navigation -> navigationItems(
-                state = state,
-                onAction = onAction,
-                listState = listState,
-                leftFocusRequester = leftFocusRequester,
-                expandedChoice = expandedNavigationChoice,
-                onExpandedChoiceChange = { expandedNavigationChoice = it },
-            )
-            SettingsSection.Network -> networkItems(
-                state,
-                apiDomain,
-                onAction,
-                listState,
-                leftFocusRequester,
-            )
-            SettingsSection.Data -> watchHistoryItems(state, onAction)
-            SettingsSection.Developer -> developerItems(state, onAction)
         }
     }
 }

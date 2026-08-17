@@ -24,6 +24,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -55,6 +56,8 @@ import com.kino.puber.R
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 
+internal val LocalSettingsLeftFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
+
 @Composable
 internal fun SettingsListItem(
     headline: String,
@@ -67,8 +70,10 @@ internal fun SettingsListItem(
     onClick: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    val leftFocusRequester = LocalSettingsLeftFocusRequester.current
     val itemModifier = modifier
         .fillMaxWidth()
+        .returnFocusLeft(leftFocusRequester)
         .semantics {
             if (role != null || selected) this.selected = selected
             role?.let { this.role = it }
@@ -113,6 +118,14 @@ internal fun SettingsListItem(
         )
     }
 }
+
+@Suppress("DEPRECATION")
+private fun Modifier.returnFocusLeft(focusRequester: FocusRequester?): Modifier =
+    if (focusRequester == null) {
+        this
+    } else {
+        focusProperties { left = focusRequester }
+    }
 
 @Composable
 private fun SettingsListItemBody(
