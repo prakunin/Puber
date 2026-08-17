@@ -24,7 +24,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -87,9 +90,66 @@ class FavoriteVMTest {
         coVerify(exactly = 1) { interactor.observeWatchlist(force = true) }
     }
 
+    /**
+     * The grid must not wait for the side panel. `ItemDetailsRepository.getItemDetails` waits for
+     * the last emission of its own feed, which is the network whenever that entry is stale or
+     * absent — a cold start, exactly the case this cache exists for — so a watching list gated on
+     * it comes off disk in milliseconds and then sits behind a request before anything is drawn.
+     */
+    @Test
+    fun watchingRows_areDrawnBeforeTheDetailsCallSettles() {
+        val details = CompletableDeferred<Item>()
+        val grid = VideoGridUIState(emptyList())
+        val loadedPanel = VideoDetailsUIState.Loading.copy(id = 42, isLoading = false)
+        coEvery { interactor.getItemDetails(42) } coAnswers { details.await() }
+        every { mapper.mapToState(any(), null) } returns FavoriteViewState.Content(
+            gridState = grid,
+            selectedItem = VideoDetailsUIState.Loading,
+        )
+        every { mapper.mapSelectedItem(any(), any()) } returns loadedPanel
+
+        val vm = createVM().also { it.testOnStart() }
+
+        assertEquals(
+            FavoriteViewState.Content(grid, VideoDetailsUIState.Loading),
+            vm.testStateValue,
+        )
+
+        details.complete(item())
+
+        assertEquals(loadedPanel, (vm.testStateValue as FavoriteViewState.Content).selectedItem)
+    }
+
+    /**
+     * Every refresh signal lands in the same place, and two collections alive at once settle in
+     * whatever order their emissions arrive in — the forced one revalidating while the earlier one
+     * is still serving the stored list, so the older list can land last and win.
+     */
+    @Test
+    fun aSecondLoad_dropsTheCollectionItReplaces() {
+        val staleEmission = CompletableDeferred<Unit>()
+        val published = mutableListOf<List<Int>>()
+        coEvery { interactor.observeWatchlist(force = false) } returns flow {
+            staleEmission.await()
+            emit(Cached.Value(listOf(item(id = 1)), isStale = false))
+        }
+        coEvery { interactor.observeWatchlist(force = true) } returns
+            flowOf(Cached.Value(listOf(item(id = 2)), isStale = false))
+        every { mapper.mapToState(any(), any()) } answers {
+            published += firstArg<List<Item>>().map(Item::id)
+            FavoriteViewState.Content(VideoGridUIState(emptyList()), VideoDetailsUIState.Loading)
+        }
+        val vm = createVM().also { it.testOnStart() }
+
+        vm.onAction(CommonAction.RetryClicked)
+        staleEmission.complete(Unit)
+
+        assertEquals(listOf(listOf(2)), published)
+    }
+
     private fun createVM() = FavoriteVM(router, interactor, savedItemInteractor, mapper)
 
-    private fun item() = Item(id = 42, title = "Series", type = ItemType.SERIAL)
+    private fun item(id: Int = 42) = Item(id = id, title = "Series", type = ItemType.SERIAL)
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
 }

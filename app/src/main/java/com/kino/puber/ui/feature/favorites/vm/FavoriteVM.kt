@@ -25,14 +25,22 @@ internal class FavoriteVM(
 ) : PuberVM<FavoriteViewState>(router) {
 
     override val initialViewState = FavoriteViewState.Loading
+    private var loadDataJob: Job? = null
     private var focusedItemJob: Job? = null
 
     override fun onStart() {
         loadData()
     }
 
+    /**
+     * Every signal that reloads the watching list comes through here, and each one replaces the
+     * collection before it. Two left alive at once settle in whatever order their emissions arrive
+     * in — the forced one is on `reload` while the one before it is still on `getOrPut` — so the
+     * older list can land last and win.
+     */
     private fun loadData(force: Boolean = false) {
-        launch {
+        loadDataJob?.cancel()
+        loadDataJob = launch {
             interactor.observeWatchlist(force = force).collect { cached ->
                 when (cached) {
                     is Cached.Value -> publish(interactor.sortByRecentlyPlayed(cached.value))
@@ -42,14 +50,22 @@ internal class FavoriteVM(
         }
     }
 
+    /**
+     * Rows first, side panel second — the shape [onItemFocused] already uses.
+     *
+     * The details go through `ItemDetailsRepository`, which waits for the last emission of its own
+     * feed: the network, whenever that entry is stale or absent. A cold start is exactly that, so a
+     * grid published only after the details had answered would come off disk in milliseconds and
+     * then wait for a request anyway — which is the one thing serving this list from the cache was
+     * for.
+     */
     private suspend fun publish(items: List<Item>) {
-        val selectedItem = items.firstOrNull()?.let { item -> interactor.getItemDetails(item.id) }
-        updateViewState(
-            favoriteItemUIMapper.mapToState(
-                items = items,
-                selectedItem = selectedItem,
-            )
-        )
+        updateViewState(favoriteItemUIMapper.mapToState(items = items, selectedItem = null))
+        val firstItem = items.firstOrNull() ?: return
+        val details = interactor.getItemDetails(firstItem.id)
+        updateViewState<FavoriteViewState.Content> {
+            copy(selectedItem = favoriteItemUIMapper.mapSelectedItem(items, details))
+        }
     }
 
     override fun onAction(action: UIAction) {

@@ -14,16 +14,24 @@ internal class FavoriteItemUIMapper(
 ) {
 
     fun mapToState(items: List<Item>, selectedItem: Item?): FavoriteViewState.Content {
-        val seriesOnly = items.filter { it.type.isSeriesLike() }
+        return FavoriteViewState.Content(
+            gridState = mapList(items),
+            selectedItem = mapSelectedItem(items, selectedItem),
+        )
+    }
+
+    /**
+     * What the side panel shows: the item whose details were fetched when it belongs on this grid,
+     * and the first row otherwise — drawn from the list entry, which is everything the panel has
+     * before the details land, and all it ever gets for a row that is not series-like.
+     */
+    fun mapSelectedItem(items: List<Item>, selectedItem: Item?): VideoDetailsUIState {
         val effectiveSelected = if (selectedItem?.type?.isSeriesLike() == true) {
             selectedItem
         } else {
-            seriesOnly.firstOrNull()
+            items.firstOrNull { it.type.isSeriesLike() }
         }
-        return FavoriteViewState.Content(
-            gridState = mapList(items),
-            selectedItem = effectiveSelected?.let(::mapDetailedItem) ?: VideoDetailsUIState.Loading,
-        )
+        return effectiveSelected?.let(::mapDetailedItem) ?: VideoDetailsUIState.Loading
     }
 
 
