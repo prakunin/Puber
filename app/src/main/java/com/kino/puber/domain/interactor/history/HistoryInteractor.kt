@@ -34,6 +34,12 @@ internal class HistoryInteractor(
      * The first page of history, stored and revalidated. The rest of the depth the list needs is
      * read straight from the server by [getPage] as before — only the page the user looks at first
      * is worth keeping.
+     *
+     * Nothing passes [force] today, and that is not an oversight: no signal this screen handles maps
+     * to it. Display-setting changes, `OnResume` and `Refresh` all drive the walk, which never
+     * consults the cache, and the screen scope dies on the way out, so every visit collects this
+     * flow afresh anyway. The parameter is here to match the other two cached surfaces — read it as
+     * "nothing to invalidate yet", not as "invalidation is wired".
      */
     fun observeFirstPage(force: Boolean = false): Flow<Cached<PaginatedResponse<History>>> =
         contentPageCache.historyFirstPage(force = force) { getPage(FIRST_PAGE) }

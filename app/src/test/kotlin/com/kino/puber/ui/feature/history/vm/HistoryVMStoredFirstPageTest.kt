@@ -27,8 +27,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -36,6 +39,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.api.fail
 import java.io.IOException
+import kotlin.coroutines.CoroutineContext
 
 /**
  * The stored first page is a publication, not a load: it is drawn while the depth walk is out and
@@ -73,6 +77,83 @@ internal class HistoryVMStoredFirstPageTest {
             val error = firstArg<Throwable>()
             ErrorEntity(message = error.message.orEmpty(), code = "test")
         }
+        // As DefaultErrorHandler does it, so an exception escaping a launched block really reaches
+        // HistoryVM.dispatchError here. Relaxed on its own would swallow it and hide the one thing
+        // aFailingStoredPageReadLeavesTheWalkToPublish is about.
+        every { errorHandler.proceedInvoke(any(), any()) } answers {
+            val action = secondArg<((ErrorEntity) -> Unit)?>()
+            action?.invoke(errorHandler.map(firstArg()))
+        }
+    }
+
+    /**
+     * With nothing stored, `CachedFeed.load` rethrows the loader's failure instead of reporting it
+     * as `RefreshFailed` — the cold-cache case, so every app start. That failure belongs to a read
+     * the user is not waiting on and must not reach the screen, least of all reset the runtime
+     * under a walk that is about to succeed.
+     */
+    @Test
+    fun aFailingStoredPageReadLeavesTheWalkToPublish() {
+        val walk = CompletableDeferred<PaginatedResponse<History>>()
+        every { interactor.observeFirstPage(any()) } returns flow<Cached<PaginatedResponse<History>>> {
+            throw IOException("stored page failure")
+        }
+        coEvery { api.getHistoryData(1) } coAnswers { Result.success(walk.await()) }
+        // The read throws inline inside testOnStart, so by the time the walk is released the
+        // failure has already had its chance to reset the runtime under it.
+        val vm = createVM().also(HistoryVM::testOnStart)
+
+        walk.complete(page(listOf(movie(2))))
+
+        assertEquals(listOf(2), awaitContent(vm).itemIds())
+        assertNull(vm.testMessageValue)
+        vm.testCancelScope()
+    }
+
+    /**
+     * The paginator delivers its opening `Loading` from its own actor thread, so it can arrive
+     * after the stored page has been drawn. Here that ordering is forced rather than raced: the
+     * paginator runs on a scheduler this test steps by hand.
+     */
+    @Test
+    fun theOpeningLoadingStateDoesNotBlankTheStoredRows() {
+        val scheduler = TestCoroutineScheduler()
+        val walk = CompletableDeferred<PaginatedResponse<History>>()
+        every { interactor.observeFirstPage(any()) } returns flowOf(
+            Cached.Value(page(listOf(movie(1))), isStale = true),
+        )
+        coEvery { api.getHistoryData(1) } coAnswers { Result.success(walk.await()) }
+        val vm = createVM(paginatorContext = StandardTestDispatcher(scheduler))
+
+        vm.testOnStart()
+
+        assertEquals(listOf(1), (vm.testStateValue as HistoryViewState.Content).itemIds())
+        scheduler.advanceUntilIdle()
+        assertEquals(listOf(1), (vm.testStateValue as HistoryViewState.Content).itemIds())
+        vm.testCancelScope()
+    }
+
+    /**
+     * Pins today's behaviour rather than improving it. The stored page is drawn without entering
+     * `stableHistory`, so a walk failure still finds no stable rows and shows the full-screen error
+     * it always has — rows then error, where it used to be spinner then error. Softening that means
+     * teaching the runtime about drawn-but-unstable rows, which is its own change.
+     */
+    @Test
+    fun aWalkFailureBehindTheStoredPageStillShowsTheFullScreenError() {
+        val walk = CompletableDeferred<PaginatedResponse<History>>()
+        every { interactor.observeFirstPage(any()) } returns flowOf(
+            Cached.Value(page(listOf(movie(1))), isStale = true),
+        )
+        coEvery { api.getHistoryData(1) } coAnswers { Result.success(walk.await()) }
+        val vm = createVM().also(HistoryVM::testOnStart)
+        assertEquals(listOf(1), awaitContent(vm).itemIds())
+
+        walk.completeExceptionally(IOException("first page failure"))
+
+        val error = awaitState(vm) { it is HistoryViewState.Error } as HistoryViewState.Error
+        assertEquals("first page failure", error.message)
+        vm.testCancelScope()
     }
 
     @Test
@@ -158,9 +239,11 @@ internal class HistoryVMStoredFirstPageTest {
         vm.testCancelScope()
     }
 
-    private fun createVM(): HistoryVM {
+    private fun createVM(
+        paginatorContext: CoroutineContext = Dispatchers.Default.limitedParallelism(1),
+    ): HistoryVM {
         return HistoryVM(
-            paginator = Paginator.Store(comparator = HistoryRowComparator),
+            paginator = Paginator.Store(paginatorContext, comparator = HistoryRowComparator),
             interactor = interactor,
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             router = mockk<AppRouter>(relaxed = true),
@@ -172,13 +255,22 @@ internal class HistoryVMStoredFirstPageTest {
         vm: HistoryVM,
         predicate: (HistoryViewState.Content) -> Boolean = { true },
     ): HistoryViewState.Content {
+        return awaitState(vm) { state ->
+            state is HistoryViewState.Content && predicate(state)
+        } as HistoryViewState.Content
+    }
+
+    private fun awaitState(
+        vm: HistoryVM,
+        predicate: (HistoryViewState) -> Boolean,
+    ): HistoryViewState {
         val deadline = System.nanoTime() + AWAIT_TIMEOUT_MILLIS * 1_000_000
         while (System.nanoTime() < deadline) {
             val state = vm.testStateValue
-            if (state is HistoryViewState.Content && predicate(state)) return state
+            if (predicate(state)) return state
             Thread.sleep(AWAIT_POLL_MILLIS)
         }
-        fail("Timed out waiting for History content; last=${vm.testStateValue}")
+        fail("Timed out waiting for History state; last=${vm.testStateValue}")
     }
 
     private fun HistoryViewState.Content.itemIds(): List<Int> = items.map(HistoryItemUIState::itemId)
