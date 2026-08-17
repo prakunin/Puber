@@ -83,6 +83,8 @@ class HomeVMIncrementalPublishTest {
         every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeCollections() } returns flowOf(Cached.Value(emptyList(), false))
+        coEvery { interactor.lastWatchedAt() } returns emptyMap()
+        every { interactor.prepareHomeItems(any(), any(), any()) } answers { firstArg() }
         every { mapper.mapItemSection(any(), any()) } returns null
         every { mapper.mapCollectionSection(any()) } returns null
         every { videoItemMapper.mapHeroItems(any()) } returns emptyList()

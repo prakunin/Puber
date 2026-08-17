@@ -12,6 +12,7 @@ import com.kino.puber.data.cache.CacheTtl
 import com.kino.puber.data.cache.CachedFeed
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.BookmarkFoldersInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
@@ -23,6 +24,7 @@ class HomeInteractor(
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
     private val bookmarkFolders: BookmarkFoldersInteractor,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
+    private val watchStateRepository: WatchStateRepository,
     private val store: PersistentPayloadStore,
     private val recentlyPlayedOrder: RecentlyPlayedOrder,
 ) {
@@ -148,6 +150,30 @@ class HomeInteractor(
 
     suspend fun getCollections(): Result<List<KCollection>> {
         return api.getCollections(page = 1).map { it.items }
+    }
+
+    suspend fun lastWatchedAt(): Map<Int, Long> = watchStateRepository.lastWatchedAt()
+
+    /**
+     * Applies the Home-specific view of the global content preferences to a cached row.
+     *
+     * Home caches the server payload rather than the rendered row, so a setting or watch-state
+     * change can be reflected immediately without waiting for the section TTL or asking the server
+     * for the same items again. Personal rows may additionally put recently played titles first;
+     * the stable sort leaves titles with no history in the order their endpoint chose.
+     */
+    fun prepareHomeItems(
+        items: List<Item>,
+        lastWatchedAt: Map<Int, Long>,
+        sortByLastWatched: Boolean,
+    ): List<Item> {
+        val visibleItems = if (navigationPreferencesRepository.contentPreferences.value.hideWatched) {
+            items.filterNot(watchStateRepository::isFullyWatched)
+        } else {
+            items
+        }
+        if (!sortByLastWatched) return visibleItems
+        return visibleItems.sortedByDescending { item -> lastWatchedAt[item.id] ?: 0L }
     }
 
     private suspend fun getDiscoveryItems(

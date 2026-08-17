@@ -51,6 +51,7 @@ class HomeInteractorTest {
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
             bookmarkFolders = BookmarkFoldersInteractor(api),
             navigationPreferencesRepository = navigationPreferencesRepository,
+            watchStateRepository = watchState,
             store = mockk<PersistentPayloadStore>(relaxed = true),
             recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )
@@ -222,6 +223,39 @@ class HomeInteractorTest {
         assertEquals(listOf(collection), interactor.getCollections().getOrThrow())
     }
 
+    @Test
+    fun prepareHomeItems_hidesFullyWatchedTitles_whenPreferenceIsEnabled() {
+        contentPreferences.value = defaultContentPreferences().copy(hideWatched = true)
+        val finished = item(id = 1)
+        val inProgress = item(id = 2)
+        every { watchState.isFullyWatched(finished) } returns true
+        every { watchState.isFullyWatched(inProgress) } returns false
+
+        val result = interactor.prepareHomeItems(
+            items = listOf(finished, inProgress),
+            lastWatchedAt = emptyMap(),
+            sortByLastWatched = false,
+        )
+
+        assertEquals(listOf(inProgress), result)
+    }
+
+    @Test
+    fun prepareHomeItems_ordersPersonalRowsByLastPlayedAndKeepsUnknownItemsStable() {
+        val firstUnknown = item(id = 1)
+        val mostRecent = item(id = 2)
+        val older = item(id = 3)
+        val secondUnknown = item(id = 4)
+
+        val result = interactor.prepareHomeItems(
+            items = listOf(firstUnknown, older, secondUnknown, mostRecent),
+            lastWatchedAt = mapOf(older.id to 100L, mostRecent.id to 200L),
+            sortByLastWatched = true,
+        )
+
+        assertEquals(listOf(mostRecent, older, firstUnknown, secondUnknown), result)
+    }
+
     /**
      * Both bookmark rows load together on the home screen and neither can ask for items before it
      * knows the folder ids, so before they shared a source the folder list was fetched twice on
@@ -242,6 +276,7 @@ class HomeInteractorTest {
             watchLaterBookmarkInteractor = WatchLaterBookmarkInteractor(api, bookmarkFolders),
             bookmarkFolders = bookmarkFolders,
             navigationPreferencesRepository = navigationPreferencesRepository,
+            watchStateRepository = watchState,
             store = mockk<PersistentPayloadStore>(relaxed = true),
             recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )

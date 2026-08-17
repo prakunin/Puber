@@ -17,6 +17,7 @@ import com.kino.puber.core.ui.navigation.component.LocalScreenKey
 import com.kino.puber.core.ui.navigation.component.RootAnchorRestoreCompletion
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
+import com.kino.puber.core.ui.uikit.state.sessionMutableStateSaver
 
 internal class ReconciledItemFocusState(
     val targetItemId: Int?,
@@ -37,10 +38,14 @@ internal fun rememberReconciledItemFocus(
     isTargetRow: Boolean,
     initialFocusedItemId: Int? = null,
     requestAfterFrame: Boolean = false,
+    restoreAcrossProcess: Boolean = true,
     onRowEmpty: () -> Unit,
 ): ReconciledItemFocusState {
-    val focusedItemId = rememberSaveable(rowKey) {
-        mutableStateOf(initialFocusedItemId ?: items.firstOrNull()?.id)
+    val initialItemId = initialFocusedItemId ?: items.firstOrNull()?.id
+    val focusedItemId = if (restoreAcrossProcess) {
+        rememberSaveable(rowKey) { mutableStateOf(initialItemId) }
+    } else {
+        rememberSaveable(rowKey, saver = sessionMutableStateSaver()) { mutableStateOf(initialItemId) }
     }
     val previousItems = remember(rowKey) { mutableStateOf(items) }
     val pendingFocus = remember(rowKey) { mutableStateOf(PendingItemFocus()) }
@@ -280,8 +285,13 @@ internal fun rememberReconciledRowFocus(
     rows: List<FocusableRow>,
     initialRowKey: String? = null,
     resetKey: Any? = Unit,
+    restoreAcrossProcess: Boolean = true,
 ): ReconciledRowFocusState {
-    val focusedRowKey = rememberSaveable(resetKey) { mutableStateOf(initialRowKey) }
+    val focusedRowKey = if (restoreAcrossProcess) {
+        rememberSaveable(resetKey) { mutableStateOf(initialRowKey) }
+    } else {
+        rememberSaveable(resetKey, saver = sessionMutableStateSaver()) { mutableStateOf(initialRowKey) }
+    }
     val previousRows = remember { mutableStateOf(rows) }
     val resolvedRowKey = resolveFocusedRowKey(
         previousRows = previousRows.value,

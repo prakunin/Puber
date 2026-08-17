@@ -80,6 +80,8 @@ class HomeVMTest {
         every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeCollections() } returns flowOf(Cached.Value(emptyList(), false))
+        coEvery { interactor.lastWatchedAt() } returns emptyMap()
+        every { interactor.prepareHomeItems(any(), any(), any()) } answers { firstArg() }
         every { mapper.mapItemSection(any(), any()) } returns null
         every { mapper.mapCollectionSection(any()) } returns null
         every { videoItemMapper.mapHeroItems(any()) } returns emptyList()
@@ -186,6 +188,25 @@ class HomeVMTest {
         verify { videoItemMapper.mapHeroItems(listOf(filteredHotItem)) }
         verify { mapper.mapItemSection(listOf(filteredHotItem), HomeSectionType.Hot) }
         verify { mapper.mapItemSection(listOf(personalWatchingItem), HomeSectionType.ContinueWatching) }
+    }
+
+    @Test
+    fun homePresentation_sortsOnlyBookmarkRowsByLastWatched() {
+        val watchLater = item(1)
+        val bookmark = item(2)
+        val hot = item(3)
+        val lastWatched = mapOf(bookmark.id to 200L, watchLater.id to 100L)
+        coEvery { interactor.lastWatchedAt() } returns lastWatched
+        every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(listOf(watchLater), false))
+        every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(listOf(bookmark), false))
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(hot), false))
+
+        createVM().testOnStart()
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        verify { interactor.prepareHomeItems(listOf(watchLater), lastWatched, true) }
+        verify { interactor.prepareHomeItems(listOf(bookmark), lastWatched, true) }
+        verify { interactor.prepareHomeItems(listOf(hot), lastWatched, false) }
     }
 
     private val displayChanges = MutableSharedFlow<Unit>()

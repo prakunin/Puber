@@ -135,7 +135,7 @@
     <string name="settings_show_anime">Show anime</string>
     <string name="settings_show_anime_description">Doesn’t affect personal lists or the “Anime” tab</string>
     <string name="settings_hide_watched">Hide watched content</string>
-    <string name="settings_hide_watched_description">Fully watched content is hidden from the catalog. This doesn’t affect search, bookmarks, or history</string>
+    <string name="settings_hide_watched_description">Fully watched content is hidden from Home and the catalog. This doesn’t affect search, dedicated bookmark screens, or history</string>
 
     <string name="search_hint">Enter a title…</string>
     <string name="search_no_results">No results</string>

@@ -29,6 +29,7 @@ class HomeInteractorCacheTest {
     private val api = mockk<KinoPubApiClient>(relaxed = true)
     private val watchLaterBookmarkInteractor = mockk<WatchLaterBookmarkInteractor>(relaxed = true)
     private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository>(relaxed = true)
+    private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
     private val store = InMemoryPayloadStore()
 
     private val interactor = HomeInteractor(
@@ -36,10 +37,11 @@ class HomeInteractorCacheTest {
         watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
         bookmarkFolders = BookmarkFoldersInteractor(api),
         navigationPreferencesRepository = navigationPreferencesRepository,
+        watchStateRepository = watchStateRepository,
         store = store,
         recentlyPlayedOrder = RecentlyPlayedOrder(
             api = api,
-            watchState = mockk<WatchStateRepository>(relaxed = true),
+            watchState = watchStateRepository,
         ),
     )
 

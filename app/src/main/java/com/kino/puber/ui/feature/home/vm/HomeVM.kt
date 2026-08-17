@@ -68,6 +68,7 @@ internal class HomeVM(
      */
     private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
     private var loadedCollections: List<KCollection>? = null
+    private var lastWatchedAt: Map<Int, Long> = emptyMap()
 
     /**
      * The content-cache generation the rows above were built under.
@@ -91,12 +92,13 @@ internal class HomeVM(
     override fun onStart() {
         loadHome()
         launch {
-            cardDisplayChanges.changes.collect { remapLoadedSections() }
+            cardDisplayChanges.changes.collect { refreshHomePresentation() }
         }
     }
 
-    private fun remapLoadedSections() {
+    private suspend fun refreshHomePresentation() {
         if (stateValue !is HomeViewState.Content) return
+        lastWatchedAt = interactor.lastWatchedAt()
         publishSections()
     }
 
@@ -205,6 +207,7 @@ internal class HomeVM(
         // stale increments land on this run's count; a fresh holder per run can't be touched by
         // a previous one no matter how cancellation is interleaved.
         val run = LoadRun()
+        lastWatchedAt = interactor.lastWatchedAt()
 
         val sections = listOf(
             HomeSectionType.ContinueWatching to interactor.observeWatchingItems(force = forceWatching),
@@ -335,12 +338,26 @@ internal class HomeVM(
     private fun publishSections() {
         val mapped = listOfNotNull(
             *loadedSections
-                .map { (type, items) -> mapper.mapItemSection(items, type) }
+                .map { (type, items) ->
+                    mapper.mapItemSection(
+                        interactor.prepareHomeItems(
+                            items = items,
+                            lastWatchedAt = lastWatchedAt,
+                            sortByLastWatched = type == HomeSectionType.WatchLater ||
+                                type == HomeSectionType.Bookmarks,
+                        ),
+                        type,
+                    )
+                }
                 .toTypedArray(),
             loadedCollections?.let { mapper.mapCollectionSection(it) },
         ).sortedBy { it.type.ordinal }
 
-        val hotItems = loadedSections[HomeSectionType.Hot].orEmpty()
+        val hotItems = interactor.prepareHomeItems(
+            items = loadedSections[HomeSectionType.Hot].orEmpty(),
+            lastWatchedAt = lastWatchedAt,
+            sortByLastWatched = false,
+        )
         updateViewState(
             HomeViewState.Content(
                 heroItems = videoItemMapper.mapHeroItems(hotItems.take(HERO_ITEMS_COUNT)),

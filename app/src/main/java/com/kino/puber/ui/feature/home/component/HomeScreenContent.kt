@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +54,7 @@ import com.kino.puber.core.ui.uikit.component.moviesList.ReconciledRowFocusState
 import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledRowFocus
+import com.kino.puber.core.ui.uikit.state.rememberSessionLazyListState
 import com.kino.puber.core.ui.navigation.component.PreserveLazyListAnchorOnRootReturn
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -68,7 +68,7 @@ internal fun HomeScreenContent(
     onAction: (UIAction) -> Unit,
     onHeroClick: (Int) -> Unit,
     onCollectionClick: (Int, String) -> Unit,
-    lazyListState: LazyListState = rememberLazyListState(),
+    lazyListState: LazyListState = rememberSessionLazyListState(),
 ) {
     Box(Modifier.fillMaxSize()) {
         when (state) {
@@ -169,7 +169,7 @@ private fun HomeContent(
             FocusableRow(row.type.name, row.items.size)
         }
     }
-    val rowFocus = rememberReconciledRowFocus(rows)
+    val rowFocus = rememberReconciledRowFocus(rows, restoreAcrossProcess = false)
     PreserveLazyListAnchorOnRootReturn(lazyListState)
 
     PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
@@ -304,11 +304,12 @@ internal fun HomeSectionRow(
         items = items,
         enabled = detailsPrefetchEnabled,
     )
-    val listState = rememberLazyListState()
+    val listState = rememberSessionLazyListState()
     val itemFocus = rememberReconciledItemFocus(
         rowKey = rowKey,
         items = items,
         isTargetRow = isTargetRow,
+        restoreAcrossProcess = false,
         onRowEmpty = onRowEmpty,
     )
 
