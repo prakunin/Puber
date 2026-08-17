@@ -662,6 +662,7 @@ private fun LazyListScope.watchHistoryItems(
             headline = stringResource(R.string.settings_watch_index_sync_action),
             trailingText = status,
             enabled = !state.watchIndex.isSyncing,
+            focusableWhenDisabled = true,
             onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
         )
     }

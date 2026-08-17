@@ -66,6 +66,7 @@ internal fun SettingsListItem(
     trailingText: String? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
+    focusableWhenDisabled: Boolean = false,
     role: Role? = null,
     onClick: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -93,8 +94,8 @@ internal fun SettingsListItem(
     }
 
     Surface(
-        onClick = onClick,
-        enabled = enabled,
+        onClick = { if (enabled) onClick() },
+        enabled = enabled || focusableWhenDisabled,
         modifier = itemModifier,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
         colors = ClickableSurfaceDefaults.colors(

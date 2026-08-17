@@ -28,6 +28,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
+import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -258,6 +259,34 @@ internal class DeviceSettingsContentFocusTest {
         dataSection.requestFocus().press(Key.DirectionRight)
 
         focusedItem(context.getString(R.string.settings_watch_index_sync_action)).assertIsFocused()
+    }
+
+    @Test
+    fun syncingDataActionKeepsFocusWithoutDispatchingAnotherSync() {
+        val actions = mutableListOf<UIAction>()
+        setSuccessContent(
+            state = successState().copy(
+                watchIndex = WatchIndexUiState(
+                    isSyncing = true,
+                    currentPage = 13,
+                    totalPages = 247,
+                ),
+            ),
+            initialSection = SettingsSection.Data,
+            onAction = actions::add,
+        )
+        val dataSection = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Data.name))
+
+        dataSection.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.settings_watch_index_sync_action))
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        composeRule.runOnIdle {
+            assertTrue(actions.isEmpty())
+        }
+        focusedNode().press(Key.DirectionLeft)
+        dataSection.assertIsFocused()
     }
 
     private fun setSuccessContent(
