@@ -78,7 +78,7 @@ class WatchStateSyncInteractor(
      * Refreshes the index when the last sync is older than [staleAfter]. Returns true when rows
      * were written, so a caller can refresh what it is showing.
      */
-    suspend fun syncIfStale(force: Boolean = false): Boolean {
+    suspend fun syncIfStale(force: Boolean = false, rebuild: Boolean = false): Boolean {
         // A walk now spans minutes of deliberately paced requests, so the two kinds of caller want
         // opposite things from one already running.
         //
@@ -95,7 +95,7 @@ class WatchStateSyncInteractor(
                 isSyncing = true,
                 totalHistoryItems = mutableProgress.value.totalHistoryItems,
             )
-            return runSync(force)
+            return runSync(force, rebuild)
         } finally {
             mutableProgress.value = mutableProgress.value.copy(isSyncing = false)
             mutex.unlock()
@@ -106,12 +106,12 @@ class WatchStateSyncInteractor(
      * Requests a sync owned by this application-wide interactor rather than by the screen that
      * initiated it. Closing settings therefore does not abandon a large first history walk.
      */
-    fun requestSync(force: Boolean = true) {
+    fun requestSync(force: Boolean = true, rebuild: Boolean = false) {
         synchronized(requestLock) {
             if (requestedSync?.isActive == true) return
             requestedSync = requestScope.launch {
                 try {
-                    syncIfStale(force = force)
+                    syncIfStale(force = force, rebuild = rebuild)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Throwable) {
@@ -127,7 +127,7 @@ class WatchStateSyncInteractor(
         }
     }
 
-    private suspend fun runSync(force: Boolean): Boolean {
+    private suspend fun runSync(force: Boolean, rebuild: Boolean): Boolean {
         if (!force && !isRunDue(clock(), repository.syncCursor())) return false
 
         // Before the first request, not just between chunks. The startup wait is easily outlived by
@@ -148,7 +148,7 @@ class WatchStateSyncInteractor(
         // repository's debounce, and every chunk would cost each open screen a re-map or a re-page.
         repository.beginSyncWindow()
         try {
-            return indexAccount(now, cursor)
+            return indexAccount(now, cursor, rebuild)
         } finally {
             repository.endSyncWindow()
         }
@@ -165,10 +165,14 @@ class WatchStateSyncInteractor(
      * protects.
      */
     @Suppress("ReturnCount")
-    private suspend fun indexAccount(now: Long, openingCursor: WatchStateSyncCursor): Boolean {
+    private suspend fun indexAccount(
+        now: Long,
+        openingCursor: WatchStateSyncCursor,
+        rebuild: Boolean,
+    ): Boolean {
         var cursor = openingCursor
         // Opened before anything is written, so every row this run stores belongs to the new pass.
-        cursor = cursor.withReconciliationIfDue(now)
+        cursor = cursor.withNewPass(now, forced = rebuild)
         repository.saveSyncCursor(cursor)
 
         val generation = this.generation
@@ -287,17 +291,21 @@ class WatchStateSyncInteractor(
         }
 
     /**
-     * Opens a new pass when the index is due to be reconciled against the server.
+     * Opens a new pass when the index is due to be reconciled against the server, or when one was
+     * asked for.
      *
-     * Only between walks: bumping mid-walk would orphan the rows this pass has already stamped, and
-     * the prune at the end would delete them.
+     * Only between walks, unless forced: bumping mid-walk would orphan the rows this pass has
+     * already stamped, and the prune at the end would delete them. A forced pass accepts that,
+     * because it restamps everything it walks and only prunes if it reaches the end.
      */
-    private fun WatchStateSyncCursor.withReconciliationIfDue(now: Long): WatchStateSyncCursor {
-        // A walk already under way rules it out; so does never having finished one.
+    private fun WatchStateSyncCursor.withNewPass(now: Long, forced: Boolean): WatchStateSyncCursor {
+        // A walk already under way rules it out; so does never having finished one. A rebuild asked
+        // for by hand overrides both: it exists precisely for an index the user no longer trusts,
+        // and waiting for the timer would make the button mean nothing.
         val isDue = fullHistoryWalkDone &&
             lastReconciledAt != null &&
             now - lastReconciledAt >= reconcileAfter.inWholeMilliseconds
-        if (!isDue) return this
+        if (!isDue && !forced) return this
         return copy(
             generation = generation + 1,
             fullHistoryWalkDone = false,

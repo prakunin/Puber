@@ -42,6 +42,7 @@ internal fun TvSafeButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     primary: Boolean = false,
+    focusableWhenDisabled: Boolean = false,
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var isSelectPressed by remember { mutableStateOf(false) }
@@ -82,7 +83,7 @@ internal fun TvSafeButton(
                     isSelectPressed = false
                 }
             }
-            .focusable(enabled = enabled)
+            .focusable(enabled = enabled || focusableWhenDisabled)
             .semantics {
                 role = SemanticsRole.Button
                 if (!enabled) {

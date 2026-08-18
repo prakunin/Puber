@@ -376,6 +376,57 @@ class WatchStateSyncInteractorTest {
         coVerify(exactly = 0) { api.getHistoryData(2) }
     }
 
+    /**
+     * A finished index only ever reads far enough to catch up, which is the whole point of the
+     * bookmark — and exactly what a user asking for a rebuild is trying to get past.
+     */
+    @Test
+    fun anOrdinaryRunOverAFinishedIndexStopsAtTheFirstPageItAlreadyKnows() = runTest {
+        stubHistory(pages = 3)
+        cursor = WatchStateSyncCursor(historyNewestSeen = 1_000L, fullHistoryWalkDone = true)
+
+        assertTrue(interactor.syncIfStale(force = true))
+
+        coVerify(exactly = 0) { api.getHistoryData(2) }
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * The rebuild is for an index the user no longer trusts, so it may not wait for the
+     * reconciliation timer the automatic pass is spaced by: it reopens the walk itself.
+     */
+    @Test
+    fun aRebuildWalksTheWholeHistoryAgainOverAFinishedIndex() = runTest {
+        stubHistory(pages = 3)
+        cursor = WatchStateSyncCursor(historyNewestSeen = 1_000L, fullHistoryWalkDone = true)
+
+        assertTrue(interactor.syncIfStale(force = true, rebuild = true))
+
+        coVerify(exactly = 1) { api.getHistoryData(3) }
+        assertTrue(cursor.fullHistoryWalkDone)
+    }
+
+    /**
+     * Rows are pruned by generation, so a rebuild that did not open a new one would restamp
+     * everything it saw and delete nothing — leaving behind exactly the stale rows it was asked to
+     * clear out.
+     */
+    @Test
+    fun aRebuildOpensANewGenerationAndPrunesWhatItNeverSaw() = runTest {
+        stubHistory(pages = 3)
+        val previousGeneration = 4L
+        cursor = WatchStateSyncCursor(
+            historyNewestSeen = 1_000L,
+            fullHistoryWalkDone = true,
+            generation = previousGeneration,
+        )
+
+        assertTrue(interactor.syncIfStale(force = true, rebuild = true))
+
+        assertTrue(cursor.generation > previousGeneration)
+        coVerify(exactly = 1) { repository.pruneStaleRows(cursor.generation) }
+    }
+
     /** Batching may not lose an entry: every page the walk read still has to reach the repository. */
     @Test
     fun aBatchedWalkStillWritesEveryEntryItRead() = runTest {

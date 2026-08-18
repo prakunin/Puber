@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.device.settings
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,7 @@ import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.core.ui.uikit.component.TvSafeButton
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
@@ -61,6 +63,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
+import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
 import com.kino.puber.ui.feature.main.model.TabType
 
 private val ScreenHorizontalPadding = 48.dp
@@ -658,34 +661,59 @@ private fun LazyListScope.watchHistoryItems(
         )
     }
     item(key = "watch-summary") {
-        WatchHistorySummary(state)
+        WatchHistorySummary(state.watchIndex)
     }
-    item(key = "sync") {
-        val status = when {
-            state.watchIndex.isSyncing &&
-                state.watchIndex.currentPage != null &&
-                state.watchIndex.totalPages != null -> stringResource(
-                R.string.settings_watch_index_progress,
-                state.watchIndex.currentPage,
-                state.watchIndex.totalPages,
-            )
-            state.watchIndex.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
-            state.watchIndex.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
-            state.watchIndex.indexedItems > 0 -> stringResource(R.string.settings_watch_index_partial)
-            else -> stringResource(R.string.settings_watch_index_not_built)
-        }
-        SettingsListItem(
-            headline = stringResource(R.string.settings_watch_index_sync_action),
-            trailingText = status,
-            enabled = !state.watchIndex.isSyncing,
-            focusableWhenDisabled = true,
-            onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
+    item(key = "watch-status") {
+        Text(
+            text = watchIndexStatus(state.watchIndex),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
         )
+    }
+    item(key = "watch-actions") {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Both stay reachable while a run is under way. Dropping out of the focus tree would
+            // take the focus with them, and the pane the user is standing in would go blank.
+            TvSafeButton(
+                text = stringResource(R.string.settings_watch_index_sync_action),
+                enabled = !state.watchIndex.isSyncing,
+                focusableWhenDisabled = true,
+                primary = true,
+                onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
+            )
+            TvSafeButton(
+                text = stringResource(R.string.settings_watch_index_rebuild_action),
+                enabled = !state.watchIndex.isSyncing,
+                focusableWhenDisabled = true,
+                onClick = { onAction(DeviceSettingsActions.RebuildWatchIndex) },
+            )
+        }
     }
 }
 
+/**
+ * What the index is doing, or where it stopped. The stored cursor answers this without a run in
+ * progress, which is the state the section is almost always opened in.
+ */
 @Composable
-private fun WatchHistorySummary(state: DeviceSettingsState.Success) {
+private fun watchIndexStatus(index: WatchIndexUiState): String = when {
+    index.isSyncing && index.currentPage != null && index.totalPages != null -> stringResource(
+        R.string.settings_watch_index_progress,
+        index.currentPage,
+        index.totalPages,
+    )
+    index.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
+    index.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
+    index.indexedItems > 0 -> stringResource(
+        R.string.settings_watch_index_resume_page,
+        index.historyResumePage,
+    )
+    else -> stringResource(R.string.settings_watch_index_not_built)
+}
+
+@Composable
+private fun WatchHistorySummary(index: WatchIndexUiState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -699,22 +727,36 @@ private fun WatchHistorySummary(state: DeviceSettingsState.Success) {
     ) {
         InformationMetric(
             label = stringResource(R.string.settings_watch_index_fully_watched),
-            value = state.watchIndex.fullyWatchedItems.toString(),
+            value = index.fullyWatchedItems.toString(),
             modifier = Modifier.weight(1f),
         )
         InformationMetric(
             label = stringResource(R.string.settings_watch_index_local_total),
-            value = state.watchIndex.indexedItems.toString(),
+            // The account total is only known while a run is reading the history, so most of the
+            // time this is the stored count on its own rather than a fraction.
+            value = index.totalHistoryItems?.let { total ->
+                stringResource(R.string.settings_watch_index_of_account, index.indexedItems, total)
+            } ?: index.indexedItems.toString(),
             modifier = Modifier.weight(1f),
         )
-        state.watchIndex.totalHistoryItems?.let { total ->
-            InformationMetric(
-                label = stringResource(R.string.settings_watch_index_account_total),
-                value = total.toString(),
-                modifier = Modifier.weight(1f),
-            )
-        }
+        InformationMetric(
+            label = stringResource(R.string.settings_watch_index_last_sync),
+            value = lastSyncLabel(index.lastSyncAt),
+            modifier = Modifier.weight(1f),
+        )
     }
+}
+
+@Composable
+private fun lastSyncLabel(lastSyncAt: Long?): String {
+    if (lastSyncAt == null) return stringResource(R.string.settings_watch_index_never_synced)
+    // Relative rather than a stamp: on a box left running for weeks, "3 days ago" answers the
+    // question the user is actually asking, and the platform already phrases it in their language.
+    return DateUtils.getRelativeTimeSpanString(
+        lastSyncAt,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS,
+    ).toString()
 }
 
 @Composable

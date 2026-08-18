@@ -25,6 +25,7 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleShowAnime : DeviceSettingsActions
     data object ToggleHideWatched : DeviceSettingsActions
     data object SyncWatchIndex : DeviceSettingsActions
+    data object RebuildWatchIndex : DeviceSettingsActions
     data object ToggleAutoUpdateCheck : DeviceSettingsActions
     data object OpenApiDomainDialog : DeviceSettingsActions
     data object CloseApiDomainDialog : DeviceSettingsActions

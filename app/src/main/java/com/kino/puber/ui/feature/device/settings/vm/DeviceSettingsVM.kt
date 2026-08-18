@@ -160,6 +160,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.SyncWatchIndex -> watchStateSyncInteractor.requestSync()
+            DeviceSettingsActions.RebuildWatchIndex -> watchStateSyncInteractor.requestSync(rebuild = true)
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
@@ -523,5 +524,7 @@ internal fun buildWatchIndexUiState(
         totalPages = progress.totalPages,
         totalHistoryItems = progress.totalHistoryItems,
         fullHistoryWalkDone = cursor.fullHistoryWalkDone,
+        lastSyncAt = cursor.lastSyncAt,
+        historyResumePage = cursor.historyResumePage,
     )
 }

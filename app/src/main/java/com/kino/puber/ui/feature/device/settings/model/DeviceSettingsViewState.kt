@@ -71,4 +71,11 @@ internal data class WatchIndexUiState(
     val totalPages: Int? = null,
     val totalHistoryItems: Int? = null,
     val fullHistoryWalkDone: Boolean = false,
+    /**
+     * The two below come off the stored cursor rather than the run in progress, so the screen can
+     * say what the index already holds the moment it opens. Sync progress only exists while a run
+     * is under way, which is never the case on a cold entry to the section.
+     */
+    val lastSyncAt: Long? = null,
+    val historyResumePage: Int = 1,
 )
