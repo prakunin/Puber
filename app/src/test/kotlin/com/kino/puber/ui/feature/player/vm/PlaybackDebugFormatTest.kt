@@ -24,6 +24,36 @@ class PlaybackDebugFormatTest {
     }
 
     @Test
+    fun streamSource_extractsLegacyMoscowNode_fromMediaHost() {
+        assertEquals(
+            "MSK05",
+            PlaybackDebugFormat.streamSource(
+                "https://video.msk-static-05.cdn.example.net/hls/segment.ts?token=abc"
+            ),
+        )
+    }
+
+    @Test
+    fun streamSource_mapsLegacyAmsterdamAndRussiaAliases() {
+        assertEquals(
+            "NL02",
+            PlaybackDebugFormat.streamSourceHost("video.ams-static-02.cdn.example.net"),
+        )
+        assertEquals(
+            "RU06",
+            PlaybackDebugFormat.streamSourceHost("video.rus-static-06.cdn.example.net"),
+        )
+    }
+
+    @Test
+    fun streamSourceHost_supportsEffectiveMediaLoadHost() {
+        assertEquals(
+            "MSK07",
+            PlaybackDebugFormat.streamSourceHost("edge.msk-stream-07.cdn.example.net"),
+        )
+    }
+
+    @Test
     fun streamSource_worksWithoutScheme() {
         assertEquals("MSK01", PlaybackDebugFormat.streamSource("msk01.cdn.example.net/movie.m3u8"))
     }

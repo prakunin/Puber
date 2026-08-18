@@ -11,15 +11,36 @@ import kotlin.math.roundToInt
  */
 internal object PlaybackDebugFormat {
 
-    /**
-     * Short name of the CDN node serving the stream.
-     *
-     * The delivery hosts carry the node code in their first DNS label (`msk01.…`), so that label —
-     * uppercased — is the whole answer. A two-label host has no node part to pick out and an IP
-     * literal has no labels at all, so both are shown verbatim rather than mangled.
-     */
+    /** Short name of the CDN node encoded in the delivery hostname. */
     fun streamSource(streamUrl: String?): String {
         val host = host(streamUrl) ?: return UNKNOWN_VALUE
+        return streamSourceHost(host)
+    }
+
+    /**
+     * Converts a media-load hostname into the label shown by Stream info.
+     *
+     * KinoPub's older delivery names encode the region and node in a middle label such as
+     * `msk-static-05`; the original client displayed that as `MSK05` and mapped Amsterdam/Russia
+     * aliases to `NL`/`RU`. Newer hosts commonly put an already useful node name first
+     * (`msk01.cdn.…`), which remains the fallback.
+     */
+    fun streamSourceHost(streamHost: String?): String {
+        val host = streamHost
+            ?.trim()
+            ?.removePrefix("[")
+            ?.removeSuffix("]")
+            ?.removeSuffix(".")
+            ?.takeIf(String::isNotEmpty)
+            ?: return UNKNOWN_VALUE
+        LEGACY_CDN_NODE.find(host)?.let { match ->
+            val region = when (match.groupValues[1].uppercase(Locale.ROOT)) {
+                "AMS" -> "NL"
+                "RUS" -> "RU"
+                else -> match.groupValues[1].uppercase(Locale.ROOT)
+            }
+            return region + match.groupValues[2]
+        }
         val labels = host.split('.')
         return if (host.isIpLiteral() || labels.size < MIN_LABELS_FOR_NODE) {
             host
@@ -62,6 +83,10 @@ internal object PlaybackDebugFormat {
     private fun String.isIpLiteral(): Boolean = contains(':') || IPV4.matches(this)
 
     private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
+    private val LEGACY_CDN_NODE = Regex(
+        pattern = """(?:^|\.)([a-z]{3})-[^.]*-(\d{2})(?:\.|$)""",
+        option = RegexOption.IGNORE_CASE,
+    )
 
     private const val MIB = 1024 * 1024
     private const val MEGABYTES = "MB"
