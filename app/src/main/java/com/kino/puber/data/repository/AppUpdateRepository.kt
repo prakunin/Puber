@@ -66,7 +66,7 @@ internal class AppUpdateRepository(
     }
 
     private companion object {
-        const val GITHUB_OWNER = "rovkinmax"
+        const val GITHUB_OWNER = "prakunin"
         const val GITHUB_REPO = "Puber"
         const val APK_EXTENSION = ".apk"
         const val APK_CONTENT_TYPE = "application/vnd.android.package-archive"
