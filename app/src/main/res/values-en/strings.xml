@@ -71,8 +71,8 @@
     <string name="settings_section_developer">For developers</string>
     <string name="settings_general_description">App, updates, and device information</string>
     <string name="settings_playback_description">Audio, player controls, and segment skipping</string>
-    <string name="settings_content_description">Sections and watched content visibility</string>
-    <string name="settings_navigation_description">Menu style and startup tab</string>
+    <string name="settings_content_description">What the lists and the cards show</string>
+    <string name="settings_navigation_description">Menu style, its sections, and the startup tab</string>
     <string name="settings_network_description">KinoPub connection and device capabilities</string>
     <string name="settings_data_description">Local watch history data</string>
     <string name="settings_developer_description">Diagnostic information for troubleshooting</string>
@@ -150,7 +150,7 @@
     <string name="settings_menu_sections_description">What the menu carries. A hidden section is not offered as the startup tab</string>
     <string name="settings_menu_section_is_startup_tab">Selected as the startup tab</string>
     <string name="settings_content_title">Content</string>
-    <string name="settings_show_anime">Show anime</string>
+    <string name="settings_show_anime">Anime in general lists</string>
     <string name="settings_show_anime_description">Doesn’t affect personal lists or the “Anime” tab</string>
     <string name="settings_hide_watched">Hide watched content</string>
     <string name="settings_hide_watched_description">Fully watched content is hidden from Home and the catalog. This doesn’t affect search, dedicated bookmark screens, or history</string>

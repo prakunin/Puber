@@ -34,12 +34,15 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -59,6 +62,7 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
+import kotlin.math.roundToInt
 
 internal val LocalSettingsLeftFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
 
@@ -66,6 +70,9 @@ private val ItemMinHeight = 48.dp
 private val DenseItemMinHeight = 40.dp
 private val TrailingSlotSize = 24.dp
 private val RadioIndicatorSize = 18.dp
+
+/** Brings the 52x32 dp Material switch down to 39x24, the size of the radio slot beside it. */
+private const val SwitchScale = 0.75f
 
 @Composable
 internal fun SettingsListItem(
@@ -214,14 +221,41 @@ internal fun SettingsToggleItem(
         role = Role.Switch,
         onClick = { if (!readOnly) onToggle() },
         modifier = modifier,
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = null,
-                enabled = enabled,
-                modifier = Modifier.focusProperties { canFocus = false },
-            )
-        },
+        trailingContent = { SmallSwitch(checked = checked, enabled = enabled) },
+    )
+}
+
+/**
+ * The Material switch at a smaller scale. The layer scales from the top-left corner and the
+ * layout reports the scaled bounds, so the row does not reserve the width the switch no longer
+ * draws in.
+ */
+@Composable
+private fun SmallSwitch(
+    checked: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Switch(
+        checked = checked,
+        onCheckedChange = null,
+        enabled = enabled,
+        modifier = modifier
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(
+                    (placeable.width * SwitchScale).roundToInt(),
+                    (placeable.height * SwitchScale).roundToInt(),
+                ) {
+                    placeable.place(0, 0)
+                }
+            }
+            .graphicsLayer {
+                scaleX = SwitchScale
+                scaleY = SwitchScale
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+            .focusProperties { canFocus = false },
     )
 }
 
