@@ -72,10 +72,27 @@ internal data class WatchIndexUiState(
     val totalHistoryItems: Int? = null,
     val fullHistoryWalkDone: Boolean = false,
     /**
-     * The two below come off the stored cursor rather than the run in progress, so the screen can
-     * say what the index already holds the moment it opens. Sync progress only exists while a run
-     * is under way, which is never the case on a cold entry to the section.
+     * Comes off the stored cursor rather than the run in progress, so the screen can say what the
+     * index already holds the moment it opens. Sync progress only exists while a run is under way,
+     * which is never the case on a cold entry to the section.
      */
     val lastSyncAt: Long? = null,
-    val historyResumePage: Int = 1,
-)
+) {
+
+    /**
+     * How much of the history the run under way has read, or null when it has not reported a
+     * position yet. Rounded down, and never allowed to reach a hundred: pages deleted mid-walk can
+     * push the current page past the total the first page reported, and "100 %" while the walk is
+     * still going says the opposite of what is happening.
+     */
+    val walkedPercent: Int?
+        get() {
+            val current = currentPage ?: return null
+            val total = totalPages?.takeIf { it > 0 } ?: return null
+            return (current * PERCENT / total).coerceIn(0, PERCENT - 1)
+        }
+
+    private companion object {
+        const val PERCENT = 100
+    }
+}

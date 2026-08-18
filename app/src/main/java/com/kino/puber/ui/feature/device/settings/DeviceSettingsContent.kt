@@ -704,21 +704,23 @@ private fun LazyListScope.watchHistoryItems(
 /**
  * What the index is doing, or where it stopped. The stored cursor answers this without a run in
  * progress, which is the state the section is almost always opened in.
+ *
+ * A run reports its position as a page number, which is ours and not the reader's; the share of the
+ * walk that is behind it says the same thing in terms they can act on.
  */
 @Composable
-private fun watchIndexStatus(index: WatchIndexUiState): String = when {
-    index.isSyncing && index.currentPage != null && index.totalPages != null -> stringResource(
-        R.string.settings_watch_index_progress,
-        index.currentPage,
-        index.totalPages,
-    )
-    index.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
-    index.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
-    index.indexedItems > 0 -> stringResource(
-        R.string.settings_watch_index_resume_page,
-        index.historyResumePage,
-    )
-    else -> stringResource(R.string.settings_watch_index_not_built)
+private fun watchIndexStatus(index: WatchIndexUiState): String {
+    val percent = index.walkedPercent
+    return when {
+        index.isSyncing && percent != null ->
+            stringResource(R.string.settings_watch_index_syncing_percent, percent)
+        index.isSyncing -> stringResource(R.string.settings_watch_index_syncing)
+        index.fullHistoryWalkDone -> stringResource(R.string.settings_watch_index_complete)
+        // Something is stored, but the walk that would have finished it did not, so what the index
+        // says about older titles cannot be trusted yet.
+        index.indexedItems > 0 -> stringResource(R.string.settings_watch_index_partial)
+        else -> stringResource(R.string.settings_watch_index_not_built)
+    }
 }
 
 @Composable
@@ -734,20 +736,24 @@ private fun WatchHistorySummary(index: WatchIndexUiState) {
             .padding(horizontal = 18.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        // Both counts are about the account, not about our storage. How many rows the index holds
+        // is a number only we can interpret, and putting it beside the history total read as a
+        // fraction of it — two different units, one of them episodes and the other titles.
         InformationMetric(
             label = stringResource(R.string.settings_watch_index_fully_watched),
             value = index.fullyWatchedItems.toString(),
             modifier = Modifier.weight(1f),
         )
-        InformationMetric(
-            label = stringResource(R.string.settings_watch_index_local_total),
-            // The account total is only known while a run is reading the history, so most of the
-            // time this is the stored count on its own rather than a fraction.
-            value = index.totalHistoryItems?.let { total ->
-                stringResource(R.string.settings_watch_index_of_account, index.indexedItems, total)
-            } ?: index.indexedItems.toString(),
-            modifier = Modifier.weight(1f),
-        )
+        // The same list the History screen pages through, so the figure is one the user can go and
+        // look at. Known only once a walk has read a page, and kept on the cursor afterwards; until
+        // then there is nothing honest to put here, so the metric stays away.
+        index.totalHistoryItems?.let { total ->
+            InformationMetric(
+                label = stringResource(R.string.settings_watch_index_history_entries),
+                value = total.toString(),
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 

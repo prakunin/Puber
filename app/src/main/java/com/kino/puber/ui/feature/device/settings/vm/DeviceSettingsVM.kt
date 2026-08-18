@@ -526,6 +526,5 @@ internal fun buildWatchIndexUiState(
         totalHistoryItems = progress.totalHistoryItems ?: cursor.historyTotalItems,
         fullHistoryWalkDone = cursor.fullHistoryWalkDone,
         lastSyncAt = cursor.lastSyncAt,
-        historyResumePage = cursor.historyResumePage,
     )
 }
