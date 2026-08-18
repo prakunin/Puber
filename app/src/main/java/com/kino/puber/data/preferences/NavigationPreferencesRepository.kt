@@ -13,8 +13,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 data class ContentPreferences(
-    val showCartoonsTab: Boolean,
-    val showAnimeTab: Boolean,
     val showAnime: Boolean,
     val hideWatched: Boolean,
     val showWatchedIndicators: Boolean,
@@ -25,14 +23,22 @@ class NavigationPreferencesRepository(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val _contentPreferences = MutableStateFlow(
         ContentPreferences(
-            showCartoonsTab = prefs.getBoolean(KEY_SHOW_CARTOONS_TAB, false),
-            showAnimeTab = prefs.getBoolean(KEY_SHOW_ANIME_TAB, false),
             showAnime = prefs.getBoolean(KEY_SHOW_ANIME, true),
             hideWatched = prefs.getBoolean(KEY_HIDE_WATCHED, false),
             showWatchedIndicators = readWatchedIndicators(context),
         )
     )
     val contentPreferences: StateFlow<ContentPreferences> = _contentPreferences.asStateFlow()
+
+    private val menuTabsRevision = MutableStateFlow(0)
+
+    /**
+     * Emits whenever the set of menu sections changes, so the main screen can rebuild its menu
+     * without a restart. A revision counter rather than the list itself: the list is per
+     * navigation mode, and the only thing a listener needs to know is that its own mode may have
+     * moved.
+     */
+    val menuTabsChanges: Flow<Unit> = menuTabsRevision.drop(1).map { }
 
     /**
      * Emits whenever a setting that changes what a catalogue card shows flips — hiding watched
@@ -76,8 +82,11 @@ class NavigationPreferencesRepository(context: Context) {
         }
         val key = tabsKeyForMode(mode)
         val stored = prefs.getString(key, null)
-        val baseTabs = stored?.let(::deserializeTabs) ?: defaultTabsForMode(mode)
-        return insertOptionalTabs(ensureRequiredTabs(mode, baseTabs))
+        val baseTabs = ensureRequiredTabs(mode, stored?.let(::deserializeTabs) ?: defaultTabsForMode(mode))
+        // Reading stays free of side effects, so the two legacy toggles keep shaping the menu
+        // until the user first edits it. The edit writes the whole list, toggles included, and
+        // that written list is what governs from then on.
+        return if (menuOwnsTabs(mode)) baseTabs else insertLegacyOptionalTabs(baseTabs)
     }
 
     private fun migrateTopTabsIfNeeded() {
@@ -109,19 +118,22 @@ class NavigationPreferencesRepository(context: Context) {
     }
 
     fun setVisibleTabs(mode: NavigationMode, tabs: List<TabType>) {
-        val key = tabsKeyForMode(mode)
-        val withSettings = ensureRequiredTabs(mode, tabs).filterNot { it.isOptionalContentTab() }
-        prefs.edit().putString(key, serializeTabs(withSettings)).apply()
+        prefs.edit()
+            .putString(tabsKeyForMode(mode), serializeTabs(ensureRequiredTabs(mode, tabs)))
+            .putInt(menuSchemaKeyForMode(mode), MENU_SCHEMA_VERSION)
+            .apply()
+        menuTabsRevision.update { it + 1 }
     }
 
-    fun setShowCartoonsTab(show: Boolean) {
-        prefs.edit().putBoolean(KEY_SHOW_CARTOONS_TAB, show).apply()
-        _contentPreferences.update { it.copy(showCartoonsTab = show) }
-    }
-
-    fun setShowAnimeTab(show: Boolean) {
-        prefs.edit().putBoolean(KEY_SHOW_ANIME_TAB, show).apply()
-        _contentPreferences.update { it.copy(showAnimeTab = show) }
+    /**
+     * Shows or hides one section. Hiding a tab the menu cannot do without is a no-op rather than
+     * an error — [ensureRequiredTabs] would put it straight back anyway.
+     */
+    fun setTabVisible(mode: NavigationMode, tab: TabType, visible: Boolean) {
+        val current = getVisibleTabs(mode)
+        if ((tab in current) == visible) return
+        val updated = if (visible) insertInDeclarationOrder(current, tab) else current - tab
+        setVisibleTabs(mode, updated)
     }
 
     fun setShowAnime(show: Boolean) {
@@ -184,12 +196,22 @@ class NavigationPreferencesRepository(context: Context) {
         return result
     }
 
-    private fun insertOptionalTabs(tabs: List<TabType>): List<TabType> {
+    private fun menuOwnsTabs(mode: NavigationMode): Boolean {
+        return prefs.getInt(menuSchemaKeyForMode(mode), 0) >= MENU_SCHEMA_VERSION
+    }
+
+    /** Places [tab] where the menu order — [TabType]'s own declaration order — expects it. */
+    private fun insertInDeclarationOrder(tabs: List<TabType>, tab: TabType): List<TabType> {
+        val index = tabs.indexOfFirst { it.ordinal > tab.ordinal }
+        if (index < 0) return tabs + tab
+        return tabs.toMutableList().apply { add(index, tab) }
+    }
+
+    private fun insertLegacyOptionalTabs(tabs: List<TabType>): List<TabType> {
         val normalized = tabs.filterNot { it.isOptionalContentTab() }.toMutableList()
-        val preferences = contentPreferences.value
         val optionalTabs = buildList {
-            if (preferences.showCartoonsTab) add(TabType.Cartoons)
-            if (preferences.showAnimeTab) add(TabType.Anime)
+            if (prefs.getBoolean(KEY_SHOW_CARTOONS_TAB, false)) add(TabType.Cartoons)
+            if (prefs.getBoolean(KEY_SHOW_ANIME_TAB, false)) add(TabType.Anime)
         }
         if (optionalTabs.isEmpty()) return normalized
 
@@ -208,6 +230,10 @@ class NavigationPreferencesRepository(context: Context) {
 
     private fun TabType.isOptionalContentTab(): Boolean {
         return this == TabType.Cartoons || this == TabType.Anime
+    }
+
+    private fun menuSchemaKeyForMode(mode: NavigationMode): String {
+        return KEY_MENU_SCHEMA_VERSION_PREFIX + mode.name
     }
 
     private fun tabsKeyForMode(mode: NavigationMode): String {
@@ -235,6 +261,7 @@ class NavigationPreferencesRepository(context: Context) {
         const val KEY_DRAWER_TABS = "drawer_tabs_visible"
         const val KEY_TOP_TABS = "toptabs_tabs_visible"
         const val KEY_TOP_TABS_SCHEMA_VERSION = "toptabs_schema_version"
+        const val KEY_MENU_SCHEMA_VERSION_PREFIX = "menu_tabs_schema_version_"
         const val KEY_SHOW_CARTOONS_TAB = "show_cartoons_tab"
         const val KEY_SHOW_ANIME_TAB = "show_anime_tab"
         const val KEY_SHOW_ANIME = "show_anime"
@@ -243,6 +270,7 @@ class NavigationPreferencesRepository(context: Context) {
         const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
         const val LEGACY_KEY_WATCHED_INDICATORS = "watched_indicators_enabled"
         const val TOP_TABS_SCHEMA_VERSION_HISTORY = 1
+        const val MENU_SCHEMA_VERSION = 1
         const val SEPARATOR = ","
 
         val TOP_TABS_DEFAULT_TAB_NAMES = listOf(

@@ -22,6 +22,8 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -106,18 +108,18 @@ internal class MainVMRefreshLifecycleTest {
     }
 
     @Test
-    fun disablingSelectedOptionalTab_fallsBackAndOpensModeStartTab() = runTest(dispatcher) {
+    fun hidingTheSelectedSection_fallsBackAndOpensModeStartTab() = runTest(dispatcher) {
         val preferences = MutableStateFlow(
             ContentPreferences(
-                showCartoonsTab = false,
-                showAnimeTab = true,
                 showAnime = true,
                 hideWatched = false,
                 showWatchedIndicators = true,
             )
         )
+        val menuTabsChanges = MutableSharedFlow<Unit>()
         val repository = mockk<NavigationPreferencesRepository>()
         every { repository.contentPreferences } returns preferences
+        every { repository.menuTabsChanges } returns menuTabsChanges
         val screens = mockk<Screens>(relaxed = true)
         val router = mockk<AppRouter>(relaxed = true)
         every { router.screens } returns screens
@@ -134,7 +136,7 @@ internal class MainVMRefreshLifecycleTest {
 
         vm.testOnStart()
         runCurrent()
-        preferences.value = preferences.value.copy(showAnimeTab = false)
+        menuTabsChanges.emit(Unit)
         runCurrent()
 
         assertEquals(TabType.Home, vm.testStateValue.selectedTab)
@@ -146,8 +148,6 @@ internal class MainVMRefreshLifecycleTest {
     fun showAnimeChange_advancesAffectedTabGenerationsAndRefreshesSelectedTab() = runTest(dispatcher) {
         val preferences = MutableStateFlow(
             ContentPreferences(
-                showCartoonsTab = true,
-                showAnimeTab = true,
                 showAnime = true,
                 hideWatched = false,
                 showWatchedIndicators = true,
@@ -155,6 +155,7 @@ internal class MainVMRefreshLifecycleTest {
         )
         val repository = mockk<NavigationPreferencesRepository>()
         every { repository.contentPreferences } returns preferences
+        every { repository.menuTabsChanges } returns emptyFlow()
         val screens = mockk<Screens>(relaxed = true)
         val router = mockk<AppRouter>(relaxed = true)
         every { router.screens } returns screens

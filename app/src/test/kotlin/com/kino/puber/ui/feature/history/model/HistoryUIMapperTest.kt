@@ -188,8 +188,6 @@ class HistoryUIMapperTest {
         val preferences = mockk<NavigationPreferencesRepository> {
             every { contentPreferences } returns MutableStateFlow(
                 ContentPreferences(
-                    showCartoonsTab = false,
-                    showAnimeTab = false,
                     showAnime = true,
                     hideWatched = false,
                     showWatchedIndicators = false,

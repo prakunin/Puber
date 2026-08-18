@@ -222,8 +222,6 @@ internal class NavigationPreferencesRepositoryTest {
 
         assertEquals(
             ContentPreferences(
-                showCartoonsTab = false,
-                showAnimeTab = false,
                 showAnime = true,
                 hideWatched = false,
                 showWatchedIndicators = true,
@@ -252,8 +250,6 @@ internal class NavigationPreferencesRepositoryTest {
     @Test
     fun contentPreferences_readPersistedValues() {
         val fixture = fixture(
-            showCartoonsTab = true,
-            showAnimeTab = true,
             showAnime = false,
             hideWatched = true,
             showWatchedIndicators = true,
@@ -261,8 +257,6 @@ internal class NavigationPreferencesRepositoryTest {
 
         assertEquals(
             ContentPreferences(
-                showCartoonsTab = true,
-                showAnimeTab = true,
                 showAnime = false,
                 hideWatched = true,
                 showWatchedIndicators = true,
@@ -278,29 +272,21 @@ internal class NavigationPreferencesRepositoryTest {
             fixture.repository.contentPreferences.drop(1).first()
         }
 
-        fixture.repository.setShowCartoonsTab(true)
+        fixture.repository.setShowAnime(false)
         assertEquals(
             ContentPreferences(
-                showCartoonsTab = true,
-                showAnimeTab = false,
-                showAnime = true,
+                showAnime = false,
                 hideWatched = false,
                 showWatchedIndicators = true,
             ),
             emitted.await(),
         )
-        fixture.repository.setShowAnimeTab(true)
-        fixture.repository.setShowAnime(false)
         fixture.repository.setHideWatched(true)
 
-        assertEquals(true, fixture.preferences.values[SHOW_CARTOONS_TAB_KEY])
-        assertEquals(true, fixture.preferences.values[SHOW_ANIME_TAB_KEY])
         assertEquals(false, fixture.preferences.values[SHOW_ANIME_KEY])
         assertEquals(true, fixture.preferences.values[HIDE_WATCHED_KEY])
         assertEquals(
             ContentPreferences(
-                showCartoonsTab = true,
-                showAnimeTab = true,
                 showAnime = false,
                 hideWatched = true,
                 showWatchedIndicators = true,
@@ -426,6 +412,105 @@ internal class NavigationPreferencesRepositoryTest {
     }
 
     @Test
+    fun hidingATab_dropsItFromTheMenuAndFromTheStartupOptions() {
+        val fixture = fixture()
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+
+        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        assertFalse(TabType.Concerts in tabs)
+        assertFalse(
+            TabType.Concerts in fixture.repository.getStartupTabOptions(NavigationMode.SideDrawer),
+        )
+        assertTrue(TabType.For4k in tabs)
+    }
+
+    @Test
+    fun showingATab_putsItBackInDeclarationOrder() {
+        val fixture = fixture(storedTabs = "Home,Movies,Series,Collections,History")
+        fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
+
+        fixture.repository.setTabVisible(NavigationMode.TopTabs, TabType.For4k, visible = true)
+
+        assertEquals(
+            listOf(
+                TabType.Home,
+                TabType.Movies,
+                TabType.Series,
+                TabType.For4k,
+                TabType.Collections,
+                TabType.History,
+            ),
+            fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
+        )
+    }
+
+    @Test
+    fun showingATabAlreadyInTheMenu_leavesTheOrderAlone() {
+        val fixture = fixture(storedDrawerTabs = "Home,Movies,Favourites,Settings")
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Favourites, visible = true)
+
+        assertEquals(
+            listOf(TabType.Home, TabType.Movies, TabType.Favourites, TabType.Settings),
+            fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+        )
+    }
+
+    @Test
+    fun hidingARequiredTab_isRefused() {
+        val fixture = fixture()
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Home, visible = false)
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Settings, visible = false)
+
+        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        assertTrue(TabType.Home in tabs)
+        assertTrue(TabType.Settings in tabs)
+    }
+
+    @Test
+    fun writingTheMenu_takesOverFromTheLegacyOptionalToggles() {
+        // The optional tabs were seeded from the old toggles, so the written list carries them;
+        // from then on the toggles no longer have a say.
+        val fixture = fixture(showAnimeTab = true)
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+        fixture.preferences.values[SHOW_ANIME_TAB_KEY] = false
+
+        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        assertTrue(TabType.Anime in tabs)
+        assertFalse(TabType.Concerts in tabs)
+    }
+
+    @Test
+    fun writingOneMode_leavesTheOtherOnTheLegacyToggles() {
+        val fixture = fixture(showAnimeTab = true)
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Anime, visible = false)
+
+        assertFalse(TabType.Anime in fixture.repository.getVisibleTabs(NavigationMode.SideDrawer))
+        assertTrue(TabType.Anime in fixture.repository.getVisibleTabs(NavigationMode.TopTabs))
+    }
+
+    @Test
+    fun menuTabsChanges_fireOnlyForVisibilityWrites() = runTest {
+        val fixture = fixture()
+        val emissions = mutableListOf<Unit>()
+        val collector = backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            fixture.repository.menuTabsChanges.collect(emissions::add)
+        }
+
+        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+        runCurrent()
+        fixture.repository.setStartupTab(TabType.Movies)
+        runCurrent()
+
+        assertEquals(1, emissions.size)
+        collector.cancel()
+    }
+
+    @Test
     fun displaySettingsChanges_fireForBothHidingAndTheWatchedMarks() = runTest {
         val fixture = fixture()
         val emissions = mutableListOf<Unit>()
@@ -440,7 +525,7 @@ internal class NavigationPreferencesRepositoryTest {
         fixture.repository.setShowWatchedIndicators(false)
         runCurrent()
         // An unrelated preference must not drag every screen through a reload.
-        fixture.repository.setShowAnimeTab(true)
+        fixture.repository.setShowAnime(false)
         runCurrent()
 
         assertEquals(2, emissions.size)

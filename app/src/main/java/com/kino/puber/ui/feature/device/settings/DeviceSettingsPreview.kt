@@ -182,8 +182,6 @@ private fun SuccessAnimeHiddenPreview() = PuberTheme {
         state = DeviceSettingsState.Success(
             settings = DeviceSettingsListUi(emptyList()),
             device = previewDevice,
-            showCartoonsTab = true,
-            showAnimeTab = true,
             showAnime = false,
         ),
         apiDomain = previewApiDomain,

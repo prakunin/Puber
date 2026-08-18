@@ -378,8 +378,6 @@ class HomeInteractorTest {
     )
 
     private fun defaultContentPreferences() = ContentPreferences(
-        showCartoonsTab = false,
-        showAnimeTab = false,
         showAnime = true,
         hideWatched = false,
         showWatchedIndicators = true,

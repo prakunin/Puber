@@ -53,6 +53,9 @@ internal class MainVM(
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }
+        launch {
+            navigationPreferencesRepository.menuTabsChanges.collect { onMenuTabsChanged() }
+        }
     }
 
     /**
@@ -147,6 +150,20 @@ internal class MainVM(
         val selectedTabChanged = updatedState.selectedTab != previousState.selectedTab
         val selectedTabNeedsRefresh = showAnimeChanged && updatedState.selectedTab in ANIME_FILTERED_TABS
         if (selectedTabChanged || selectedTabNeedsRefresh) {
+            tabRouter.openTab(buildTabContent(updatedState.selectedTab, updatedState.navigationMode))
+        }
+    }
+
+    /**
+     * A section was added to or removed from the menu. The tabs themselves are untouched, so only
+     * the menu is rebuilt — and the tab is reopened just when the one on screen has gone away and
+     * the mapper picked a different one.
+     */
+    private fun onMenuTabsChanged() {
+        val previousState = stateValue
+        val updatedState = mainUIMapper.buildViewState(previousState.selectedTab)
+        updateViewState(updatedState)
+        if (updatedState.selectedTab != previousState.selectedTab) {
             tabRouter.openTab(buildTabContent(updatedState.selectedTab, updatedState.navigationMode))
         }
     }

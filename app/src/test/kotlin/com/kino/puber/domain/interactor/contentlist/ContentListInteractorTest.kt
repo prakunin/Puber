@@ -133,8 +133,6 @@ internal open class ContentListInteractorTestFixture {
     protected val maxPagesPerStepUnderTest = 5
 
     protected fun defaultContentPreferences() = ContentPreferences(
-        showCartoonsTab = false,
-        showAnimeTab = false,
         showAnime = true,
         hideWatched = false,
         showWatchedIndicators = true,

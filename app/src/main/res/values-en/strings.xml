@@ -146,9 +146,10 @@
     <string name="settings_startup_tab">Startup tab</string>
     <string name="main_press_back_again_to_exit">Press Back again to exit</string>
     <string name="settings_tab_config">Configure tabs</string>
+    <string name="settings_menu_sections_title">Sections in the menu</string>
+    <string name="settings_menu_sections_description">What the menu carries. A hidden section is not offered as the startup tab</string>
+    <string name="settings_menu_section_is_startup_tab">Selected as the startup tab</string>
     <string name="settings_content_title">Content</string>
-    <string name="settings_show_cartoons_tab">Show the “Animation” tab</string>
-    <string name="settings_show_anime_tab">Show the “Anime” tab</string>
     <string name="settings_show_anime">Show anime</string>
     <string name="settings_show_anime_description">Doesn’t affect personal lists or the “Anime” tab</string>
     <string name="settings_hide_watched">Hide watched content</string>

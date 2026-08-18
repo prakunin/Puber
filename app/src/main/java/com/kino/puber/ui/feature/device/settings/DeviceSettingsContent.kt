@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -480,20 +481,6 @@ private fun LazyListScope.contentItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleWatchedIndicators) },
         )
     }
-    item(key = "cartoons-tab") {
-        SettingsToggleItem(
-            label = stringResource(R.string.settings_show_cartoons_tab),
-            checked = state.showCartoonsTab,
-            onToggle = { onAction(DeviceSettingsActions.ToggleCartoonsTab) },
-        )
-    }
-    item(key = "anime-tab") {
-        SettingsToggleItem(
-            label = stringResource(R.string.settings_show_anime_tab),
-            checked = state.showAnimeTab,
-            onToggle = { onAction(DeviceSettingsActions.ToggleAnimeTab) },
-        )
-    }
     item(key = "show-anime") {
         SettingsToggleItem(
             label = stringResource(R.string.settings_show_anime),
@@ -556,6 +543,36 @@ private fun LazyListScope.navigationItems(
                 onExpandedChoiceChange(null)
                 onAction(DeviceSettingsActions.ChangeStartupTab(TabType.valueOf(key)))
             },
+        )
+    }
+    menuSectionItems(state, onAction)
+}
+
+private fun LazyListScope.menuSectionItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item(key = "menu-sections-heading") {
+        SectionHeading(
+            title = stringResource(R.string.settings_menu_sections_title),
+            description = stringResource(R.string.settings_menu_sections_description),
+        )
+    }
+    items(
+        items = state.menuSections,
+        key = { section -> "menu-section-${section.tab.name}" },
+    ) { section ->
+        val isStartupTab = section.tab == state.startupTab
+        SettingsToggleItem(
+            label = stringResource(section.tab.title),
+            description = stringResource(R.string.settings_menu_section_is_startup_tab)
+                .takeIf { isStartupTab },
+            checked = section.visible,
+            // The startup tab has to stay reachable, so its section cannot be switched off. The
+            // row keeps its ordinary look — it is switched on, and saying so matters more than
+            // signalling that it is fixed; the line underneath carries the reason.
+            readOnly = isStartupTab,
+            onToggle = { onAction(DeviceSettingsActions.ToggleMenuSection(section.tab)) },
         )
     }
 }

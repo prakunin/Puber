@@ -35,13 +35,31 @@ internal sealed interface DeviceSettingsState {
         val navigationMode: NavigationMode = NavigationMode.TopTabs,
         val startupTab: TabType = TabType.Home,
         val startupTabOptions: List<TabType> = listOf(TabType.Home),
-        val showCartoonsTab: Boolean = false,
-        val showAnimeTab: Boolean = false,
+        val menuSections: List<MenuSectionUi> = emptyList(),
         val showAnime: Boolean = true,
         val hideWatched: Boolean = false,
         val autoUpdateCheckEnabled: Boolean = true,
         val watchIndex: WatchIndexUiState = WatchIndexUiState(),
     ) : DeviceSettingsState
+}
+
+/**
+ * One section the menu may or may not carry. The label comes from [TabType] at draw time, and
+ * whether the row can be switched off is read off the startup tab, so neither is duplicated here.
+ */
+@Immutable
+internal data class MenuSectionUi(
+    val tab: TabType,
+    val visible: Boolean,
+)
+
+/** The sections a user may add to or remove from the menu. */
+internal val SelectableMenuTabs: List<TabType> = TabType.entries.filterNot { tab ->
+    // Home anchors the menu, Search and Settings are structural, and SportTV has no screen yet.
+    tab == TabType.Home ||
+        tab == TabType.Search ||
+        tab == TabType.Settings ||
+        tab == TabType.SportTV
 }
 
 @Immutable

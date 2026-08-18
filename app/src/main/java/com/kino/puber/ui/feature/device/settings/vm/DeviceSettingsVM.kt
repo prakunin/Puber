@@ -32,6 +32,8 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
+import com.kino.puber.ui.feature.device.settings.model.MenuSectionUi
+import com.kino.puber.ui.feature.device.settings.model.SelectableMenuTabs
 import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
 import com.kino.puber.ui.feature.main.model.TabType
 import kotlinx.coroutines.CancellationException
@@ -121,8 +123,7 @@ internal class DeviceSettingsVM(
                                 navigationMode = navigationMode,
                                 startupTab = startupTab,
                                 startupTabOptions = startupTabOptions,
-                                showCartoonsTab = contentPreferences.showCartoonsTab,
-                                showAnimeTab = contentPreferences.showAnimeTab,
+                                menuSections = buildMenuSections(navigationMode),
                                 showAnime = contentPreferences.showAnime,
                                 hideWatched = contentPreferences.hideWatched,
                                 autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
@@ -155,8 +156,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             is DeviceSettingsActions.ChangeStartupTab -> onChangeStartupTab(action.tab)
-            DeviceSettingsActions.ToggleCartoonsTab -> toggleCartoonsTab()
-            DeviceSettingsActions.ToggleAnimeTab -> toggleAnimeTab()
+            is DeviceSettingsActions.ToggleMenuSection -> onToggleMenuSection(action.tab)
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.SyncWatchIndex -> watchStateSyncInteractor.requestSync()
@@ -364,6 +364,7 @@ internal class DeviceSettingsVM(
                     navigationMode = mode,
                     startupTab = startupTab,
                     startupTabOptions = startupTabOptions,
+                    menuSections = buildMenuSections(mode),
                 )
             )
         )
@@ -378,20 +379,33 @@ internal class DeviceSettingsVM(
         updateViewState(stateValue.copy(state = currentState.copy(startupTab = tab)))
     }
 
-    private fun toggleCartoonsTab() {
+    /**
+     * The startup tab has to remain reachable, so the section carrying it cannot be switched off.
+     * The row is drawn disabled to say so, and this guard covers the case where the two disagree.
+     */
+    private fun onToggleMenuSection(tab: TabType) {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.showCartoonsTab
-        navigationPreferencesRepository.setShowCartoonsTab(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(showCartoonsTab = newValue)))
+        if (tab == currentState.startupTab) return
+        val section = currentState.menuSections.firstOrNull { it.tab == tab } ?: return
+
+        val mode = currentState.navigationMode
+        navigationPreferencesRepository.setTabVisible(mode, tab, visible = !section.visible)
+        updateViewState(
+            stateValue.copy(
+                state = currentState.copy(
+                    menuSections = buildMenuSections(mode),
+                    startupTabOptions = navigationPreferencesRepository.getStartupTabOptions(mode),
+                )
+            )
+        )
     }
 
-    private fun toggleAnimeTab() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.showAnimeTab
-        navigationPreferencesRepository.setShowAnimeTab(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(showAnimeTab = newValue)))
+    private fun buildMenuSections(mode: NavigationMode): List<MenuSectionUi> {
+        val visibleTabs = navigationPreferencesRepository.getVisibleTabs(mode)
+        return SelectableMenuTabs.map { tab ->
+            MenuSectionUi(tab = tab, visible = tab in visibleTabs)
+        }
     }
 
     private fun toggleShowAnime() {

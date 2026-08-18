@@ -201,13 +201,18 @@ internal fun SettingsToggleItem(
     modifier: Modifier = Modifier,
     description: String? = null,
     enabled: Boolean = true,
+    focusableWhenDisabled: Boolean = false,
+    readOnly: Boolean = false,
 ) {
     SettingsListItem(
         headline = label,
         supportingText = description,
+        // Read-only is not the same as unavailable: the value shown is real and current, it just
+        // cannot be changed from here. Dimming it would read as the setting being switched off.
         enabled = enabled,
+        focusableWhenDisabled = focusableWhenDisabled,
         role = Role.Switch,
-        onClick = onToggle,
+        onClick = { if (!readOnly) onToggle() },
         modifier = modifier,
         trailingContent = {
             Switch(

@@ -96,8 +96,6 @@ internal class MainVMDeviceInfoTest {
         val preferences = mockk<NavigationPreferencesRepository>(relaxed = true)
         every { preferences.contentPreferences } returns MutableStateFlow(
             ContentPreferences(
-                showCartoonsTab = true,
-                showAnimeTab = true,
                 showAnime = true,
                 hideWatched = false,
                 showWatchedIndicators = true,
