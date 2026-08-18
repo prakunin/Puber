@@ -1,5 +1,7 @@
 package com.kino.puber.ui.feature.root.vm
 
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
+import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
@@ -27,7 +29,7 @@ internal class LauncherVMTest {
     @Test
     fun start_keepsSplashOnScreenUntilItsAnimationHasPlayed() = runTest(dispatcher) {
         val router = router()
-        val vm = LauncherVM(router, preferences(accessToken = "token"))
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
 
         vm.testOnStart()
 
@@ -40,7 +42,7 @@ internal class LauncherVMTest {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"))
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
 
         vm.testOnStart()
         vm.onAction(LauncherAction.SplashShown)
@@ -54,7 +56,7 @@ internal class LauncherVMTest {
         val router = router()
         val authScreen = mockk<PuberScreen>()
         every { router.screens.auth() } returns authScreen
-        val vm = LauncherVM(router, preferences(accessToken = null))
+        val vm = LauncherVM(router, preferences(accessToken = null), coordinator())
 
         vm.testOnStart()
         vm.onAction(LauncherAction.SplashShown)
@@ -68,7 +70,7 @@ internal class LauncherVMTest {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"))
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
 
         vm.testOnStart()
         vm.onAction(LauncherAction.SplashShown)
@@ -89,4 +91,6 @@ internal class LauncherVMTest {
             every { getAccessToken() } returns accessToken
         }
     }
+
+    private fun coordinator() = ContentLaunchCoordinator(ContentUriCodec())
 }

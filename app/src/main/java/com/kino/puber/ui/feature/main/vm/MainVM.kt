@@ -9,6 +9,7 @@ import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
@@ -31,6 +32,7 @@ internal class MainVM(
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val deviceInfoInteractor: IDeviceInfoInteractor,
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
+    private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<MainViewState>(router) {
     override val initialViewState = MainViewState()
     internal val tabAppRouterHolder = TabAppRouterHolder(router.screens)
@@ -50,6 +52,7 @@ internal class MainVM(
         tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
         reportDeviceInformation()
         syncWatchState()
+        tvHomeSyncCoordinator?.requestRefresh(immediate = true)
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }

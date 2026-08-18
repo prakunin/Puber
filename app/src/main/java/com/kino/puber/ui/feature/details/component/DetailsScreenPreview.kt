@@ -11,6 +11,7 @@ import com.adamglin.phosphoricons.duotone.BookmarkSimple
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.Play
 import com.adamglin.phosphoricons.duotone.Playlist
+import com.adamglin.phosphoricons.duotone.ShareNetwork
 import com.adamglin.phosphoricons.duotone.VideoCamera
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.RatingUIState
@@ -79,6 +80,11 @@ private val previewSeriesButtons = listOf(
         contentDescription = R.string.video_details_button_trailer,
         action = DetailsAction.TrailerClicked,
     ),
+    DetailsButtonUIState.IconOnly(
+        icon = PhosphorIcons.Duotone.ShareNetwork,
+        contentDescription = R.string.video_details_button_share,
+        action = DetailsAction.ShareClicked,
+    ),
     DetailsButtonUIState.WatchlistToggle(
         contentDescription = R.string.video_details_button_add_to_watchlist,
         action = DetailsAction.WatchlistToggleClicked,
@@ -95,6 +101,11 @@ private val previewMovieButtons = listOf(
         textRes = R.string.video_details_button_trailer,
         icon = PhosphorIcons.Duotone.FilmSlate,
         action = DetailsAction.TrailerClicked,
+    ),
+    DetailsButtonUIState.IconOnly(
+        icon = PhosphorIcons.Duotone.ShareNetwork,
+        contentDescription = R.string.video_details_button_share,
+        action = DetailsAction.ShareClicked,
     ),
     DetailsButtonUIState.WatchedToggle(
         contentDescription = R.string.video_details_button_mark_watched,

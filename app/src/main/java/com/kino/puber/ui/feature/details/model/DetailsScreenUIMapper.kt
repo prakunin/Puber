@@ -5,6 +5,7 @@ import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.Play
 import com.adamglin.phosphoricons.duotone.Playlist
+import com.adamglin.phosphoricons.duotone.ShareNetwork
 import com.adamglin.phosphoricons.duotone.VideoCamera
 import com.kino.puber.R
 import com.kino.puber.core.system.ResourceProvider
@@ -141,8 +142,14 @@ internal class DetailsScreenUIMapper(
             buildSeriesButtons(item)
         } else {
             buildMovieButtons(item)
-        } + buildStatusButtons(isSeriesLike)
+        } + buildShareButton() + buildStatusButtons(isSeriesLike)
     }
+
+    private fun buildShareButton() = DetailsButtonUIState.IconOnly(
+        icon = PhosphorIcons.Duotone.ShareNetwork,
+        contentDescription = R.string.video_details_button_share,
+        action = DetailsAction.ShareClicked,
+    )
 
     private fun buildSeriesButtons(item: Item): List<DetailsButtonUIState> = buildList {
         val continueText = findFirstUnwatchedEpisode(item)?.let { (season, _, episode) ->

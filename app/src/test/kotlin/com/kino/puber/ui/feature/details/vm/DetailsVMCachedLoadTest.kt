@@ -3,6 +3,8 @@ package com.kino.puber.ui.feature.details.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.contentlink.ContentUriCodec
+import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
@@ -232,6 +234,8 @@ class DetailsVMCachedLoadTest {
         interactor = interactor,
         savedItemInteractor = savedItemInteractor,
         resources = FakeResourceProvider(),
+        contentUriCodec = ContentUriCodec(),
+        contentSharer = mockk(relaxed = true),
         errorHandler = errorHandler,
     )
 }

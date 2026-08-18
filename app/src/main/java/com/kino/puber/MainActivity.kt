@@ -1,6 +1,7 @@
 package com.kino.puber
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,9 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.kino.puber.core.system.AppLocale
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.ui.AppLanguageProvider
 import com.kino.puber.ui.feature.root.component.App
 import com.kino.puber.ui.feature.root.component.SplashContent
+import org.koin.mp.KoinPlatform.getKoin
 
 class MainActivity : ComponentActivity() {
 
@@ -25,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        acceptContentIntent(intent)
         setContent {
             // Outermost, so the wordmark is in the chosen language too.
             AppLanguageProvider {
@@ -39,5 +43,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptContentIntent(intent)
+    }
+
+    private fun acceptContentIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        getKoin().get<ContentLaunchCoordinator>().accept(intent.dataString)
     }
 }
