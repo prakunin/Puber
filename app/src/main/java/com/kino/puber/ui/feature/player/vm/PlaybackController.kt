@@ -8,12 +8,14 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.ParserException
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -33,12 +35,21 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
+import com.kino.puber.domain.interactor.player.StreamCandidate
+import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import java.io.FileNotFoundException
+import java.io.IOException
 import java.util.Locale
 
 internal interface PlaybackControl {
+    enum class StreamRecovery {
+        NEXT_URL,
+        REFRESH_LINKS,
+    }
+
     interface Callback {
         fun onPlaybackStateChanged(
             isPlaying: Boolean,
@@ -50,6 +61,8 @@ internal interface PlaybackControl {
 
         fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int)
         fun onPlaybackEnded()
+        fun onStreamReady(streamUrl: String)
+        fun onStreamFailure(message: String, recovery: StreamRecovery, streamUrl: String)
         fun onError(message: String)
     }
 
@@ -74,14 +87,14 @@ internal interface PlaybackControl {
 
     fun setCallback(callback: Callback)
     fun prepare(
-        streamUrl: String,
+        stream: StreamCandidate,
         subtitles: List<SubtitleLink>?,
         startPosition: Long?,
         bufferPreset: BufferPreset = BufferPreset.AUTO,
         fastDns: Boolean = true,
     )
 
-    fun switchStream(streamUrl: String, subtitles: List<SubtitleLink>?)
+    fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?)
     fun play()
     fun pause()
     fun seekTo(positionMs: Long)
@@ -150,6 +163,7 @@ internal class PlaybackController(
                 Player.STATE_READY -> {
                     notifyPlaybackState()
                     notifyTracksUpdated()
+                    callback?.onStreamReady(currentStreamUrl.orEmpty())
                 }
                 Player.STATE_BUFFERING -> notifyPlaybackState()
                 else -> {}
@@ -163,12 +177,17 @@ internal class PlaybackController(
 
         override fun onPlayerError(error: PlaybackException) {
             val cause = error.cause
+            val message = error.localizedMessage ?: context.getString(R.string.player_error_playback)
+            val recovery = cause.streamRecovery()
             when {
                 cause is BehindLiveWindowException -> recoverBehindLiveWindow()
                 cause.isAc3DecoderInitializationException() -> disableAc3AndRetry()
-                else -> callback?.onError(
-                    error.localizedMessage ?: context.getString(R.string.player_error_playback)
+                recovery != null -> callback?.onStreamFailure(
+                    message = message,
+                    recovery = recovery,
+                    streamUrl = currentStreamUrl.orEmpty(),
                 )
+                else -> callback?.onError(message)
             }
         }
     }
@@ -204,13 +223,53 @@ internal class PlaybackController(
         return this is MediaCodecRenderer.DecoderInitializationException && mimeType == MimeTypes.AUDIO_AC3
     }
 
+    private fun Throwable?.streamRecovery(): PlaybackControl.StreamRecovery? {
+        var error = this
+        var classified = false
+        var recovery: PlaybackControl.StreamRecovery? = null
+        while (error != null && !classified) {
+            when (error) {
+                // Expired signed links can return a 200 HTML/JSON error page or a portal redirect.
+                // Media3 then reports a parser failure, so another backend-provided candidate is valid.
+                is ParserException -> {
+                    classified = true
+                    recovery = PlaybackControl.StreamRecovery.NEXT_URL
+                }
+                is HttpDataSource.InvalidResponseCodeException -> {
+                    classified = true
+                    recovery = when (error.responseCode) {
+                        HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> PlaybackControl.StreamRecovery.REFRESH_LINKS
+                        HTTP_NOT_FOUND,
+                        HTTP_REQUEST_TIMEOUT,
+                        HTTP_TOO_MANY_REQUESTS,
+                        in HTTP_SERVER_ERROR_RANGE,
+                        -> PlaybackControl.StreamRecovery.NEXT_URL
+                        else -> null
+                    }
+                }
+                is FileNotFoundException -> {
+                    classified = true
+                    recovery = PlaybackControl.StreamRecovery.NEXT_URL
+                }
+                is HttpDataSource.HttpDataSourceException,
+                is IOException,
+                -> {
+                    classified = true
+                    recovery = PlaybackControl.StreamRecovery.NEXT_URL
+                }
+            }
+            error = error.cause
+        }
+        return recovery
+    }
+
     override fun setCallback(callback: PlaybackControl.Callback) {
         this.callback = callback
     }
 
     @OptIn(UnstableApi::class)
     override fun prepare(
-        streamUrl: String,
+        stream: StreamCandidate,
         subtitles: List<SubtitleLink>?,
         startPosition: Long?,
         bufferPreset: BufferPreset,
@@ -258,10 +317,10 @@ internal class PlaybackController(
             }
         exoPlayer = player
 
-        val mediaItem = buildMediaItem(streamUrl, subtitles)
-        setMediaSource(player, mediaItem, streamUrl)
-        currentStreamUrl = streamUrl
-        effectiveStreamSource = PlaybackDebugFormat.streamSource(streamUrl)
+        val mediaItem = buildMediaItem(stream.url, subtitles)
+        setMediaSource(player, mediaItem, stream.type)
+        currentStreamUrl = stream.url
+        effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.prepare()
         if (startPosition != null) {
@@ -296,7 +355,7 @@ internal class PlaybackController(
             .build()
     }
 
-    override fun switchStream(streamUrl: String, subtitles: List<SubtitleLink>?) {
+    override fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         val player = exoPlayer ?: return
         val savedPosition = player.currentPosition
         val wasPlaying = player.playWhenReady
@@ -304,10 +363,10 @@ internal class PlaybackController(
 
         player.stop()
 
-        val mediaItem = buildMediaItem(streamUrl, subtitles)
-        setMediaSource(player, mediaItem, streamUrl)
-        currentStreamUrl = streamUrl
-        effectiveStreamSource = PlaybackDebugFormat.streamSource(streamUrl)
+        val mediaItem = buildMediaItem(stream.url, subtitles)
+        setMediaSource(player, mediaItem, stream.type)
+        currentStreamUrl = stream.url
+        effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
@@ -453,9 +512,9 @@ internal class PlaybackController(
     }
 
     @OptIn(UnstableApi::class)
-    private fun setMediaSource(player: ExoPlayer, mediaItem: MediaItem, streamUrl: String) {
+    private fun setMediaSource(player: ExoPlayer, mediaItem: MediaItem, streamType: StreamType) {
         val dsFactory = dataSourceFactory ?: return
-        if (streamUrl.contains(".m3u8") || streamUrl.contains("hls")) {
+        if (streamType == StreamType.HLS) {
             val hlsSource = HlsMediaSource.Factory(dsFactory)
                 .setAllowChunklessPreparation(true)
                 .setLoadErrorHandlingPolicy(HlsErrorPolicy())
@@ -649,6 +708,12 @@ internal class PlaybackController(
         const val MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS = 25_000
         const val BANDWIDTH_FRACTION = 0.75f
         const val PLAYER_NETWORK_TIMEOUT_SECONDS = 20L
+        const val HTTP_UNAUTHORIZED = 401
+        const val HTTP_FORBIDDEN = 403
+        const val HTTP_NOT_FOUND = 404
+        const val HTTP_REQUEST_TIMEOUT = 408
+        const val HTTP_TOO_MANY_REQUESTS = 429
+        val HTTP_SERVER_ERROR_RANGE = 500..599
         const val BITS_PER_MEGABIT = 1_000_000.0
         const val UNKNOWN_VALUE = "—"
         const val CHANNELS_MONO = 1

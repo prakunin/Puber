@@ -4,8 +4,11 @@ import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.data.api.models.SkipSegmentType
+import com.kino.puber.domain.interactor.player.StreamCandidate
+import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerViewState
+import com.kino.puber.ui.feature.player.model.QualityUIState
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 import com.kino.puber.ui.feature.player.model.SkipSegmentUIState
 import com.kino.puber.util.MainDispatcherExtension
@@ -184,6 +187,149 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         verify { playbackController.release() }
         // After retry, preparePlayback runs again → Content
         assertTrue(vm.testStateValue is PlayerViewState.Content)
+    }
+
+    @Test
+    fun streamFailure_switchesToNextCandidate_andIgnoresStaleFailure() {
+        val primary = StreamCandidate("https://cdn/video-hls4.m3u8", StreamType.HLS)
+        val fallback = StreamCandidate("https://cdn/video.m3u8", StreamType.HLS)
+        every { interactor.selectStreamCandidates(any(), any()) } returns listOf(primary, fallback)
+        val vm = startedVM()
+
+        callbackSlot.captured.onStreamFailure(
+            message = "network error",
+            recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+            streamUrl = primary.url,
+        )
+        callbackSlot.captured.onStreamFailure(
+            message = "stale network error",
+            recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+            streamUrl = primary.url,
+        )
+
+        verify(exactly = 1) { playbackController.switchStream(fallback, emptyList()) }
+        assertTrue(vm.testStateValue is PlayerViewState.Content)
+    }
+
+    @Test
+    fun exhaustedCandidates_refreshesLinksOnce_thenShowsError() {
+        val expired = StreamCandidate("https://cdn/expired.m3u8", StreamType.HLS)
+        val refreshed = StreamCandidate("https://cdn/refreshed.m3u8", StreamType.HLS)
+        val refreshedItem = testItem.copy(title = "Refreshed")
+        every { interactor.selectStreamCandidates(any(), any()) } returnsMany listOf(
+            listOf(expired),
+            listOf(refreshed),
+        )
+        coEvery { interactor.refreshItemDetails(42) } returns refreshedItem
+        every { interactor.resolveMedia(refreshedItem, 1, 1, 1) } returns testResolvedMedia
+        val vm = startedVM()
+
+        callbackSlot.captured.onStreamFailure(
+            message = "expired",
+            recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+            streamUrl = expired.url,
+        )
+
+        coVerify(exactly = 1) { interactor.refreshItemDetails(42) }
+        verify(exactly = 1) { playbackController.switchStream(refreshed, emptyList()) }
+        assertTrue(vm.testStateValue is PlayerViewState.Content)
+
+        callbackSlot.captured.onStreamFailure(
+            message = "still unavailable",
+            recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+            streamUrl = refreshed.url,
+        )
+
+        coVerify(exactly = 1) { interactor.refreshItemDetails(42) }
+        assertTrue(vm.testStateValue is PlayerViewState.Error)
+    }
+
+    @Test
+    fun refreshedStreamReady_allowsLaterLinkRefresh() {
+        val expired = StreamCandidate("https://cdn/expired.m3u8", StreamType.HLS)
+        val refreshed = StreamCandidate("https://cdn/refreshed.m3u8", StreamType.HLS)
+        val refreshedAgain = StreamCandidate("https://cdn/refreshed-again.m3u8", StreamType.HLS)
+        every { interactor.selectStreamCandidates(any(), any()) } returnsMany listOf(
+            listOf(expired),
+            listOf(refreshed),
+            listOf(refreshedAgain),
+        )
+        coEvery { interactor.refreshItemDetails(42) } returns testItem
+        val vm = startedVM()
+
+        callbackSlot.captured.onStreamFailure(
+            message = "first expiry",
+            recovery = PlaybackControl.StreamRecovery.REFRESH_LINKS,
+            streamUrl = expired.url,
+        )
+        callbackSlot.captured.onStreamReady(refreshed.url)
+        callbackSlot.captured.onStreamFailure(
+            message = "second expiry",
+            recovery = PlaybackControl.StreamRecovery.REFRESH_LINKS,
+            streamUrl = refreshed.url,
+        )
+
+        coVerify(exactly = 2) { interactor.refreshItemDetails(42) }
+        verify(exactly = 1) { playbackController.switchStream(refreshedAgain, emptyList()) }
+        assertTrue(vm.testStateValue is PlayerViewState.Content)
+    }
+
+    @Test
+    fun emptyQualityCandidate_keepsCurrentFallbackState() {
+        val current = StreamCandidate("https://cdn/current.m3u8", StreamType.HLS)
+        every { interactor.selectStreamCandidates(any(), 0) } returns listOf(current)
+        every { interactor.selectStreamCandidates(any(), 1) } returns emptyList()
+        coEvery { interactor.refreshItemDetails(42) } returns testItem
+        val vm = startedVM()
+
+        vm.onAction(PlayerAction.SelectQuality(1))
+        callbackSlot.captured.onStreamFailure(
+            message = "network error",
+            recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+            streamUrl = current.url,
+        )
+
+        assertEquals(0, contentState(vm).selectedQualityIndex)
+        coVerify(exactly = 1) { interactor.refreshItemDetails(42) }
+    }
+
+    @Test
+    fun completedRefresh_restoresContentAndRemapsMissingQuality() {
+        val expired = StreamCandidate("https://cdn/1080.m3u8", StreamType.HLS)
+        val refreshed = StreamCandidate("https://cdn/auto.m3u8", StreamType.HLS)
+        val initialQualities = listOf(
+            QualityUIState(0, "Auto", null, null, null),
+            QualityUIState(1, "1080p", 4, 1920, 1080),
+        )
+        val refreshedQualities = listOf(
+            QualityUIState(0, "Auto", null, null, null),
+            QualityUIState(1, "720p", 3, 1280, 720),
+        )
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
+            testContentState.copy(qualities = initialQualities, selectedQualityIndex = 1)
+        every { mapper.mapQualities(any()) } returns refreshedQualities
+        every { interactor.selectStreamCandidates(any(), 1) } returns listOf(expired)
+        every { interactor.selectStreamCandidates(any(), 0) } returns listOf(refreshed)
+        val refreshedItem = testItem.copy(title = "Refreshed")
+        val refreshedItemResult = CompletableDeferred<com.kino.puber.data.api.models.Item>()
+        coEvery { interactor.refreshItemDetails(42) } coAnswers { refreshedItemResult.await() }
+        every { interactor.resolveMedia(refreshedItem, 1, 1, 1) } returns testResolvedMedia
+        val vm = startedVM()
+
+        callbackSlot.captured.onStreamFailure(
+            message = "expired",
+            recovery = PlaybackControl.StreamRecovery.REFRESH_LINKS,
+            streamUrl = expired.url,
+        )
+        callbackSlot.captured.onError("late player error")
+        assertTrue(vm.testStateValue is PlayerViewState.Error)
+
+        refreshedItemResult.complete(refreshedItem)
+
+        assertTrue(vm.testStateValue is PlayerViewState.Content)
+        assertEquals(refreshedQualities, contentState(vm).qualities)
+        assertEquals(0, contentState(vm).selectedQualityIndex)
+        verify(exactly = 1) { playbackController.switchStream(refreshed, emptyList()) }
     }
 
     // endregion

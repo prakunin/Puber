@@ -22,6 +22,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.SkipSegmentInteractor
+import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.WatchedDetailsRefreshException
 import com.kino.puber.ui.feature.player.model.SkipSegmentUIState
 import com.kino.puber.ui.feature.player.model.ActivePanel
@@ -35,6 +36,7 @@ import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.ui.feature.player.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
 import com.kino.puber.ui.feature.player.model.PlayerViewState
+import com.kino.puber.ui.feature.player.model.QualityUIState
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 import com.kino.puber.ui.feature.player.model.SeekIndicatorState
 import com.kino.puber.domain.model.SubtitleSize
@@ -125,6 +127,9 @@ internal class PlayerVM(
 
     private var currentMedia: CurrentMedia? = null
     private var mediaGeneration = 0L
+    private var streamCandidates: List<StreamCandidate> = emptyList()
+    private var streamCandidateIndex = -1
+    private var streamLinksRefreshAttempted = false
 
     private var controlsHideJob: Job? = null
     private var seekIndicatorHideJob: Job? = null
@@ -207,6 +212,26 @@ internal class PlayerVM(
             this@PlayerVM.onPlaybackEnded()
         }
 
+        override fun onStreamReady(streamUrl: String) {
+            if (streamCandidates.getOrNull(streamCandidateIndex)?.url == streamUrl) {
+                streamLinksRefreshAttempted = false
+            }
+        }
+
+        override fun onStreamFailure(
+            message: String,
+            recovery: PlaybackControl.StreamRecovery,
+            streamUrl: String,
+        ) {
+            if (streamCandidates.getOrNull(streamCandidateIndex)?.url != streamUrl) return
+            when (recovery) {
+                PlaybackControl.StreamRecovery.NEXT_URL -> if (!switchToNextStreamCandidate()) {
+                    refreshStreamLinksOnce(message)
+                }
+                PlaybackControl.StreamRecovery.REFRESH_LINKS -> refreshStreamLinksOnce(message)
+            }
+        }
+
         override fun onError(message: String) {
             updateViewState(PlayerViewState.Error(message))
         }
@@ -233,6 +258,9 @@ internal class PlayerVM(
         videoNumber: Int? = null,
     ) {
         val generation = ++mediaGeneration
+        streamCandidates = emptyList()
+        streamCandidateIndex = -1
+        streamLinksRefreshAttempted = false
         launch {
             preparePlayback(
                 generation = generation,
@@ -339,14 +367,118 @@ internal class PlayerVM(
             ?.preset
             ?: BufferPreset.AUTO
         val fastDns = content?.fastDnsEnabled ?: true
-        val streamUrl = interactor.selectStreamUrl(media.files, qualityIndex) ?: return
+        val streamUrl = replaceStreamCandidates(
+            candidates = interactor.selectStreamCandidates(media.files, qualityIndex),
+            refreshAttempted = false,
+        ) ?: return
         playbackController.prepare(streamUrl, media.subtitles, savedPosition, bufferPreset, fastDns)
     }
 
-    private fun switchStreamUrl(qualityIndex: Int) {
-        val media = currentMedia ?: return
-        val streamUrl = interactor.selectStreamUrl(media.files, qualityIndex) ?: return
+    private fun switchStreamUrl(qualityIndex: Int): Boolean {
+        val media = currentMedia ?: return false
+        val streamUrl = replaceStreamCandidates(
+            candidates = interactor.selectStreamCandidates(media.files, qualityIndex),
+            refreshAttempted = false,
+        ) ?: return false
         playbackController.switchStream(streamUrl, media.subtitles)
+        return true
+    }
+
+    private fun replaceStreamCandidates(
+        candidates: List<StreamCandidate>,
+        refreshAttempted: Boolean,
+    ): StreamCandidate? {
+        val firstCandidate = candidates.firstOrNull() ?: return null
+        streamCandidates = candidates
+        streamCandidateIndex = 0
+        streamLinksRefreshAttempted = refreshAttempted
+        return firstCandidate
+    }
+
+    private fun switchToNextStreamCandidate(): Boolean {
+        val media = currentMedia ?: return false
+        val nextIndex = streamCandidateIndex + 1
+        val streamUrl = streamCandidates.getOrNull(nextIndex) ?: return false
+        streamCandidateIndex = nextIndex
+        playbackController.switchStream(streamUrl, media.subtitles)
+        return true
+    }
+
+    private fun refreshStreamLinksOnce(message: String) {
+        val media = currentMedia ?: return
+        val contentAtFailure = (stateValue as? PlayerViewState.Content)?.content ?: return
+        if (streamLinksRefreshAttempted) {
+            updateViewState(PlayerViewState.Error(message))
+            return
+        }
+        streamLinksRefreshAttempted = true
+        val token = media.token
+        launch {
+            try {
+                val item = interactor.refreshItemDetails(token.key.itemId)
+                if (!isCurrentMedia(token)) return@launch
+                val resolved = interactor.resolveMedia(
+                    item = item,
+                    seasonNumber = token.key.seasonNumber,
+                    episodeNumber = token.key.episodeNumber,
+                    videoNumber = token.key.videoNumber,
+                )
+                if (!isCurrentMedia(token)) return@launch
+                val refreshedMedia = media.copy(
+                    item = item,
+                    files = resolved.files,
+                    subtitles = resolved.subtitles,
+                )
+                val latestContent = (stateValue as? PlayerViewState.Content)?.content ?: contentAtFailure
+                val (refreshedQualities, qualityIndex) = refreshedQualitySelection(
+                    files = resolved.files,
+                    previousContent = contentAtFailure,
+                )
+                val streamUrl = replaceStreamCandidates(
+                    candidates = interactor.selectStreamCandidates(resolved.files, qualityIndex),
+                    refreshAttempted = true,
+                )
+                if (streamUrl == null) {
+                    updateViewState(PlayerViewState.Error(message))
+                    return@launch
+                }
+                currentMedia = refreshedMedia
+                updateViewState(
+                    PlayerViewState.Content(
+                        latestContent.copy(
+                            qualities = refreshedQualities,
+                            selectedQualityIndex = qualityIndex,
+                        ),
+                    ),
+                )
+                playbackController.switchStream(streamUrl, refreshedMedia.subtitles)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (isCurrentMedia(token)) {
+                    updateViewState(PlayerViewState.Error(message))
+                }
+            }
+        }
+    }
+
+    private fun refreshedQualitySelection(
+        files: List<VideoFile>?,
+        previousContent: PlayerContentState,
+    ): Pair<List<QualityUIState>, Int> {
+        val refreshedQualities = mapper.mapQualities(files)
+        if (previousContent.selectedQualityIndex == 0) return refreshedQualities to 0
+        val selectedQuality = previousContent.qualities.getOrNull(previousContent.selectedQualityIndex)
+        val refreshedIndex = refreshedQualities.indexOfFirst { quality ->
+            quality.qualityId == selectedQuality?.qualityId &&
+                quality.width == selectedQuality?.width &&
+                quality.height == selectedQuality?.height
+        }.takeIf { it >= 0 } ?: 0
+        return refreshedQualities to refreshedIndex
+    }
+
+    private fun isCurrentMedia(token: MediaToken): Boolean {
+        return !closing && currentMedia?.token == token
     }
 
     private fun restoreTrackPreferences() {
@@ -615,10 +747,11 @@ internal class PlayerVM(
         val currentState = (stateValue as? PlayerViewState.Content)?.content ?: return
         if (currentState.selectedQualityIndex == index) return
 
-        updateContent {
-            copy(selectedQualityIndex = index)
+        if (switchStreamUrl(index)) {
+            updateContent {
+                copy(selectedQualityIndex = index)
+            }
         }
-        switchStreamUrl(index)
     }
 
     private fun selectSpeed(index: Int) {
