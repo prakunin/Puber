@@ -127,6 +127,7 @@ class HistoryVMFilteredEmptyPageTest {
             paginator = Paginator.Store(comparator = HistoryRowComparator),
             interactor = interactor,
             mapper = mapper,
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )

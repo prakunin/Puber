@@ -245,6 +245,7 @@ class HistoryVMContentPublicationTest {
                 ),
             ),
             mapper = mapper,
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )

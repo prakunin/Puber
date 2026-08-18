@@ -294,6 +294,7 @@ internal class HistoryVMStoredFirstPageTest {
             paginator = Paginator.Store(paginatorContext, comparator = HistoryRowComparator),
             interactor = interactor,
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = mockk<AppRouter>(relaxed = true),
             errorHandler = errorHandler,
         )

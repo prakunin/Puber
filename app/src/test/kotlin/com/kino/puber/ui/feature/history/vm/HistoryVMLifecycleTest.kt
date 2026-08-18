@@ -16,6 +16,7 @@ import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.domain.interactor.history.HistoryInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.history.model.HistoryItemUIState
 import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.ui.feature.history.model.HistoryViewState
@@ -26,11 +27,13 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -51,11 +54,13 @@ internal class HistoryVMLifecycleTest {
 
     private lateinit var api: KinoPubApiClient
     private lateinit var vm: HistoryVM
+    private lateinit var watchStateSync: WatchStateSyncInteractor
     private val displaySettingsChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     @BeforeEach
     fun setUp() {
         api = mockk()
+        watchStateSync = mockk(relaxed = true)
         val errorHandler = mockk<ErrorHandler>(relaxed = true)
         every { errorHandler.map(any()) } answers {
             val error = firstArg<Throwable>()
@@ -72,9 +77,36 @@ internal class HistoryVMLifecycleTest {
                 contentPageCache = stubContentPageCache(),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
+            watchStateSyncInteractor = watchStateSync,
             router = mockk<AppRouter>(relaxed = true),
             errorHandler = errorHandler,
         )
+    }
+
+    @Test
+    fun openingTheScreenAsksTheIndexToCatchUp() {
+        coEvery { api.getHistoryData(1) } returns Result.success(page(listOf(movie(1))))
+
+        vm.testOnStart()
+        awaitContent()
+
+        // Not forced, so a walk already running is left alone; no age accepted, so the hour that
+        // governs the background refresh does not keep this one from happening.
+        verify { watchStateSync.requestSync(force = false, maxIndexAge = Duration.ZERO) }
+    }
+
+    @Test
+    fun comingBackToTheScreenAsksAgain() {
+        coEvery { api.getHistoryData(1) } returns Result.success(page(listOf(movie(1))))
+        vm.testOnStart()
+        awaitContent()
+
+        vm.onAction(CommonAction.OnResume)
+        awaitState { true }
+
+        verify(exactly = 2) {
+            watchStateSync.requestSync(force = false, maxIndexAge = Duration.ZERO)
+        }
     }
 
     @Test

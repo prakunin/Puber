@@ -83,6 +83,7 @@ class HistoryVMDeletionSchedulingTest {
                 ),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )
@@ -196,6 +197,7 @@ class HistoryVMDeletionSchedulingTest {
                 ),
             ),
             mapper = blockingMapper,
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )

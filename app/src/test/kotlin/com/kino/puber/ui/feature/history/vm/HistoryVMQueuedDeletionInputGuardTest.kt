@@ -284,6 +284,7 @@ class HistoryVMQueuedDeletionInputGuardTest {
                 ),
             ),
             mapper = mapper,
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )

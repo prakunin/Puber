@@ -78,6 +78,7 @@ internal class HistoryVMRestartTest {
                 contentPageCache = stubContentPageCache(),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = mockk<AppRouter>(relaxed = true),
             errorHandler = errorHandler,
         ).also(HistoryVM::testOnStart)

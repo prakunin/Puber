@@ -15,6 +15,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.history.HistoryInteractor
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.domain.interactor.history.HistoryTraversal
 import com.kino.puber.domain.interactor.history.rowKeyOrNull
@@ -29,6 +30,7 @@ import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlin.math.min
+import kotlin.time.Duration
 
 internal const val FIRST_PAGE = 1
 
@@ -46,6 +48,7 @@ internal class HistoryVM(
     paginator: Paginator.Store<History>,
     private val interactor: HistoryInteractor,
     private val mapper: HistoryUIMapper,
+    private val watchStateSyncInteractor: WatchStateSyncInteractor,
     router: AppRouter,
     errorHandler: ErrorHandler,
 ) : PagingVM<History, HistoryViewState>(paginator, router, errorHandler) {
@@ -85,7 +88,24 @@ internal class HistoryVM(
     override fun onStart() {
         init()
         drawStoredFirstPage()
+        catchUpWatchState()
         launch { interactor.displaySettingsChanges.collect { requestResumeRefresh() } }
+    }
+
+    /**
+     * Catches the watch-state index up on what this screen is about to show.
+     *
+     * The index is built from the same history the list below draws, so arriving here is the moment
+     * it is most worth being current — and the moment the user is most likely to notice that it is
+     * not. Only the account's age gate is waived: the interactor still refuses to start a second
+     * walk while one is running, and still keeps its floor between runs, so bouncing in and out of
+     * the screen costs one catch-up rather than one per visit.
+     *
+     * Owned by the interactor's own scope rather than by this view model, so leaving the screen
+     * does not abandon a walk that has only just started.
+     */
+    private fun catchUpWatchState() {
+        watchStateSyncInteractor.requestSync(force = false, maxIndexAge = Duration.ZERO)
     }
 
     /**
@@ -152,7 +172,10 @@ internal class HistoryVM(
             CommonAction.LoadMore,
             CommonAction.ReloadNextPage -> requestNextPage()
             CommonAction.Refresh -> requestRefresh()
-            CommonAction.OnResume -> requestResumeRefresh()
+            CommonAction.OnResume -> {
+                catchUpWatchState()
+                requestResumeRefresh()
+            }
             CommonAction.RetryClicked -> retry()
             is HistoryAction.OpenContextMenu -> openContextMenu(action.item)
             HistoryAction.DismissContextMenu -> dismissContextMenu()

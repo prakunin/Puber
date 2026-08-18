@@ -78,7 +78,11 @@ class WatchStateSyncInteractor(
      * Refreshes the index when the last sync is older than [staleAfter]. Returns true when rows
      * were written, so a caller can refresh what it is showing.
      */
-    suspend fun syncIfStale(force: Boolean = false, rebuild: Boolean = false): Boolean {
+    suspend fun syncIfStale(
+        force: Boolean = false,
+        rebuild: Boolean = false,
+        maxIndexAge: Duration = staleAfter,
+    ): Boolean {
         // A walk now spans minutes of deliberately paced requests, so the two kinds of caller want
         // opposite things from one already running.
         //
@@ -95,7 +99,7 @@ class WatchStateSyncInteractor(
                 isSyncing = true,
                 totalHistoryItems = mutableProgress.value.totalHistoryItems,
             )
-            return runSync(force, rebuild)
+            return runSync(force, rebuild, maxIndexAge)
         } finally {
             mutableProgress.value = mutableProgress.value.copy(isSyncing = false)
             mutex.unlock()
@@ -106,12 +110,16 @@ class WatchStateSyncInteractor(
      * Requests a sync owned by this application-wide interactor rather than by the screen that
      * initiated it. Closing settings therefore does not abandon a large first history walk.
      */
-    fun requestSync(force: Boolean = true, rebuild: Boolean = false) {
+    fun requestSync(
+        force: Boolean = true,
+        rebuild: Boolean = false,
+        maxIndexAge: Duration = staleAfter,
+    ) {
         synchronized(requestLock) {
             if (requestedSync?.isActive == true) return
             requestedSync = requestScope.launch {
                 try {
-                    syncIfStale(force = force, rebuild = rebuild)
+                    syncIfStale(force = force, rebuild = rebuild, maxIndexAge = maxIndexAge)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: Throwable) {
@@ -127,8 +135,8 @@ class WatchStateSyncInteractor(
         }
     }
 
-    private suspend fun runSync(force: Boolean, rebuild: Boolean): Boolean {
-        if (!force && !isRunDue(clock(), repository.syncCursor())) return false
+    private suspend fun runSync(force: Boolean, rebuild: Boolean, maxIndexAge: Duration): Boolean {
+        if (!force && !isRunDue(clock(), repository.syncCursor(), maxIndexAge)) return false
 
         // Before the first request, not just between chunks. The startup wait is easily outlived by
         // the user leaving, and a run that went ahead anyway would spend both watching requests and
@@ -236,15 +244,21 @@ class WatchStateSyncInteractor(
     /**
      * Whether a run is due.
      *
-     * [staleAfter] governs syncs that finished. A run that stopped early stamps nothing for that
-     * check to see, which is what [minTimeBetweenRuns] covers: without it every resume that follows
-     * an interrupted walk starts the next one straight away, and a session spent switching in and
-     * out of the app pays a fresh page budget each time rather than the one run's worth that budget
-     * exists to allow.
+     * [maxIndexAge] governs syncs that finished, and defaults to [staleAfter]. A caller passes its
+     * own when the index is on show for it rather than merely being used: the history screen reads
+     * the same account activity the index is built from, so what counts as fresh enough there is a
+     * matter of minutes, not of the hour that serves a background refresh.
+     *
+     * A run that stopped early stamps nothing for that check to see, which is what
+     * [minTimeBetweenRuns] covers: without it every resume that follows an interrupted walk starts
+     * the next one straight away, and a session spent switching in and out of the app pays a fresh
+     * page budget each time rather than the one run's worth that budget exists to allow. It is the
+     * floor under every caller, whatever age they will accept, so a screen that asks on each visit
+     * cannot turn revisiting it into a stream of walks.
      */
-    private fun isRunDue(now: Long, cursor: WatchStateSyncCursor): Boolean {
+    private fun isRunDue(now: Long, cursor: WatchStateSyncCursor, maxIndexAge: Duration): Boolean {
         val lastSync = cursor.lastSyncAt
-        if (lastSync != null && now - lastSync < staleAfter.inWholeMilliseconds) return false
+        if (lastSync != null && now - lastSync < maxIndexAge.inWholeMilliseconds) return false
         val lastRun = lastRunAt
         return lastRun == null || now - lastRun >= minTimeBetweenRuns.inWholeMilliseconds
     }

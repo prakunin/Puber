@@ -83,6 +83,7 @@ class HistoryVMPlaybackTest {
                 ),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
+            watchStateSyncInteractor = mockk(relaxed = true),
             router = router,
             errorHandler = errorHandler,
         )

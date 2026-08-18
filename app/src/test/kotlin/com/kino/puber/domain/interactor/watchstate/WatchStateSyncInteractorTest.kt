@@ -392,6 +392,40 @@ class WatchStateSyncInteractorTest {
     }
 
     /**
+     * The history screen shows the same activity the index is built from, so it asks for a fresher
+     * index than the hour a background refresh settles for.
+     */
+    @Test
+    fun aCallerThatAcceptsNoAgeRunsOverAnIndexSyncedWithinTheHour() = runTest {
+        cursor = WatchStateSyncCursor(lastSyncAt = now - 1.minutes.inWholeMilliseconds)
+
+        assertFalse(interactor.syncIfStale())
+        assertTrue(interactor.syncIfStale(maxIndexAge = Duration.ZERO))
+    }
+
+    /**
+     * The floor between runs is under every caller. Without it, a screen that asks on every visit
+     * would turn moving in and out of it into a stream of walks.
+     */
+    @Test
+    fun theFloorBetweenRunsStillHoldsForACallerThatAcceptsNoAge() = runTest {
+        val paced = WatchStateSyncInteractor(
+            api = api,
+            repository = repository,
+            clock = { now },
+            staleAfter = 1.hours,
+            minTimeBetweenRuns = 5.minutes,
+            pauseBetweenChunks = Duration.ZERO,
+        )
+
+        assertTrue(paced.syncIfStale(maxIndexAge = Duration.ZERO))
+        assertFalse(paced.syncIfStale(maxIndexAge = Duration.ZERO))
+
+        now += 5.minutes.inWholeMilliseconds
+        assertTrue(paced.syncIfStale(maxIndexAge = Duration.ZERO))
+    }
+
+    /**
      * The rebuild is for an index the user no longer trusts, so it may not wait for the
      * reconciliation timer the automatic pass is spaced by: it reopens the walk itself.
      */
