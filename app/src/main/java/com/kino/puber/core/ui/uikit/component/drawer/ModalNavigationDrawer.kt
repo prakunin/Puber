@@ -123,6 +123,16 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
      */
     fun beginHandoff(expectsNewContent: Boolean): Long? {
         if (currentValue != DrawerValue.Open) return null
+        return startHandoff(expectsNewContent)
+    }
+
+    /** Starts the first content handoff before the user has interacted with the rail. */
+    fun beginInitialHandoff(): Long? {
+        if (currentValue != DrawerValue.Closed) return null
+        return startHandoff(expectsNewContent = false)
+    }
+
+    private fun startHandoff(expectsNewContent: Boolean): Long {
         lastHandoffId += 1
         pendingHandoffId = lastHandoffId
         handoffExpectsNewContent = expectsNewContent
@@ -180,6 +190,9 @@ fun ModalNavigationDrawer(
 ) {
     val localDensity = LocalDensity.current
     val closedDrawerWidth: MutableState<Dp?> = remember { mutableStateOf(null) }
+    LaunchedEffect(drawerState, handoff) {
+        if (handoff != null) drawerState.beginInitialHandoff()
+    }
     val internalDrawerModifier =
         Modifier.zIndex(Float.MAX_VALUE).onSizeChanged {
             if (closedDrawerWidth.value == null && drawerState.currentValue == DrawerValue.Closed) {
