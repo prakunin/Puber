@@ -57,6 +57,18 @@ class AppUpdateInteractorTest {
     }
 
     @Test
+    fun checkForUpdateNow_callsRepository_whenAutoCheckDisabled() = runTest {
+        val update = availableUpdate()
+        every { preferencesRepository.autoUpdateCheckEnabled } returns false
+        coEvery { updateRepository.getAvailableUpdate("1.4.0") } returns Result.success(update)
+
+        val result = interactor.checkForUpdateNow(currentVersionName = "1.4.0")
+
+        assertEquals(update, result.getOrThrow())
+        coVerify(exactly = 1) { updateRepository.getAvailableUpdate("1.4.0") }
+    }
+
+    @Test
     fun setAutoCheckEnabled_persistsPreference() {
         every { preferencesRepository.autoUpdateCheckEnabled = false } just Runs
 

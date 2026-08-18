@@ -15,6 +15,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
@@ -174,6 +175,7 @@ class DeviceSettingsVMMirrorNavigationTest {
             apiDomainInteractor = apiDomainInteractor,
             watchStateRepository = watchStateRepository,
             watchStateSyncInteractor = watchStateSyncInteractor,
+            updateCheckCoordinator = AppUpdateCheckCoordinator(),
             errorHandler = errorHandler,
             resources = FakeResourceProvider(),
             router = router,

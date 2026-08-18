@@ -9,6 +9,8 @@ internal interface IAppUpdateInteractor {
 
     suspend fun checkForUpdate(currentVersionName: String): Result<AvailableUpdate?>
 
+    suspend fun checkForUpdateNow(currentVersionName: String): Result<AvailableUpdate?>
+
     fun isAutoCheckEnabled(): Boolean
 
     fun setAutoCheckEnabled(enabled: Boolean)

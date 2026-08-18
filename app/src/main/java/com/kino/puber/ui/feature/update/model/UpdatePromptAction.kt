@@ -7,5 +7,6 @@ internal sealed interface UpdatePromptAction : UIAction {
     data object DismissClicked : UpdatePromptAction
     data object OpenInstallPermissionSettingsClicked : UpdatePromptAction
     data object RetryInstallClicked : UpdatePromptAction
+    data object RetryCheckClicked : UpdatePromptAction
     data object OnResume : UpdatePromptAction
 }

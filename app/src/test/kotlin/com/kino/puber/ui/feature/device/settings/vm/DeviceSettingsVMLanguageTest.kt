@@ -14,6 +14,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
@@ -71,11 +72,23 @@ internal class DeviceSettingsVMLanguageTest {
         verify(exactly = 0) { appLanguageRepository.setLanguage(any()) }
     }
 
+    @Test
+    fun checkForUpdatesNow_requestsManualCheck() {
+        val coordinator = mockk<AppUpdateCheckCoordinator>(relaxed = true)
+        val vm = createVM(updateCheckCoordinator = coordinator)
+
+        vm.onAction(DeviceSettingsActions.CheckForUpdatesNow)
+
+        verify(exactly = 1) { coordinator.requestManualCheck() }
+    }
+
     private fun DeviceSettingsVM.successState(): DeviceSettingsState.Success {
         return testStateValue.state as DeviceSettingsState.Success
     }
 
-    private fun createVM(): DeviceSettingsVM {
+    private fun createVM(
+        updateCheckCoordinator: AppUpdateCheckCoordinator = AppUpdateCheckCoordinator(),
+    ): DeviceSettingsVM {
         every { appLanguageRepository.getLanguage() } answers { storedLanguage }
         every { appLanguageRepository.setLanguage(any()) } answers {
             storedLanguage = firstArg()
@@ -112,6 +125,7 @@ internal class DeviceSettingsVMLanguageTest {
             apiDomainInteractor = apiDomainInteractor,
             watchStateRepository = mockk<WatchStateRepository>(relaxed = true),
             watchStateSyncInteractor = mockk<WatchStateSyncInteractor>(relaxed = true),
+            updateCheckCoordinator = updateCheckCoordinator,
             errorHandler = mockk<ErrorHandler>(relaxed = true),
             resources = FakeResourceProvider(),
             router = mockk<AppRouter>(relaxed = true),

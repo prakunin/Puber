@@ -14,6 +14,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
@@ -145,6 +146,7 @@ internal class DeviceSettingsVMMenuSectionsTest {
             apiDomainInteractor = apiDomainInteractor,
             watchStateRepository = mockk<WatchStateRepository>(relaxed = true),
             watchStateSyncInteractor = mockk<WatchStateSyncInteractor>(relaxed = true),
+            updateCheckCoordinator = AppUpdateCheckCoordinator(),
             errorHandler = mockk<ErrorHandler>(relaxed = true),
             resources = FakeResourceProvider(),
             router = mockk<AppRouter>(relaxed = true),

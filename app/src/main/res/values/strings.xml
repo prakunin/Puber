@@ -14,6 +14,15 @@
     <string name="settings_updates_title">Обновления</string>
     <string name="settings_auto_update_check">Автоматически проверять обновления</string>
     <string name="settings_auto_update_check_subtitle">Puber будет искать новую версию при запуске приложения.</string>
+    <string name="settings_check_for_updates_now">Проверить обновления сейчас</string>
+    <string name="settings_check_for_updates_now_subtitle">Сравнить установленную версию с последним релизом Puber.</string>
+    <string name="update_prompt_checking_title">Проверка обновлений</string>
+    <string name="update_prompt_checking">Ищем новую версию Puber…</string>
+    <string name="update_prompt_up_to_date_title">Установлена актуальная версия</string>
+    <string name="update_prompt_up_to_date">Новых версий Puber пока нет.</string>
+    <string name="update_prompt_check_error_title">Не удалось проверить обновления</string>
+    <string name="update_prompt_check_failed">Не удалось проверить обновления. Проверь подключение и попробуй ещё раз.</string>
+    <string name="update_prompt_close">Закрыть</string>
     <string name="update_prompt_title">Доступна новая версия</string>
     <string name="update_prompt_version">Версия: %1$s</string>
     <string name="update_prompt_notes_label">Что нового</string>

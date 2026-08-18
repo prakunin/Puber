@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,8 +54,10 @@ internal fun UpdatePromptOverlay(
 
     val primaryFocusRequester = remember { FocusRequester() }
     LaunchedEffect(state) {
-        delay(FocusDelayMs)
-        runCatching { primaryFocusRequester.requestFocus() }
+        if (state != UpdatePromptViewState.Checking) {
+            delay(FocusDelayMs)
+            runCatching { primaryFocusRequester.requestFocus() }
+        }
     }
 
     TvDialogOverlay(onDismiss = { onAction(UpdatePromptAction.DismissClicked) }) {
@@ -68,6 +72,16 @@ internal fun UpdatePromptOverlay(
                 verticalArrangement = Arrangement.spacedBy(ContentSpacing),
             ) {
                 when (state) {
+                    UpdatePromptViewState.Checking -> CheckingContent()
+                    UpdatePromptViewState.UpToDate -> UpToDateContent(
+                        primaryFocusRequester = primaryFocusRequester,
+                        onAction = onAction,
+                    )
+                    is UpdatePromptViewState.CheckError -> CheckErrorContent(
+                        state = state,
+                        primaryFocusRequester = primaryFocusRequester,
+                        onAction = onAction,
+                    )
                     is UpdatePromptViewState.Available -> AvailableContent(
                         update = state.update,
                         primaryFocusRequester = primaryFocusRequester,
@@ -87,6 +101,76 @@ internal fun UpdatePromptOverlay(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CheckingContent() {
+    Text(
+        text = stringResource(R.string.update_prompt_checking_title),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+        text = stringResource(R.string.update_prompt_checking),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    CircularProgressIndicator(modifier = Modifier.size(36.dp))
+}
+
+@Composable
+private fun UpToDateContent(
+    primaryFocusRequester: FocusRequester,
+    onAction: (UIAction) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.update_prompt_up_to_date_title),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+        text = stringResource(R.string.update_prompt_up_to_date),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ActionRow {
+        TvSafeButton(
+            text = stringResource(R.string.update_prompt_close),
+            onClick = { onAction(UpdatePromptAction.DismissClicked) },
+            primary = true,
+            modifier = Modifier.focusRequester(primaryFocusRequester),
+        )
+    }
+}
+
+@Composable
+private fun CheckErrorContent(
+    state: UpdatePromptViewState.CheckError,
+    primaryFocusRequester: FocusRequester,
+    onAction: (UIAction) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.update_prompt_check_error_title),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+        text = state.message,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ActionRow {
+        TvSafeButton(
+            text = stringResource(R.string.update_prompt_retry),
+            onClick = { onAction(UpdatePromptAction.RetryCheckClicked) },
+            primary = true,
+            modifier = Modifier.focusRequester(primaryFocusRequester),
+        )
+        TvSafeButton(
+            text = stringResource(R.string.update_prompt_close),
+            onClick = { onAction(UpdatePromptAction.DismissClicked) },
+        )
     }
 }
 

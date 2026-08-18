@@ -25,6 +25,33 @@ private val previewUpdate = AvailableUpdate(
     releasePageUrl = "https://github.com/prakunin/Puber/releases/tag/v1.5.0",
 )
 
+@Preview(name = "Update prompt - checking", device = TV_1080p)
+@Composable
+private fun CheckingPreview() = UpdatePromptPreviewTheme {
+    UpdatePromptOverlay(
+        state = UpdatePromptViewState.Checking,
+        onAction = {},
+    )
+}
+
+@Preview(name = "Update prompt - up to date", device = TV_1080p)
+@Composable
+private fun UpToDatePreview() = UpdatePromptPreviewTheme {
+    UpdatePromptOverlay(
+        state = UpdatePromptViewState.UpToDate,
+        onAction = {},
+    )
+}
+
+@Preview(name = "Update prompt - check error", device = TV_1080p)
+@Composable
+private fun CheckErrorPreview() = UpdatePromptPreviewTheme {
+    UpdatePromptOverlay(
+        state = UpdatePromptViewState.CheckError("Unable to check for updates. Try again."),
+        onAction = {},
+    )
+}
+
 @Preview(name = "Update prompt - available", device = TV_1080p)
 @Composable
 private fun AvailablePreview() = UpdatePromptPreviewTheme {

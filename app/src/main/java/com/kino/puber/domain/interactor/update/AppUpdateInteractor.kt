@@ -21,6 +21,10 @@ internal class AppUpdateInteractor(
             return Result.success(null)
         }
 
+        return checkForUpdateNow(currentVersionName)
+    }
+
+    override suspend fun checkForUpdateNow(currentVersionName: String): Result<AvailableUpdate?> {
         return updateRepository.getAvailableUpdate(currentVersionName)
     }
 

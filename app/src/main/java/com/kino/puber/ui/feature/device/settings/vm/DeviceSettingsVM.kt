@@ -21,6 +21,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceCapabilities
@@ -45,6 +46,7 @@ internal class DeviceSettingsVM(
     private val apiDomainInteractor: ApiDomainInteractor,
     private val watchStateRepository: WatchStateRepository,
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
+    private val updateCheckCoordinator: AppUpdateCheckCoordinator,
     override val errorHandler: ErrorHandler,
     private val resources: ResourceProvider,
     router: AppRouter,
@@ -151,6 +153,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.RebuildWatchIndex -> watchStateSyncInteractor.requestSync(rebuild = true)
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
+            DeviceSettingsActions.CheckForUpdatesNow -> updateCheckCoordinator.requestManualCheck()
             is DeviceSettingsActions.ChangeAppLanguage -> onChangeAppLanguage(action.language)
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()

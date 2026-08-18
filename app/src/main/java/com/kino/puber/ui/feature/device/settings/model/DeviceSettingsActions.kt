@@ -26,6 +26,7 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleHideWatched : DeviceSettingsActions
     data object RebuildWatchIndex : DeviceSettingsActions
     data object ToggleAutoUpdateCheck : DeviceSettingsActions
+    data object CheckForUpdatesNow : DeviceSettingsActions
     data class ChangeAppLanguage(val language: AppLanguage) : DeviceSettingsActions
     data object OpenApiDomainDialog : DeviceSettingsActions
     data object CloseApiDomainDialog : DeviceSettingsActions

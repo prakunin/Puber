@@ -39,8 +39,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
@@ -472,6 +473,14 @@ private fun LazyListScope.generalItems(
             description = stringResource(R.string.settings_auto_update_check_subtitle),
             checked = state.autoUpdateCheckEnabled,
             onToggle = { onAction(DeviceSettingsActions.ToggleAutoUpdateCheck) },
+        )
+    }
+    item(key = "check-update-now") {
+        SettingsListItem(
+            headline = stringResource(R.string.settings_check_for_updates_now),
+            supportingText = stringResource(R.string.settings_check_for_updates_now_subtitle),
+            role = Role.Button,
+            onClick = { onAction(DeviceSettingsActions.CheckForUpdatesNow) },
         )
     }
     item(key = "about-heading") {

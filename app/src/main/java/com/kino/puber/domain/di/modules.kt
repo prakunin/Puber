@@ -15,6 +15,7 @@ import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.AppUpdateInteractor
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
@@ -25,6 +26,7 @@ import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 val interactorModule = module {
+    singleOf(::AppUpdateCheckCoordinator)
     singleOf(::AppUpdateInteractor) { bind<IAppUpdateInteractor>() }
     singleOf(::AuthInteractor) { bind<IAuthInteractor>() }
     singleOf(::DeviceInfoInteractor) { bind<IDeviceInfoInteractor>() }

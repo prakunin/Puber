@@ -11,6 +11,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.repository.AppUpdateDownload
 import com.kino.puber.data.repository.AvailableUpdate
 import com.kino.puber.data.repository.InstallLaunchResult
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.ui.feature.update.model.UpdatePromptAction
 import com.kino.puber.ui.feature.update.model.UpdatePromptViewState
@@ -21,16 +22,25 @@ internal class UpdatePromptVM(
     router: AppRouter,
     override val errorHandler: ErrorHandler,
     private val updateInteractor: IAppUpdateInteractor,
+    private val updateCheckCoordinator: AppUpdateCheckCoordinator,
     private val resources: ResourceProvider,
 ) : PuberVM<UpdatePromptViewState>(router) {
 
     override val initialViewState = UpdatePromptViewState.Hidden
 
     private var dismissedTagName: String? = null
+    private var manualCheckJob: Job? = null
+    private var manualCheckRequestId: Long = 0L
     private var downloadJob: Job? = null
     private var downloadRequestId: Long = 0L
 
     override fun onStart() {
+        launch {
+            updateCheckCoordinator.manualCheckRequests.collect {
+                checkForUpdateNow()
+            }
+        }
+
         if (!updateInteractor.isAutoCheckEnabled()) {
             return
         }
@@ -52,6 +62,7 @@ internal class UpdatePromptVM(
             UpdatePromptAction.DismissClicked -> dismiss()
             UpdatePromptAction.OpenInstallPermissionSettingsClicked -> openInstallPermissionSettings()
             UpdatePromptAction.RetryInstallClicked -> retryFromCurrentState()
+            UpdatePromptAction.RetryCheckClicked -> checkForUpdateNow()
             UpdatePromptAction.OnResume -> retryInstallerAfterPermission()
             else -> super.onAction(action)
         }
@@ -95,8 +106,56 @@ internal class UpdatePromptVM(
                 )
             )
             is UpdatePromptViewState.Error -> updateViewState(state.copy(message = message))
-            UpdatePromptViewState.Hidden -> Unit
+            is UpdatePromptViewState.CheckError -> updateViewState(
+                UpdatePromptViewState.CheckError(
+                    message = error.message.ifBlank {
+                        resources.getString(R.string.update_prompt_check_failed)
+                    }
+                )
+            )
+            UpdatePromptViewState.Checking -> updateViewState(
+                UpdatePromptViewState.CheckError(
+                    message = error.message.ifBlank {
+                        resources.getString(R.string.update_prompt_check_failed)
+                    }
+                )
+            )
+            UpdatePromptViewState.Hidden,
+            UpdatePromptViewState.UpToDate,
+            -> Unit
         }
+    }
+
+    private fun checkForUpdateNow() {
+        manualCheckJob?.cancel()
+        val currentRequestId = ++manualCheckRequestId
+        updateViewState(UpdatePromptViewState.Checking)
+        manualCheckJob = launch {
+            val result = updateInteractor.checkForUpdateNow(BuildConfig.VERSION_NAME)
+            if (!isActiveManualCheck(currentRequestId)) {
+                return@launch
+            }
+            manualCheckJob = null
+            result.fold(
+                onSuccess = { update ->
+                    updateViewState(
+                        update?.let(UpdatePromptViewState::Available)
+                            ?: UpdatePromptViewState.UpToDate
+                    )
+                },
+                onFailure = {
+                    updateViewState(
+                        UpdatePromptViewState.CheckError(
+                            resources.getString(R.string.update_prompt_check_failed)
+                        )
+                    )
+                },
+            )
+        }
+    }
+
+    private fun isActiveManualCheck(requestId: Long): Boolean {
+        return manualCheckRequestId == requestId && stateValue == UpdatePromptViewState.Checking
     }
 
     private fun startDownloadFromCurrentState() {
@@ -214,6 +273,9 @@ internal class UpdatePromptVM(
     }
 
     private fun dismiss() {
+        manualCheckRequestId++
+        manualCheckJob?.cancel()
+        manualCheckJob = null
         downloadRequestId++
         downloadJob?.cancel()
         downloadJob = null
@@ -223,7 +285,11 @@ internal class UpdatePromptVM(
             is UpdatePromptViewState.Downloading -> dismissedTagName = state.update.tagName
             is UpdatePromptViewState.PermissionRequired -> dismissedTagName = state.update.tagName
             is UpdatePromptViewState.Error -> dismissedTagName = state.update?.tagName
-            UpdatePromptViewState.Hidden -> Unit
+            is UpdatePromptViewState.CheckError,
+            UpdatePromptViewState.Checking,
+            UpdatePromptViewState.Hidden,
+            UpdatePromptViewState.UpToDate,
+            -> Unit
         }
         updateViewState(UpdatePromptViewState.Hidden)
     }

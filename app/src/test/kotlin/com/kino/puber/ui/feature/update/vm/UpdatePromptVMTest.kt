@@ -6,6 +6,7 @@ import com.kino.puber.data.repository.AppUpdateDownload
 import com.kino.puber.data.repository.AppVersion
 import com.kino.puber.data.repository.AvailableUpdate
 import com.kino.puber.data.repository.InstallLaunchResult
+import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.ui.feature.update.model.UpdatePromptAction
 import com.kino.puber.ui.feature.update.model.UpdatePromptViewState
@@ -37,15 +38,18 @@ class UpdatePromptVMTest {
     private val router = mockk<AppRouter>(relaxed = true)
     private val errorHandler = mockk<ErrorHandler>(relaxed = true)
     private val updateInteractor = mockk<IAppUpdateInteractor>(relaxUnitFun = true)
+    private val updateCheckCoordinator = AppUpdateCheckCoordinator()
 
     private fun createVM(): UpdatePromptVM {
         every { updateInteractor.isAutoCheckEnabled() } returns true
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(null)
+        coEvery { updateInteractor.checkForUpdateNow(any()) } returns Result.success(null)
         every { updateInteractor.canRequestPackageInstalls() } returns true
         return UpdatePromptVM(
             router = router,
             errorHandler = errorHandler,
             updateInteractor = updateInteractor,
+            updateCheckCoordinator = updateCheckCoordinator,
             resources = FakeResourceProvider(),
         )
     }
@@ -58,12 +62,88 @@ class UpdatePromptVMTest {
             router = router,
             errorHandler = errorHandler,
             updateInteractor = updateInteractor,
+            updateCheckCoordinator = updateCheckCoordinator,
             resources = FakeResourceProvider(),
         )
         vm.testOnStart()
 
         assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
         coVerify(exactly = 0) { updateInteractor.checkForUpdate(any()) }
+    }
+
+    @Test
+    fun manualCheck_showsUpToDateAndBypassesAutoPreference_whenNoUpdateExists() {
+        val vm = createVM()
+        every { updateInteractor.isAutoCheckEnabled() } returns false
+        vm.testOnStart()
+
+        updateCheckCoordinator.requestManualCheck()
+
+        assertEquals(UpdatePromptViewState.UpToDate, vm.testStateValue)
+        coVerify(exactly = 1) { updateInteractor.checkForUpdateNow(any()) }
+        coVerify(exactly = 0) { updateInteractor.checkForUpdate(any()) }
+    }
+
+    @Test
+    fun manualCheck_showsAvailable_whenUpdateExists() {
+        val update = availableUpdate()
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdateNow(any()) } returns Result.success(update)
+        vm.testOnStart()
+
+        updateCheckCoordinator.requestManualCheck()
+
+        assertEquals(UpdatePromptViewState.Available(update), vm.testStateValue)
+    }
+
+    @Test
+    fun manualCheck_showsCheckError_whenRequestFails() {
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdateNow(any()) } returns Result.failure(IOException("Network error"))
+        vm.testOnStart()
+
+        updateCheckCoordinator.requestManualCheck()
+
+        assertTrue(vm.testStateValue is UpdatePromptViewState.CheckError)
+    }
+
+    @Test
+    fun retryCheck_showsUpToDate_afterPreviousFailure() {
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdateNow(any()) } returnsMany listOf(
+            Result.failure(IOException("Network error")),
+            Result.success(null),
+        )
+        vm.testOnStart()
+        updateCheckCoordinator.requestManualCheck()
+
+        vm.onAction(UpdatePromptAction.RetryCheckClicked)
+
+        assertEquals(UpdatePromptViewState.UpToDate, vm.testStateValue)
+        coVerify(exactly = 2) { updateInteractor.checkForUpdateNow(any()) }
+    }
+
+    @Test
+    fun dismiss_keepsPromptHidden_whenCanceledManualCheckReturnsFailure() = runTest {
+        val checkStarted = CompletableDeferred<Unit>()
+        val releaseCheck = CompletableDeferred<Unit>()
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdateNow(any()) } coAnswers {
+            checkStarted.complete(Unit)
+            try {
+                releaseCheck.await()
+                Result.success(availableUpdate())
+            } catch (_: CancellationException) {
+                Result.failure(IOException("Canceled check"))
+            }
+        }
+        vm.testOnStart()
+        updateCheckCoordinator.requestManualCheck()
+        checkStarted.await()
+
+        vm.onAction(UpdatePromptAction.DismissClicked)
+
+        assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
     }
 
     @Test

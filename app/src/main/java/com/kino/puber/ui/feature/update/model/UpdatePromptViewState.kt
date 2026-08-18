@@ -8,6 +8,13 @@ import java.io.File
 internal sealed interface UpdatePromptViewState {
     data object Hidden : UpdatePromptViewState
 
+    data object Checking : UpdatePromptViewState
+
+    data object UpToDate : UpdatePromptViewState
+
+    @Immutable
+    data class CheckError(val message: String) : UpdatePromptViewState
+
     @Immutable
     data class Available(val update: AvailableUpdate) : UpdatePromptViewState
 
