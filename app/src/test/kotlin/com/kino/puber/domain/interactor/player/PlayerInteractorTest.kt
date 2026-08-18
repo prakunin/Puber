@@ -221,14 +221,14 @@ class PlayerInteractorTest {
 
     // endregion
 
-    // region selectStreamUrl
+    // region selectStreamCandidates
 
     @Test
     fun selectStreamUrl_auto_prefersHls4() {
         val files = listOf(
             VideoFile(url = VideoUrl(http = "http://video.mp4", hls = "hls://video.m3u8", hls4 = "hls4://video.m3u8")),
         )
-        val result = interactor.selectStreamUrl(files, qualityIndex = 0)
+        val result = interactor.selectStreamCandidates(files, qualityIndex = 0).firstOrNull()?.url
         assertEquals("hls4://video.m3u8", result)
     }
 
@@ -237,7 +237,7 @@ class PlayerInteractorTest {
         val files = listOf(
             VideoFile(url = VideoUrl(http = "http://video.mp4", hls = "hls://video.m3u8", hls4 = null)),
         )
-        val result = interactor.selectStreamUrl(files, qualityIndex = 0)
+        val result = interactor.selectStreamCandidates(files, qualityIndex = 0).firstOrNull()?.url
         assertEquals("hls://video.m3u8", result)
     }
 
@@ -246,7 +246,7 @@ class PlayerInteractorTest {
         val files = listOf(
             VideoFile(url = VideoUrl(http = "http://video.mp4", hls = null, hls4 = null)),
         )
-        val result = interactor.selectStreamUrl(files, qualityIndex = 0)
+        val result = interactor.selectStreamCandidates(files, qualityIndex = 0).firstOrNull()?.url
         assertEquals("http://video.mp4", result)
     }
 
@@ -258,7 +258,7 @@ class PlayerInteractorTest {
             VideoFile(url = VideoUrl(hls = "hls://480p.m3u8"), quality = "480p", qualityId = 2),
         )
         // qualityIndex = 1 → first entry after sorting descending by qualityId → 1080p
-        val result = interactor.selectStreamUrl(files, qualityIndex = 1)
+        val result = interactor.selectStreamCandidates(files, qualityIndex = 1).firstOrNull()?.url
         assertEquals("hls://1080p.m3u8", result)
     }
 
@@ -268,24 +268,137 @@ class PlayerInteractorTest {
             VideoFile(url = VideoUrl(hls = "hls://1080p.m3u8"), quality = "1080p", qualityId = 4),
             VideoFile(url = VideoUrl(hls = "hls://720p.m3u8"), quality = "720p", qualityId = 3),
         )
-        val result = interactor.selectStreamUrl(files, qualityIndex = 2)
+        val result = interactor.selectStreamCandidates(files, qualityIndex = 2).firstOrNull()?.url
         assertEquals("hls://720p.m3u8", result)
     }
 
     @Test
     fun selectStreamUrl_nullFiles_returnsNull() {
-        assertNull(interactor.selectStreamUrl(null, qualityIndex = 0))
+        assertNull(interactor.selectStreamCandidates(null, qualityIndex = 0).firstOrNull())
     }
 
     @Test
     fun selectStreamUrl_emptyFiles_returnsNull() {
-        assertNull(interactor.selectStreamUrl(emptyList(), qualityIndex = 0))
+        assertNull(interactor.selectStreamCandidates(emptyList(), qualityIndex = 0).firstOrNull())
     }
 
     @Test
     fun selectStreamUrl_fileWithNullUrl_returnsNull() {
         val files = listOf(VideoFile(url = null))
-        assertNull(interactor.selectStreamUrl(files, qualityIndex = 0))
+        assertNull(interactor.selectStreamCandidates(files, qualityIndex = 0).firstOrNull())
+    }
+
+    @Test
+    fun selectStreamCandidates_auto_returnsEveryProtocolInFallbackOrder() {
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(
+                    http = "https://cdn/video.mp4",
+                    hls = "https://cdn/video.m3u8",
+                    hls4 = "https://cdn/video-hls4.m3u8",
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                StreamCandidate("https://cdn/video-hls4.m3u8", StreamType.HLS),
+                StreamCandidate("https://cdn/video.m3u8", StreamType.HLS),
+                StreamCandidate("https://cdn/video.mp4", StreamType.PROGRESSIVE),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 0),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_manual_prefersSelectedQualityHls() {
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(
+                    http = "https://cdn/1080.mp4",
+                    hls = "https://cdn/1080.m3u8",
+                    hls4 = "https://cdn/1080-hls4.m3u8",
+                ),
+                quality = "1080p",
+                qualityId = 4,
+            ),
+            VideoFile(
+                url = VideoUrl(hls = "https://cdn/720.m3u8"),
+                quality = "720p",
+                qualityId = 3,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                StreamCandidate("https://cdn/1080.m3u8", StreamType.HLS),
+                StreamCandidate("https://cdn/1080-hls4.m3u8", StreamType.HLS),
+                StreamCandidate("https://cdn/1080.mp4", StreamType.PROGRESSIVE),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 1),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_appliesSurroundPreferenceToEveryDistinctCandidate() {
+        every { playerPreferencesRepository.preferSurroundAudio } returns true
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(
+                    http = "https://cdn/video.mp4?token=test",
+                    hls = "https://cdn/video.m3u8",
+                    hls4 = "https://cdn/video.m3u8",
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                StreamCandidate("https://cdn/video.m3u8?ac3default=1", StreamType.HLS),
+                StreamCandidate(
+                    "https://cdn/video.mp4?token=test&ac3default=1",
+                    StreamType.PROGRESSIVE,
+                ),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 0),
+        )
+    }
+
+    @Test
+    fun refreshItemDetails_forcesRepositoryRefresh() = runTest {
+        coEvery { itemDetailsRepository.refresh(42) } returns serialItem
+
+        assertEquals(serialItem, interactor.refreshItemDetails(42))
+        coVerify(exactly = 1) { itemDetailsRepository.refresh(42) }
+    }
+
+    @Test
+    fun selectStreamCandidates_excludesFilesWithoutUsableUrlsFromQualityIndex() {
+        val files = listOf(
+            VideoFile(url = null, quality = "1080p", qualityId = 4),
+            VideoFile(
+                url = VideoUrl(hls = "https://cdn/720.m3u8"),
+                quality = "720p",
+                qualityId = 3,
+            ),
+        )
+
+        assertEquals(
+            listOf(StreamCandidate("https://cdn/720.m3u8", StreamType.HLS)),
+            interactor.selectStreamCandidates(files, qualityIndex = 1),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_httpFieldRemainsProgressiveWhenUrlContainsHls() {
+        val files = listOf(
+            VideoFile(url = VideoUrl(http = "https://hls-cdn.test/video.mp4")),
+        )
+
+        assertEquals(
+            listOf(StreamCandidate("https://hls-cdn.test/video.mp4", StreamType.PROGRESSIVE)),
+            interactor.selectStreamCandidates(files, qualityIndex = 0),
+        )
     }
 
     // endregion

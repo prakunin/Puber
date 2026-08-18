@@ -14,6 +14,8 @@ import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.ResolvedMedia
 import com.kino.puber.domain.interactor.player.SkipSegmentInteractor
+import com.kino.puber.domain.interactor.player.StreamCandidate
+import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
@@ -95,7 +97,9 @@ internal open class PlayerVMTestFixture {
         coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState
         coEvery { interactor.markCurrentAsWatched(any(), any(), any()) } returns
             testItem.withCurrentEpisodeWatched(true)
-        every { interactor.selectStreamUrl(any(), any()) } returns "https://test/v.m3u8"
+        every { interactor.selectStreamCandidates(any(), any()) } returns listOf(
+            StreamCandidate("https://test/v.m3u8", StreamType.HLS),
+        )
         every { interactor.getPreferredAudioLabel(any()) } returns null
         every { interactor.getPreferredAudioLang(any()) } returns null
         every { interactor.getPreferredSubtitleLang(any()) } returns null
@@ -117,6 +121,7 @@ internal open class PlayerVMTestFixture {
         every { mapper.formatSeekOffset(any(), any()) } returns "+10s"
         every { mapper.buildTitle(any()) } returns "Title"
         every { mapper.buildSubtitle(any(), any(), any()) } returns "Sub"
+        every { mapper.mapQualities(any()) } returns emptyList()
         every { mapper.mapEpisodes(any()) } returns null
         every { mapper.mapSkipSegmentLabel(any()) } returns "Skip"
         every { mapper.defaultSoundModeLabel() } returns "Stereo"

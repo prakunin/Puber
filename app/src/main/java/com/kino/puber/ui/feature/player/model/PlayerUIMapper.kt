@@ -76,8 +76,14 @@ internal class PlayerUIMapper(
 
         // Deduplicate by quality string, keep first occurrence (prefer h265 over h264)
         val unique = files
+            .filter { file ->
+                file.url?.let { url ->
+                    listOf(url.hls4, url.hls, url.http).any { !it.isNullOrBlank() }
+                } == true
+            }
             .distinctBy { it.quality ?: "${it.h}p" }
             .sortedByDescending { it.qualityId ?: 0 }
+        if (unique.isEmpty()) return emptyList()
 
         val result = mutableListOf(
             QualityUIState(

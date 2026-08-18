@@ -5,6 +5,8 @@ import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
+import com.kino.puber.domain.interactor.player.StreamCandidate
+import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.PlayerAction
@@ -56,7 +58,13 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     fun onStart_preparesPlayer() {
         startedVM()
         verify { playbackController.setCallback(any()) }
-        verify { playbackController.prepare("https://test/v.m3u8", any(), any()) }
+        verify {
+            playbackController.prepare(
+                StreamCandidate("https://test/v.m3u8", StreamType.HLS),
+                any(),
+                any(),
+            )
+        }
     }
 
     @Test

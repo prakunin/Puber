@@ -16,6 +16,22 @@ import kotlinx.coroutines.CancellationException
 private const val WATCHED_STATUS = 1
 private const val UNWATCHED_STATUS = 0
 
+internal enum class StreamType {
+    HLS,
+    PROGRESSIVE,
+}
+
+internal data class StreamCandidate(
+    val url: String,
+    val type: StreamType,
+)
+
+private fun VideoFile.hasUsableStreamUrl(): Boolean {
+    return url?.let { videoUrl ->
+        listOf(videoUrl.hls4, videoUrl.hls, videoUrl.http).any { !it.isNullOrBlank() }
+    } == true
+}
+
 internal data class ResolvedMedia(
     val files: List<VideoFile>?,
     val audios: List<Audio>?,
@@ -52,6 +68,10 @@ internal class PlayerInteractor(
 
     suspend fun getItemDetails(id: Int): Item {
         return itemDetailsRepository.getItemDetails(id)
+    }
+
+    suspend fun refreshItemDetails(id: Int): Item {
+        return itemDetailsRepository.refresh(id)
     }
 
     fun resolveMedia(
@@ -191,29 +211,39 @@ internal class PlayerInteractor(
         }
     }
 
-    fun selectStreamUrl(files: List<VideoFile>?, qualityIndex: Int): String? {
-        return selectBaseStreamUrl(files, qualityIndex)?.let(::withSurroundAudioPreference)
+    fun selectStreamCandidates(files: List<VideoFile>?, qualityIndex: Int): List<StreamCandidate> {
+        if (files.isNullOrEmpty()) return emptyList()
+        val playableFiles = files.filter(VideoFile::hasUsableStreamUrl)
+        if (playableFiles.isEmpty()) return emptyList()
+        val candidates = if (qualityIndex == 0) {
+            autoStreamCandidates(playableFiles)
+        } else {
+            manualStreamCandidates(playableFiles, qualityIndex)
+        }
+        return candidates
+            .filter { it.url.isNotBlank() }
+            .map { it.copy(url = withSurroundAudioPreference(it.url)) }
+            .distinctBy(StreamCandidate::url)
     }
 
-    private fun selectBaseStreamUrl(files: List<VideoFile>?, qualityIndex: Int): String? {
-        if (files.isNullOrEmpty()) return null
-        return if (qualityIndex == 0) {
-            selectAutoStreamUrl(files)
-        } else {
-            selectManualStreamUrl(files, qualityIndex)
+    private fun autoStreamCandidates(files: List<VideoFile>): List<StreamCandidate> {
+        val url = files.firstOrNull()?.url
+        return buildList {
+            url?.hls4?.let { add(StreamCandidate(it, StreamType.HLS)) }
+            url?.hls?.let { add(StreamCandidate(it, StreamType.HLS)) }
+            url?.http?.let { add(StreamCandidate(it, StreamType.PROGRESSIVE)) }
         }
     }
 
-    private fun selectAutoStreamUrl(files: List<VideoFile>): String? {
-        val url = files.firstOrNull()?.url
-        return url?.hls4 ?: url?.hls ?: url?.http
-    }
-
-    private fun selectManualStreamUrl(files: List<VideoFile>, qualityIndex: Int): String? {
+    private fun manualStreamCandidates(files: List<VideoFile>, qualityIndex: Int): List<StreamCandidate> {
         val uniqueFiles = files.distinctBy { it.quality ?: "${it.h}p" }
             .sortedByDescending { it.qualityId ?: 0 }
         val url = (uniqueFiles.getOrNull(qualityIndex - 1) ?: files.first()).url
-        return url?.hls ?: url?.hls4 ?: url?.http
+        return buildList {
+            url?.hls?.let { add(StreamCandidate(it, StreamType.HLS)) }
+            url?.hls4?.let { add(StreamCandidate(it, StreamType.HLS)) }
+            url?.http?.let { add(StreamCandidate(it, StreamType.PROGRESSIVE)) }
+        }
     }
 
     private fun withSurroundAudioPreference(baseUrl: String): String {
