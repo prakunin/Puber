@@ -44,7 +44,6 @@ internal class DeviceUiSettingsMapper {
     ) = DeviceSettingUIModel.TypeValue(
         type = type,
         value = setting.value == 1,
-        label = setting.label,
         supported = supported,
     )
 
@@ -61,6 +60,5 @@ internal class DeviceUiSettingsMapper {
                 selected = it.selected == 1,
             )
         },
-        label = setting.label,
     )
 }

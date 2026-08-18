@@ -24,36 +24,30 @@ private val previewDevice = DeviceUi(
 private val previewToggleSettings = listOf(
     DeviceSettingUIModel.TypeValue(
         type = DeviceSettingType.SUPPORT_SSL,
-        label = "Поддержка SSL",
         value = true,
     ),
     DeviceSettingUIModel.TypeValue(
         type = DeviceSettingType.SUPPORT_HEVC,
-        label = "Поддержка HEVC",
         value = true,
     ),
     DeviceSettingUIModel.TypeValue(
         type = DeviceSettingType.SUPPORT_HDR,
-        label = "Поддержка HDR",
         value = false,
         supported = false,
     ),
     DeviceSettingUIModel.TypeValue(
         type = DeviceSettingType.SUPPORT_4K,
-        label = "Поддержка 4K",
         value = false,
         supported = false,
     ),
     DeviceSettingUIModel.TypeValue(
         type = DeviceSettingType.MIXED_PLAYLIST,
-        label = "Смешанный плейлист",
         value = true,
     ),
 )
 
 private val previewStreamingType = DeviceSettingUIModel.TypeList(
     type = DeviceSettingType.STREAMING_TYPE,
-    label = "Тип стриминга",
     values = listOf(
         SettingOptionUi(1, "HLS", selected = true),
         SettingOptionUi(2, "HLS2", selected = false),
@@ -64,7 +58,6 @@ private val previewStreamingType = DeviceSettingUIModel.TypeList(
 
 private val previewServerLocation = DeviceSettingUIModel.TypeList(
     type = DeviceSettingType.SERVER_LOCATION,
-    label = "Сервер",
     values = listOf(
         SettingOptionUi(1, "Автоматически", selected = true),
         SettingOptionUi(2, "Москва", selected = false),
@@ -72,7 +65,7 @@ private val previewServerLocation = DeviceSettingUIModel.TypeList(
 )
 
 private val previewAllSettings = DeviceSettingsListUi(
-    previewToggleSettings + previewStreamingType + previewServerLocation
+    previewToggleSettings + previewServerLocation + previewStreamingType
 )
 
 private val previewApiDomain = ApiDomainDialogState(
@@ -254,18 +247,15 @@ private fun UnsupportedPreview() = PuberTheme {
                 listOf(
                     DeviceSettingUIModel.TypeValue(
                         type = DeviceSettingType.SUPPORT_SSL,
-                        label = "Поддержка SSL",
                         value = true,
                     ),
                     DeviceSettingUIModel.TypeValue(
                         type = DeviceSettingType.SUPPORT_HDR,
-                        label = "Поддержка HDR",
                         value = false,
                         supported = false,
                     ),
                     DeviceSettingUIModel.TypeValue(
                         type = DeviceSettingType.SUPPORT_4K,
-                        label = "Поддержка 4K",
                         value = false,
                         supported = false,
                     ),

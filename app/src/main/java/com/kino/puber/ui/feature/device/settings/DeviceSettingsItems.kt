@@ -62,6 +62,7 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
+import com.kino.puber.ui.feature.device.settings.model.titleRes
 import kotlin.math.roundToInt
 
 internal val LocalSettingsLeftFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
@@ -267,7 +268,7 @@ internal fun SettingSwitchItem(
 ) {
     if (!setting.supported) {
         SettingsListItem(
-            headline = setting.label,
+            headline = stringResource(setting.type.titleRes),
             supportingText = stringResource(R.string.device_settings_not_supported),
             enabled = false,
         )
@@ -276,7 +277,7 @@ internal fun SettingSwitchItem(
 
     Box {
         SettingsToggleItem(
-            label = setting.label,
+            label = stringResource(setting.type.titleRes),
             checked = setting.value,
             enabled = !isSaving,
             onToggle = onToggle,
@@ -311,7 +312,7 @@ internal fun SettingListItem(
         }
     }
     SettingsChoiceItem(
-        label = setting.label,
+        label = stringResource(setting.type.titleRes),
         options = options,
         isExpanded = isExpanded,
         savingOptionKey = savingOptionId?.toString(),

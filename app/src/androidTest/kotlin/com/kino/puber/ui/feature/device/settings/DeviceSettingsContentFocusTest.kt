@@ -152,7 +152,7 @@ internal class DeviceSettingsContentFocusTest {
         // "Automatic" also names the collapsed row's current value, so the unselected option is
         // what tells the list apart from the row that opens it.
         composeRule.onNodeWithText("Europe").assertDoesNotExist()
-        focusedItem("Server").assertIsFocused()
+        focusedItem(context.getString(R.string.device_setting_server_location)).assertIsFocused()
     }
 
     @Test
@@ -235,7 +235,7 @@ internal class DeviceSettingsContentFocusTest {
         )
 
         composeRule
-            .onNodeWithText("Use SSL", useUnmergedTree = true)
+            .onNodeWithText(context.getString(R.string.device_setting_support_ssl), useUnmergedTree = true)
             .onParent()
             .assertIsNotEnabled()
     }
@@ -412,7 +412,6 @@ private fun apiDomain() = ApiDomainDialogState(
 
 private fun serverSetting() = DeviceSettingUIModel.TypeList(
     type = DeviceSettingType.SERVER_LOCATION,
-    label = "Server",
     values = listOf(
         SettingOptionUi(
             id = 1,
@@ -431,6 +430,5 @@ private fun serverSetting() = DeviceSettingUIModel.TypeList(
 
 private fun sslSetting() = DeviceSettingUIModel.TypeValue(
     type = DeviceSettingType.SUPPORT_SSL,
-    label = "Use SSL",
     value = true,
 )

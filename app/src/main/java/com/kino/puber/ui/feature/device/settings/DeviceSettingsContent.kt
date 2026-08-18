@@ -614,35 +614,36 @@ private fun LazyListScope.networkItems(
             onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
         )
     }
+    // Which server and which stream decide what actually plays, so they belong with the mirror at
+    // the top. The switches below only report what this box can decode, and stay under their own
+    // heading.
+    items(
+        items = state.settings.settingsList.filterIsInstance<DeviceSettingUIModel.TypeList>(),
+        key = { setting -> setting.type.name },
+    ) { setting ->
+        SettingListItem(
+            setting = setting,
+            isExpanded = setting.type == state.expandedType,
+            savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
+            leftFocusRequester = leftFocusRequester,
+            onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
+            onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
+        )
+    }
     item(key = "device-settings-heading") {
         SectionHeading(stringResource(R.string.device_settings_title))
     }
-    itemsIndexed(
-        items = state.settings.settingsList,
-        key = { _, setting ->
-            when (setting) {
-                is DeviceSettingUIModel.TypeList -> setting.type.name
-                is DeviceSettingUIModel.TypeValue -> setting.type.name
-            }
-        },
-    ) { _, setting ->
-        when (setting) {
-            is DeviceSettingUIModel.TypeValue -> SettingSwitchItem(
-                setting = setting,
-                isSaving = state.savingToggleType == setting.type,
-                onToggle = {
-                    onAction(DeviceSettingsActions.ChangeSettingValue(setting.copy(value = !setting.value)))
-                },
-            )
-            is DeviceSettingUIModel.TypeList -> SettingListItem(
-                setting = setting,
-                isExpanded = setting.type == state.expandedType,
-                savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
-                leftFocusRequester = leftFocusRequester,
-                onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
-                onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
-            )
-        }
+    items(
+        items = state.settings.settingsList.filterIsInstance<DeviceSettingUIModel.TypeValue>(),
+        key = { setting -> setting.type.name },
+    ) { setting ->
+        SettingSwitchItem(
+            setting = setting,
+            isSaving = state.savingToggleType == setting.type,
+            onToggle = {
+                onAction(DeviceSettingsActions.ChangeSettingValue(setting.copy(value = !setting.value)))
+            },
+        )
     }
 }
 

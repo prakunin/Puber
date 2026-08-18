@@ -78,6 +78,13 @@
     <string name="settings_developer_description">Diagnostic information for troubleshooting</string>
     <string name="settings_about_device_title">About app and device</string>
     <string name="device_settings_title">Device settings</string>
+    <string name="device_setting_server_location">Server in use</string>
+    <string name="device_setting_streaming_type">Stream type</string>
+    <string name="device_setting_support_ssl">Use SSL</string>
+    <string name="device_setting_support_hevc">HEVC support</string>
+    <string name="device_setting_support_hdr">HDR support</string>
+    <string name="device_setting_support_4k">4K support</string>
+    <string name="device_setting_mixed_playlist">Mixed playlist</string>
     <string name="device_settings_current_device">Current device</string>
     <string name="device_settings_name">Name: %1$s</string>
     <string name="device_settings_name_with_version">Name: %1$s · %2$s</string>

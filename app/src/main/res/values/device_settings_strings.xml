@@ -17,6 +17,13 @@
     <string name="settings_developer_description">Диагностическая информация для отладки</string>
     <string name="settings_about_device_title">О приложении и устройстве</string>
     <string name="device_settings_title">Настройки устройства</string>
+    <string name="device_setting_server_location">Используемый сервер</string>
+    <string name="device_setting_streaming_type">Тип потока</string>
+    <string name="device_setting_support_ssl">Использовать SSL</string>
+    <string name="device_setting_support_hevc">Поддержка HEVC</string>
+    <string name="device_setting_support_hdr">Поддержка HDR</string>
+    <string name="device_setting_support_4k">Поддержка 4K</string>
+    <string name="device_setting_mixed_playlist">Смешанный плейлист</string>
     <string name="device_settings_current_device">Текущее устройство</string>
     <string name="device_settings_name">Название: %1$s</string>
     <string name="device_settings_name_with_version">Название: %1$s · %2$s</string>
