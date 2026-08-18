@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +32,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -81,6 +82,7 @@ internal fun DeviceSettingsContent(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit = {},
     initialSection: SettingsSection = SettingsSection.General,
+    isApiDomainDialogOpen: Boolean = false,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (state) {
@@ -95,6 +97,7 @@ internal fun DeviceSettingsContent(
                 apiDomain = apiDomain,
                 onAction = onAction,
                 initialSection = initialSection,
+                isApiDomainDialogOpen = isApiDomainDialogOpen,
             )
         }
     }
@@ -170,6 +173,7 @@ private fun DeviceSettingsPane(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
     initialSection: SettingsSection,
+    isApiDomainDialogOpen: Boolean,
 ) {
     var selectedSection by rememberSaveable { mutableStateOf(initialSection) }
     val sections = remember {
@@ -180,6 +184,18 @@ private fun DeviceSettingsPane(
         sections.associateWith { section ->
             if (section == initialSection) initialFocusRequester else FocusRequester()
         }
+    }
+    // Rebuilt with the panel it points into, which is keyed on the section below: a requester kept
+    // across sections would still name a list that has been thrown away.
+    val panelFocusRequester = remember(selectedSection) { FocusRequester() }
+    // The dialog takes focus into itself, and closing it leaves nothing holding focus at all: the
+    // search that follows starts from the root and settles on the navigation rail, so dismissing
+    // the dialog looks like the menu opening by itself. The panel takes its focus back, at the top
+    // — which is where the row that opens the dialog sits anyway.
+    var dialogWasOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(isApiDomainDialogOpen) {
+        if (!isApiDomainDialogOpen && dialogWasOpen) panelFocusRequester.requestFocus()
+        dialogWasOpen = isApiDomainDialogOpen
     }
 
     Row(
@@ -203,6 +219,7 @@ private fun DeviceSettingsPane(
                 sections = sections,
                 selectedSection = selectedSection,
                 sectionFocusRequesters = sectionFocusRequesters,
+                panelFocusRequester = panelFocusRequester,
                 onSectionSelected = { selectedSection = it },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -216,6 +233,7 @@ private fun DeviceSettingsPane(
                 apiDomain = apiDomain,
                 onAction = onAction,
                 leftFocusRequester = sectionFocusRequesters.getValue(selectedSection),
+                panelFocusRequester = panelFocusRequester,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -229,6 +247,7 @@ private fun SettingsNavigation(
     sections: List<SettingsSection>,
     selectedSection: SettingsSection,
     sectionFocusRequesters: Map<SettingsSection, FocusRequester>,
+    panelFocusRequester: FocusRequester,
     onSectionSelected: (SettingsSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -240,6 +259,16 @@ private fun SettingsNavigation(
                 // arriving focus. The list is the picker for the open section, so coming back to
                 // it belongs on that section rather than wherever the search points.
                 onEnter = { sectionFocusRequesters.getValue(selectedSection).requestFocus() }
+                // Leaving to the right is the way into the open section, and the same geometry
+                // applies on the way out: a plain search lands on whichever setting happens to sit
+                // level with the row being left, so walking down the sections walks down the
+                // panel's rows too. Handing the move to the panel's own requester enters it at the
+                // top instead, from every row and for every section.
+                onExit = {
+                    if (requestedFocusDirection == FocusDirection.Right) {
+                        panelFocusRequester.requestFocus()
+                    }
+                }
             }
             .focusGroup()
             .testTag(SettingsTestTags.Navigation),
@@ -297,6 +326,7 @@ private fun SettingsSectionPanel(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
+    panelFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -330,6 +360,7 @@ private fun SettingsSectionPanel(
                 apiDomain = apiDomain,
                 onAction = onAction,
                 leftFocusRequester = leftFocusRequester,
+                panelFocusRequester = panelFocusRequester,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(SettingsTestTags.Content),
@@ -358,17 +389,31 @@ private fun SettingsSectionContent(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
+    panelFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
     var expandedNavigationChoice by rememberSaveable(section) {
         mutableStateOf<NavigationChoice?>(null)
     }
+    var panelHasFocus by remember { mutableStateOf(false) }
+    // Arriving from the section list always lands on the setting at the top, whichever section it
+    // is and whatever was touched there before. Restoring the previous row would mean the same
+    // press of Right ends up somewhere different every time, and a row remembered from a section
+    // the user has since left says nothing about the one they are looking at.
+    //
+    // Done on the way out rather than on the way in: focus entering the group resolves against the
+    // items composed at that moment, so a list still scrolled down would hand focus to whatever sits
+    // at its top edge before any correction here could run.
+    LaunchedEffect(section, panelHasFocus) {
+        if (!panelHasFocus) listState.scrollToItem(0)
+    }
     CompositionLocalProvider(LocalSettingsLeftFocusRequester provides leftFocusRequester) {
         LazyColumn(
             state = listState,
             modifier = modifier
-                .focusRestorer()
+                .onFocusChanged { panelHasFocus = it.hasFocus }
+                .focusRequester(panelFocusRequester)
                 .focusGroup(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),

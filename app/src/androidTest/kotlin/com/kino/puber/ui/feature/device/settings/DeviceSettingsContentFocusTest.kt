@@ -107,6 +107,35 @@ internal class DeviceSettingsContentFocusTest {
     }
 
     @Test
+    fun reEnteringTheSamePanelLandsOnItsFirstSettingAgain() {
+        setSuccessContent(initialSection = SettingsSection.Playback)
+        val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
+        playback.requestFocus().press(Key.DirectionRight)
+        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
+
+        playback.press(Key.DirectionRight)
+
+        focusedItem(context.getString(R.string.settings_prefer_surround_audio)).assertIsFocused()
+    }
+
+    @Test
+    fun anotherSectionOpensOnItsFirstSettingRatherThanWhereTheLastOneStopped() {
+        setSuccessContent(initialSection = SettingsSection.Playback)
+        val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
+        playback.requestFocus().press(Key.DirectionRight)
+        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
+
+        playback.press(Key.DirectionDown)
+        composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Content.name))
+            .assertIsFocused()
+            .press(Key.DirectionRight)
+
+        focusedItem(context.getString(R.string.settings_watched_indicators)).assertIsFocused()
+    }
+
+    @Test
     fun leftFromLowerSettingReturnsToTheActiveMenuSection() {
         setSuccessContent(initialSection = SettingsSection.Playback)
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
@@ -238,6 +267,35 @@ internal class DeviceSettingsContentFocusTest {
             .onNodeWithText(context.getString(R.string.device_setting_support_ssl), useUnmergedTree = true)
             .onParent()
             .assertIsNotEnabled()
+    }
+
+    @Test
+    fun closingTheMirrorDialogPutsFocusBackInThePanel() {
+        var dialogOpen by mutableStateOf(false)
+        composeRule.setContent {
+            PuberTheme {
+                DeviceSettingsContent(
+                    state = successState(settings = listOf(serverSetting())),
+                    apiDomain = apiDomain(),
+                    initialSection = SettingsSection.Network,
+                    isApiDomainDialogOpen = dialogOpen,
+                )
+            }
+        }
+        val network = composeRule.onNodeWithTag(
+            SettingsTestTags.section(SettingsSection.Network.name)
+        )
+        network.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
+
+        // The dialog is a sibling of this content, so the test can only play its effect on focus:
+        // it takes focus away while open, and on close there is nothing left holding any.
+        dialogOpen = true
+        composeRule.waitForIdle()
+        dialogOpen = false
+        composeRule.waitForIdle()
+
+        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
     }
 
     @Test

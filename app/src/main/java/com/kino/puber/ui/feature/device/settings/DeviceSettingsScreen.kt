@@ -42,6 +42,7 @@ internal class DeviceSettingsScreen : PuberScreen {
                 state = state.state,
                 apiDomain = state.apiDomain,
                 onAction = onAction,
+                isApiDomainDialogOpen = state.isApiDomainDialogOpen,
             )
             ApiDomainDialog(
                 state = state.apiDomain.takeIf { state.isApiDomainDialogOpen },
