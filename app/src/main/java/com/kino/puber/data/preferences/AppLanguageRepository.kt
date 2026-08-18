@@ -7,11 +7,11 @@ import android.content.Context
 /**
  * The interface language the user has chosen.
  *
- * Only stores the choice. Applying it is [AppLocale]'s job, and it happens once, in
- * `attachBaseContext`, before anything can read a string — so a language written here governs
- * from the next start of the app rather than the moment it is written. Everything the process has
- * already resolved, in a composition or through
- * [com.kino.puber.core.system.ResourceProvider], stays in one language until then.
+ * Only stores the choice. Applying it is [AppLocale]'s job: writing here publishes the language on
+ * [AppLocale.current], which the composition and
+ * [com.kino.puber.core.system.ResourceProvider] both follow, so the interface changes over without
+ * a restart. What a screen has already resolved into its state — a rail title, a duration label —
+ * keeps the old language until that state is built again.
  */
 class AppLanguageRepository(private val context: Context) {
 

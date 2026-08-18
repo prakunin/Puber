@@ -4,8 +4,26 @@ import android.content.Context
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.ContextCompat
+import com.kino.puber.core.model.AppLanguage
 
-class AndroidResourceProvider(private val context: Context) : ResourceProvider {
+class AndroidResourceProvider(private val appContext: Context) : ResourceProvider {
+
+    @Volatile
+    private var localized: Pair<AppLanguage, Context>? = null
+
+    /**
+     * The application was wrapped once, in `attachBaseContext`, so on its own it would keep
+     * answering in whichever language the process started in. Re-wrapping when the choice changes
+     * is what lets a string resolved outside a composition — an error message, a snackbar written
+     * by a view model — come out in the language the screen is already showing.
+     */
+    private val context: Context
+        get() {
+            val language = AppLocale.current.value
+            localized?.takeIf { it.first == language }?.let { return it.second }
+            return AppLocale.wrap(appContext, language).also { localized = language to it }
+        }
+
     override fun getString(resId: Int): String = context.getString(resId)
     override fun getString(resId: Int, vararg arg: Any): String = context.getString(resId, *arg)
     override fun getColor(colorRes: Int): Int = ContextCompat.getColor(context, colorRes)
@@ -15,10 +33,10 @@ class AndroidResourceProvider(private val context: Context) : ResourceProvider {
     }
 
     override fun getImageVector(resId: Int): ImageVector {
-        val res = context.resources
-        val theme = context.theme
+        val localizedContext = context
         return ImageVector.vectorResource(
-            theme = theme, res = res,
+            theme = localizedContext.theme,
+            res = localizedContext.resources,
             resId = resId,
         )
     }

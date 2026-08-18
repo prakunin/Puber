@@ -460,7 +460,6 @@ private fun LazyListScope.generalItems(
     item(key = "app-language") {
         SettingsChoiceItem(
             label = stringResource(R.string.settings_app_language),
-            description = stringResource(R.string.settings_navigation_restart_hint),
             options = appLanguageOptions(state.appLanguage),
             isExpanded = languageExpanded,
             leftFocusRequester = leftFocusRequester,

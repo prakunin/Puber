@@ -2,6 +2,7 @@ package com.kino.puber.data.preferences
 
 import android.content.Context
 import com.kino.puber.core.model.AppLanguage
+import com.kino.puber.core.system.AppLocale
 import com.kino.puber.util.FakeSharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -30,6 +31,17 @@ internal class AppLanguageRepositoryTest {
 
         assertEquals(AppLanguage.English, fixture.repository.getLanguage())
         assertEquals(AppLanguage.English.name, fixture.preferences.values[LANGUAGE_KEY])
+    }
+
+    @Test
+    fun storingALanguagePublishesItSoTheInterfaceChangesOverWithoutARestart() {
+        val fixture = fixture()
+
+        fixture.repository.setLanguage(AppLanguage.English)
+        assertEquals(AppLanguage.English, AppLocale.current.value)
+
+        fixture.repository.setLanguage(AppLanguage.System)
+        assertEquals(AppLanguage.System, AppLocale.current.value)
     }
 
     @Test
