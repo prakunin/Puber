@@ -17,11 +17,14 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import androidx.media3.exoplayer.source.BehindLiveWindowException
 import okhttp3.OkHttpClient
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultAllocator
@@ -102,6 +105,7 @@ internal class PlaybackController(
     private var useFastDns = true
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
     private var currentStreamUrl: String? = null
+    private var effectiveStreamSource: String? = null
 
     // Owned rather than left to DefaultLoadControl, which keeps its allocator to itself: this is
     // the only way to read how many bytes the buffer actually holds.
@@ -169,6 +173,26 @@ internal class PlaybackController(
         }
     }
 
+    private val analyticsListener = object : AnalyticsListener {
+        override fun onLoadStarted(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+            retryAttempt: Int,
+        ) {
+            updateEffectiveStreamSource(loadEventInfo.uri.host, mediaLoadData)
+        }
+
+        override fun onLoadCompleted(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+        ) {
+            // Unlike DataSpec.uri, this URI reflects the endpoint after HTTP redirects.
+            updateEffectiveStreamSource(loadEventInfo.uri.host, mediaLoadData)
+        }
+    }
+
     private fun recoverBehindLiveWindow() {
         exoPlayer?.let { player ->
             player.seekToDefaultPosition()
@@ -228,12 +252,16 @@ internal class PlaybackController(
             .setHandleAudioBecomingNoisy(true)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
-            .apply { addListener(playerListener) }
+            .apply {
+                addListener(playerListener)
+                addAnalyticsListener(analyticsListener)
+            }
         exoPlayer = player
 
         val mediaItem = buildMediaItem(streamUrl, subtitles)
         setMediaSource(player, mediaItem, streamUrl)
         currentStreamUrl = streamUrl
+        effectiveStreamSource = PlaybackDebugFormat.streamSource(streamUrl)
 
         player.prepare()
         if (startPosition != null) {
@@ -279,6 +307,7 @@ internal class PlaybackController(
         val mediaItem = buildMediaItem(streamUrl, subtitles)
         setMediaSource(player, mediaItem, streamUrl)
         currentStreamUrl = streamUrl
+        effectiveStreamSource = PlaybackDebugFormat.streamSource(streamUrl)
 
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
@@ -338,12 +367,16 @@ internal class PlaybackController(
     }
 
     override fun release() {
-        exoPlayer?.removeListener(playerListener)
-        exoPlayer?.release()
+        exoPlayer?.let { player ->
+            player.removeAnalyticsListener(analyticsListener)
+            player.removeListener(playerListener)
+            player.release()
+        }
         exoPlayer = null
         trackSelector = null
         dataSourceFactory = null
         currentStreamUrl = null
+        effectiveStreamSource = null
         bufferAllocator = null
         targetBufferBytes = 0
     }
@@ -464,8 +497,16 @@ internal class PlaybackController(
                 allocatedBytes = bufferAllocator?.totalBytesAllocated ?: 0,
                 targetBytes = targetBufferBytes,
             ),
-            streamSource = PlaybackDebugFormat.streamSource(currentStreamUrl),
+            streamSource = effectiveStreamSource
+                ?: PlaybackDebugFormat.streamSource(currentStreamUrl),
         )
+    }
+
+    private fun updateEffectiveStreamSource(host: String?, mediaLoadData: MediaLoadData) {
+        if (mediaLoadData.trackType == C.TRACK_TYPE_TEXT) return
+        PlaybackDebugFormat.streamSourceHost(host)
+            .takeUnless { it == UNKNOWN_VALUE }
+            ?.let { effectiveStreamSource = it }
     }
 
     private fun codecName(format: Format?): String {
