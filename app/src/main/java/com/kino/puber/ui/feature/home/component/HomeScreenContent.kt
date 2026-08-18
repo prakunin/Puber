@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,7 @@ import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledRowFocus
 import com.kino.puber.core.ui.uikit.state.rememberSessionLazyListState
+import com.kino.puber.core.ui.uikit.state.sessionMutableStateSaver
 import com.kino.puber.core.ui.navigation.component.PreserveLazyListAnchorOnRootReturn
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -163,6 +165,10 @@ private fun HomeContent(
     var focusedTarget by remember(state.heroItems, state.sections) {
         mutableStateOf(state.defaultFocusedTarget())
     }
+    // Which of the two regions — the carousel or the rows — the user was last in. Kept for the
+    // session rather than for the composition, because a screen that is returned to has lost its
+    // composition but not the position the user left, and that position is what the restore aims at.
+    var rowsHeldFocus by rememberSaveable(saver = sessionMutableStateSaver()) { mutableStateOf(false) }
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
     val rows = remember(state.sections) {
         state.sections.map { row ->
@@ -206,6 +212,7 @@ private fun HomeContent(
                             onItemClick = onHeroClick,
                             onFocusedItemChanged = { id ->
                                 focusedTarget = HomeFocusedTarget.Hero(id)
+                                rowsHeldFocus = false
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -214,10 +221,18 @@ private fun HomeContent(
                 homeSections(
                     state = state,
                     rowFocus = rowFocus,
-                    focusedTarget = focusedTarget,
+                    // The hero owns the focus a fresh Home opens with, and no row may pull focus off
+                    // it — that request would scroll the carousel out of the viewport the moment Home
+                    // loads, or the moment a refresh lands under a user who is looking at it. A user
+                    // who left from the rows is a different matter: the row they left is exactly what
+                    // a return has to restore to.
+                    rowsMayTakeFocus = state.heroItems.isEmpty() || rowsHeldFocus,
                     onAction = onAction,
                     onCollectionClick = onCollectionClick,
-                    onFocusedTarget = { focusedTarget = it },
+                    onFocusedTarget = {
+                        focusedTarget = it
+                        rowsHeldFocus = true
+                    },
                     onContextMenuItem = { contextMenuItem = it },
                 )
             }
@@ -233,7 +248,7 @@ private fun HomeContent(
 private fun LazyListScope.homeSections(
     state: HomeViewState.Content,
     rowFocus: ReconciledRowFocusState,
-    focusedTarget: HomeFocusedTarget?,
+    rowsMayTakeFocus: Boolean,
     onAction: (UIAction) -> Unit,
     onCollectionClick: (Int, String) -> Unit,
     onFocusedTarget: (HomeFocusedTarget) -> Unit,
@@ -252,11 +267,7 @@ private fun LazyListScope.homeSections(
                 HomeSectionRow(
                     rowKey = section.type.name,
                     items = section.items,
-                    // The hero is the initial Home target. A section must not restore its first
-                    // card until focus has actually moved below the hero, otherwise that request
-                    // scrolls the carousel out of the viewport as soon as Home loads.
-                    isTargetRow = focusedTarget !is HomeFocusedTarget.Hero &&
-                        section.type.name == rowFocus.focusedRowKey,
+                    isTargetRow = rowsMayTakeFocus && section.type.name == rowFocus.focusedRowKey,
                     rowOrder = index,
                     // Collections open a list, not a details screen, and their ids are collection
                     // ids. The row keeps its absolute position all the same, so the rows either
