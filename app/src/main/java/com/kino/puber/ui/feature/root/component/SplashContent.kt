@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -65,17 +66,20 @@ internal fun SplashContent(modifier: Modifier = Modifier) {
                     textAlign = TextAlign.Center,
                 ),
             )
-            BasicText(
-                text = BuildConfig.VERSION_NAME,
-                style = TextStyle(
-                    fontFamily = FontFamily.Default,
-                    fontSize = 9.sp,
-                    letterSpacing = 1.sp,
-                    color = colorResource(R.color.splash_signature),
-                    textAlign = TextAlign.Center,
-                ),
-            )
         }
+        BasicText(
+            text = BuildConfig.VERSION_NAME,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp),
+            style = TextStyle(
+                fontFamily = FontFamily.Default,
+                fontSize = 9.sp,
+                letterSpacing = 1.sp,
+                color = colorResource(R.color.splash_signature),
+                textAlign = TextAlign.Center,
+            ),
+        )
     }
 }
 
