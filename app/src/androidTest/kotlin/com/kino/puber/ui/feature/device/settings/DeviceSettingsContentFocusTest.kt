@@ -1,8 +1,19 @@
 package com.kino.puber.ui.feature.device.settings
 
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
@@ -38,6 +49,7 @@ import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.ui.feature.main.model.TabType
 
 private const val FocusTimeoutMillis = 3_000L
+private const val NeighbourTag = "settings-neighbour"
 
 internal class DeviceSettingsContentFocusTest {
 
@@ -137,7 +149,10 @@ internal class DeviceSettingsContentFocusTest {
         focusedItem("Automatic").assertIsFocused().press(Key.Back)
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Automatic").assertDoesNotExist()
+        // "Automatic" also names the collapsed row's current value, so the unselected option is
+        // what tells the list apart from the row that opens it.
+        composeRule.onNodeWithText("Europe").assertDoesNotExist()
+        focusedItem("Server").assertIsFocused()
     }
 
     @Test
@@ -287,6 +302,56 @@ internal class DeviceSettingsContentFocusTest {
         }
         focusedNode().press(Key.DirectionLeft)
         dataSection.assertIsFocused()
+    }
+
+    /**
+     * Entering the section list from the outside lands on the section that is actually open.
+     *
+     * The neighbour sits at the bottom, where the rail's own Settings entry sits, so a plain
+     * directional search picks the section nearest to it rather than the selected one.
+     */
+    @Test
+    fun enteringSectionListFromOutsideLandsOnTheSelectedSection() {
+        setContentBesideNeighbour(
+            initialSection = SettingsSection.Navigation,
+            neighbourAlignment = Alignment.BottomStart,
+        )
+        composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Navigation.name))
+            .requestFocus()
+
+        composeRule.onNodeWithTag(NeighbourTag).requestFocus().press(Key.DirectionRight)
+
+        composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Navigation.name))
+            .assertIsFocused()
+    }
+
+    private fun setContentBesideNeighbour(
+        initialSection: SettingsSection,
+        neighbourAlignment: Alignment,
+    ) {
+        composeRule.setContent {
+            PuberTheme {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxHeight().width(48.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .align(neighbourAlignment)
+                                .height(48.dp)
+                                .width(48.dp)
+                                .testTag(NeighbourTag)
+                                .focusable(),
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        DeviceSettingsContent(
+                            state = successState(),
+                            apiDomain = apiDomain(),
+                            initialSection = initialSection,
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun setSuccessContent(

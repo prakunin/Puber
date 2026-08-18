@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -229,7 +230,13 @@ private fun SettingsNavigation(
 ) {
     LazyColumn(
         modifier = modifier
-            .focusRestorer()
+            .focusProperties {
+                // Entry from outside — from the navigation rail, say — is a directional focus
+                // search, and geometry alone lands on whichever row happens to sit nearest the
+                // arriving focus. The list is the picker for the open section, so coming back to
+                // it belongs on that section rather than wherever the search points.
+                onEnter = { sectionFocusRequesters.getValue(selectedSection).requestFocus() }
+            }
             .focusGroup()
             .testTag(SettingsTestTags.Navigation),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -251,6 +258,7 @@ private fun SettingsNavigation(
                     .semantics { this.selected = selected }
                     .testTag(SettingsTestTags.section(section.name)),
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = if (selected) {
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
@@ -368,7 +376,6 @@ private fun SettingsSectionContent(
                 SettingsSection.Navigation -> navigationItems(
                     state = state,
                     onAction = onAction,
-                    listState = listState,
                     leftFocusRequester = leftFocusRequester,
                     expandedChoice = expandedNavigationChoice,
                     onExpandedChoiceChange = { expandedNavigationChoice = it },
@@ -377,7 +384,6 @@ private fun SettingsSectionContent(
                     state,
                     apiDomain,
                     onAction,
-                    listState,
                     leftFocusRequester,
                 )
                 SettingsSection.Data -> watchHistoryItems(state, onAction)
@@ -509,7 +515,6 @@ private fun LazyListScope.contentItems(
 private fun LazyListScope.navigationItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState,
     leftFocusRequester: FocusRequester,
     expandedChoice: NavigationChoice?,
     onExpandedChoiceChange: (NavigationChoice?) -> Unit,
@@ -530,8 +535,6 @@ private fun LazyListScope.navigationItems(
                 onExpandedChoiceChange(null)
                 onAction(DeviceSettingsActions.ChangeNavigationMode(NavigationMode.valueOf(key)))
             },
-            listState = listState,
-            lazyItemIndex = 0,
         )
     }
     item(key = "startup-tab") {
@@ -553,8 +556,6 @@ private fun LazyListScope.navigationItems(
                 onExpandedChoiceChange(null)
                 onAction(DeviceSettingsActions.ChangeStartupTab(TabType.valueOf(key)))
             },
-            listState = listState,
-            lazyItemIndex = 1,
         )
     }
 }
@@ -586,7 +587,6 @@ private fun LazyListScope.networkItems(
     state: DeviceSettingsState.Success,
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState,
     leftFocusRequester: FocusRequester,
 ) {
     item(key = "api-domain") {
@@ -608,7 +608,7 @@ private fun LazyListScope.networkItems(
                 is DeviceSettingUIModel.TypeValue -> setting.type.name
             }
         },
-    ) { index, setting ->
+    ) { _, setting ->
         when (setting) {
             is DeviceSettingUIModel.TypeValue -> SettingSwitchItem(
                 setting = setting,
@@ -624,8 +624,6 @@ private fun LazyListScope.networkItems(
                 leftFocusRequester = leftFocusRequester,
                 onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
                 onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
-                listState = listState,
-                lazyItemIndex = index + 2,
             )
         }
     }

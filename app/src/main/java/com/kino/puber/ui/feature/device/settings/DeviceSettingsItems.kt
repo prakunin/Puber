@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.device.settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,13 +16,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -33,6 +34,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -47,8 +49,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -57,6 +61,11 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 
 internal val LocalSettingsLeftFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
+
+private val ItemMinHeight = 48.dp
+private val DenseItemMinHeight = 40.dp
+private val TrailingSlotSize = 24.dp
+private val RadioIndicatorSize = 18.dp
 
 @Composable
 internal fun SettingsListItem(
@@ -67,6 +76,7 @@ internal fun SettingsListItem(
     selected: Boolean = false,
     enabled: Boolean = true,
     focusableWhenDisabled: Boolean = false,
+    dense: Boolean = false,
     role: Role? = null,
     onClick: (() -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -88,6 +98,7 @@ internal fun SettingsListItem(
             supportingText = supportingText,
             trailingText = trailingText,
             trailingContent = trailingContent,
+            dense = dense,
             modifier = itemModifier,
         )
         return
@@ -98,6 +109,7 @@ internal fun SettingsListItem(
         enabled = enabled || focusableWhenDisabled,
         modifier = itemModifier,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) {
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
@@ -116,6 +128,7 @@ internal fun SettingsListItem(
             supportingText = supportingText,
             trailingText = trailingText,
             trailingContent = trailingContent,
+            dense = dense,
         )
     }
 }
@@ -135,11 +148,12 @@ private fun SettingsListItemBody(
     supportingText: String?,
     trailingText: String?,
     trailingContent: (@Composable RowScope.() -> Unit)?,
+    dense: Boolean = false,
 ) {
     Row(
         modifier = modifier
-            .heightIn(min = 56.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .heightIn(min = if (dense) DenseItemMinHeight else ItemMinHeight)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -153,7 +167,7 @@ private fun SettingsListItemBody(
                 Text(
                     text = supportingText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.7f),
+                    color = LocalContentColor.current.copy(alpha = 0.7f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp),
@@ -165,14 +179,16 @@ private fun SettingsListItemBody(
             Text(
                 text = trailingText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.76f),
+                color = LocalContentColor.current.copy(alpha = 0.76f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         trailingContent?.let {
             Spacer(modifier = Modifier.width(16.dp))
-            it()
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                it()
+            }
         }
     }
 }
@@ -244,8 +260,6 @@ internal fun SettingListItem(
     leftFocusRequester: FocusRequester,
     onToggleExpand: () -> Unit,
     onOptionSelect: (Int) -> Unit,
-    listState: LazyListState? = null,
-    lazyItemIndex: Int = 0,
 ) {
     val options = remember(setting.values) {
         setting.values.map { option ->
@@ -265,8 +279,6 @@ internal fun SettingListItem(
         leftFocusRequester = leftFocusRequester,
         onToggleExpand = onToggleExpand,
         onOptionSelect = { onOptionSelect(it.toInt()) },
-        listState = listState,
-        lazyItemIndex = lazyItemIndex,
     )
 }
 
@@ -281,8 +293,6 @@ internal fun SettingsChoiceItem(
     modifier: Modifier = Modifier,
     description: String? = null,
     savingOptionKey: String? = null,
-    listState: LazyListState? = null,
-    lazyItemIndex: Int = 0,
 ) {
     val headerFocusRequester = remember { FocusRequester() }
     val optionFocusRequesters = remember(options.map(SettingsChoiceOption::key)) {
@@ -317,6 +327,11 @@ internal fun SettingsChoiceItem(
                 modifier = Modifier
                     .onKeyEvent { event ->
                         if (event.key == Key.Back && event.type == KeyEventType.KeyUp) {
+                            // Focus goes back to the header before the options leave the
+                            // composition. Collapsing out from under the focused row drops focus
+                            // out of the screen entirely, and the navigation rail reveals itself
+                            // on focus — so Back would both close the list and open the rail.
+                            headerFocusRequester.requestFocus()
                             onToggleExpand()
                             true
                         } else {
@@ -324,8 +339,8 @@ internal fun SettingsChoiceItem(
                         }
                     }
                     .focusGroup()
-                    .padding(start = 24.dp, top = 4.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .padding(start = 16.dp, top = 2.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 options.forEach { option ->
                     OptionItem(
@@ -349,7 +364,6 @@ internal fun SettingsChoiceItem(
 
         LaunchedEffect(isExpanded) {
             if (isExpanded) {
-                listState?.animateScrollToItem(lazyItemIndex)
                 val requester = selectedOption
                     ?.let { optionFocusRequesters[it.key] }
                     ?: optionFocusRequesters.values.firstOrNull()
@@ -372,23 +386,48 @@ private fun OptionItem(
         supportingText = option.description,
         selected = option.selected,
         enabled = enabled,
+        dense = true,
         role = Role.RadioButton,
         onClick = onClick,
         modifier = modifier,
         trailingContent = {
-            if (isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                RadioButton(
-                    selected = option.selected,
-                    onClick = null,
-                    enabled = enabled,
-                    modifier = Modifier.focusProperties { canFocus = false },
-                )
+            // A fixed slot keeps the label still while the indicator swaps for the saving spinner.
+            Box(
+                modifier = Modifier.size(TrailingSlotSize),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(TrailingSlotSize),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    RadioIndicator(selected = option.selected)
+                }
             }
         },
     )
+}
+
+/**
+ * A radio dot drawn in the current content colour so it inverts together with the focused row,
+ * and sized exactly, unlike the Material button that pads itself out to a touch target.
+ */
+@Composable
+private fun RadioIndicator(
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val color = LocalContentColor.current
+    Canvas(modifier = modifier.size(RadioIndicatorSize)) {
+        val strokeWidth = 2.dp.toPx()
+        drawCircle(
+            color = color.copy(alpha = if (selected) 1f else 0.6f),
+            radius = (size.minDimension - strokeWidth) / 2,
+            style = Stroke(width = strokeWidth),
+        )
+        if (selected) {
+            drawCircle(color = color, radius = size.minDimension / 4)
+        }
+    }
 }
