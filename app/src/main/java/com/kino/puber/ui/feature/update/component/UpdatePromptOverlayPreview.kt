@@ -19,10 +19,10 @@ private val previewUpdate = AvailableUpdate(
         - Improved update download progress and checksum validation.
     """.trimIndent(),
     apkAssetName = "puber-prod-release.apk",
-    apkDownloadUrl = "https://github.com/rovkinmax/Puber/releases/download/v1.5.0/puber-prod-release.apk",
+    apkDownloadUrl = "https://github.com/prakunin/Puber/releases/download/v1.5.0/puber-prod-release.apk",
     apkSizeBytes = 42_000_000,
-    checksumDownloadUrl = "https://github.com/rovkinmax/Puber/releases/download/v1.5.0/puber-prod-release.apk.sha256",
-    releasePageUrl = "https://github.com/rovkinmax/Puber/releases/tag/v1.5.0",
+    checksumDownloadUrl = "https://github.com/prakunin/Puber/releases/download/v1.5.0/puber-prod-release.apk.sha256",
+    releasePageUrl = "https://github.com/prakunin/Puber/releases/tag/v1.5.0",
 )
 
 @Preview(name = "Update prompt - available", device = TV_1080p)

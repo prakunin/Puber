@@ -22,20 +22,20 @@ class AppUpdateRepositoryTest {
     fun getAvailableUpdate_returnsUpdate_whenLatestReleaseIsNewer() = runTest {
         val apkAsset = releaseAsset(
             name = "puber-v1.5.0.apk",
-            browserDownloadUrl = "https://github.com/rovkinmax/Puber/releases/download/v1.5.0/puber-v1.5.0.apk",
+            browserDownloadUrl = "https://github.com/prakunin/Puber/releases/download/v1.5.0/puber-v1.5.0.apk",
             size = 42_000_000,
             contentType = "application/vnd.android.package-archive",
         )
         val checksumAsset = releaseAsset(
             name = "puber-v1.5.0.apk.sha256",
-            browserDownloadUrl = "https://github.com/rovkinmax/Puber/releases/download/v1.5.0/puber-v1.5.0.apk.sha256",
+            browserDownloadUrl = "https://github.com/prakunin/Puber/releases/download/v1.5.0/puber-v1.5.0.apk.sha256",
         )
-        coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
             release(
                 tagName = "v1.5.0",
                 name = "Puber 1.5.0",
                 body = "Release notes",
-                htmlUrl = "https://github.com/rovkinmax/Puber/releases/tag/v1.5.0",
+                htmlUrl = "https://github.com/prakunin/Puber/releases/tag/v1.5.0",
                 assets = listOf(apkAsset, checksumAsset),
             )
         )
@@ -51,7 +51,7 @@ class AppUpdateRepositoryTest {
         assertEquals(apkAsset.browserDownloadUrl, update?.apkDownloadUrl)
         assertEquals(apkAsset.size, update?.apkSizeBytes)
         assertEquals(checksumAsset.browserDownloadUrl, update?.checksumDownloadUrl)
-        assertEquals("https://github.com/rovkinmax/Puber/releases/tag/v1.5.0", update?.releasePageUrl)
+        assertEquals("https://github.com/prakunin/Puber/releases/tag/v1.5.0", update?.releasePageUrl)
     }
 
     @Test
@@ -66,7 +66,7 @@ class AppUpdateRepositoryTest {
             browserDownloadUrl = "https://example.com/package.apk",
             contentType = "application/vnd.android.package-archive",
         )
-        coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
             release(tagName = "1.5.0", assets = listOf(genericApkAsset, packageApkAsset))
         )
 
@@ -77,7 +77,7 @@ class AppUpdateRepositoryTest {
 
     @Test
     fun getAvailableUpdate_returnsNull_whenLatestReleaseIsNotNewer() = runTest {
-        coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
             release(tagName = "1.4.0", assets = listOf(releaseAsset(name = "puber.apk")))
         )
 
@@ -85,7 +85,7 @@ class AppUpdateRepositoryTest {
 
         assertNull(equalResult.getOrThrow())
 
-        coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
             release(tagName = "1.3.9", assets = listOf(releaseAsset(name = "puber.apk")))
         )
 
@@ -105,7 +105,7 @@ class AppUpdateRepositoryTest {
         )
 
         unusableReleases.forEach { release ->
-            coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.success(release)
+            coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(release)
 
             val result = repository.getAvailableUpdate(currentVersionName = "1.4.0")
 
@@ -124,7 +124,7 @@ class AppUpdateRepositoryTest {
     @Test
     fun getAvailableUpdate_returnsFailure_whenApiFails() = runTest {
         val exception = IOException("Network error")
-        coEvery { apiClient.getLatestGitHubRelease("rovkinmax", "Puber") } returns Result.failure(exception)
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.failure(exception)
 
         val result = repository.getAvailableUpdate(currentVersionName = "1.4.0")
 

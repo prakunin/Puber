@@ -209,6 +209,6 @@ class UpdatePromptVMTest {
         apkDownloadUrl = "https://example.com/puber-v1.5.0.apk",
         apkSizeBytes = 42_000_000,
         checksumDownloadUrl = "https://example.com/puber-v1.5.0.apk.sha256",
-        releasePageUrl = "https://github.com/rovkinmax/Puber/releases/tag/v1.5.0",
+        releasePageUrl = "https://github.com/prakunin/Puber/releases/tag/v1.5.0",
     )
 }
