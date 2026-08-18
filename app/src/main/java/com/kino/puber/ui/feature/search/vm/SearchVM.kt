@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.search.SearchInteractor
+import com.kino.puber.ui.feature.search.model.SearchAction
 import com.kino.puber.ui.feature.search.model.SearchViewState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -39,8 +40,16 @@ internal class SearchVM(
                 setItemSaved(item, action.isSaved)
             }
             is CommonAction.RetryClicked -> restartSearch()
+            SearchAction.ScreenEntered -> resetSearch()
             else -> super.onAction(action)
         }
+    }
+
+    private fun resetSearch() {
+        searchJob?.cancel()
+        searchJob = null
+        query = ""
+        updateViewState(SearchViewState.Idle)
     }
 
     private fun onQueryChanged(text: String) {

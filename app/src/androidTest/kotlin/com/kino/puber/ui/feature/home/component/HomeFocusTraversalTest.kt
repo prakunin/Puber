@@ -1,10 +1,17 @@
 package com.kino.puber.ui.feature.home.component
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -15,6 +22,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.home.model.HomeSectionState
@@ -30,6 +38,43 @@ internal class HomeFocusTraversalTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun enteringHomeFocusesHeroBeforeTheFirstSection() {
+        val contentFocus = FocusRequester()
+        composeRule.setContent {
+            PuberTheme {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .focusRequester(contentFocus)
+                        .focusGroup(),
+                ) {
+                    HomeScreenContent(
+                        state = HomeViewState.Content(
+                            heroItems = listOf(heroItem()),
+                            sections = listOf(
+                                HomeSectionState(
+                                    title = "Continue watching",
+                                    type = HomeSectionType.ContinueWatching,
+                                    items = listOf(item(0, 0)),
+                                ),
+                            ),
+                        ),
+                        onAction = {},
+                        onHeroClick = {},
+                        onCollectionClick = { _, _ -> },
+                    )
+                }
+            }
+        }
+
+        composeRule.runOnIdle { contentFocus.requestFocus() }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(HERO_TITLE).assertIsFocused()
+        composeRule.onNodeWithText(itemTitle(0, 0)).assertIsNotFocused()
+    }
 
     @Test
     fun dpadFocusOnNonFallbackItemInNonTargetHomeRowRecordsActualIdentity() {
@@ -214,6 +259,7 @@ internal class HomeFocusTraversalTest {
 
     private companion object {
         const val ITEM_COUNT = 3
+        const val HERO_TITLE = "Featured hero"
         const val ITEM_TITLE_PREFIX = "home-row-"
         const val BOUNDS_TOLERANCE = 1f
         val MAX_VERTICAL_DELTA = 240.dp
@@ -234,5 +280,14 @@ internal class HomeFocusTraversalTest {
         )
 
         fun itemTitle(row: Int, column: Int) = "home-row-$row-item-$column"
+
+        fun heroItem() = HeroItemState(
+            id = 100,
+            title = HERO_TITLE,
+            wideImageUrl = "",
+            fallbackImageUrl = "",
+            year = "2026",
+            genres = "Drama",
+        )
     }
 }

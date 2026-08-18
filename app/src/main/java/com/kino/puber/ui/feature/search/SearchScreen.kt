@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.search
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.kino.puber.core.di.DIScope
@@ -9,6 +10,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.search.SearchInteractor
 import com.kino.puber.ui.feature.search.content.SearchScreenContent
+import com.kino.puber.ui.feature.search.model.SearchAction
 import com.kino.puber.ui.feature.search.vm.SearchVM
 import kotlinx.parcelize.Parcelize
 import com.kino.puber.core.di.puberViewModel
@@ -36,6 +38,11 @@ internal class SearchScreen : PuberScreen {
         val vm = puberViewModel<SearchVM>()
         val state by vm.collectViewState()
         val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
+        // A tab keeps its ViewModel and saved-state registry. Treat each new composition of the
+        // Search root as a fresh visit so switching sections never resurrects an old query.
+        LaunchedEffect(vm) {
+            vm.onAction(SearchAction.ScreenEntered)
+        }
         SearchScreenContent(
             state = state,
             onAction = onAction,

@@ -155,6 +155,7 @@
     <string name="settings_hide_watched_description">Fully watched content is hidden from Home and the catalog. This doesn’t affect search, dedicated bookmark screens, or history</string>
 
     <string name="search_hint">Enter a title…</string>
+    <string name="search_start_hint">Enter a movie or series title. Search starts automatically after 3 characters.</string>
     <string name="search_no_results">No results</string>
     <string name="search_min_query">Enter at least 3 characters</string>
 

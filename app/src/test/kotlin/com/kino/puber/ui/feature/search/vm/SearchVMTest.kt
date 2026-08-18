@@ -14,6 +14,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.search.SearchInteractor
+import com.kino.puber.ui.feature.search.model.SearchAction
 import com.kino.puber.ui.feature.search.model.SearchViewState
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
@@ -82,6 +83,27 @@ class SearchVMTest {
 
         coVerify(exactly = 1) { interactor.search("query") }
     }
+
+    @Test
+    fun enteringSearchAgainCancelsThePreviousQueryAndReturnsToIdle() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            val response = CompletableDeferred<List<Item>>()
+            coEvery { interactor.search("query") } coAnswers { response.await() }
+            val vm = createVM()
+
+            vm.onAction(CommonAction.TextChanged("query", tag = Unit))
+            advanceTimeBy(DEBOUNCE_DELAY_MS + 1)
+            assertEquals(SearchViewState.Loading, vm.testStateValue)
+
+            vm.onAction(SearchAction.ScreenEntered)
+            response.complete(listOf(Item(id = 42, title = "Stale", type = ItemType.MOVIE)))
+            runCurrent()
+            vm.onAction(CommonAction.RetryClicked)
+            runCurrent()
+
+            assertEquals(SearchViewState.Idle, vm.testStateValue)
+            coVerify(exactly = 1) { interactor.search("query") }
+        }
 
     /**
      * Typing continues while a slow search is still out, so the query the user has actually left in

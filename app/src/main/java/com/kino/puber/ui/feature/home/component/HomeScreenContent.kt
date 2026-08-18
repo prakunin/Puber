@@ -214,6 +214,7 @@ private fun HomeContent(
                 homeSections(
                     state = state,
                     rowFocus = rowFocus,
+                    focusedTarget = focusedTarget,
                     onAction = onAction,
                     onCollectionClick = onCollectionClick,
                     onFocusedTarget = { focusedTarget = it },
@@ -232,6 +233,7 @@ private fun HomeContent(
 private fun LazyListScope.homeSections(
     state: HomeViewState.Content,
     rowFocus: ReconciledRowFocusState,
+    focusedTarget: HomeFocusedTarget?,
     onAction: (UIAction) -> Unit,
     onCollectionClick: (Int, String) -> Unit,
     onFocusedTarget: (HomeFocusedTarget) -> Unit,
@@ -250,7 +252,11 @@ private fun LazyListScope.homeSections(
                 HomeSectionRow(
                     rowKey = section.type.name,
                     items = section.items,
-                    isTargetRow = section.type.name == rowFocus.focusedRowKey,
+                    // The hero is the initial Home target. A section must not restore its first
+                    // card until focus has actually moved below the hero, otherwise that request
+                    // scrolls the carousel out of the viewport as soon as Home loads.
+                    isTargetRow = focusedTarget !is HomeFocusedTarget.Hero &&
+                        section.type.name == rowFocus.focusedRowKey,
                     rowOrder = index,
                     // Collections open a list, not a details screen, and their ids are collection
                     // ids. The row keeps its absolute position all the same, so the rows either

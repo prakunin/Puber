@@ -25,7 +25,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +40,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -62,42 +62,32 @@ import kotlinx.coroutines.delay
 private const val GRID_COLUMNS = 3
 private const val SHIMMER_ITEM_COUNT = 15
 private const val SEARCH_TAG = "search_query"
-private const val FOCUS_TARGET_TEXT_FIELD = 0
-private const val FOCUS_TARGET_GRID = 1
 
 @Composable
 internal fun SearchScreenContent(
     state: SearchViewState,
     onAction: (UIAction) -> Unit,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
     val textFieldFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
-    var focusTarget by rememberSaveable { mutableStateOf(FOCUS_TARGET_TEXT_FIELD) }
     val focusResults: () -> Unit = {
-        focusTarget = FOCUS_TARGET_GRID
         gridFocusRequester.requestFocus()
     }
 
-    // Restore focus on (re-)composition: text field on first launch, grid on return from details
+    // Every new visit starts as a new search, so its first focus target is always the input.
     LaunchedEffect(Unit) {
         delay(100)
-        when {
-            focusTarget == FOCUS_TARGET_GRID && state is SearchViewState.Content ->
-                gridFocusRequester.requestFocus()
-            else ->
-                textFieldFocusRequester.requestFocus()
-        }
+        textFieldFocusRequester.requestFocus()
     }
 
     // Move focus to grid when IME dismisses via Back
     val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
     val isKeyboardOpen = imeBottomPx > 0
-    var wasKeyboardOpen by rememberSaveable { mutableStateOf(false) }
+    var wasKeyboardOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(isKeyboardOpen) {
         if (wasKeyboardOpen && !isKeyboardOpen && state is SearchViewState.Content) {
-            focusTarget = FOCUS_TARGET_GRID
             gridFocusRequester.requestFocus()
         }
         wasKeyboardOpen = isKeyboardOpen
@@ -116,10 +106,10 @@ internal fun SearchScreenContent(
         )
         SearchResultsArea(
             state = state,
+            queryLength = query.length,
             gridFocusRequester = gridFocusRequester,
             onAction = onAction,
             onItemClick = { item ->
-                focusTarget = FOCUS_TARGET_GRID
                 onAction(CommonAction.ItemSelected(item))
             },
         )
@@ -161,7 +151,11 @@ private fun SearchInputField(
             ),
             singleLine = true,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Words,
+                autoCorrectEnabled = true,
+                imeAction = ImeAction.Search,
+            ),
             keyboardActions = KeyboardActions(
                 onSearch = {
                     keyboardController?.hide()
@@ -209,13 +203,22 @@ private fun Modifier.onDpadDown(
 @Composable
 private fun SearchResultsArea(
     state: SearchViewState,
+    queryLength: Int,
     gridFocusRequester: FocusRequester,
     onAction: (UIAction) -> Unit,
     onItemClick: (VideoItemUIState) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (state) {
-            is SearchViewState.Idle -> CenteredText(stringResource(R.string.search_hint))
+            is SearchViewState.Idle -> CenteredText(
+                stringResource(
+                    if (queryLength in 1 until MIN_QUERY_LENGTH) {
+                        R.string.search_min_query
+                    } else {
+                        R.string.search_start_hint
+                    },
+                ),
+            )
             is SearchViewState.Loading -> ShimmerSearchGrid()
             is SearchViewState.Empty -> CenteredText(stringResource(R.string.search_no_results))
             is SearchViewState.Error -> CenteredText(state.message)
@@ -302,3 +305,5 @@ private fun CenteredText(text: String) {
         )
     }
 }
+
+private const val MIN_QUERY_LENGTH = 3

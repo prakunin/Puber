@@ -31,6 +31,8 @@ fun PuberTheme(
         tertiary = Pink80,
         error = Error60,
         errorContainer = Error60,
+        background = OledBackground,
+        surface = OledBackground,
     )
 
     val colorScheme = androidx.compose.material3.darkColorScheme(
@@ -39,6 +41,8 @@ fun PuberTheme(
         tertiary = Pink80,
         error = Error60,
         errorContainer = Error60,
+        background = OledBackground,
+        surface = OledBackground,
     )
     CompositionLocalProvider(
         LocalTvContextMenuLongSelectState provides contextMenuLongSelectState,
