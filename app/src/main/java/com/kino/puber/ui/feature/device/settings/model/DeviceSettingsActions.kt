@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.device.settings.model
 
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.device.DeviceSettingType
@@ -26,6 +27,7 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleHideWatched : DeviceSettingsActions
     data object RebuildWatchIndex : DeviceSettingsActions
     data object ToggleAutoUpdateCheck : DeviceSettingsActions
+    data class ChangeAppLanguage(val language: AppLanguage) : DeviceSettingsActions
     data object OpenApiDomainDialog : DeviceSettingsActions
     data object CloseApiDomainDialog : DeviceSettingsActions
     data class SaveApiDomain(val domain: String) : DeviceSettingsActions

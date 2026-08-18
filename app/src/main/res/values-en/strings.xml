@@ -334,4 +334,7 @@
     <string name="video_details_info_sound">Sound</string>
     <string name="video_details_info_sound_surround">Surround sound</string>
     <string name="video_details_similar_title">Similar</string>
+    <string name="settings_app_language">Interface language</string>
+    <string name="settings_app_language_system">Same as the device</string>
+    <string name="player_episodes_title">Episodes</string>
 </resources>

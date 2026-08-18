@@ -1,6 +1,7 @@
 package com.kino.puber
 
 import android.app.Application
+import android.content.Context
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -15,6 +16,7 @@ import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.LinkingDebugTree
 import com.kino.puber.core.system.AndroidResourceProvider
+import com.kino.puber.core.system.AppLocale
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.data.di.apiModule
 import com.kino.puber.data.di.repositoryModule
@@ -40,6 +42,14 @@ private const val IMAGE_MEMORY_CACHE_PERCENT = 0.15
 private const val IMAGE_DISK_CACHE_BYTES = 100L * 1024 * 1024
 
 class PuberApp : Application(), SingletonImageLoader.Factory {
+
+    // Runs before onCreate, and therefore before Koin exists, which is why the chosen language is
+    // read straight from preferences here. Wrapping the application itself is what keeps strings
+    // resolved outside a composition in the same language as the screen.
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppLocale.wrap(base))
+    }
+
     override fun onCreate() {
         super.onCreate()
 

@@ -1,8 +1,8 @@
 package com.kino.puber.data.preferences
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.kino.puber.core.model.NavigationMode
+import com.kino.puber.util.FakeSharedPreferences
 import com.kino.puber.ui.feature.main.model.TabType
 import io.mockk.every
 import io.mockk.mockk
@@ -543,7 +543,7 @@ internal class NavigationPreferencesRepositoryTest {
         showWatchedIndicators: Boolean? = null,
         legacyWatchedIndicators: Boolean? = null,
     ): Fixture {
-        val preferences = TestPreferences()
+        val preferences = FakeSharedPreferences()
         storedTabs?.let { preferences.values[TOP_TABS_KEY] = it }
         storedDrawerTabs?.let { preferences.values[SIDE_DRAWER_KEY] = it }
         startupTab?.let { preferences.values[STARTUP_TAB_KEY] = it }
@@ -552,7 +552,7 @@ internal class NavigationPreferencesRepositoryTest {
         showAnime?.let { preferences.values[SHOW_ANIME_KEY] = it }
         hideWatched?.let { preferences.values[HIDE_WATCHED_KEY] = it }
         showWatchedIndicators?.let { preferences.values[SHOW_WATCHED_INDICATORS_KEY] = it }
-        val legacyPreferences = TestPreferences()
+        val legacyPreferences = FakeSharedPreferences()
         legacyWatchedIndicators?.let {
             legacyPreferences.values[LEGACY_WATCHED_INDICATORS_KEY] = it
         }
@@ -571,47 +571,6 @@ internal class NavigationPreferencesRepositoryTest {
 
     private data class Fixture(
         val repository: NavigationPreferencesRepository,
-        val preferences: TestPreferences,
+        val preferences: FakeSharedPreferences,
     )
-}
-
-private class TestPreferences {
-    val values: MutableMap<String, Any?> = mutableMapOf()
-    val transactions: MutableList<Map<String, Any?>> = mutableListOf()
-    val sharedPreferences: SharedPreferences = mockk()
-
-    private val pending: MutableMap<String, Any?> = linkedMapOf()
-    private val editor: SharedPreferences.Editor = mockk()
-
-    init {
-        every { sharedPreferences.getString(any(), any()) } answers {
-            values[firstArg()] as? String ?: secondArg<String?>()
-        }
-        every { sharedPreferences.getInt(any(), any()) } answers {
-            values[firstArg()] as? Int ?: secondArg()
-        }
-        every { sharedPreferences.getBoolean(any(), any()) } answers {
-            values[firstArg()] as? Boolean ?: secondArg()
-        }
-        every { sharedPreferences.contains(any()) } answers { values.containsKey(firstArg()) }
-        every { sharedPreferences.edit() } returns editor
-        every { editor.putString(any(), any()) } answers {
-            pending[firstArg()] = secondArg<String?>()
-            editor
-        }
-        every { editor.putInt(any(), any()) } answers {
-            pending[firstArg()] = secondArg<Int>()
-            editor
-        }
-        every { editor.putBoolean(any(), any()) } answers {
-            pending[firstArg()] = secondArg<Boolean>()
-            editor
-        }
-        every { editor.apply() } answers {
-            val transaction = pending.toMap()
-            values.putAll(transaction)
-            transactions += transaction
-            pending.clear()
-        }
-    }
 }

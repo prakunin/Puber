@@ -1,7 +1,9 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.ui.navigation.AppRouter
+import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.data.repository.WatchState
@@ -163,6 +165,9 @@ class DeviceSettingsVMMirrorNavigationTest {
             deviceUiSettingsMapper = deviceUiSettingsMapper,
             playerPreferencesRepository = playerPreferencesRepository,
             navigationPreferencesRepository = navigationPreferencesRepository,
+            appLanguageRepository = mockk<AppLanguageRepository> {
+                every { getLanguage() } returns AppLanguage.System
+            },
             apiDomainInteractor = apiDomainInteractor,
             appUpdateInteractor = appUpdateInteractor,
             watchStateRepository = watchStateRepository,

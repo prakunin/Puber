@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.device.settings.vm
 import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
@@ -10,6 +11,7 @@ import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.data.repository.WatchState
@@ -45,6 +47,7 @@ internal class DeviceSettingsVM(
     private val deviceUiSettingsMapper: DeviceUiSettingsMapper,
     private val playerPreferencesRepository: PlayerPreferencesRepository,
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
+    private val appLanguageRepository: AppLanguageRepository,
     private val apiDomainInteractor: ApiDomainInteractor,
     private val appUpdateInteractor: IAppUpdateInteractor,
     private val watchStateRepository: WatchStateRepository,
@@ -127,6 +130,7 @@ internal class DeviceSettingsVM(
                                 showAnime = contentPreferences.showAnime,
                                 hideWatched = contentPreferences.hideWatched,
                                 autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
+                                appLanguage = appLanguageRepository.getLanguage(),
                                 watchIndex = latestWatchIndex,
                             )
                         )
@@ -161,6 +165,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
             DeviceSettingsActions.RebuildWatchIndex -> watchStateSyncInteractor.requestSync(rebuild = true)
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
+            is DeviceSettingsActions.ChangeAppLanguage -> onChangeAppLanguage(action.language)
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
             is DeviceSettingsActions.SaveApiDomain -> saveApiDomain(action.domain)
@@ -344,6 +349,14 @@ internal class DeviceSettingsVM(
         val newValue = !currentState.watchedIndicatorsEnabled
         navigationPreferencesRepository.setShowWatchedIndicators(newValue)
         updateViewState(stateValue.copy(state = currentState.copy(watchedIndicatorsEnabled = newValue)))
+    }
+
+    private fun onChangeAppLanguage(language: AppLanguage) {
+        val currentState = stateValue.state
+        if (currentState !is DeviceSettingsState.Success) return
+        if (currentState.appLanguage == language) return
+        appLanguageRepository.setLanguage(language)
+        updateViewState(stateValue.copy(state = currentState.copy(appLanguage = language)))
     }
 
     private fun onChangeNavigationMode(mode: NavigationMode) {

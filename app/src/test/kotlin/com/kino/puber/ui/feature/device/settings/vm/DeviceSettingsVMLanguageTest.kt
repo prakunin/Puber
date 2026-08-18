@@ -1,11 +1,11 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.error.ErrorHandler
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.model.AppLanguage
+import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.AppRouter
-import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.api.models.DeviceResponse
+import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
@@ -28,12 +28,10 @@ import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 
-internal class DeviceSettingsVMMenuSectionsTest {
+internal class DeviceSettingsVMLanguageTest {
 
     companion object {
         @JvmField
@@ -41,71 +39,47 @@ internal class DeviceSettingsVMMenuSectionsTest {
         val mainDispatcher = MainDispatcherExtension()
     }
 
-    private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository>(relaxed = true)
-    private var visibleTabs = listOf(TabType.Home, TabType.Movies, TabType.Concerts, TabType.Settings)
+    private val appLanguageRepository = mockk<AppLanguageRepository>(relaxed = true)
+    private var storedLanguage = AppLanguage.System
 
     @Test
-    fun menuSections_reportEverySelectableTabAgainstTheVisibleOnes() {
+    fun theSectionOpensOnTheLanguageAlreadyStored() {
+        storedLanguage = AppLanguage.English
+
         val vm = createVM()
 
-        val sections = vm.successState().menuSections
-
-        assertEquals(
-            listOf(
-                TabType.Favourites,
-                TabType.Bookmarks,
-                TabType.History,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Cartoons,
-                TabType.Anime,
-                TabType.For4k,
-                TabType.Concerts,
-                TabType.DocMovies,
-                TabType.DocSeries,
-                TabType.TvShows,
-                TabType.Collections,
-            ),
-            sections.map { it.tab },
-        )
-        assertTrue(sections.single { it.tab == TabType.Movies }.visible)
-        assertFalse(sections.single { it.tab == TabType.Series }.visible)
+        assertEquals(AppLanguage.English, vm.successState().appLanguage)
     }
 
     @Test
-    fun togglingASection_writesItAndRefreshesTheStartupOptions() {
+    fun choosingALanguageStoresItAndShowsItAsSelected() {
         val vm = createVM()
 
-        vm.onAction(DeviceSettingsActions.ToggleMenuSection(TabType.Concerts))
+        vm.onAction(DeviceSettingsActions.ChangeAppLanguage(AppLanguage.Russian))
 
-        verify {
-            navigationPreferencesRepository.setTabVisible(
-                mode = NavigationMode.SideDrawer,
-                tab = TabType.Concerts,
-                visible = false,
-            )
-        }
-        assertFalse(vm.successState().menuSections.single { it.tab == TabType.Concerts }.visible)
-        assertFalse(TabType.Concerts in vm.successState().startupTabOptions)
+        verify { appLanguageRepository.setLanguage(AppLanguage.Russian) }
+        assertEquals(AppLanguage.Russian, vm.successState().appLanguage)
     }
 
     @Test
-    fun theStartupTabsSection_cannotBeSwitchedOff() {
-        val vm = createVM(startupTab = TabType.Movies)
+    fun choosingTheLanguageAlreadyInUseChangesNothing() {
+        storedLanguage = AppLanguage.Russian
+        val vm = createVM()
 
-        vm.onAction(DeviceSettingsActions.ToggleMenuSection(TabType.Movies))
+        vm.onAction(DeviceSettingsActions.ChangeAppLanguage(AppLanguage.Russian))
 
-        verify(exactly = 0) {
-            navigationPreferencesRepository.setTabVisible(any(), any(), any())
-        }
-        assertTrue(vm.successState().menuSections.single { it.tab == TabType.Movies }.visible)
+        verify(exactly = 0) { appLanguageRepository.setLanguage(any()) }
     }
 
     private fun DeviceSettingsVM.successState(): DeviceSettingsState.Success {
         return testStateValue.state as DeviceSettingsState.Success
     }
 
-    private fun createVM(startupTab: TabType = TabType.Home): DeviceSettingsVM {
+    private fun createVM(): DeviceSettingsVM {
+        every { appLanguageRepository.getLanguage() } answers { storedLanguage }
+        every { appLanguageRepository.setLanguage(any()) } answers {
+            storedLanguage = firstArg()
+        }
         val deviceSettingInteractor = mockk<IDeviceSettingInteractor>(relaxed = true)
         every { deviceSettingInteractor.getCurrentDeviceSettings() } returns
             flowOf(Result.success(mockk<DeviceResponse>(relaxed = true)))
@@ -114,21 +88,16 @@ internal class DeviceSettingsVMMenuSectionsTest {
             domain = "service-kp.com",
             customDomain = null,
         )
+        val navigationPreferencesRepository = mockk<NavigationPreferencesRepository>(relaxed = true)
         every { navigationPreferencesRepository.contentPreferences } returns MutableStateFlow(
             ContentPreferences(showAnime = true, hideWatched = false, showWatchedIndicators = true)
         )
         every { navigationPreferencesRepository.getNavigationMode() } returns NavigationMode.SideDrawer
-        every { navigationPreferencesRepository.getStartupTab() } returns startupTab
-        every { navigationPreferencesRepository.getVisibleTabs(any()) } answers { visibleTabs }
-        every { navigationPreferencesRepository.getStartupTabOptions(any()) } answers {
-            visibleTabs.filterNot { it == TabType.Search || it == TabType.Settings }
-        }
-        every {
-            navigationPreferencesRepository.setTabVisible(any(), any(), any())
-        } answers {
-            val tab = secondArg<TabType>()
-            visibleTabs = if (thirdArg<Boolean>()) visibleTabs + tab else visibleTabs - tab
-        }
+        every { navigationPreferencesRepository.getStartupTab() } returns TabType.Home
+        every { navigationPreferencesRepository.getVisibleTabs(any()) } returns
+            listOf(TabType.Home, TabType.Settings)
+        every { navigationPreferencesRepository.getStartupTabOptions(any()) } returns
+            listOf(TabType.Home)
 
         val vm = DeviceSettingsVM(
             deviceSettingInteractor = deviceSettingInteractor,
@@ -136,9 +105,7 @@ internal class DeviceSettingsVMMenuSectionsTest {
             deviceUiSettingsMapper = mockk<DeviceUiSettingsMapper>(relaxed = true),
             playerPreferencesRepository = mockk<PlayerPreferencesRepository>(relaxed = true),
             navigationPreferencesRepository = navigationPreferencesRepository,
-            appLanguageRepository = mockk<AppLanguageRepository> {
-                every { getLanguage() } returns AppLanguage.System
-            },
+            appLanguageRepository = appLanguageRepository,
             apiDomainInteractor = apiDomainInteractor,
             appUpdateInteractor = mockk<IAppUpdateInteractor>(relaxed = true),
             watchStateRepository = mockk<WatchStateRepository>(relaxed = true),

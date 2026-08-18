@@ -51,6 +51,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
@@ -396,6 +397,7 @@ private fun SettingsSectionContent(
     var expandedNavigationChoice by rememberSaveable(section) {
         mutableStateOf<NavigationChoice?>(null)
     }
+    var languageChoiceExpanded by rememberSaveable(section) { mutableStateOf(false) }
     var panelHasFocus by remember { mutableStateOf(false) }
     // Arriving from the section list always lands on the setting at the top, whichever section it
     // is and whatever was touched there before. Restoring the previous row would mean the same
@@ -419,7 +421,13 @@ private fun SettingsSectionContent(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             when (section) {
-                SettingsSection.General -> generalItems(state, onAction)
+                SettingsSection.General -> generalItems(
+                    state = state,
+                    onAction = onAction,
+                    leftFocusRequester = leftFocusRequester,
+                    languageExpanded = languageChoiceExpanded,
+                    onLanguageExpandedChange = { languageChoiceExpanded = it },
+                )
                 SettingsSection.Playback -> playbackItems(state, onAction)
                 SettingsSection.Content -> contentItems(state, onAction)
                 SettingsSection.Navigation -> navigationItems(
@@ -445,7 +453,24 @@ private fun SettingsSectionContent(
 private fun LazyListScope.generalItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
+    languageExpanded: Boolean,
+    onLanguageExpandedChange: (Boolean) -> Unit,
 ) {
+    item(key = "app-language") {
+        SettingsChoiceItem(
+            label = stringResource(R.string.settings_app_language),
+            description = stringResource(R.string.settings_navigation_restart_hint),
+            options = appLanguageOptions(state.appLanguage),
+            isExpanded = languageExpanded,
+            leftFocusRequester = leftFocusRequester,
+            onToggleExpand = { onLanguageExpandedChange(!languageExpanded) },
+            onOptionSelect = { key ->
+                onLanguageExpandedChange(false)
+                onAction(DeviceSettingsActions.ChangeAppLanguage(AppLanguage.valueOf(key)))
+            },
+        )
+    }
     item(key = "auto-update") {
         SettingsToggleItem(
             label = stringResource(R.string.settings_auto_update_check),
@@ -623,6 +648,21 @@ private fun LazyListScope.menuSectionItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleMenuSection(section.tab)) },
         )
     }
+}
+
+@Composable
+private fun appLanguageOptions(currentLanguage: AppLanguage) = AppLanguage.entries.map { language ->
+    SettingsChoiceOption(
+        key = language.name,
+        label = stringResource(
+            when (language) {
+                AppLanguage.System -> R.string.settings_app_language_system
+                AppLanguage.Russian -> R.string.settings_app_language_russian
+                AppLanguage.English -> R.string.settings_app_language_english
+            }
+        ),
+        selected = language == currentLanguage,
+    )
 }
 
 @Composable

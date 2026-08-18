@@ -46,4 +46,8 @@
     <string name="settings_watch_index_never_synced">Ещё не было</string>
     <string name="settings_watch_index_partial">Сборка не завершена</string>
     <string name="settings_watch_index_not_built">Ещё не собрано</string>
+    <string name="settings_app_language">Язык интерфейса</string>
+    <string name="settings_app_language_system">Как на устройстве</string>
+    <string name="settings_app_language_russian" translatable="false">Русский</string>
+    <string name="settings_app_language_english" translatable="false">English</string>
 </resources>

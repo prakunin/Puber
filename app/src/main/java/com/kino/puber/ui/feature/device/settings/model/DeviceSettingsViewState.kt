@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.device.settings.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.domain.interactor.device.DeviceSettingType
@@ -39,6 +40,7 @@ internal sealed interface DeviceSettingsState {
         val showAnime: Boolean = true,
         val hideWatched: Boolean = false,
         val autoUpdateCheckEnabled: Boolean = true,
+        val appLanguage: AppLanguage = AppLanguage.System,
         val watchIndex: WatchIndexUiState = WatchIndexUiState(),
     ) : DeviceSettingsState
 }

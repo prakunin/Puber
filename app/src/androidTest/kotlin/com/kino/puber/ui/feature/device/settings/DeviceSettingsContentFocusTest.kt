@@ -45,6 +45,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.ui.feature.main.model.TabType
 
@@ -71,6 +72,35 @@ internal class DeviceSettingsContentFocusTest {
         }
 
         composeRule.onNodeWithTag(tag).assertIsFocused()
+    }
+
+    @Test
+    fun generalSectionOpensOnTheLanguageChoiceAndSelectingOneReportsIt() {
+        val actions = mutableListOf<UIAction>()
+        setSuccessContent(onAction = actions::add)
+        val general = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.General.name))
+
+        general.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.settings_app_language))
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        // Opens on the language in use, so a press of Down lands on the next one down the list
+        // rather than wherever the expansion happened to leave focus.
+        composeRule.onNodeWithText(context.getString(R.string.settings_app_language_english))
+            .assertExists()
+        focusedItem(context.getString(R.string.settings_app_language_system))
+            .assertIsFocused()
+            .press(Key.DirectionDown)
+        focusedItem(context.getString(R.string.settings_app_language_russian))
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        composeRule.runOnIdle {
+            assertTrue(
+                actions.contains(DeviceSettingsActions.ChangeAppLanguage(AppLanguage.Russian))
+            )
+        }
     }
 
     @Test

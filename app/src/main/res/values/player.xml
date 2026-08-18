@@ -8,7 +8,7 @@
     <string name="player_button_next_episode">Следующая серия</string>
     <string name="player_button_episodes">Серии</string>
     <string name="player_episodes_title">Серии</string>
-    <string name="player_episodes_season_title">%1$s  ·  %2$s</string>
+    <string name="player_episodes_season_title" translatable="false">%1$s  ·  %2$s</string>
     <string name="player_button_mark_watched">Просмотрено</string>
     <string name="player_button_mark_watched_state_watched">Отмечено просмотренным</string>
     <string name="player_button_mark_watched_state_not_watched">Не просмотрено</string>
