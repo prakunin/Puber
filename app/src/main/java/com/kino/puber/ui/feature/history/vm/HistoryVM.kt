@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.history.HistoryInteractor
@@ -51,6 +52,7 @@ internal class HistoryVM(
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
     router: AppRouter,
     errorHandler: ErrorHandler,
+    private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PagingVM<History, HistoryViewState>(paginator, router, errorHandler) {
 
     override val initialViewState: HistoryViewState = HistoryViewState.Loading
@@ -581,6 +583,7 @@ internal class HistoryVM(
                 mediaId = item.deletionMediaId,
                 itemId = item.itemId,
             )
+            tvHomeSyncCoordinator?.requestRefresh()
         } catch (error: CancellationException) {
             runtime.cancelDeletion(deletion.operationId)
             throw error

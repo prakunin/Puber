@@ -1,5 +1,7 @@
 package com.kino.puber.ui.feature.auth.vm
 
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
+import com.kino.puber.core.contentlink.toScreen
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -30,6 +32,7 @@ internal class AuthVM(
     private val deviceInfoInteractor: IDeviceInfoInteractor,
     private val apiDomainInteractor: ApiDomainInteractor,
     private val resources: ResourceProvider,
+    private val contentLaunchCoordinator: ContentLaunchCoordinator,
     override val errorHandler: ErrorHandler,
     router: AppRouter,
 ) : PuberVM<AuthViewState>(router) {
@@ -126,7 +129,17 @@ internal class AuthVM(
 
                     AuthState.Success -> {
                         timerJob?.cancel()
-                        router.newRootScreen(router.screens.main())
+                        val target = contentLaunchCoordinator.consumeAfterAuthentication()
+                        if (target == null) {
+                            router.newRootScreen(router.screens.main())
+                        } else {
+                            router.newRootScreens(
+                                listOf(
+                                    router.screens.main(),
+                                    target.toScreen(router.screens),
+                                )
+                            )
+                        }
                     }
                 }
             }

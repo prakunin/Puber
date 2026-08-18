@@ -1,6 +1,8 @@
 package com.kino.puber.ui.feature.auth.vm
 
 import com.kino.puber.R
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
+import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
@@ -54,6 +56,7 @@ class AuthVMTest {
             deviceInfoInteractor = deviceInfoInteractor,
             apiDomainInteractor = apiDomainInteractor,
             resources = FakeResourceProvider(),
+            contentLaunchCoordinator = ContentLaunchCoordinator(ContentUriCodec()),
             errorHandler = authErrorHandler,
             router = router,
         )

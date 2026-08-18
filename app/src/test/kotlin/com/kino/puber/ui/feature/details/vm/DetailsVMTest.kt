@@ -2,6 +2,8 @@ package com.kino.puber.ui.feature.details.vm
 
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.core.contentlink.ContentUriCodec
+import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -57,6 +59,7 @@ class DetailsVMTest {
     private lateinit var interactor: DetailsInteractor
     private lateinit var savedItemInteractor: SavedItemInteractor
     private lateinit var errorHandler: ErrorHandler
+    private lateinit var contentSharer: ContentSharer
 
     private val params = DetailsScreenParams(itemId = 42)
 
@@ -69,6 +72,9 @@ class DetailsVMTest {
         mapper = mockk(relaxed = true)
         interactor = mockk(relaxed = true)
         savedItemInteractor = mockk(relaxed = true)
+        contentSharer = mockk {
+            every { share(any(), any()) } returns true
+        }
         errorHandler = mockk {
             every { proceed(any()) } returns { }
             every { proceedInvoke(any(), any()) } returns Unit
@@ -93,6 +99,29 @@ class DetailsVMTest {
         verify {
             router.navigateForResult<ContentChangeSet>(playerScreen, RESULT_CONTENT_CHANGED, any())
         }
+    }
+
+    @Test
+    fun shareClickedUsesStablePublicItemUrl() {
+        val vm = startedVM()
+
+        vm.onAction(DetailsAction.ShareClicked)
+
+        verify { contentSharer.share("https://kino.pub/item/view/42", any()) }
+    }
+
+    @Test
+    fun shareClickedFromEpisodeDetailsIncludesEpisodeCoordinates() {
+        val vm = startedVM(
+            DetailsScreenParams(
+                itemId = 42,
+                initialEpisode = DetailsEpisodeTarget(seasonNumber = 2, episodeNumber = 5),
+            ),
+        )
+
+        vm.onAction(DetailsAction.ShareClicked)
+
+        verify { contentSharer.share("https://kino.pub/item/view/42/s2e5", any()) }
     }
 
     @Test
@@ -628,6 +657,8 @@ class DetailsVMTest {
         interactor = interactor,
         savedItemInteractor = savedItemInteractor,
         resources = FakeResourceProvider(),
+        contentUriCodec = ContentUriCodec(),
+        contentSharer = contentSharer,
         errorHandler = errorHandler,
     )
 

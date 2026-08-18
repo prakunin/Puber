@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="tv_home_continue_watching">Продолжить просмотр</string>
+    <string name="tv_home_recommendation_channel">Продолжить просмотр</string>
     <string name="error_generic">Не удалось выполнить запрос. Попробуйте ещё раз.</string>
     <string name="history_title">История</string>
     <string name="history_empty_title">История просмотров пуста</string>

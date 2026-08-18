@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.lifecycle.Lifecycle
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
+import com.kino.puber.core.contentlink.toScreen
 import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
@@ -15,6 +17,7 @@ import com.kino.puber.core.lifecycle.ReportAppForeground
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
@@ -64,6 +67,8 @@ private fun SessionExpiredHandler() {
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
     val payloadStore = getKoin().get<PersistentPayloadStore>()
     val detailsPrefetcher = getKoin().get<DetailsPrefetcher>()
+    val contentLaunchCoordinator = getKoin().get<ContentLaunchCoordinator>()
+    val tvHomeSyncCoordinator = getKoin().get<TvHomeSyncCoordinator>()
     LaunchedEffect(Unit) {
         // This collect is the app's only subscriber to session-expiry events. An exception escaping
         // it would kill the collector, and every later Unauthorized event for the rest of the
@@ -81,6 +86,8 @@ private fun SessionExpiredHandler() {
         sessionEventBus.events.collect { event ->
             when (event) {
                 SessionEvent.Unauthorized -> {
+                    contentLaunchCoordinator.clearSession()
+                    clearWithoutFailing { tvHomeSyncCoordinator.clearAccountPrograms() }
                     // The watch-state index is one account's viewing history, and the payload store
                     // is that account's cached view of one domain's catalogue; neither must outlive
                     // the session. Ejecting the user to auth is the part that must not be optional,
@@ -94,6 +101,26 @@ private fun SessionExpiredHandler() {
                     router.newRootScreen(router.screens.auth())
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun WarmContentLaunchHandler() {
+    val scope = checkNotNull(LocalPuberKoinScope.current) {
+        "WarmContentLaunchHandler needs an enclosing navigation scope"
+    }
+    val router by scope.inject<AppRouter>()
+    val coordinator = getKoin().get<ContentLaunchCoordinator>()
+    LaunchedEffect(router, coordinator) {
+        coordinator.changes.collect {
+            val target = coordinator.consumeForWarmRouting() ?: return@collect
+            router.newRootScreens(
+                listOf(
+                    router.screens.main(),
+                    target.toScreen(router.screens),
+                )
+            )
         }
     }
 }
@@ -138,6 +165,7 @@ fun App() {
                 // the background walk has to stand down even when a fullscreen screen is on top.
                 ReportAppForeground(getKoin().get())
                 SessionExpiredHandler()
+                WarmContentLaunchHandler()
                 UpdatePromptHost()
             }
         }

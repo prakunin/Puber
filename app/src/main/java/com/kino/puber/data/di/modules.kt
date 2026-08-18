@@ -4,6 +4,7 @@ package com.kino.puber.data.di
 
 import android.net.ConnectivityManager
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.repository.AppUpdateDownloader
@@ -75,6 +76,7 @@ private const val MIB = 1024L * 1024L
 private const val MEDIA_CACHE_SIZE_BYTES = 512L * MIB
 
 val repositoryModule = module {
+    single { ContentSharer(androidContext()) }
     singleOf(::AppUpdateRepository) { bind<IAppUpdateRepository>() }
     singleOf(::AppUpdatePreferencesRepository)
     singleOf(::AppUpdateInstaller)

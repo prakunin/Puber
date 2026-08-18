@@ -15,6 +15,7 @@ import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.SkipSegment
 import com.kino.puber.data.api.models.SkipSegmentType
@@ -64,6 +65,7 @@ internal class PlayerVM(
     private val contentStateFactory: ContentStateFactory,
     private val playbackController: PlaybackControl,
     private val resources: ResourceProvider,
+    private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<PlayerViewState>(router) {
 
     override val initialViewState: PlayerViewState = PlayerViewState.Loading
@@ -1551,6 +1553,9 @@ internal class PlayerVM(
 
     private fun markContentChanged(type: ContentChangeType) {
         contentChanges = contentChanges.merge(ContentChange(params.itemId, type))
+        if (type == ContentChangeType.Watched || type == ContentChangeType.PlaybackProgress) {
+            tvHomeSyncCoordinator?.requestRefresh()
+        }
     }
 
     private fun launchMutation(

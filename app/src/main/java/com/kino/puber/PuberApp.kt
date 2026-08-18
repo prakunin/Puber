@@ -14,10 +14,16 @@ import coil3.memory.MemoryCache
 import coil3.util.DebugLogger
 import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.contentlink.ContentLaunchCoordinator
+import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.logger.LinkingDebugTree
 import com.kino.puber.core.system.AndroidResourceProvider
 import com.kino.puber.core.system.AppLocale
 import com.kino.puber.core.system.ResourceProvider
+import com.kino.puber.core.tvhome.ContinueWatchingSource
+import com.kino.puber.core.tvhome.TvHomePublisher
+import com.kino.puber.core.tvhome.TvHomePublisherFactory
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.di.apiModule
 import com.kino.puber.data.di.repositoryModule
 import com.kino.puber.domain.di.interactorModule
@@ -27,11 +33,19 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.koin.dsl.module
 import timber.log.Timber
 
 private val resourceModule = module {
     single<ResourceProvider> { AndroidResourceProvider(get()) }
+    singleOf(::ContentUriCodec)
+    singleOf(::ContentLaunchCoordinator)
+    single { ContinueWatchingSource(get()) }
+    single<TvHomePublisher> { TvHomePublisherFactory.create(androidContext(), get()) }
+    single { TvHomeSyncCoordinator(get(), get(), CoroutineScope(SupervisorJob() + Dispatchers.IO)) }
 }
 
 private val handlersModule = module {

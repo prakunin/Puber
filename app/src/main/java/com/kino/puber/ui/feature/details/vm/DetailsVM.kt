@@ -4,11 +4,15 @@ import com.kino.puber.R
 import com.kino.puber.core.content.ContentChange
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.core.contentlink.ContentTarget
+import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
+import com.kino.puber.core.system.ContentSharer
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
@@ -40,7 +44,10 @@ internal class DetailsVM(
     private val interactor: DetailsInteractor,
     private val savedItemInteractor: SavedItemInteractor,
     private val resources: ResourceProvider,
+    private val contentUriCodec: ContentUriCodec,
+    private val contentSharer: ContentSharer,
     override val errorHandler: ErrorHandler,
+    private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<DetailsScreenState>(router) {
 
     override val initialViewState = DetailsScreenState.Loading
@@ -150,6 +157,7 @@ internal class DetailsVM(
             is DetailsAction.SelectSeasonClicked -> showSeasonsPanel()
             is DetailsAction.WatchlistToggleClicked -> onWatchlistToggle()
             is DetailsAction.WatchedToggleClicked -> onWatchedToggle()
+            is DetailsAction.ShareClicked -> shareContent()
             is DetailsAction.EpisodeSelected -> onEpisodeSelected(action.item)
             is DetailsAction.EpisodeWatchedChanged -> onEpisodeWatchedChanged(action.item, action.watched)
             is DetailsAction.SeasonWatchedChanged -> onSeasonWatchedChanged(action.item, action.watched)
@@ -170,6 +178,21 @@ internal class DetailsVM(
             is CommonAction.RetryClicked -> loadData()
             else -> super.onAction(action)
         }
+    }
+
+    private fun shareContent() {
+        val target = params.initialEpisode?.let { episode ->
+            ContentTarget.EpisodeDetails(
+                itemId = params.itemId,
+                seasonNumber = episode.seasonNumber,
+                episodeNumber = episode.episodeNumber,
+            )
+        } ?: ContentTarget.Details(params.itemId)
+        val shared = contentSharer.share(
+            url = contentUriCodec.publicUrl(target),
+            chooserTitle = resources.getString(R.string.video_details_share_chooser),
+        )
+        if (!shared) showMessage(resources.getString(R.string.error_generic))
     }
 
     private fun showSeasonsPanel() {
@@ -473,6 +496,9 @@ internal class DetailsVM(
 
     private fun markContentChanged(itemId: Int, type: ContentChangeType) {
         contentChanges = contentChanges.merge(ContentChange(itemId, type))
+        if (type == ContentChangeType.Watched) {
+            tvHomeSyncCoordinator?.requestRefresh()
+        }
     }
 
     private fun launchMutation(block: suspend CoroutineScope.() -> Unit): Job {
