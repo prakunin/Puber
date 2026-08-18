@@ -33,8 +33,34 @@ import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import timber.log.Timber
 
 internal open class PlayerVMTestFixture {
+
+    /**
+     * Collects what the pipeline logged, so a case can assert on the whole output rather than on
+     * one call. Shared: more than one suite checks that a diagnostic carries no identifying detail.
+     */
+    protected class CollectingLogTree : Timber.Tree() {
+        private val entries = mutableListOf<Pair<String, Throwable?>>()
+        val entryCount: Int
+            get() = entries.size
+
+        override fun log(
+            priority: Int,
+            tag: String?,
+            message: String,
+            t: Throwable?,
+        ) {
+            entries += message to t
+        }
+
+        fun output(): String {
+            return entries.joinToString("\n") { (message, throwable) ->
+                listOfNotNull(message, throwable?.stackTraceToString()).joinToString("\n")
+            }
+        }
+    }
 
     protected lateinit var router: AppRouter
     protected lateinit var errorHandler: ErrorHandler
