@@ -98,7 +98,7 @@ internal fun TopTabBar(
                                 modifier = Modifier.size(20.dp),
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(text = tab.label)
+                            Text(text = stringResource(tab.type.title))
                         }
                     }
                 }

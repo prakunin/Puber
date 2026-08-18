@@ -20,6 +20,8 @@ import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.ClockCounterClockwise
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.House
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.R
 import com.kino.puber.core.ui.navigation.AppLauncher
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -54,9 +56,14 @@ import org.junit.Test
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
-private const val HOME_TAB = "Главная"
-private const val MOVIES_TAB = "Фильмы"
-private const val HISTORY_TAB = "История"
+// Read from resources rather than written out: the tab bar resolves a tab's title at draw time,
+// so a literal here would only match in whatever language the device happens to be set to.
+private val HOME_TAB = tabTitle(R.string.main_tabs_home)
+private val MOVIES_TAB = tabTitle(R.string.main_tabs_movies)
+private val HISTORY_TAB = tabTitle(R.string.main_tabs_history)
+
+private fun tabTitle(resId: Int): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(resId)
 private const val SETTINGS = "Settings"
 
 internal class TopTabMainContentHistoryFocusTest {
@@ -255,11 +262,10 @@ private val noOpAction: (UIAction) -> Unit = {}
 private fun historyMainState(): MainViewState {
     return MainViewState(
         tabs = listOf(
-            mainTab(TabType.Home, HOME_TAB, PhosphorIcons.Duotone.House),
-            mainTab(TabType.Movies, MOVIES_TAB, PhosphorIcons.Duotone.FilmSlate),
+            mainTab(TabType.Home, PhosphorIcons.Duotone.House),
+            mainTab(TabType.Movies, PhosphorIcons.Duotone.FilmSlate),
             mainTab(
                 type = TabType.History,
-                label = HISTORY_TAB,
                 icon = PhosphorIcons.Duotone.ClockCounterClockwise,
                 isSelected = true,
             ),
@@ -270,13 +276,11 @@ private fun historyMainState(): MainViewState {
 
 private fun mainTab(
     type: TabType,
-    label: String,
     icon: ImageVector,
     isSelected: Boolean = false,
 ): MainTab {
     return MainTab(
         type = type,
-        label = label,
         icon = icon,
         isSelected = isSelected,
     )

@@ -460,27 +460,22 @@ private fun HistoryTopTabsPreviewHost(state: HistoryViewState) {
     val tabs = listOf(
         MainTab(
             type = TabType.Home,
-            label = stringResource(R.string.main_tabs_home),
             icon = PhosphorIcons.Duotone.House,
         ),
         MainTab(
             type = TabType.Movies,
-            label = stringResource(R.string.main_tabs_movies),
             icon = PhosphorIcons.Duotone.FilmSlate,
         ),
         MainTab(
             type = TabType.Series,
-            label = stringResource(R.string.main_tabs_series),
             icon = PhosphorIcons.Duotone.TelevisionSimple,
         ),
         MainTab(
             type = TabType.Collections,
-            label = stringResource(R.string.main_tabs_collections),
             icon = PhosphorIcons.Duotone.Playlist,
         ),
         MainTab(
             type = TabType.History,
-            label = stringResource(R.string.main_tabs_history),
             icon = PhosphorIcons.Duotone.ClockCounterClockwise,
             isSelected = true,
         ),

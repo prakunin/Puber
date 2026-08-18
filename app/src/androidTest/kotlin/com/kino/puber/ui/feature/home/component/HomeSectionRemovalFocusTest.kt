@@ -288,7 +288,6 @@ internal class HomeSectionRemovalFocusTest {
         tabs = listOf(
             MainTab(
                 type = TabType.Home,
-                label = "Home",
                 icon = PhosphorIcons.Duotone.House,
                 isSelected = true,
             ),

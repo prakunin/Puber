@@ -80,7 +80,6 @@ internal class MainVMRefreshLifecycleTest {
         )
         val historyTab = MainTab(
             type = TabType.History,
-            label = "History",
             icon = PhosphorIcons.Duotone.House,
         )
 
@@ -221,7 +220,6 @@ internal class MainVMRefreshLifecycleTest {
     ): MainTab {
         return MainTab(
             type = type,
-            label = type.name,
             icon = PhosphorIcons.Duotone.House,
             isSelected = isSelected,
         )

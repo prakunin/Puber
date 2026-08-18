@@ -25,6 +25,7 @@ import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.House
 import com.adamglin.phosphoricons.duotone.TelevisionSimple
+import androidx.test.platform.app.InstrumentationRegistry
 import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -205,19 +206,16 @@ private fun rapidTabs(selectedTab: TabType): List<MainTab> {
     return listOf(
         MainTab(
             type = TabType.Home,
-            label = "Главная",
             icon = PhosphorIcons.Duotone.House,
             isSelected = selectedTab == TabType.Home,
         ),
         MainTab(
             type = TabType.Movies,
-            label = "Фильмы",
             icon = PhosphorIcons.Duotone.FilmSlate,
             isSelected = selectedTab == TabType.Movies,
         ),
         MainTab(
             type = TabType.Series,
-            label = "Сериалы",
             icon = PhosphorIcons.Duotone.TelevisionSimple,
             isSelected = selectedTab == TabType.Series,
         ),
@@ -226,12 +224,10 @@ private fun rapidTabs(selectedTab: TabType): List<MainTab> {
 
 private val rapidTabTypes = listOf(TabType.Home, TabType.Movies, TabType.Series)
 
-private fun tabLabel(tabType: TabType): String = when (tabType) {
-    TabType.Home -> "Главная"
-    TabType.Movies -> "Фильмы"
-    TabType.Series -> "Сериалы"
-    else -> error("Unsupported rapid-tab fixture type: $tabType")
-}
+// Read from resources rather than written out: the tab bar resolves a tab's title at draw time,
+// so a literal here would only match in whatever language the device happens to be set to.
+private fun tabLabel(tabType: TabType): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(tabType.title)
 
 private fun TabType.previous(direction: Key): TabType = when (direction) {
     Key.DirectionRight -> when (this) {

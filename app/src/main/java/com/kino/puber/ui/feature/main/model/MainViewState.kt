@@ -18,7 +18,6 @@ internal data class MainViewState(
 @Immutable
 internal data class MainTab(
     val type: TabType,
-    val label: String,
     val icon: ImageVector,
     val badge: Int = 0,
     val isSelected: Boolean = false,

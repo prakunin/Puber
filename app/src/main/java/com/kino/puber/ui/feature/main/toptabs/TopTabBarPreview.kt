@@ -17,11 +17,11 @@ import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.TabType
 
 private val previewTabs = listOf(
-    MainTab(type = TabType.Home, label = "Главная", icon = PhosphorIcons.Duotone.House),
-    MainTab(type = TabType.Movies, label = "Фильмы", icon = PhosphorIcons.Duotone.FilmSlate),
-    MainTab(type = TabType.Series, label = "Сериалы", icon = PhosphorIcons.Duotone.TelevisionSimple),
-    MainTab(type = TabType.Collections, label = "Подборки", icon = PhosphorIcons.Duotone.Playlist),
-    MainTab(type = TabType.History, label = "История", icon = PhosphorIcons.Duotone.ClockCounterClockwise),
+    MainTab(type = TabType.Home, icon = PhosphorIcons.Duotone.House),
+    MainTab(type = TabType.Movies, icon = PhosphorIcons.Duotone.FilmSlate),
+    MainTab(type = TabType.Series, icon = PhosphorIcons.Duotone.TelevisionSimple),
+    MainTab(type = TabType.Collections, icon = PhosphorIcons.Duotone.Playlist),
+    MainTab(type = TabType.History, icon = PhosphorIcons.Duotone.ClockCounterClockwise),
 )
 
 @Preview(name = "TopTabBar — Home selected", device = TV_1080p)

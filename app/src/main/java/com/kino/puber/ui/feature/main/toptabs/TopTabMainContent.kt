@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -161,7 +162,7 @@ internal fun TopTabMainContent(
 
                 val contextMenuTab = contextMenuTabIndex?.let(state.tabs::getOrNull)
                 TopTabContextMenuDialog(
-                    title = contextMenuTab?.label,
+                    title = contextMenuTab?.let { stringResource(it.type.title) },
                     onRefresh = {
                         contextMenuTab?.let { tab ->
                             lastFocusedRegion = TopTabFocusedRegion.Content

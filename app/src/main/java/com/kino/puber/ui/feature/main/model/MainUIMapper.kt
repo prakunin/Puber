@@ -45,7 +45,6 @@ internal class MainUIMapper(
             tabs = tabs.map { type ->
                 MainTab(
                     type = type,
-                    label = resources.getString(type.title),
                     icon = type.icon,
                     isSelected = type == selectedTab,
                     badge = if (type == TabType.Favourites) 20 else 0 // TODO добавить счетчик

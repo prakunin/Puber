@@ -341,13 +341,11 @@ private data object TopTabDetailsProbeHostScreen : PuberScreen {
                 tabs = listOf(
                     MainTab(
                         type = TabType.Home,
-                        label = "Главная",
                         icon = PhosphorIcons.Duotone.House,
                         isSelected = selectedTab == TabType.Home,
                     ),
                     MainTab(
                         type = TabType.Movies,
-                        label = "Фильмы",
                         icon = PhosphorIcons.Duotone.FilmSlate,
                         isSelected = selectedTab == TabType.Movies,
                     ),

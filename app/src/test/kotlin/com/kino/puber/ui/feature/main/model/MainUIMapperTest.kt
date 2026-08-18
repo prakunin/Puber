@@ -240,7 +240,6 @@ internal class MainUIMapperTest {
     ): MainTab {
         return MainTab(
             type = type,
-            label = type.name,
             icon = PhosphorIcons.Duotone.House,
             isSelected = isSelected,
         )

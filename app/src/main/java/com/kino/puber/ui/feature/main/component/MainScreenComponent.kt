@@ -274,7 +274,7 @@ private fun NavigationDrawerScope.MainSideMenuItem(
         },
         trailingContent = mainSideMenuItemBadge(tab),
     ) {
-        Text(text = tab.label)
+        Text(text = stringResource(tab.type.title))
     }
 }
 

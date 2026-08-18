@@ -29,6 +29,8 @@ import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.ClockCounterClockwise
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.Heart
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
@@ -54,6 +56,12 @@ internal class MainSideMenuFocusTraversalTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    // Read from resources rather than written out: the rail resolves a tab's title at draw time,
+    // so a literal here would only match in whatever language the device happens to be set to.
+    private val favourites = tabTitle(R.string.main_tabs_favorites)
+    private val history = tabTitle(R.string.main_tabs_history)
+    private val movies = tabTitle(R.string.main_tabs_movies)
+
     @Test
     fun movingDownTwice_keepsFocusInOpenDrawer_untilFocusedItemIsClicked() {
         lateinit var drawerState: DrawerState
@@ -70,16 +78,16 @@ internal class MainSideMenuFocusTraversalTest {
             }
         }
 
-        focusedItem("Favorites").press(Key.DirectionDown)
-        focusedItem("History").press(Key.DirectionDown)
+        focusedItem(favourites).press(Key.DirectionDown)
+        focusedItem(history).press(Key.DirectionDown)
 
-        focusedItem("Movies").assertExists()
+        focusedItem(movies).assertExists()
         composeRule.runOnIdle {
             assertEquals(DrawerValue.Open, drawerState.currentValue)
             assertEquals(TabType.Favourites, selectedTabFromAction)
         }
 
-        focusedItem("Movies").press(Key.Enter)
+        focusedItem(movies).press(Key.Enter)
 
         composeRule.waitUntil(HandoffTimeoutMillis) {
             drawerState.currentValue != DrawerValue.HandingOff
@@ -107,8 +115,8 @@ internal class MainSideMenuFocusTraversalTest {
             }
         }
 
-        focusedItem("Favorites").press(Key.DirectionDown)
-        focusedItem("History").press(Key.Enter)
+        focusedItem(favourites).press(Key.DirectionDown)
+        focusedItem(history).press(Key.Enter)
 
         composeRule.waitUntil(HandoffTimeoutMillis) {
             drawerState.currentValue != DrawerValue.HandingOff
@@ -245,22 +253,22 @@ private fun RailScaffold(
     }
 }
 
+private fun tabTitle(resId: Int): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(resId)
+
 private fun testTabs(selectedTab: TabType): List<MainTab> = listOf(
     MainTab(
         type = TabType.Favourites,
-        label = "Favorites",
         icon = PhosphorIcons.Duotone.Heart,
         isSelected = selectedTab == TabType.Favourites,
     ),
     MainTab(
         type = TabType.History,
-        label = "History",
         icon = PhosphorIcons.Duotone.ClockCounterClockwise,
         isSelected = selectedTab == TabType.History,
     ),
     MainTab(
         type = TabType.Movies,
-        label = "Movies",
         icon = PhosphorIcons.Duotone.FilmSlate,
         isSelected = selectedTab == TabType.Movies,
     ),

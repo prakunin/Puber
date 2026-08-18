@@ -134,7 +134,6 @@ internal class MainVMWatchStateSyncTest {
             tabs = listOf(
                 MainTab(
                     type = TabType.Home,
-                    label = TabType.Home.name,
                     icon = PhosphorIcons.Duotone.House,
                     isSelected = true,
                 )
