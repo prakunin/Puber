@@ -16,13 +16,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -41,20 +37,6 @@ private const val KINOPUB_WORDMARK_ASPECT_RATIO = 640f / 169f
  */
 @Composable
 internal fun SplashContent(modifier: Modifier = Modifier) {
-    val signature = stringResource(R.string.splash_signature)
-    val signatureWithVersion = buildAnnotatedString {
-        append(signature)
-        withStyle(
-            SpanStyle(
-                fontSize = 11.sp,
-                letterSpacing = 1.sp,
-                baselineShift = BaselineShift.Subscript,
-            ),
-        ) {
-            append(BuildConfig.VERSION_NAME)
-        }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -74,11 +56,21 @@ internal fun SplashContent(modifier: Modifier = Modifier) {
                     .aspectRatio(KINOPUB_WORDMARK_ASPECT_RATIO),
             )
             BasicText(
-                text = signatureWithVersion,
+                text = stringResource(R.string.splash_signature),
                 style = TextStyle(
                     fontFamily = FontFamily.Default,
                     fontSize = 22.sp,
                     letterSpacing = 4.sp,
+                    color = colorResource(R.color.splash_signature),
+                    textAlign = TextAlign.Center,
+                ),
+            )
+            BasicText(
+                text = BuildConfig.VERSION_NAME,
+                style = TextStyle(
+                    fontFamily = FontFamily.Default,
+                    fontSize = 9.sp,
+                    letterSpacing = 1.sp,
                     color = colorResource(R.color.splash_signature),
                     textAlign = TextAlign.Center,
                 ),
