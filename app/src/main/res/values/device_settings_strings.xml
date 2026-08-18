@@ -24,14 +24,11 @@
     <string name="device_setting_support_hdr">Поддержка HDR</string>
     <string name="device_setting_support_4k">Поддержка 4K</string>
     <string name="device_setting_mixed_playlist">Смешанный плейлист</string>
-    <string name="device_settings_current_device">Текущее устройство</string>
     <string name="device_settings_name">Название: %1$s</string>
-    <string name="device_settings_name_with_version">Название: %1$s · %2$s</string>
     <string name="device_settings_app_version">Версия Puber: %1$s</string>
     <string name="device_settings_hardware">Оборудование: %1$s</string>
     <string name="device_settings_software">Программное обеспечение: %1$s</string>
     <string name="device_settings_retry">Повторить</string>
-    <string name="device_settings_unlink">Отвязать устройство</string>
     <string name="device_settings_not_supported">Не поддерживается устройством</string>
     <string name="device_settings_restart_required">Нужно перезапустить приложение</string>
     <string name="settings_watch_index_title">История просмотров</string>

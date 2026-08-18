@@ -134,13 +134,15 @@ internal class DeviceSettingsVMMenuSectionsTest {
             deviceSettingInteractor = deviceSettingInteractor,
             deviceInfoInteractor = mockk<IDeviceInfoInteractor>(relaxed = true),
             deviceUiSettingsMapper = mockk<DeviceUiSettingsMapper>(relaxed = true),
-            playerPreferencesRepository = mockk<PlayerPreferencesRepository>(relaxed = true),
-            navigationPreferencesRepository = navigationPreferencesRepository,
-            appLanguageRepository = mockk<AppLanguageRepository> {
-                every { getLanguage() } returns AppLanguage.System
-            },
+            preferencesStore = DefaultDeviceSettingsPreferencesStore(
+                playerPreferences = mockk<PlayerPreferencesRepository>(relaxed = true),
+                navigationPreferences = navigationPreferencesRepository,
+                appLanguagePreferences = mockk<AppLanguageRepository> {
+                    every { getLanguage() } returns AppLanguage.System
+                },
+                appUpdatePreferences = mockk<IAppUpdateInteractor>(relaxed = true),
+            ),
             apiDomainInteractor = apiDomainInteractor,
-            appUpdateInteractor = mockk<IAppUpdateInteractor>(relaxed = true),
             watchStateRepository = mockk<WatchStateRepository>(relaxed = true),
             watchStateSyncInteractor = mockk<WatchStateSyncInteractor>(relaxed = true),
             errorHandler = mockk<ErrorHandler>(relaxed = true),

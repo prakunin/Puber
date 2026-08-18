@@ -163,13 +163,15 @@ class DeviceSettingsVMMirrorNavigationTest {
             deviceSettingInteractor = deviceSettingInteractor,
             deviceInfoInteractor = deviceInfoInteractor,
             deviceUiSettingsMapper = deviceUiSettingsMapper,
-            playerPreferencesRepository = playerPreferencesRepository,
-            navigationPreferencesRepository = navigationPreferencesRepository,
-            appLanguageRepository = mockk<AppLanguageRepository> {
-                every { getLanguage() } returns AppLanguage.System
-            },
+            preferencesStore = DefaultDeviceSettingsPreferencesStore(
+                playerPreferences = playerPreferencesRepository,
+                navigationPreferences = navigationPreferencesRepository,
+                appLanguagePreferences = mockk<AppLanguageRepository> {
+                    every { getLanguage() } returns AppLanguage.System
+                },
+                appUpdatePreferences = appUpdateInteractor,
+            ),
             apiDomainInteractor = apiDomainInteractor,
-            appUpdateInteractor = appUpdateInteractor,
             watchStateRepository = watchStateRepository,
             watchStateSyncInteractor = watchStateSyncInteractor,
             errorHandler = errorHandler,

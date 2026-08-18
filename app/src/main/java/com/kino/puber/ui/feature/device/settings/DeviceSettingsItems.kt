@@ -84,6 +84,7 @@ internal fun SettingsListItem(
     selected: Boolean = false,
     enabled: Boolean = true,
     focusableWhenDisabled: Boolean = false,
+    dimWhenDisabled: Boolean = true,
     dense: Boolean = false,
     role: Role? = null,
     onClick: (() -> Unit)? = null,
@@ -98,7 +99,7 @@ internal fun SettingsListItem(
             role?.let { this.role = it }
             if (!enabled) disabled()
         }
-        .alpha(if (enabled) 1f else 0.46f)
+        .alpha(if (enabled || !dimWhenDisabled) 1f else 0.46f)
 
     if (onClick == null) {
         SettingsListItemBody(
@@ -212,15 +213,17 @@ internal fun SettingsToggleItem(
     focusableWhenDisabled: Boolean = false,
     readOnly: Boolean = false,
 ) {
+    val interactionEnabled = enabled && !readOnly
     SettingsListItem(
         headline = label,
         supportingText = description,
-        // Read-only is not the same as unavailable: the value shown is real and current, it just
-        // cannot be changed from here. Dimming it would read as the setting being switched off.
-        enabled = enabled,
-        focusableWhenDisabled = focusableWhenDisabled,
+        // A read-only value remains focusable and visually current, but its disabled semantics
+        // make it clear that activating the row cannot change it.
+        enabled = interactionEnabled,
+        focusableWhenDisabled = focusableWhenDisabled || readOnly,
+        dimWhenDisabled = !readOnly,
         role = Role.Switch,
-        onClick = { if (!readOnly) onToggle() },
+        onClick = onToggle,
         modifier = modifier,
         trailingContent = { SmallSwitch(checked = checked, enabled = enabled) },
     )

@@ -55,14 +55,27 @@ internal data class MenuSectionUi(
     val visible: Boolean,
 )
 
-/** The sections a user may add to or remove from the menu. */
-internal val SelectableMenuTabs: List<TabType> = TabType.entries.filterNot { tab ->
-    // Home anchors the menu, Search and Settings are structural, and SportTV has no screen yet.
-    tab == TabType.Home ||
-        tab == TabType.Search ||
-        tab == TabType.Settings ||
-        tab == TabType.SportTV
-}
+/**
+ * The sections a user may add to or remove from the menu.
+ *
+ * Keep this list explicit: a newly declared [TabType] must not become user-visible before its
+ * screen and both navigation modes are ready for it.
+ */
+internal val SelectableMenuTabs: List<TabType> = listOf(
+    TabType.Favourites,
+    TabType.Bookmarks,
+    TabType.History,
+    TabType.Movies,
+    TabType.Series,
+    TabType.Cartoons,
+    TabType.Anime,
+    TabType.For4k,
+    TabType.Concerts,
+    TabType.DocMovies,
+    TabType.DocSeries,
+    TabType.TvShows,
+    TabType.Collections,
+)
 
 @Immutable
 internal data class WatchIndexUiState(

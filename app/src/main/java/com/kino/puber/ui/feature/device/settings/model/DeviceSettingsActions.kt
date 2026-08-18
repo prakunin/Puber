@@ -8,7 +8,6 @@ import com.kino.puber.ui.feature.main.model.TabType
 
 internal sealed interface DeviceSettingsActions : UIAction {
 
-    data object UnlinkDevice : DeviceSettingsActions
     data class ChangeSettingValue(val setting: DeviceSettingUIModel.TypeValue) : DeviceSettingsActions
     data class ToggleListExpand(val setting: DeviceSettingUIModel.TypeList) : DeviceSettingsActions
     data class SelectOption(val type: DeviceSettingType, val optionId: Int) : DeviceSettingsActions

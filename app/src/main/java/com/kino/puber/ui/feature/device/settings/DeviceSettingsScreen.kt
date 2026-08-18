@@ -11,8 +11,12 @@ import com.kino.puber.core.ui.uikit.component.ScaffoldMessage
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
 import com.kino.puber.ui.feature.device.settings.vm.DeviceSettingsVM
+import com.kino.puber.ui.feature.device.settings.vm.DefaultDeviceSettingsPreferencesStore
+import com.kino.puber.ui.feature.device.settings.vm.DeviceSettingsPreferencesStore
 import kotlinx.parcelize.Parcelize
 import com.kino.puber.core.di.puberViewModel
+import org.koin.core.module.dsl.bind
+import org.koin.core.module.dsl.scopedOf
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
 import org.koin.core.scope.Scope
@@ -26,6 +30,9 @@ internal class DeviceSettingsScreen : PuberScreen {
     private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
         scope(named(scopeId)) {
             scoped { DeviceUiSettingsMapper() }
+            scopedOf(::DefaultDeviceSettingsPreferencesStore) {
+                bind<DeviceSettingsPreferencesStore>()
+            }
             viewModelOf(::DeviceSettingsVM)
         }
     }

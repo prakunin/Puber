@@ -11,9 +11,6 @@ import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.data.preferences.AppLanguageRepository
-import com.kino.puber.data.preferences.NavigationPreferencesRepository
-import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.data.repository.WatchState
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
@@ -24,7 +21,6 @@ import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
-import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceCapabilities
@@ -45,11 +41,8 @@ internal class DeviceSettingsVM(
     private val deviceSettingInteractor: IDeviceSettingInteractor,
     private val deviceInfoInteractor: IDeviceInfoInteractor,
     private val deviceUiSettingsMapper: DeviceUiSettingsMapper,
-    private val playerPreferencesRepository: PlayerPreferencesRepository,
-    private val navigationPreferencesRepository: NavigationPreferencesRepository,
-    private val appLanguageRepository: AppLanguageRepository,
+    private val preferencesStore: DeviceSettingsPreferencesStore,
     private val apiDomainInteractor: ApiDomainInteractor,
-    private val appUpdateInteractor: IAppUpdateInteractor,
     private val watchStateRepository: WatchStateRepository,
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
     override val errorHandler: ErrorHandler,
@@ -100,13 +93,7 @@ internal class DeviceSettingsVM(
             deviceSettingInteractor.getCurrentDeviceSettings().collect { currentDevice ->
                 if (currentDevice.isSuccess) {
                     val device = currentDevice.getOrThrow()
-                    val contentPreferences = navigationPreferencesRepository.contentPreferences.value
-                    val navigationMode = navigationPreferencesRepository.getNavigationMode()
-                    val startupTabOptions =
-                        navigationPreferencesRepository.getStartupTabOptions(navigationMode)
-                    val startupTab = navigationPreferencesRepository.getStartupTab()
-                        .takeIf(startupTabOptions::contains)
-                        ?: TabType.Home
+                    val preferences = preferencesStore.read()
                     updateViewState(
                         stateValue.copy(
                             state = DeviceSettingsState.Success(
@@ -115,22 +102,22 @@ internal class DeviceSettingsVM(
                                     capabilities
                                 ),
                                 device = deviceUiSettingsMapper.mapDevice(device.device),
-                                skipIntroEnabled = playerPreferencesRepository.skipIntroEnabled,
-                                skipRecapEnabled = playerPreferencesRepository.skipRecapEnabled,
-                                skipCreditsEnabled = playerPreferencesRepository.skipCreditsEnabled,
-                                debugOverlayEnabled = playerPreferencesRepository.debugOverlayEnabled,
-                                okTogglesPlayPause = playerPreferencesRepository.okTogglesPlayPause,
-                                showMarkWatchedButton = playerPreferencesRepository.showMarkWatchedButton,
-                                preferSurroundAudio = playerPreferencesRepository.preferSurroundAudio,
-                                watchedIndicatorsEnabled = contentPreferences.showWatchedIndicators,
-                                navigationMode = navigationMode,
-                                startupTab = startupTab,
-                                startupTabOptions = startupTabOptions,
-                                menuSections = buildMenuSections(navigationMode),
-                                showAnime = contentPreferences.showAnime,
-                                hideWatched = contentPreferences.hideWatched,
-                                autoUpdateCheckEnabled = appUpdateInteractor.isAutoCheckEnabled(),
-                                appLanguage = appLanguageRepository.getLanguage(),
+                                skipIntroEnabled = preferences.skipIntroEnabled,
+                                skipRecapEnabled = preferences.skipRecapEnabled,
+                                skipCreditsEnabled = preferences.skipCreditsEnabled,
+                                debugOverlayEnabled = preferences.debugOverlayEnabled,
+                                okTogglesPlayPause = preferences.okTogglesPlayPause,
+                                showMarkWatchedButton = preferences.showMarkWatchedButton,
+                                preferSurroundAudio = preferences.preferSurroundAudio,
+                                watchedIndicatorsEnabled = preferences.watchedIndicatorsEnabled,
+                                navigationMode = preferences.navigationMode,
+                                startupTab = preferences.startupTab,
+                                startupTabOptions = preferences.startupTabOptions,
+                                menuSections = buildMenuSections(preferences.visibleTabs),
+                                showAnime = preferences.showAnime,
+                                hideWatched = preferences.hideWatched,
+                                autoUpdateCheckEnabled = preferences.autoUpdateCheckEnabled,
+                                appLanguage = preferences.appLanguage,
                                 watchIndex = latestWatchIndex,
                             )
                         )
@@ -147,7 +134,6 @@ internal class DeviceSettingsVM(
             is DeviceSettingsActions.ChangeSettingValue -> onChangeSettingValue(action.setting)
             is DeviceSettingsActions.ToggleListExpand -> onToggleListExpand(action.setting)
             is DeviceSettingsActions.SelectOption -> onSelectOption(action.type, action.optionId)
-            DeviceSettingsActions.UnlinkDevice -> onUnlinkDevice()
             DeviceSettingsActions.ToggleSkipIntro -> toggleSkipPref { it.copy(skipIntroEnabled = !it.skipIntroEnabled) }
             DeviceSettingsActions.ToggleSkipRecap -> toggleSkipPref { it.copy(skipRecapEnabled = !it.skipRecapEnabled) }
             DeviceSettingsActions.ToggleSkipCredits -> toggleSkipPref {
@@ -178,16 +164,7 @@ internal class DeviceSettingsVM(
 
     override fun dispatchError(error: ErrorEntity) {
         val currentState = stateValue.state
-        if (currentState is DeviceSettingsState.Success) {
-            updateViewState(
-                stateValue.copy(
-                    state = currentState.copy(
-                        savingOptionId = null,
-                        savingToggleType = null
-                    )
-                )
-            )
-        } else {
+        if (currentState !is DeviceSettingsState.Success) {
             updateViewState(stateValue.copy(state = DeviceSettingsState.Error(error.message)))
         }
         showMessage(error.message)
@@ -270,9 +247,21 @@ internal class DeviceSettingsVM(
         )
 
         launch {
-            deviceSettingInteractor.updateDeviceSetting(type, optionId)
-            applyListSettingLocally(type, optionId)
+            try {
+                deviceSettingInteractor.updateDeviceSetting(type, optionId)
+                applyListSettingLocally(type, optionId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                clearSavingOption()
+                throw error
+            }
         }
+    }
+
+    private fun clearSavingOption() {
+        val currentState = stateValue.state as? DeviceSettingsState.Success ?: return
+        updateViewState(stateValue.copy(state = currentState.copy(savingOptionId = null)))
     }
 
     private fun applyListSettingLocally(type: DeviceSettingType, selectedOptionId: Int) {
@@ -305,57 +294,49 @@ internal class DeviceSettingsVM(
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         val newState = update(currentState)
-        playerPreferencesRepository.skipIntroEnabled = newState.skipIntroEnabled
-        playerPreferencesRepository.skipRecapEnabled = newState.skipRecapEnabled
-        playerPreferencesRepository.skipCreditsEnabled = newState.skipCreditsEnabled
+        preferencesStore.setSkipPreferences(
+            intro = newState.skipIntroEnabled,
+            recap = newState.skipRecapEnabled,
+            credits = newState.skipCreditsEnabled,
+        )
         updateViewState(stateValue.copy(state = newState))
     }
 
-    private fun toggleDebugOverlay() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.debugOverlayEnabled
-        playerPreferencesRepository.debugOverlayEnabled = newValue
-        updateViewState(stateValue.copy(state = currentState.copy(debugOverlayEnabled = newValue)))
-    }
+    private fun toggleDebugOverlay() = updatePreference(
+        value = { !debugOverlayEnabled },
+        persist = preferencesStore::setDebugOverlay,
+        update = { copy(debugOverlayEnabled = it) },
+    )
 
-    private fun toggleSurroundAudio() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.preferSurroundAudio
-        playerPreferencesRepository.preferSurroundAudio = newValue
-        updateViewState(stateValue.copy(state = currentState.copy(preferSurroundAudio = newValue)))
-    }
+    private fun toggleSurroundAudio() = updatePreference(
+        value = { !preferSurroundAudio },
+        persist = preferencesStore::setPreferSurroundAudio,
+        update = { copy(preferSurroundAudio = it) },
+    )
 
-    private fun toggleOkTogglesPlayPause() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.okTogglesPlayPause
-        playerPreferencesRepository.okTogglesPlayPause = newValue
-        updateViewState(stateValue.copy(state = currentState.copy(okTogglesPlayPause = newValue)))
-    }
+    private fun toggleOkTogglesPlayPause() = updatePreference(
+        value = { !okTogglesPlayPause },
+        persist = preferencesStore::setOkTogglesPlayPause,
+        update = { copy(okTogglesPlayPause = it) },
+    )
 
-    private fun toggleShowMarkWatchedButton() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.showMarkWatchedButton
-        playerPreferencesRepository.showMarkWatchedButton = newValue
-        updateViewState(stateValue.copy(state = currentState.copy(showMarkWatchedButton = newValue)))
-    }
+    private fun toggleShowMarkWatchedButton() = updatePreference(
+        value = { !showMarkWatchedButton },
+        persist = preferencesStore::setShowMarkWatchedButton,
+        update = { copy(showMarkWatchedButton = it) },
+    )
 
-    private fun toggleWatchedIndicators() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.watchedIndicatorsEnabled
-        navigationPreferencesRepository.setShowWatchedIndicators(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(watchedIndicatorsEnabled = newValue)))
-    }
+    private fun toggleWatchedIndicators() = updatePreference(
+        value = { !watchedIndicatorsEnabled },
+        persist = preferencesStore::setShowWatchedIndicators,
+        update = { copy(watchedIndicatorsEnabled = it) },
+    )
 
     private fun onChangeAppLanguage(language: AppLanguage) {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         if (currentState.appLanguage == language) return
-        appLanguageRepository.setLanguage(language)
+        preferencesStore.setAppLanguage(language)
         updateViewState(stateValue.copy(state = currentState.copy(appLanguage = language)))
     }
 
@@ -363,13 +344,13 @@ internal class DeviceSettingsVM(
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         if (currentState.navigationMode == mode) return
-        navigationPreferencesRepository.setNavigationMode(mode)
-        val startupTabOptions = navigationPreferencesRepository.getStartupTabOptions(mode)
+        preferencesStore.setNavigationMode(mode)
+        val startupTabOptions = preferencesStore.getStartupTabOptions(mode)
         val startupTab = currentState.startupTab
             .takeIf(startupTabOptions::contains)
             ?: TabType.Home
         if (startupTab != currentState.startupTab) {
-            navigationPreferencesRepository.setStartupTab(startupTab)
+            preferencesStore.setStartupTab(startupTab)
         }
         updateViewState(
             stateValue.copy(
@@ -377,7 +358,7 @@ internal class DeviceSettingsVM(
                     navigationMode = mode,
                     startupTab = startupTab,
                     startupTabOptions = startupTabOptions,
-                    menuSections = buildMenuSections(mode),
+                    menuSections = buildMenuSections(preferencesStore.getVisibleTabs(mode)),
                 )
             )
         )
@@ -388,13 +369,13 @@ internal class DeviceSettingsVM(
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
         if (tab !in currentState.startupTabOptions || currentState.startupTab == tab) return
-        navigationPreferencesRepository.setStartupTab(tab)
+        preferencesStore.setStartupTab(tab)
         updateViewState(stateValue.copy(state = currentState.copy(startupTab = tab)))
     }
 
     /**
      * The startup tab has to remain reachable, so the section carrying it cannot be switched off.
-     * The row is drawn disabled to say so, and this guard covers the case where the two disagree.
+     * The row is read-only to say so, and this guard covers the case where the two disagree.
      */
     private fun onToggleMenuSection(tab: TabType) {
         val currentState = stateValue.state
@@ -403,50 +384,50 @@ internal class DeviceSettingsVM(
         val section = currentState.menuSections.firstOrNull { it.tab == tab } ?: return
 
         val mode = currentState.navigationMode
-        navigationPreferencesRepository.setTabVisible(mode, tab, visible = !section.visible)
+        preferencesStore.setTabVisible(mode, tab, visible = !section.visible)
         updateViewState(
             stateValue.copy(
                 state = currentState.copy(
-                    menuSections = buildMenuSections(mode),
-                    startupTabOptions = navigationPreferencesRepository.getStartupTabOptions(mode),
+                    menuSections = buildMenuSections(preferencesStore.getVisibleTabs(mode)),
+                    startupTabOptions = preferencesStore.getStartupTabOptions(mode),
                 )
             )
         )
     }
 
-    private fun buildMenuSections(mode: NavigationMode): List<MenuSectionUi> {
-        val visibleTabs = navigationPreferencesRepository.getVisibleTabs(mode)
+    private fun buildMenuSections(visibleTabs: List<TabType>): List<MenuSectionUi> {
         return SelectableMenuTabs.map { tab ->
             MenuSectionUi(tab = tab, visible = tab in visibleTabs)
         }
     }
 
-    private fun toggleShowAnime() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.showAnime
-        navigationPreferencesRepository.setShowAnime(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(showAnime = newValue)))
-    }
+    private fun toggleShowAnime() = updatePreference(
+        value = { !showAnime },
+        persist = preferencesStore::setShowAnime,
+        update = { copy(showAnime = it) },
+    )
 
-    private fun toggleHideWatched() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.hideWatched
-        navigationPreferencesRepository.setHideWatched(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(hideWatched = newValue)))
-    }
+    private fun toggleHideWatched() = updatePreference(
+        value = { !hideWatched },
+        persist = preferencesStore::setHideWatched,
+        update = { copy(hideWatched = it) },
+    )
 
-    private fun toggleAutoUpdateCheck() {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        val newValue = !currentState.autoUpdateCheckEnabled
-        appUpdateInteractor.setAutoCheckEnabled(newValue)
-        updateViewState(stateValue.copy(state = currentState.copy(autoUpdateCheckEnabled = newValue)))
-    }
+    private fun toggleAutoUpdateCheck() = updatePreference(
+        value = { !autoUpdateCheckEnabled },
+        persist = preferencesStore::setAutoUpdateCheck,
+        update = { copy(autoUpdateCheckEnabled = it) },
+    )
 
-    private fun onUnlinkDevice() {
-        //todo
+    private inline fun <T> updatePreference(
+        value: DeviceSettingsState.Success.() -> T,
+        persist: (T) -> Unit,
+        update: DeviceSettingsState.Success.(T) -> DeviceSettingsState.Success,
+    ) {
+        val currentState = stateValue.state as? DeviceSettingsState.Success ?: return
+        val newValue = currentState.value()
+        persist(newValue)
+        updateViewState(stateValue.copy(state = currentState.update(newValue)))
     }
 
     private fun onRetry() {

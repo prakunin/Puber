@@ -3,7 +3,6 @@ package com.kino.puber.ui.feature.device.settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
@@ -72,33 +71,6 @@ private val previewApiDomain = ApiDomainDialogState(
     currentDomain = "service-kp.com",
     customDomain = null,
 )
-
-internal class DeviceSettingsStateProvider : PreviewParameterProvider<DeviceSettingsState> {
-    override val values = sequenceOf(
-        DeviceSettingsState.Loading,
-        DeviceSettingsState.Error("Не удалось загрузить настройки"),
-        DeviceSettingsState.Success(
-            settings = previewAllSettings,
-            device = previewDevice,
-        ),
-        DeviceSettingsState.Success(
-            settings = previewAllSettings,
-            device = previewDevice,
-            showAnime = false,
-        ),
-        DeviceSettingsState.Success(
-            settings = previewAllSettings,
-            device = previewDevice,
-            expandedType = DeviceSettingType.STREAMING_TYPE,
-        ),
-        DeviceSettingsState.Success(
-            settings = previewAllSettings,
-            device = previewDevice,
-            expandedType = DeviceSettingType.STREAMING_TYPE,
-            savingOptionId = 2,
-        ),
-    )
-}
 
 @Preview(name = "Loading", device = TV_1080p)
 @Composable

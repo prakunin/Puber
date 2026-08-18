@@ -85,14 +85,11 @@
     <string name="device_setting_support_hdr">HDR support</string>
     <string name="device_setting_support_4k">4K support</string>
     <string name="device_setting_mixed_playlist">Mixed playlist</string>
-    <string name="device_settings_current_device">Current device</string>
     <string name="device_settings_name">Name: %1$s</string>
-    <string name="device_settings_name_with_version">Name: %1$s · %2$s</string>
     <string name="device_settings_app_version">Puber version: %1$s</string>
     <string name="device_settings_hardware">Hardware: %1$s</string>
     <string name="device_settings_software">Software: %1$s</string>
     <string name="device_settings_retry">Retry</string>
-    <string name="device_settings_unlink">Unlink device</string>
     <string name="device_settings_not_supported">Not supported by this device</string>
     <string name="device_settings_restart_required">Restart the app to apply</string>
     <string name="settings_watch_index_title">Watch history</string>
