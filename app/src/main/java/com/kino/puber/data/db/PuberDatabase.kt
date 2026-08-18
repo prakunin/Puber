@@ -1,6 +1,7 @@
 package com.kino.puber.data.db
 
 import android.content.Context
+import androidx.room3.AutoMigration
 import androidx.room3.Database
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
@@ -9,8 +10,11 @@ import kotlinx.coroutines.Dispatchers
 
 @Database(
     entities = [WatchStateEntity::class, WatchStateSyncEntity::class, CachedPayloadEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
+    // Adding a column is a migration Room writes itself, and this one is worth writing: dropping
+    // the tables would cost a walk of the whole history to get back what is already there.
+    autoMigrations = [AutoMigration(from = 2, to = 3)],
 )
 abstract class PuberDatabase : RoomDatabase() {
 

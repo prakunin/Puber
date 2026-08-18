@@ -273,7 +273,7 @@ internal class DeviceSettingsContentFocusTest {
         val dataSection = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Data.name))
         dataSection.requestFocus().press(Key.DirectionRight)
 
-        focusedItem(context.getString(R.string.settings_watch_index_sync_action)).assertIsFocused()
+        focusedItem(context.getString(R.string.settings_watch_index_rebuild_action)).assertIsFocused()
     }
 
     @Test
@@ -293,7 +293,7 @@ internal class DeviceSettingsContentFocusTest {
         val dataSection = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Data.name))
 
         dataSection.requestFocus().press(Key.DirectionRight)
-        focusedItem(context.getString(R.string.settings_watch_index_sync_action))
+        focusedItem(context.getString(R.string.settings_watch_index_rebuild_action))
             .assertIsFocused()
             .press(Key.Enter)
 

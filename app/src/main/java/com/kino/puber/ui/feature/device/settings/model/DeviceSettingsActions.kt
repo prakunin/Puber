@@ -24,7 +24,6 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data class ToggleMenuSection(val tab: TabType) : DeviceSettingsActions
     data object ToggleShowAnime : DeviceSettingsActions
     data object ToggleHideWatched : DeviceSettingsActions
-    data object SyncWatchIndex : DeviceSettingsActions
     data object RebuildWatchIndex : DeviceSettingsActions
     data object ToggleAutoUpdateCheck : DeviceSettingsActions
     data object OpenApiDomainDialog : DeviceSettingsActions

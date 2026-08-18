@@ -520,6 +520,8 @@ data class WatchStateSyncCursor(
     val generation: Long = FIRST_GENERATION,
     /** When the last full pass finished and pruned what it had not seen. */
     val lastReconciledAt: Long? = null,
+    /** How many entries the account's history held when it was last read. */
+    val historyTotalItems: Int? = null,
 )
 
 private fun WatchStateSyncEntity.toCursor() = WatchStateSyncCursor(
@@ -529,6 +531,7 @@ private fun WatchStateSyncEntity.toCursor() = WatchStateSyncCursor(
     historyResumePage = historyResumePage,
     generation = generation,
     lastReconciledAt = lastReconciledAt,
+    historyTotalItems = historyTotalItems,
 )
 
 private fun WatchStateSyncCursor.toEntity() = WatchStateSyncEntity(
@@ -538,4 +541,5 @@ private fun WatchStateSyncCursor.toEntity() = WatchStateSyncEntity(
     historyResumePage = historyResumePage,
     generation = generation,
     lastReconciledAt = lastReconciledAt,
+    historyTotalItems = historyTotalItems,
 )

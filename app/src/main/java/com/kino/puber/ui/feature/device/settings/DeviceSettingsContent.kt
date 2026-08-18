@@ -664,31 +664,40 @@ private fun LazyListScope.watchHistoryItems(
         WatchHistorySummary(state.watchIndex)
     }
     item(key = "watch-status") {
-        Text(
-            text = watchIndexStatus(state.watchIndex),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
-        )
-    }
-    item(key = "watch-actions") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Both stay reachable while a run is under way. Dropping out of the focus tree would
-            // take the focus with them, and the pane the user is standing in would go blank.
-            TvSafeButton(
-                text = stringResource(R.string.settings_watch_index_sync_action),
-                enabled = !state.watchIndex.isSyncing,
-                focusableWhenDisabled = true,
-                primary = true,
-                onClick = { onAction(DeviceSettingsActions.SyncWatchIndex) },
+        ) {
+            Text(
+                text = watchIndexStatus(state.watchIndex),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TvSafeButton(
-                text = stringResource(R.string.settings_watch_index_rebuild_action),
-                enabled = !state.watchIndex.isSyncing,
-                focusableWhenDisabled = true,
-                onClick = { onAction(DeviceSettingsActions.RebuildWatchIndex) },
+            // Prose, not a figure: it belongs beside the status rather than in the row of counts,
+            // where the metric type would blow a phrase up to headline size.
+            Text(
+                text = stringResource(
+                    R.string.settings_watch_index_last_sync,
+                    lastSyncLabel(state.watchIndex.lastSyncAt),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    item(key = "watch-actions") {
+        // Only the rebuild: catching up on what is new already happens on its own, every time the
+        // app comes back to the foreground, so a button for it would promise work that is done.
+        //
+        // It stays reachable while a run is under way. Dropping out of the focus tree would take
+        // the focus with it, and the pane the user is standing in would go blank.
+        TvSafeButton(
+            text = stringResource(R.string.settings_watch_index_rebuild_action),
+            enabled = !state.watchIndex.isSyncing,
+            focusableWhenDisabled = true,
+            primary = true,
+            onClick = { onAction(DeviceSettingsActions.RebuildWatchIndex) },
+        )
     }
 }
 
@@ -737,11 +746,6 @@ private fun WatchHistorySummary(index: WatchIndexUiState) {
             value = index.totalHistoryItems?.let { total ->
                 stringResource(R.string.settings_watch_index_of_account, index.indexedItems, total)
             } ?: index.indexedItems.toString(),
-            modifier = Modifier.weight(1f),
-        )
-        InformationMetric(
-            label = stringResource(R.string.settings_watch_index_last_sync),
-            value = lastSyncLabel(index.lastSyncAt),
             modifier = Modifier.weight(1f),
         )
     }

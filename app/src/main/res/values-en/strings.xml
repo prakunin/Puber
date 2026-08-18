@@ -99,13 +99,11 @@
     <string name="settings_watch_index_description">Data used for watched markers and hiding watched content</string>
     <string name="settings_watch_index_fully_watched">Watched</string>
     <string name="settings_watch_index_local_total">Stored on this device</string>
-    <string name="settings_watch_index_account_total">Entries in the account</string>
-    <string name="settings_watch_index_sync_action">Update</string>
     <string name="settings_watch_index_syncing">Syncing…</string>
     <string name="settings_watch_index_progress">Page %1$d of %2$d</string>
     <string name="settings_watch_index_complete">The full history walk is done</string>
     <string name="settings_watch_index_rebuild_action">Rebuild the index</string>
-    <string name="settings_watch_index_last_sync">Last sync</string>
+    <string name="settings_watch_index_last_sync">Last sync: %1$s</string>
     <string name="settings_watch_index_never_synced">Never</string>
     <string name="settings_watch_index_resume_page">The walk stopped on page %1$d</string>
     <string name="settings_watch_index_of_account">%1$d of %2$d</string>

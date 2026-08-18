@@ -452,6 +452,9 @@ class WatchStateSyncInteractor(
                     serverExhausted -> 1
                     else -> nextPage
                 },
+                // Travels with the pages it was read alongside, so it lands on disk in the same
+                // write and outlives the run that learnt it.
+                historyTotalItems = response.pagination.totalItems,
             ),
             walkIsOver = caughtUp || serverExhausted,
             serverExhausted = serverExhausted,

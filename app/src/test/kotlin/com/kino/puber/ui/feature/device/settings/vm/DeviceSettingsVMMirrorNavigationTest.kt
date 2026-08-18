@@ -119,12 +119,12 @@ class DeviceSettingsVMMirrorNavigationTest {
     }
 
     @Test
-    fun syncWatchIndex_requestsApplicationOwnedSync() {
+    fun rebuildWatchIndex_requestsApplicationOwnedRebuild() {
         val vm = createVM()
 
-        vm.onAction(DeviceSettingsActions.SyncWatchIndex)
+        vm.onAction(DeviceSettingsActions.RebuildWatchIndex)
 
-        verify { watchStateSyncInteractor.requestSync() }
+        verify { watchStateSyncInteractor.requestSync(rebuild = true) }
     }
 
     @Test

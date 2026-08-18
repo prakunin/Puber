@@ -1,0 +1,174 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "760c6d1d669d32568cc2128cfca6e442",
+    "entities": [
+      {
+        "tableName": "watch_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`item_id` INTEGER NOT NULL, `is_series_like` INTEGER NOT NULL, `is_fully_watched` INTEGER NOT NULL, `watched_episodes` INTEGER, `total_episodes` INTEGER, `progress_time` INTEGER, `progress_duration` INTEGER, `updated_at` INTEGER NOT NULL, `history_seen_at` INTEGER NOT NULL, `is_local_pending` INTEGER NOT NULL, `generation` INTEGER NOT NULL, PRIMARY KEY(`item_id`))",
+        "fields": [
+          {
+            "fieldPath": "itemId",
+            "columnName": "item_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSeriesLike",
+            "columnName": "is_series_like",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFullyWatched",
+            "columnName": "is_fully_watched",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "watchedEpisodes",
+            "columnName": "watched_episodes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "totalEpisodes",
+            "columnName": "total_episodes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progressTime",
+            "columnName": "progress_time",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progressDuration",
+            "columnName": "progress_duration",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historySeenAt",
+            "columnName": "history_seen_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isLocalPending",
+            "columnName": "is_local_pending",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "item_id"
+          ]
+        }
+      },
+      {
+        "tableName": "watch_state_sync",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `last_sync_at` INTEGER, `history_newest_seen` INTEGER NOT NULL, `full_history_walk_done` INTEGER NOT NULL, `history_resume_page` INTEGER NOT NULL, `generation` INTEGER NOT NULL, `last_reconciled_at` INTEGER, `history_total_items` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncAt",
+            "columnName": "last_sync_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "historyNewestSeen",
+            "columnName": "history_newest_seen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullHistoryWalkDone",
+            "columnName": "full_history_walk_done",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historyResumePage",
+            "columnName": "history_resume_page",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReconciledAt",
+            "columnName": "last_reconciled_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "historyTotalItems",
+            "columnName": "history_total_items",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "cached_payload",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `payload` TEXT NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '760c6d1d669d32568cc2128cfca6e442')"
+    ]
+  }
+}

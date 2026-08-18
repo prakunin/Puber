@@ -31,6 +31,12 @@ data class WatchStateSyncEntity(
     @ColumnInfo(name = "generation") val generation: Long = FIRST_GENERATION,
     /** When the last full pass finished and pruned what it had not seen. */
     @ColumnInfo(name = "last_reconciled_at") val lastReconciledAt: Long? = null,
+    /**
+     * How many entries the account's history held when it was last read. Stored rather than kept
+     * with the run's progress, so the settings screen can say how much of the account the index
+     * covers without a walk having to be under way.
+     */
+    @ColumnInfo(name = "history_total_items") val historyTotalItems: Int? = null,
 ) {
 
     companion object {

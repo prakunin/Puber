@@ -159,7 +159,6 @@ internal class DeviceSettingsVM(
             is DeviceSettingsActions.ToggleMenuSection -> onToggleMenuSection(action.tab)
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
             DeviceSettingsActions.ToggleHideWatched -> toggleHideWatched()
-            DeviceSettingsActions.SyncWatchIndex -> watchStateSyncInteractor.requestSync()
             DeviceSettingsActions.RebuildWatchIndex -> watchStateSyncInteractor.requestSync(rebuild = true)
             DeviceSettingsActions.ToggleAutoUpdateCheck -> toggleAutoUpdateCheck()
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
@@ -522,7 +521,9 @@ internal fun buildWatchIndexUiState(
         isSyncing = progress.isSyncing,
         currentPage = progress.currentPage,
         totalPages = progress.totalPages,
-        totalHistoryItems = progress.totalHistoryItems,
+        // The run in progress knows the freshest count; the cursor holds the last one seen,
+        // which is what a section opened between runs has to go on.
+        totalHistoryItems = progress.totalHistoryItems ?: cursor.historyTotalItems,
         fullHistoryWalkDone = cursor.fullHistoryWalkDone,
         lastSyncAt = cursor.lastSyncAt,
         historyResumePage = cursor.historyResumePage,
