@@ -3,13 +3,11 @@ package com.kino.puber.ui.feature.contentlist.content
 import android.os.PowerManager
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -37,13 +35,11 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
-import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
 import kotlin.math.abs
@@ -275,10 +271,59 @@ internal class SectionRowFocusTraversalTest {
         assertSettleFlush(settleSectionTag(1))
     }
 
-    // Mirrors ContentListLayout's item wiring: a hero item followed by one viewport-sized item
-    // per section, sharing the same `rememberFocusedListItemScroller`.
+    // The two pieces of production arithmetic the other SettleScene tests never reach: the
+    // list-item index of a section when there is *no* hero above it, and an empty section
+    // collapsing to nothing instead of owning a page of its own.
+    @Test
+    fun withoutHeroAnEmptySectionOwnsNoPageAndDpadDownSkipsIt() {
+        val rows = listOf(
+            RowFixture(
+                config = SectionConfig(id = "settle_empty_first", title = "Settle empty first"),
+                state = SectionState.Empty,
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_no_hero_0", title = "Settle no hero 0"),
+                state = SectionState.Content(items = listOf(item(0, 0), item(0, 1))),
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_empty_middle", title = "Settle empty middle"),
+                state = SectionState.Empty,
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_no_hero_1", title = "Settle no hero 1"),
+                state = SectionState.Content(items = listOf(item(1, 0), item(1, 1))),
+            ),
+        )
+
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = rows, isHeroItemPresent = false)
+            }
+        }
+
+        // Nothing has been focused and nothing has scrolled, so the first section with content is
+        // flush with the viewport top only if the empty section above it took up no height at all.
+        assertSettleFlush(settleSectionTag(1))
+
+        // With no hero, section 0 is list item 0 and section 1 is list item 1. Were the hero
+        // offset applied anyway, focusing this section would scroll list item 2 to the top and
+        // carry this one off the screen.
+        requestFocusOnFirstFocusableIn(settleSectionTag(1))
+        assertSettleFlush(settleSectionTag(1))
+
+        // The empty section holds nothing focusable, so Down lands two sections on -- and the
+        // scroller has to name *that* section's list index for it to settle flush.
+        pressLeafFocused(Key.DirectionDown)
+        assertSettleFlush(settleSectionTag(3))
+    }
+
+    // Mirrors ContentListLayout's item wiring: an optional hero item followed by one item per
+    // section, sharing the same `rememberFocusedListItemScroller`. The two pieces of arithmetic
+    // this scene is here to guard -- where a section sits in the list, and what an empty section
+    // collapses to -- come from production's `sectionListItemIndex` and `SectionListItem` rather
+    // than from a copy of them, so changing either breaks these tests.
     @Composable
-    private fun SettleScene(rows: List<RowFixture>) {
+    private fun SettleScene(rows: List<RowFixture>, isHeroItemPresent: Boolean = true) {
         val lazyListState = rememberLazyListState()
         val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
         Box(
@@ -295,36 +340,31 @@ internal class SectionRowFocusTraversalTest {
                         .height(SETTLE_VIEWPORT_HEIGHT)
                         .focusGroup(),
                 ) {
-                    item(key = "hero", contentType = "hero") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillParentMaxHeight()
-                                .testTag(SETTLE_HERO_TAG),
-                        ) {
-                            HeroCarousel(
-                                items = listOf(settleHeroItem()),
-                                onItemClick = {},
-                                modifier = Modifier.fillMaxSize(),
-                                onFocusedItemChanged = { onListItemFocused(0) },
-                            )
-                        }
-                    }
-                    items(rows, key = { it.config.id }) { row ->
-                        val rowIndex = rows.indexOf(row) + 1
-                        Column(
-                            modifier = Modifier
-                                .fillParentMaxHeight()
-                                .testTag(settleSectionTag(rowIndex)),
-                        ) {
-                            Text(
+                    if (isHeroItemPresent) {
+                        item(key = "hero", contentType = "hero") {
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                text = row.config.title,
-                                style = SectionTitleStyle,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                                    .fillParentMaxHeight()
+                                    .testTag(SETTLE_HERO_TAG),
+                            ) {
+                                HeroCarousel(
+                                    items = listOf(settleHeroItem()),
+                                    onItemClick = {},
+                                    modifier = Modifier.fillMaxSize(),
+                                    onFocusedItemChanged = { onListItemFocused(0) },
+                                )
+                            }
+                        }
+                    }
+                    itemsIndexed(rows, key = { _, row -> row.config.id }) { index, row ->
+                        val rowIndex = sectionListItemIndex(index, isHeroItemPresent)
+                        SectionListItem(
+                            title = row.config.title,
+                            isEmpty = row.state is SectionState.Empty,
+                            fillsViewport = true,
+                            modifier = Modifier.testTag(settleSectionTag(rowIndex)),
+                        ) {
                             SectionRowContent(
                                 state = row.state,
                                 config = row.config,

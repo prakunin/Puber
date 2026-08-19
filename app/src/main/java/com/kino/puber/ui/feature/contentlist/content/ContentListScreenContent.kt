@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -60,6 +61,11 @@ internal fun ContentListScreenContent(
     onAction: (UIAction) -> Unit,
 ) {
     val mainContentFocus = rememberFocusRequesterOnLaunch()
+    // Which *section* owns focus restoration and the empty-row handoff. Deliberately not the same
+    // thing as the list-item index `rememberFocusedListItemScroller` is given: that one counts the
+    // hero as an item, this one does not, and folding either into the other would push the hero
+    // offset into a `rememberSaveable` that also drives `isTargetRow`. They answer different
+    // questions; do not simplify one into the other.
     var focusedSectionIndex by rememberSaveable { mutableIntStateOf(0) }
     var contextMenuTarget by remember { mutableStateOf<ContentListContextMenuTarget?>(null) }
 
@@ -132,7 +138,6 @@ private fun ContentListLayout(
     PreserveLazyListAnchorOnRootReturn(lazyListState)
     var rowsHaveFocus by remember { mutableStateOf(false) }
     val isHeroItemPresent = state.isHeroLoading || state.heroItems.isNotEmpty()
-    val sectionItemIndexOffset = if (isHeroItemPresent) 1 else 0
     val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
 
     // One list item per screen is a rule about the space the detail panel leaves over, not about
@@ -212,7 +217,7 @@ private fun ContentListLayout(
                     sectionVms = sectionVms,
                     sectionStates = sectionStates,
                     focusedSectionIndex = focusedSectionIndex,
-                    sectionItemIndexOffset = sectionItemIndexOffset,
+                    isHeroItemPresent = isHeroItemPresent,
                     fillsViewport = itemsFillViewport,
                     onSectionFocused = onSectionFocused,
                     onListItemFocused = onListItemFocused,
@@ -322,7 +327,7 @@ private fun LazyListScope.sectionItems(
     sectionVms: List<SectionVM>,
     sectionStates: List<SectionState>,
     focusedSectionIndex: Int,
-    sectionItemIndexOffset: Int,
+    isHeroItemPresent: Boolean,
     fillsViewport: Boolean,
     onSectionFocused: (Int) -> Unit,
     onListItemFocused: (Int) -> Unit,
@@ -339,7 +344,7 @@ private fun LazyListScope.sectionItems(
             isTargetRow = index == focusedSectionIndex,
             fillsViewport = fillsViewport,
             onSectionFocused = onSectionFocused,
-            onRowFocused = { onListItemFocused(sectionItemIndexOffset + index) },
+            onRowFocused = { onListItemFocused(sectionListItemIndex(index, isHeroItemPresent)) },
             onContextMenu = onContextMenu,
             onAction = onAction,
             onRowEmpty = {
@@ -410,28 +415,67 @@ private fun LazyListScope.sectionItem(
             )
         }
 
-        if (sectionState is SectionState.Empty) {
-            // No heading, and no page: a section with nothing in it must not own a screen.
-            // It is still composed rather than skipped, because SectionRowContent carries the
-            // LaunchedEffect that reports the row empty and hands focus to the nearest
-            // non-empty one.
-            row()
-        } else {
-            Column(
-                modifier = if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
-            ) {
-                val title = config.titleRes?.let { stringResource(it) } ?: config.title
-                Text(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    text = title,
-                    style = SectionTitleStyle,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                row()
-            }
-        }
+        SectionListItem(
+            title = config.titleRes?.let { stringResource(it) } ?: config.title,
+            isEmpty = sectionState is SectionState.Empty,
+            fillsViewport = fillsViewport,
+            row = row,
+        )
+    }
+}
+
+/**
+ * Where section [sectionIndex] sits in the `LazyColumn`, which is what
+ * [rememberFocusedListItemScroller] has to be told: the hero, when there is one, is list item 0
+ * and pushes every section down by one.
+ *
+ * Shared with `SectionRowFocusTraversalTest` so the tests exercise this arithmetic rather than a
+ * copy of it — the offset changing without the tests noticing is exactly the regression they exist
+ * to catch.
+ */
+internal fun sectionListItemIndex(sectionIndex: Int, isHeroItemPresent: Boolean): Int =
+    sectionIndex + if (isHeroItemPresent) 1 else 0
+
+/**
+ * The two shapes a section's list item can take, kept in one place because both are load-bearing
+ * and neither is obvious from the call site.
+ *
+ * A section with nothing in it collapses to nothing: no heading, and no page, because a section
+ * with no cards must not own a screen. It is still composed rather than skipped, because
+ * `SectionRowContent` carries the `LaunchedEffect` that reports the row empty and hands focus to
+ * the nearest non-empty one.
+ *
+ * Everything else is a page when [fillsViewport] — see `ContentListLayout`, where that follows the
+ * detail panel.
+ *
+ * Shared with `SectionRowFocusTraversalTest` for the same reason as [sectionListItemIndex].
+ */
+@Composable
+internal fun LazyItemScope.SectionListItem(
+    title: String,
+    isEmpty: Boolean,
+    fillsViewport: Boolean,
+    modifier: Modifier = Modifier,
+    row: @Composable () -> Unit,
+) {
+    if (isEmpty) {
+        Column(modifier = modifier) { row() }
+        return
+    }
+    Column(
+        modifier = modifier.then(
+            if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
+        ),
+    ) {
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            text = title,
+            style = SectionTitleStyle,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        row()
     }
 }
 
