@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -129,6 +130,27 @@ private fun ContentListLayout(
     val lazyListState = rememberLazyListState()
     PreserveLazyListAnchorOnRootReturn(lazyListState)
     var rowsHaveFocus by remember { mutableStateOf(false) }
+    val isHeroItemPresent = state.isHeroLoading || state.heroItems.isNotEmpty()
+
+    // The vertical BringIntoViewSpec set up by PositionFocusedItemInLazyLayout below settles
+    // whatever rect asked to be brought into view — which, by default, is the focused card, not
+    // the section around it. For a viewport-sized section item that lands the card's own offset
+    // inside the section (heading + gap + row padding) at the viewport edge, not the section's
+    // top edge; those numbers lining up today is coincidental, not guaranteed. While a row has
+    // real focus, explicitly scroll so the *section's item* — not the card inside it — settles
+    // flush with the viewport top. This is independent of heading size, gap, row padding or
+    // card height: it targets the list item itself, at offset zero, by index.
+    //
+    // This scroll races the automatic per-card bring-into-view request triggered by the same
+    // focus change, but `LazyListState` serializes scroll mutations and the most recently
+    // issued one wins, so the section-aligned target is what the list settles on.
+    LaunchedEffect(focusedSectionIndex, rowsHaveFocus, isHeroItemPresent) {
+        if (rowsHaveFocus) {
+            val targetItemIndex = (if (isHeroItemPresent) 1 else 0) + focusedSectionIndex
+            lazyListState.animateScrollToItem(index = targetItemIndex, scrollOffset = 0)
+        }
+    }
+
     Column(modifier = modifier) {
         if (state.showDetailPanel) {
             VideoItemGridDetails(
@@ -168,7 +190,7 @@ private fun ContentListLayout(
                     .focusRestorer()
                     .focusGroup(),
             ) {
-                heroItem(state, onAction)
+                heroItem(state, isHeroItemPresent, onAction)
                 sectionItems(
                     sections = sections,
                     sectionVms = sectionVms,
@@ -185,9 +207,10 @@ private fun ContentListLayout(
 
 private fun LazyListScope.heroItem(
     state: ContentListViewState,
+    isHeroItemPresent: Boolean,
     onAction: (UIAction) -> Unit,
 ) {
-    if (state.isHeroLoading || state.heroItems.isNotEmpty()) {
+    if (isHeroItemPresent) {
         item(key = "hero", contentType = "hero") {
             if (state.heroItems.isEmpty()) {
                 Spacer(

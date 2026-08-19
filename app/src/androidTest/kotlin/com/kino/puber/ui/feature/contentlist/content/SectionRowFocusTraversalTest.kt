@@ -2,15 +2,21 @@ package com.kino.puber.ui.feature.contentlist.content
 
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -26,9 +32,11 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
 import kotlin.math.abs
@@ -169,6 +177,110 @@ internal class SectionRowFocusTraversalTest {
         assertBoundsAndViewport(snapshots)
     }
 
+    // Mirrors the fix in ContentListScreenContent.ContentListLayout for the catalogue's
+    // one-section-per-screen layout: each section is a viewport-sized item (heading + gap +
+    // SectionRowContent, wrapped in `Modifier.fillParentMaxHeight()`), and while a row has real
+    // focus an explicit `animateScrollToItem(index, scrollOffset = 0)` keeps the *section's own
+    // item* — not the focused card inside it — settled flush with the viewport top. Without that
+    // explicit scroll, `PositionFocusedItemInLazyLayout`'s BringIntoViewSpec settles the focused
+    // card instead, landing the section short of the top by however far the card sits inside it.
+    @Test
+    fun dpadDownSettlesEachSectionFlushWithViewportTop() {
+        val rows = (0 until SETTLE_ROW_COUNT).map { rowIndex ->
+            RowFixture(
+                config = SectionConfig(id = "settle_row_$rowIndex", title = "Settle row $rowIndex"),
+                state = SectionState.Content(
+                    items = listOf(
+                        item(rowIndex, 0),
+                        item(rowIndex, 1),
+                        item(rowIndex, 2),
+                    ),
+                ),
+            )
+        }
+        var focusedRowIndex by mutableIntStateOf(0)
+        var rowsHaveFocus by mutableStateOf(false)
+
+        composeRule.setContent {
+            PuberTheme {
+                val lazyListState = rememberLazyListState()
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(SETTLE_VIEWPORT_HEIGHT)
+                        .testTag(SETTLE_VIEWPORT_TAG),
+                ) {
+                    LaunchedEffect(focusedRowIndex, rowsHaveFocus) {
+                        if (rowsHaveFocus) {
+                            lazyListState.animateScrollToItem(index = focusedRowIndex, scrollOffset = 0)
+                        }
+                    }
+                    PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
+                        LazyColumn(
+                            state = lazyListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(SETTLE_VIEWPORT_HEIGHT)
+                                .onFocusChanged { rowsHaveFocus = it.hasFocus }
+                                .focusGroup(),
+                        ) {
+                            items(rows, key = { it.config.id }) { row ->
+                                val rowIndex = rows.indexOf(row)
+                                Column(
+                                    modifier = Modifier
+                                        .fillParentMaxHeight()
+                                        .testTag(settleSectionTag(rowIndex)),
+                                ) {
+                                    Text(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
+                                        text = row.config.title,
+                                        style = SectionTitleStyle,
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    SectionRowContent(
+                                        state = row.state,
+                                        config = row.config,
+                                        isTargetRow = rowIndex == focusedRowIndex,
+                                        onItemClick = {},
+                                        onItemContextMenu = {},
+                                        onItemFocused = {},
+                                        onSectionFocused = { focusedRowIndex = rowIndex },
+                                        onRetry = {},
+                                        onLoadMore = {},
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        requestFocus(itemTitle(0, 0))
+        composeRule.waitForIdle()
+        val viewportTop = composeRule
+            .onNodeWithTag(SETTLE_VIEWPORT_TAG)
+            .getUnclippedBoundsInRoot()
+            .top
+
+        repeat(SETTLE_ROW_COUNT - 1) { step ->
+            pressCurrent(Key.DirectionDown)
+            val settledRowIndex = step + 1
+            val sectionTop = composeRule
+                .onNodeWithTag(settleSectionTag(settledRowIndex))
+                .getUnclippedBoundsInRoot()
+                .top
+            assertTrue(
+                "section $settledRowIndex top $sectionTop is not flush with viewport top $viewportTop",
+                abs(sectionTop.value - viewportTop.value) <= BOUNDS_TOLERANCE,
+            )
+        }
+    }
+
+    private fun settleSectionTag(rowIndex: Int) = "settle_section_$rowIndex"
+
     private fun seedStableTargets() {
         repeat(ROW_COUNT - 1) { index ->
             val row = index + 1
@@ -270,6 +382,13 @@ internal class SectionRowFocusTraversalTest {
         const val BOUNDS_TOLERANCE = 1f
         val VIEWPORT_HEIGHT = 420.dp
         val MAX_VERTICAL_DELTA = 210.dp
+
+        // Matches the real device: a 960x540 dp screen with a 270 dp list viewport below the
+        // detail panel, and a 190 dp card (PuberTheme.Defaults.CatalogueRowItemHeight) — the
+        // exact numbers behind the bug this test guards against.
+        const val SETTLE_ROW_COUNT = 4
+        const val SETTLE_VIEWPORT_TAG = "settle_viewport"
+        val SETTLE_VIEWPORT_HEIGHT = 270.dp
         val focusedCardMatcher = isFocused() and hasAnyDescendant(
             hasText("row-", substring = true),
         )
