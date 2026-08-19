@@ -28,7 +28,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.GenreChipBar
@@ -36,6 +35,7 @@ import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchSurface
@@ -272,7 +272,7 @@ private fun LazyListScope.sectionItem(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
             text = title,
-            style = MaterialTheme.typography.titleLarge,
+            style = SectionTitleStyle,
         )
     }
 

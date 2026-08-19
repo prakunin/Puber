@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -46,6 +47,7 @@ fun VideoItemHorizontal(
     modifier: Modifier = Modifier,
     state: VideoItemUIState,
     onClick: () -> Unit,
+    itemHeight: Dp = PuberTheme.Defaults.HorizontalVideoItemHeight,
     onContextMenu: (() -> Unit)? = null,
 ) {
     Card(
@@ -58,7 +60,7 @@ fun VideoItemHorizontal(
                 }
             )
             .onSelectKeyClick(onClick)
-            .height(PuberTheme.Defaults.HorizontalVideoItemHeight)
+            .height(itemHeight)
             .aspectRatio(PuberTheme.Defaults.HorizontalVideoItemAspectRatio),
         scale = CardDefaults.scale(pressedScale = 1f, focusedScale = 1f),
         onClick = onClick,

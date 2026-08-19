@@ -39,7 +39,7 @@ internal fun ShimmerSectionCards() {
 private fun ShimmerVideoItem() {
     Box(
         modifier = Modifier
-            .height(PuberTheme.Defaults.HorizontalVideoItemHeight)
+            .height(PuberTheme.Defaults.CatalogueRowItemHeight)
             .aspectRatio(PuberTheme.Defaults.HorizontalVideoItemAspectRatio)
             .placeholder(visible = true)
             // focusable intentionally: prevents vertical scroll lag between section rows

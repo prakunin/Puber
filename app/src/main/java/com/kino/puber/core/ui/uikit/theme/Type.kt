@@ -41,3 +41,16 @@ val Typography = Typography(
     )
     */
 )
+
+/**
+ * The heading above a catalogue carousel. Deliberately not `titleLarge`: that style is shared
+ * with the home screen, the player and the context menu, and this heading needs to sit quietly
+ * above the row rather than compete with the film titles on the cards.
+ */
+val SectionTitleStyle = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Medium,
+    fontSize = 16.sp,
+    lineHeight = 20.sp,
+    letterSpacing = 0.15.sp,
+)

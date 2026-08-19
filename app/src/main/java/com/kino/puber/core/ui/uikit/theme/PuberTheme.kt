@@ -14,6 +14,13 @@ data object PuberTheme {
         val VideoItemWidth = 120.dp
         val VideoItemHeight = 180.dp
         val HorizontalVideoItemHeight = 150.dp
+
+        /**
+         * Card height for the catalogue rows only, where one section fills the list viewport.
+         * The shared [HorizontalVideoItemHeight] stays at its smaller value for search, history,
+         * collections and the shared horizontal card.
+         */
+        val CatalogueRowItemHeight = 190.dp
         const val HorizontalVideoItemAspectRatio = 16f / 9f
         const val DetailsWeight = 1F
         const val ContentWeight = 1F

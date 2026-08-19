@@ -160,6 +160,7 @@ private fun ContentSectionCards(
                             .then(focusModifier),
                         state = item,
                         onClick = clickCallback,
+                        itemHeight = PuberTheme.Defaults.CatalogueRowItemHeight,
                         onContextMenu = { onItemContextMenu(item) },
                     )
                 }
@@ -167,7 +168,7 @@ private fun ContentSectionCards(
                     item {
                         Box(
                             modifier = Modifier
-                                .height(PuberTheme.Defaults.HorizontalVideoItemHeight)
+                                .height(PuberTheme.Defaults.CatalogueRowItemHeight)
                                 .aspectRatio(PuberTheme.Defaults.HorizontalVideoItemAspectRatio),
                             contentAlignment = Alignment.Center,
                         ) {
