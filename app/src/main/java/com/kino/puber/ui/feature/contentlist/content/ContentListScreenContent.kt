@@ -286,9 +286,9 @@ private fun LazyListScope.heroItem(
 ) {
     if (isHeroItemPresent) {
         item(key = "hero", contentType = "hero") {
-            // Off the page layout the carousel keeps the fixed height it sets on itself, and the
-            // still-loading placeholder has to name the same number to reserve the same space.
-            val heightModifier = if (fillsViewport) {
+            // Off the page layout there is no viewport height to fill, so both the carousel and
+            // the placeholder standing in for it while it loads name the carousel's own height.
+            val heroHeight = if (fillsViewport) {
                 Modifier.fillParentMaxHeight()
             } else {
                 Modifier.height(HeroCarouselHeight)
@@ -297,7 +297,7 @@ private fun LazyListScope.heroItem(
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(heightModifier),
+                        .then(heroHeight),
                 )
             } else {
                 HeroCarousel(
@@ -307,9 +307,7 @@ private fun LazyListScope.heroItem(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(
-                            if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
-                        ),
+                        .then(heroHeight),
                     // D-pad up out of the top row lands here, inside the same focus group as the
                     // rows, so nothing else reports that the focused card is no longer focused.
                     onFocusedItemChanged = {
@@ -479,10 +477,10 @@ internal fun LazyItemScope.SectionListItem(
     }
 }
 
-// `HeroCarousel` sets this height on itself and takes no height parameter, so a hero that is still
-// loading has to name the same number to reserve the space the loaded carousel will take. It only
-// applies off the page layout: `fillParentMaxHeight` imposes fixed constraints that coerce both
-// this and the carousel's own height away.
+// `HeroCarousel` sets this height on itself and takes no height parameter, so the only way to say
+// "as tall as the hero" is to repeat the number. Used only off the page layout, where the item has
+// no viewport height to fill; under it, `fillParentMaxHeight` imposes fixed constraints that
+// coerce this and the carousel's own height alike.
 private val HeroCarouselHeight = 280.dp
 
 private data class ContentListContextMenuTarget(
