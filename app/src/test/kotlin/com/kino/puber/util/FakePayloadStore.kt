@@ -10,6 +10,12 @@ class FakePayloadStore : PersistentPayloadStore {
     var readCount: Int = 0
     var onRead: (suspend (String) -> Unit)? = null
 
+    /**
+     * Runs after a bulk write has landed but before the writer resumes, so a test can interleave
+     * whatever crossed it — an invalidate, a newer writer — with a write that is already durable.
+     */
+    var onWriteAll: (suspend (Set<String>) -> Unit)? = null
+
     override var generation: Long = 0L
         private set
 
@@ -20,12 +26,31 @@ class FakePayloadStore : PersistentPayloadStore {
         return stored
     }
 
+    /** The single-key counterpart of [onWriteAll]: fires once the row has landed. */
+    var onWrite: (suspend (String) -> Unit)? = null
+
+    /** Fires before the row lands, so a test can model a writer this one then overwrites. */
+    var onBeforeWrite: (suspend (String) -> Unit)? = null
+
     override suspend fun write(key: String, payload: String, updatedAt: Long) {
+        val before = onBeforeWrite
+        onBeforeWrite = null
+        before?.invoke(key)
+        val after = onWrite
+        onWrite = null
         rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
+        after?.invoke(key)
     }
 
     override suspend fun touch(key: String, updatedAt: Long) {
         rows[key]?.let { row -> rows[key] = row.copy(updatedAt = updatedAt) }
+    }
+
+    override suspend fun writeAll(payloads: Map<String, StoredPayload>) {
+        val hook = onWriteAll
+        onWriteAll = null
+        payloads.forEach { (key, value) -> rows[key] = value }
+        hook?.invoke(payloads.keys)
     }
 
     override suspend fun remove(key: String) {

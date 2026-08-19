@@ -169,7 +169,9 @@ class ItemDetailsRepositoryTest {
         repository.markStale(42)
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true, updatedAt = now), emissions[0])
+        // The stale emission carries the sentinel `markStale` wrote rather than a real timestamp:
+        // its age is deliberately unknown, and the epoch orders behind every genuine observation.
+        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true, updatedAt = 0L), emissions[0])
         assertEquals(Cached.Value(item(42, "Newer"), isStale = false, updatedAt = now), emissions[1])
     }
 

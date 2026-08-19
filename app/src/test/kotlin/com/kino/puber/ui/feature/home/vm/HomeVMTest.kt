@@ -19,7 +19,9 @@ import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
+import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
+import com.kino.puber.ui.feature.home.model.HomeViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
@@ -36,6 +38,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 
@@ -186,6 +190,113 @@ class HomeVMTest {
         verify(exactly = 1) { interactor.observeWatchLaterItems(true) }
         verify(exactly = 1) { interactor.observeBookmarkItems(true) }
         verify(exactly = 0) { interactor.observeWatchingItems(true) }
+    }
+
+    @Test
+    fun successfulMovieSave_survivesTheRefreshItTriggers() = runTest {
+        // The saved flag is derived from the cached card, and only the personal rows are re-fetched;
+        // every other row republishes the payload it already had, still carrying the pre-toggle flag.
+        // Without the local override the heart flips back moments after the confirmation message.
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(42)), false))
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns HomeSectionState(
+            title = "Hot",
+            items = listOf(videoItem(42)),
+            type = HomeSectionType.Hot,
+        )
+        coEvery { savedItemInteractor.setSaved(42, false, true) } returns Result.success(true)
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+
+        vm.onAction(CommonAction.ItemSavedChanged(videoItem(42), true))
+        runCurrent()
+
+        val hot = (vm.testStateValue as HomeViewState.Content).sections.single { it.type == HomeSectionType.Hot }
+        assertTrue(hot.items.single().isSaved)
+    }
+
+    @Test
+    fun aSaveSurvivesAnUnrelatedChangeReturnedFromAnotherScreen() = runTest {
+        // Returning from a player reports a playback position, which says nothing about whether some
+        // other title is saved — and the refresh it asks for re-fetches only Continue Watching, so
+        // the row holding that title republishes its pre-toggle payload.
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(42)), false))
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns HomeSectionState(
+            title = "Hot",
+            items = listOf(videoItem(42)),
+            type = HomeSectionType.Hot,
+        )
+        coEvery { savedItemInteractor.setSaved(42, false, true) } returns Result.success(true)
+        val screen = mockk<PuberScreen>()
+        every { screens.player(99, null, null) } returns screen
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+        vm.onAction(CommonAction.ItemSavedChanged(videoItem(42), true))
+        runCurrent()
+        vm.onAction(CommonAction.ItemPlayed(videoItem(99)))
+        verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
+
+        listener.captured(ContentChangeSet.single(99, ContentChangeType.PlaybackProgress))
+        runCurrent()
+
+        val hot = (vm.testStateValue as HomeViewState.Content).sections.single { it.type == HomeSectionType.Hot }
+        assertTrue(hot.items.single().isSaved)
+    }
+
+    @Test
+    fun aSaveChangeReturnedForTheSameTitleHandsControlBackToTheServer() = runTest {
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(42)), false))
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns HomeSectionState(
+            title = "Hot",
+            items = listOf(videoItem(42)),
+            type = HomeSectionType.Hot,
+        )
+        coEvery { savedItemInteractor.setSaved(42, false, true) } returns Result.success(true)
+        val screen = mockk<PuberScreen>()
+        every { screens.details(42) } returns screen
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+        vm.onAction(CommonAction.ItemSavedChanged(videoItem(42), true))
+        runCurrent()
+        vm.onAction(CommonAction.ItemSelected(videoItem(42)))
+        verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
+
+        // The details screen toggled the same title, so what this screen was holding is stale.
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Watchlist))
+        runCurrent()
+
+        val hot = (vm.testStateValue as HomeViewState.Content).sections.single { it.type == HomeSectionType.Hot }
+        assertFalse(hot.items.single().isSaved)
+    }
+
+    @Test
+    fun aSaveIsHeldUntilEveryRowShowingTheTitleAgrees() = runTest {
+        // The personal row is re-fetched by the toggle and carries the server's answer at once; the
+        // rows that were not re-fetched republish the payload they already had. Retiring the local
+        // state on the first row to agree hands those rows straight back to the stale payload.
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(42)), false))
+        every { interactor.observeWatchLaterItems(any()) } returns
+            flowOf(Cached.Value(listOf(item(42)), false))
+        every { mapper.mapItemSection(any(), HomeSectionType.Hot) } returns HomeSectionState(
+            title = "Hot",
+            items = listOf(videoItem(42)),
+            type = HomeSectionType.Hot,
+        )
+        every { mapper.mapItemSection(any(), HomeSectionType.WatchLater) } returns HomeSectionState(
+            title = "WatchLater",
+            items = listOf(videoItem(42).copy(isSaved = true)),
+            type = HomeSectionType.WatchLater,
+        )
+        coEvery { savedItemInteractor.setSaved(42, false, true) } returns Result.success(true)
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+
+        vm.onAction(CommonAction.ItemSavedChanged(videoItem(42), true))
+        runCurrent()
+
+        val hot = (vm.testStateValue as HomeViewState.Content).sections.single { it.type == HomeSectionType.Hot }
+        assertTrue(hot.items.single().isSaved)
     }
 
     @Test

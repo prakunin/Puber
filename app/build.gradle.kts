@@ -15,63 +15,30 @@ plugins {
 
 val currentVersion = "1.7.42"
 
-/**
- * Reads CLIENT_SECRET from local.properties or system environment variable
- */
-fun getClientSecret(): String {
-    // Try to read from local.properties first
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        val localProperties = Properties()
-        localProperties.load(FileInputStream(localPropertiesFile))
-        val localSecret = localProperties.getProperty("PUBER_CLIENT_SECRET")
-        if (!localSecret.isNullOrEmpty()) {
-            return localSecret
-        }
-    }
-
-    // Fall back to system environment variable
-    val envSecret = System.getenv("PUBER_CLIENT_SECRET")
-    if (!envSecret.isNullOrEmpty()) {
-        return envSecret
-    }
-
-    // Fallback to default value for development (not recommended for production)
-    return ""
+private fun readProperties(name: String): Properties = Properties().apply {
+    rootProject.file(name)
+        .takeIf(File::exists)
+        ?.inputStream()
+        ?.use(::load)
 }
 
-fun getTmdbReadAccessToken(): String {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        val localProperties = Properties()
-        localProperties.load(FileInputStream(localPropertiesFile))
-        val token = localProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
-        if (!token.isNullOrEmpty()) return token
-    }
-    val envToken = System.getenv("TMDB_READ_ACCESS_TOKEN")
-    if (!envToken.isNullOrEmpty()) return envToken
-    return ""
-}
+val localEnvironment: Properties by lazy { readProperties(".env") }
 
 /**
- * Default API mirror for a fresh install. A domain saved in the app always wins over it.
+ * `local.properties` is still read, and still documented in the README, because it is where every
+ * existing checkout keeps these secrets. Dropping it in favour of `.env` alone would leave those
+ * developers with an empty CLIENT_SECRET and a login that silently stops working.
  */
-fun getApiDomainOverride(): String {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        val localProperties = Properties()
-        localProperties.load(FileInputStream(localPropertiesFile))
-        val domain = localProperties.getProperty("PUBER_API_DOMAIN")
-        if (!domain.isNullOrEmpty()) return domain
-    }
-    val envDomain = System.getenv("PUBER_API_DOMAIN")
-    if (!envDomain.isNullOrEmpty()) return envDomain
-    return ""
-}
+val localProperties: Properties by lazy { readProperties("local.properties") }
 
 fun envOrNull(name: String): String? {
-    return System.getenv(name)?.takeIf { it.isNotBlank() }
+    return localEnvironment.property(name)
+        ?: localProperties.property(name)
+        ?: System.getenv(name)?.trim()?.takeIf(String::isNotEmpty)
 }
+
+private fun Properties.property(name: String): String? =
+    getProperty(name)?.trim()?.takeIf(String::isNotEmpty)
 
 android {
     namespace = "com.kino.puber"
@@ -85,9 +52,10 @@ android {
         versionName = currentVersion
 
         // Add CLIENT_SECRET to BuildConfig
-        buildConfigField("String", "CLIENT_SECRET", "\"${getClientSecret()}\"")
-        buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${getTmdbReadAccessToken()}\"")
-        buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"${getApiDomainOverride()}\"")
+        buildConfigField("String", "CLIENT_SECRET", "\"${envOrNull("PUBER_CLIENT_SECRET").orEmpty()}\"")
+        buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${envOrNull("TMDB_READ_ACCESS_TOKEN").orEmpty()}\"")
+        // Default mirror for a fresh install. A domain saved in the app still wins over it.
+        buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"${envOrNull("PUBER_API_DOMAIN").orEmpty()}\"")
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")

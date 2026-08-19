@@ -16,7 +16,7 @@ import tempfile
 INSTALL_FAILED = re.compile(r"INSTALL_FAILED_([A-Z0-9_]+)")
 VERSION_CODE = re.compile(r"\bversionCode=(\d+)")
 CERT_DIGEST = re.compile(
-    r"Signer #\d+ certificate SHA-256 digest:\s*([0-9a-f:]+)",
+    r"(?:Signer #\d+|V\d+ Signer): certificate SHA-256 digest:\s*([0-9a-f:]+)",
     re.IGNORECASE,
 )
 

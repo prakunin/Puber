@@ -8,10 +8,13 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.util.FakePayloadStore
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
@@ -179,6 +182,86 @@ class ContentCacheRepositoryTest {
         val emissions = subject.historyFirstPage { historyPage(2) }.toList()
 
         assertEquals(2, emissions.size)
+    }
+
+    @Test
+    fun aQueryReferencingAnUnreadableCardPayloadRepairsItselfInsteadOfFailing() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7), item(8)) }.toList()
+        // What an app update that changes the Item model leaves behind: the list still decodes, the
+        // shared card payload it names no longer does. Failing the whole list here would take the row
+        // down inside a collector the screens only log, on this launch and every one after it.
+        store.write(ContentCacheRepository.itemKey(8), "{\"item\":", updatedAt = now)
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = restarted.observeItems("home", CacheTtl.HomeSection) {
+            listOf(item(7), item(8))
+        }.toList()
+
+        assertEquals(
+            listOf(listOf(7), listOf(7, 8)),
+            emissions.map { (it as Cached.Value).value.map(Item::id) },
+        )
+    }
+
+    @Test
+    fun detailsOverACardOnlyRecordReportTheFailureInsteadOfEmittingNothing() = runTest {
+        // Browsing home caches the card; opening the title offline has nothing to draw from it, so a
+        // quiet RefreshFailed would leave the details screen spinning with no error and no retry.
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+
+        assertThrows<IllegalStateException> {
+            subject.observeItemDetails(7) { error("offline") }.toList()
+        }
+    }
+
+    @Test
+    fun aPayloadWrittenByAnIncompatibleBuildIsDroppedAndFetchedAgain() = runTest {
+        val serializer = ListSerializer(String.serializer())
+        subject.getPayload("genres", serializer, 10.minutes) { listOf("Drama") }
+        // Decodes as the string the feed stores, but not as the payload inside it — the feed's own
+        // recovery cannot see that, so without repair every later read fails on the same row.
+        store.write(ContentCacheRepository.payloadKey("genres"), "\"not a genre list\"", updatedAt = now)
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val value = restarted.getPayload("genres", serializer, 10.minutes) { listOf("Comedy") }
+
+        assertEquals(listOf("Comedy"), value)
+    }
+
+    @Test
+    fun anInvalidationCrossingADetailsWriteIsNotUndoneByIt() = runTest {
+        subject.observeItemDetails(7) { item(7).copy(plot = "Fresh") }.toList()
+        // The bookmark toggle lands while the revalidation's row is already in the database but its
+        // writer has not resumed. What it writes says "these details are no longer to be trusted",
+        // and the write it crossed must not put freshness back.
+        store.onWrite = { subject.invalidateItemDetails(7) }
+        subject.observeItemDetails(7, force = true) { item(7).copy(plot = "In flight") }.toList()
+
+        var loads = 0
+        val emissions = subject.observeItemDetails(7) {
+            loads++
+            item(7).copy(plot = "Reloaded")
+        }.toList()
+
+        assertEquals(1, loads)
+        assertEquals("Reloaded", (emissions.last() as Cached.Value).value.plot)
+    }
+
+    @Test
+    fun aDetailsWriteThatOutlandsAnInvalidationIsStillTakenBackOut() = runTest {
+        subject.observeItemDetails(7) { item(7).copy(plot = "Fresh") }.toList()
+        // The other ordering: the toggle's row lands first and the revalidation overwrites it, so
+        // the record left in the database claims details the toggle has just discarded.
+        store.onBeforeWrite = { subject.invalidateItemDetails(7) }
+        subject.observeItemDetails(7, force = true) { item(7).copy(plot = "In flight") }.toList()
+
+        var loads = 0
+        subject.observeItemDetails(7) {
+            loads++
+            item(7).copy(plot = "Reloaded")
+        }.toList()
+
+        assertEquals(1, loads)
     }
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)

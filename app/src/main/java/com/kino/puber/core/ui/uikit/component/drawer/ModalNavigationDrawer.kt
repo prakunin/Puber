@@ -36,6 +36,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -244,6 +249,27 @@ private fun DrawerSheet(
             .animateContentSize(finishedListener = sizeAnimationFinishedListener)
             .fillMaxHeight()
             .then(modifier)
+            // Right is the only way out of the rail, and left to the focus system it is resolved as
+            // a plain two-dimensional search: focus lands on whatever happens to sit nearest the
+            // rail, and the card the user left is not merely skipped but overwritten, because the
+            // row records whatever card it just gave focus to. Turning the key into the same
+            // handoff Back already performs puts the content in charge of where focus goes, so it
+            // can answer with the position it remembers.
+            //
+            // Swallowed while the handoff travels, too. It takes several frames to land, and focus
+            // sits in the rail for all of them, so auto-repeat from a held press would otherwise
+            // reach the focus search after the first press had already flipped the state — losing
+            // the position to the very search this exists to prevent.
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionRight) {
+                    return@onPreviewKeyEvent false
+                }
+                when (drawerState.currentValue) {
+                    DrawerValue.Open -> drawerState.beginHandoff(expectsNewContent = false) != null
+                    DrawerValue.HandingOff -> true
+                    DrawerValue.Closed -> false
+                }
+            }
             .onFocusChanged {
                 focusState = it
 

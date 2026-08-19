@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -29,6 +30,92 @@ class CachedFeedTest {
         keyPrefix = "",
         clock = { now },
     )
+
+    @Test
+    fun aBulkWriteCrossedByAnotherBulkWriteKeepsTheRow() = runTest {
+        // Item payloads are shared, so two sections loading at once collide on every title they
+        // have in common. Neither writer may delete: a list record written alongside them would be
+        // left pointing at a key with no row, and nothing ever repairs it.
+        val subject = feed()
+        store.onWriteAll = { subject.putAll(mapOf("k" to "second")) }
+
+        subject.putAll(mapOf("k" to "first"))
+
+        assertNotNull(store.read("k"))
+        assertNotNull(subject.peek("k"))
+    }
+
+    @Test
+    fun aBulkWriteCrossedByAnInvalidateAndThenANewerWriteKeepsTheNewerRow() = runTest {
+        // The late writer sees only that *an* invalidation happened, never that a write landed after
+        // it. Reading that as "my row is superseded" deletes the newer writer's row instead of its
+        // own, which is the same dangling reference the barrier exists to prevent.
+        val subject = feed()
+        store.onWriteAll = {
+            subject.invalidate("k")
+            subject.putAll(mapOf("k" to "newer"))
+        }
+
+        subject.putAll(mapOf("k" to "first"))
+
+        assertEquals("newer", subject.peek("k")?.value)
+        assertNotNull(store.read("k"))
+    }
+
+    @Test
+    fun aBulkWriteCrossedByAnInvalidateStillDropsTheRow() = runTest {
+        val subject = feed()
+        store.onWriteAll = { subject.invalidate("k") }
+
+        subject.putAll(mapOf("k" to "first"))
+
+        assertNull(store.read("k"))
+        assertNull(subject.peek("k"))
+    }
+
+    @Test
+    fun aLoadCrossedByABulkWriteKeepsTheRow() = runTest {
+        val subject = feed()
+        store.onRead = null
+
+        subject.load("k") {
+            subject.putAll(mapOf("k" to "written by a section merge"))
+            "loaded"
+        }.toList()
+
+        assertNotNull(store.read("k"))
+    }
+
+    @Test
+    fun aValuePinnedByABulkWriteStillRevalidatesOnItsCallersTtl() = runTest {
+        // put/putAll have no reader's TTL to work from and pin to the hard ceiling. Left alone, the
+        // memory tier would then answer every load for a week, whatever TTL the caller governs by.
+        val subject = feed()
+        subject.putAll(mapOf("k" to "stored"))
+        now += 11.minutes.inWholeMilliseconds
+
+        val emissions = subject.load("k", ttl = 10.minutes) { "fresh" }.toList()
+
+        assertEquals(
+            listOf(
+                Cached.Value("stored", isStale = true, updatedAt = now - 11.minutes.inWholeMilliseconds),
+                Cached.Value("fresh", isStale = false, updatedAt = now),
+            ),
+            emissions,
+        )
+    }
+
+    @Test
+    fun aPeekDoesNotSuppressTheRevalidationOfTheLoadThatFollowsIt() = runTest {
+        val subject = feed()
+        subject.load("k") { "stored" }.toList()
+        now += 11.minutes.inWholeMilliseconds
+
+        subject.peek("k")
+        val emissions = subject.load("k") { "fresh" }.toList()
+
+        assertEquals(listOf("stored", "fresh"), emissions.map { (it as Cached.Value).value })
+    }
 
     @Test
     fun emptyKeyEmitsOnceFromTheLoader() = runTest {

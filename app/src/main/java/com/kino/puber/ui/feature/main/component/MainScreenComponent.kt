@@ -54,6 +54,7 @@ import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
 import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -134,7 +135,24 @@ private fun DrawerMainContent(
                     drawerState = drawerState,
                 )
             },
-            content = { MainScreenContentBody(mainContentFocus, tabRouter, tabAppRouterHolder) },
+            content = {
+                // The rows restore the card the user left from their own remembered position, but
+                // only once something tells them the content stopped holding focus. The rail is that
+                // something, and only the top-tab layout used to say it: here the flag stayed true
+                // forever, every row went on believing it still held focus, and the restore that
+                // returning from the rail is supposed to trigger was skipped. Focus then fell to
+                // whatever a plain focus search found first — the hero — and the list jumped to the
+                // top with it.
+                //
+                // Handing off counts as active: the rail is already on its way out and the content
+                // is being asked for focus, so the rows must be free to answer with the card the
+                // user left rather than waiting for the rail to finish closing.
+                CompositionLocalProvider(
+                    LocalContentFocusActive provides (drawerState.currentValue != DrawerValue.Open),
+                ) {
+                    MainScreenContentBody(mainContentFocus, tabRouter, tabAppRouterHolder)
+                }
+            },
         )
 
         // Registered AFTER the tab content, which is the only way the rail can win over

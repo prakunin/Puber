@@ -32,6 +32,7 @@ import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.ui.feature.collections.detail.CollectionDetailScreen
 import com.kino.puber.ui.feature.home.model.HomeAction
+import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.model.HomeViewState
@@ -52,6 +53,12 @@ internal class HomeVM(
     companion object {
         private const val HERO_ITEMS_COUNT = 10
         private const val TOTAL_SECTIONS = 8
+
+        /** The changes that say something about whether a title is saved. */
+        private val SAVED_STATE_CHANGES = setOf(
+            ContentChangeType.Bookmark,
+            ContentChangeType.Watchlist,
+        )
     }
 
     override val initialViewState: HomeViewState = HomeViewState.Loading()
@@ -68,6 +75,21 @@ internal class HomeVM(
      * domain switch clears it — see [clearRowsFromPreviousCatalogue].
      */
     private val loadedSections = linkedMapOf<HomeSectionType, List<Item>>()
+
+    /**
+     * Save toggles this screen performed, held until every row that shows the title agrees.
+     *
+     * The saved flag is derived from the card payload, and the refresh a toggle triggers re-fetches
+     * only the personal rows — every other row republishes the payload it already had, which still
+     * carries the pre-toggle flag. Without this the heart flips back moments after the confirmation
+     * message.
+     *
+     * Retired only once no row still disagrees, rather than as soon as one does. The row that agrees
+     * first is the freshly re-fetched personal one, which was never stale; retiring on it would hand
+     * the remaining rows straight back to the payload this exists to correct. A title that has left
+     * every row agrees vacuously, so an override cannot outlive what it describes.
+     */
+    private val savedOverrides = mutableMapOf<Int, Boolean>()
     private var loadedCollections: List<KCollection>? = null
     private var lastWatchedAt: Map<Int, Long> = emptyMap()
 
@@ -163,7 +185,24 @@ internal class HomeVM(
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
         if (changes == null || changes.isEmpty || stateValue !is HomeViewState.Content) return
+        dropSavedOverridesSettledElsewhere(changes)
         silentRefresh(HomeRefreshTargets.from(changes))
+    }
+
+    /**
+     * Drops the pending save state only for the titles the returning screen reported a save change
+     * on.
+     *
+     * Everything else it may report — a playback position, a watched mark — says nothing about
+     * whether a title is saved, and the refresh those changes ask for re-fetches only the rows they
+     * concern. Clearing the whole map on any return therefore undid a save the user had just made on
+     * an unrelated card: every row the refresh leaves alone republishes its pre-toggle payload, and
+     * the heart flips back.
+     */
+    private fun dropSavedOverridesSettledElsewhere(changes: ContentChangeSet) {
+        changes.changes.forEach { (itemId, types) ->
+            if (types.any { it in SAVED_STATE_CHANGES }) savedOverrides.remove(itemId)
+        }
     }
 
     private fun loadHome(
@@ -324,6 +363,7 @@ internal class HomeVM(
     private fun clearRowsFromPreviousCatalogue() {
         loadedSections.clear()
         loadedCollections = null
+        savedOverrides.clear()
         loadedCacheGeneration = interactor.cacheGeneration
         if (stateValue is HomeViewState.Content) {
             updateViewState(HomeViewState.Loading(apiDomainDialog = currentDialogState()))
@@ -362,7 +402,7 @@ internal class HomeVM(
                 }
                 .toTypedArray(),
             loadedCollections?.let { mapper.mapCollectionSection(it) },
-        ).sortedBy { it.type.ordinal }
+        ).sortedBy { it.type.ordinal }.let(::applySavedOverrides)
 
         val hotItems = interactor.prepareHomeItems(
             items = loadedSections[HomeSectionType.Hot].orEmpty(),
@@ -478,6 +518,7 @@ internal class HomeVM(
     }
 
     private fun updateSavedItem(itemId: Int, saved: Boolean) {
+        savedOverrides[itemId] = saved
         updateViewState<HomeViewState.Content> {
             copy(
                 sections = sections.map { section ->
@@ -493,6 +534,30 @@ internal class HomeVM(
                 },
             )
         }
+    }
+
+    private fun applySavedOverrides(sections: List<HomeSectionState>): List<HomeSectionState> {
+        if (savedOverrides.isEmpty()) return sections
+        val stillDisagreeing = mutableSetOf<Int>()
+        val patched = sections.map { section ->
+            if (section.type == HomeSectionType.Collections) {
+                section
+            } else {
+                section.copy(
+                    items = section.items.map { item ->
+                        val override = savedOverrides[item.id]
+                        if (override == null || override == item.isSaved) {
+                            item
+                        } else {
+                            stillDisagreeing += item.id
+                            item.copy(isSaved = override)
+                        }
+                    },
+                )
+            }
+        }
+        savedOverrides.keys.retainAll(stillDisagreeing)
+        return patched
     }
 
     private fun savedMessage(item: VideoItemUIState, saved: Boolean): String {

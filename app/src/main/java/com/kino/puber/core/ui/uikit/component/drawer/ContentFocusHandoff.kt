@@ -34,6 +34,17 @@ private const val HandoffEagerFrames = 30
 private const val HandoffBackoffMillis = 250L
 
 /**
+ * Frames the arriving content is given to place focus itself before the blind request starts.
+ *
+ * The request below aims at nothing in particular — it takes whatever the focus search finds first.
+ * A screen that remembers where the user was aims at the card they left, and it needs a frame or
+ * two to do it. Without this grace the blind request wins the race, and the landing it produces is
+ * not merely wrong: rows record whatever card they were just given, so it overwrites the very
+ * position the screen was about to restore, leaving nothing to correct afterwards.
+ */
+private const val HandoffContentGraceFrames = 5
+
+/**
  * The contract by which the rail hands focus to the content it just revealed.
  *
  * A thin facade over [DrawerState] rather than a second store of state: the rail's value stays the
@@ -109,7 +120,7 @@ fun ContentFocusHandoffEffect(
                 attempt++
                 // Someone else finished this handoff while we waited.
                 if (handoff.pendingRequestId != requestId) return@withTimeoutOrNull true
-                if (!contentFocusRequester.restoreFocusedChild()) {
+                if (!contentFocusRequester.restoreFocusedChild() && attempt > HandoffContentGraceFrames) {
                     runCatching { contentFocusRequester.requestFocus() }
                 }
                 if (contentHasFocus()) {
