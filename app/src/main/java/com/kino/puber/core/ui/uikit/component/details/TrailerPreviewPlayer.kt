@@ -28,6 +28,10 @@ import androidx.media3.ui.PlayerView
  * Every way playback can stop — the end of the trailer, a player error, the app going to the
  * background — reports through [onFinished] rather than being handled here, so the panel and the
  * state that drives it never disagree about what is on screen.
+ *
+ * [onFirstFrameRendered] reports the one moment there is actually something to look at. Until it
+ * fires the view is a black rectangle — media3's shutter, and behind it a `SurfaceView` that has
+ * been given no frames yet — so the caller has to keep the still on top until then.
  */
 @UnstableApi
 @Composable
@@ -35,9 +39,11 @@ internal fun TrailerPreviewPlayer(
     url: String,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
+    onFirstFrameRendered: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val currentOnFinished by rememberUpdatedState(onFinished)
+    val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
     val exoPlayer = remember {
         ExoPlayer.Builder(context)
             .build()
@@ -63,6 +69,10 @@ internal fun TrailerPreviewPlayer(
 
             override fun onPlayerError(error: PlaybackException) {
                 currentOnFinished()
+            }
+
+            override fun onRenderedFirstFrame() {
+                currentOnFirstFrameRendered()
             }
         }
         exoPlayer.addListener(listener)

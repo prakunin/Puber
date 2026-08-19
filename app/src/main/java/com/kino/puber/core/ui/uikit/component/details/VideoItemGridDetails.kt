@@ -1,7 +1,7 @@
 package com.kino.puber.core.ui.uikit.component.details
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -168,34 +169,42 @@ private fun VideoDetailsPoster(
         var urlIndex by remember(imageUrls) { mutableIntStateOf(0) }
         val currentUrl = imageUrls.getOrNull(urlIndex)
 
-        AsyncImage(
+        var trailerRendered by remember(trailerUrl) { mutableStateOf(false) }
+
+        PosterStill(
+            imageUrl = currentUrl,
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth()
-                .placeholder(visible = currentUrl.isNullOrEmpty()),
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(currentUrl)
-                .crossfade(true)
-                .build(),
+                .fillMaxWidth(),
             onError = {
                 if (urlIndex < imageUrls.lastIndex) {
                     urlIndex++
                 }
             },
-            contentDescription = null,
-            contentScale = ContentScale.FillWidth,
         )
 
-        AnimatedVisibility(
-            visible = trailerUrl != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            val playingUrl = remember(trailerUrl) { trailerUrl }
-            if (playingUrl != null) {
-                TrailerPreviewPlayer(
-                    url = playingUrl,
-                    onFinished = onTrailerFinished,
+        if (trailerUrl != null) {
+            TrailerPreviewPlayer(
+                url = trailerUrl,
+                onFinished = onTrailerFinished,
+                onFirstFrameRendered = { trailerRendered = true },
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(),
+            )
+
+            // The player is a `SurfaceView`: it punches a transparent hole through everything the
+            // window drew before it, and media3 fills that hole with a black shutter until the
+            // first frame arrives. So the still above is not what is on screen while the trailer
+            // buffers — this second copy, drawn *after* the player, is. The 48 dp gradients below
+            // stay visible over a playing trailer for the same reason.
+            AnimatedVisibility(
+                visible = !trailerRendered,
+                enter = EnterTransition.None,
+                exit = fadeOut(),
+            ) {
+                PosterStill(
+                    imageUrl = currentUrl,
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(),
@@ -237,6 +246,24 @@ private fun VideoDetailsPoster(
                 )
         )
     }
+}
+
+@Composable
+private fun PosterStill(
+    imageUrl: String?,
+    modifier: Modifier,
+    onError: () -> Unit = {},
+) {
+    AsyncImage(
+        modifier = modifier.placeholder(visible = imageUrl.isNullOrEmpty()),
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(imageUrl)
+            .crossfade(true)
+            .build(),
+        onError = { onError() },
+        contentDescription = null,
+        contentScale = ContentScale.FillWidth,
+    )
 }
 
 @Composable
