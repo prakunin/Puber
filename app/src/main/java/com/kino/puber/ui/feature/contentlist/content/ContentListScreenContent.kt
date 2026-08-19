@@ -13,15 +13,18 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -58,6 +61,14 @@ internal fun ContentListScreenContent(
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     var focusedSectionIndex by rememberSaveable { mutableIntStateOf(0) }
     var contextMenuTarget by remember { mutableStateOf<ContentListContextMenuTarget?>(null) }
+
+    // Navigating away or switching tabs drops this composition while the view model lives on. The
+    // player goes with the composition, but `previewTrailerUrl` would not, so coming back would
+    // resume a trailer from zero with sound and none of the two-second pause that starts one.
+    val currentOnAction by rememberUpdatedState(onAction)
+    DisposableEffect(Unit) {
+        onDispose { currentOnAction(ContentListAction.TrailerPreviewStopped) }
+    }
 
     val scope = LocalPuberKoinScope.current ?: return
     val sectionVms = remember {
@@ -118,6 +129,7 @@ private fun ContentListLayout(
 ) {
     val lazyListState = rememberLazyListState()
     PreserveLazyListAnchorOnRootReturn(lazyListState)
+    var rowsHaveFocus by remember { mutableStateOf(false) }
     Column(modifier = modifier) {
         if (state.showDetailPanel) {
             VideoItemGridDetails(
@@ -144,6 +156,16 @@ private fun ContentListLayout(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(if (state.showDetailPanel) PuberTheme.Defaults.ContentWeight else 1f)
+                    // Focus leaving the rows entirely — into the side rail, most often by pressing
+                    // LEFT from the first card of a row — is not seen by `ItemFocused`, which only
+                    // ever reports a card gaining focus. Without this the trailer keeps playing,
+                    // with sound, over a screen the user has navigated out of.
+                    .onFocusChanged { focusState ->
+                        if (rowsHaveFocus && !focusState.hasFocus) {
+                            onAction(ContentListAction.TrailerPreviewStopped)
+                        }
+                        rowsHaveFocus = focusState.hasFocus
+                    }
                     .focusRestorer()
                     .focusGroup(),
                 contentPadding = PaddingValues(bottom = PuberTheme.Defaults.HorizontalVideoItemHeight),
@@ -182,6 +204,9 @@ private fun LazyListScope.heroItem(
                         onAction(ContentListAction.HeroSelected(itemId))
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    // D-pad up out of the top row lands here, inside the same focus group as the
+                    // rows, so nothing else reports that the focused card is no longer focused.
+                    onFocusedItemChanged = { onAction(ContentListAction.TrailerPreviewStopped) },
                 )
             }
         }

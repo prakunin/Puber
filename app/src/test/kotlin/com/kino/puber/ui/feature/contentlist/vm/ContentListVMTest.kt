@@ -468,6 +468,94 @@ class ContentListVMTest {
         assertNull(vm.testStateValue.previewTrailerUrl)
     }
 
+    @Test
+    fun openingShowAll_stopsAPublishedTrailerPreview() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+
+        vm.onAction(ContentListAction.ShowAll(SectionConfig(id = "popular", title = "Popular")))
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun openingShowAllDuringTheCountdown_neverPublishesTheTrailer() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(1000)
+
+        vm.onAction(ContentListAction.ShowAll(SectionConfig(id = "popular", title = "Popular")))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(5000)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun focusLeavingTheRows_stopsAPublishedTrailerPreview() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+
+        vm.onAction(ContentListAction.TrailerPreviewStopped)
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(5000)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun focusLeavingTheRowsDuringTheCountdown_neverPublishesTheTrailer() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(1000)
+
+        vm.onAction(ContentListAction.TrailerPreviewStopped)
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(5000)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun trailerPreviewFinishedDuringTheCountdown_cancelsTheGate() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(1000)
+
+        vm.onAction(ContentListAction.TrailerPreviewFinished)
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(5000)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun refocusingTheSameCardAfterAStop_startsAFreshCountdown() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+        vm.onAction(ContentListAction.TrailerPreviewStopped)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(1999)
+        assertNull(vm.testStateValue.previewTrailerUrl)
+
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2)
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+    }
+
     private fun createVM() = ContentListVM(
         router = router,
         interactor = interactor,

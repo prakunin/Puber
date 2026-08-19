@@ -64,8 +64,8 @@ internal class ContentListVM(
             is ContentListAction.ShowAll -> openShowAll(action.config)
             is ContentListAction.GenreSelected -> onGenreSelected(action.genreId)
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
-            is ContentListAction.TrailerPreviewFinished ->
-                updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
+            is ContentListAction.TrailerPreviewFinished -> stopTrailerPreview()
+            is ContentListAction.TrailerPreviewStopped -> stopTrailerPreview()
         }
     }
 
@@ -135,6 +135,11 @@ internal class ContentListVM(
      * This cancels only the trailer gate, not [focusedItemJob] itself: an in-flight details
      * request must be left to finish and publish `selectedItem`, or a change made while opening
      * the item (e.g. marking it watched) would refresh against a stale id.
+     *
+     * Every stop goes through here, including the player's own `TrailerPreviewFinished`: cancelling
+     * an already-completed gate is a no-op, and routing everything through one place means a stop
+     * dispatched from composition disposal cannot leave a pending gate behind to publish a trailer
+     * onto a screen the user has already left.
      */
     private fun stopTrailerPreview() {
         trailerGateJob?.cancel()
@@ -142,6 +147,7 @@ internal class ContentListVM(
     }
 
     private fun openShowAll(config: SectionConfig) {
+        stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
             screen = ShowAllScreen(config),
             requestCode = RESULT_CONTENT_CHANGED,
