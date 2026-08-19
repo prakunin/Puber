@@ -1,5 +1,8 @@
 package com.kino.puber.core.ui.uikit.component.details
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,37 +48,24 @@ fun VideoItemGridDetails(
     modifier: Modifier,
     state: VideoDetailsUIState,
     descriptionMaxLines: Int = Int.MAX_VALUE,
+    trailerUrl: String? = null,
+    onTrailerFinished: () -> Unit = {},
 ) {
-    if (state.isLoading) {
-        Row(modifier = modifier) {
-            VideoDetailsDescription(
-                modifier = Modifier.weight(3F),
-                state = state,
-                descriptionMaxLines = descriptionMaxLines,
-            )
-            VideoDetailsPoster(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(5F),
-                imageUrl = state.imageUrl,
-                imageFallbackUrls = state.imageFallbackUrls,
-            )
-        }
-    } else {
-        Row(modifier = modifier) {
-            VideoDetailsDescription(
-                modifier = Modifier.weight(3F),
-                state = state,
-                descriptionMaxLines = descriptionMaxLines,
-            )
-            VideoDetailsPoster(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(5F),
-                imageUrl = state.imageUrl,
-                imageFallbackUrls = state.imageFallbackUrls,
-            )
-        }
+    Row(modifier = modifier) {
+        VideoDetailsDescription(
+            modifier = Modifier.weight(3F),
+            state = state,
+            descriptionMaxLines = descriptionMaxLines,
+        )
+        VideoDetailsPoster(
+            modifier = Modifier
+                .fillMaxHeight()
+                .weight(5F),
+            imageUrl = state.imageUrl,
+            imageFallbackUrls = state.imageFallbackUrls,
+            trailerUrl = trailerUrl,
+            onTrailerFinished = onTrailerFinished,
+        )
     }
 }
 
@@ -158,11 +148,14 @@ fun VideoDetailsDescription(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoDetailsPoster(
     modifier: Modifier,
     imageUrl: String,
     imageFallbackUrls: List<String>,
+    trailerUrl: String? = null,
+    onTrailerFinished: () -> Unit = {},
 ) {
     Box(
         modifier = modifier,
@@ -192,6 +185,23 @@ private fun VideoDetailsPoster(
             contentDescription = null,
             contentScale = ContentScale.FillWidth,
         )
+
+        AnimatedVisibility(
+            visible = trailerUrl != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            val playingUrl = remember(trailerUrl) { trailerUrl }
+            if (playingUrl != null) {
+                TrailerPreviewPlayer(
+                    url = playingUrl,
+                    onFinished = onTrailerFinished,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(),
+                )
+            }
+        }
 
         val gradientWidth = 48.dp
         Box(

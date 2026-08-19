@@ -125,6 +125,8 @@ private fun ContentListLayout(
                     .fillMaxWidth()
                     .weight(PuberTheme.Defaults.DetailsWeight),
                 state = state.selectedItem,
+                trailerUrl = state.previewTrailerUrl,
+                onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
             )
         }
 
