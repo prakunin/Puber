@@ -112,6 +112,7 @@ internal class DeviceSettingsVM(
                                 showMarkWatchedButton = preferences.showMarkWatchedButton,
                                 preferSurroundAudio = preferences.preferSurroundAudio,
                                 watchedIndicatorsEnabled = preferences.watchedIndicatorsEnabled,
+                                autoTrailerEnabled = preferences.autoTrailerEnabled,
                                 navigationMode = preferences.navigationMode,
                                 startupTab = preferences.startupTab,
                                 startupTabOptions = preferences.startupTabOptions,
@@ -146,6 +147,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
             DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
+            DeviceSettingsActions.ToggleAutoTrailer -> toggleAutoTrailer()
             is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             is DeviceSettingsActions.ChangeStartupTab -> onChangeStartupTab(action.tab)
             is DeviceSettingsActions.ToggleMenuSection -> onToggleMenuSection(action.tab)
@@ -333,6 +335,12 @@ internal class DeviceSettingsVM(
         value = { !watchedIndicatorsEnabled },
         persist = preferencesStore::setShowWatchedIndicators,
         update = { copy(watchedIndicatorsEnabled = it) },
+    )
+
+    private fun toggleAutoTrailer() = updatePreference(
+        value = { !autoTrailerEnabled },
+        persist = preferencesStore::setAutoTrailer,
+        update = { copy(autoTrailerEnabled = it) },
     )
 
     private fun onChangeAppLanguage(language: AppLanguage) {

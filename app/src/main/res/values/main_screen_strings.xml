@@ -47,4 +47,6 @@
     <string name="settings_show_anime_description">Не влияет на личные списки и вкладку «Аниме»</string>
     <string name="settings_hide_watched">Скрывать просмотренное</string>
     <string name="settings_hide_watched_description">Полностью просмотренное не показывается на главной и в каталоге. Не влияет на поиск, отдельные экраны закладок и историю</string>
+    <string name="settings_auto_trailer">Трейлер при наведении</string>
+    <string name="settings_auto_trailer_description">Если задержаться на карточке, вместо кадра начнёт играть трейлер со звуком</string>
 </resources>

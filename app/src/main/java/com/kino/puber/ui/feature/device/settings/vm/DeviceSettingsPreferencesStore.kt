@@ -17,6 +17,7 @@ internal interface DeviceSettingsPreferencesStore {
     fun setOkTogglesPlayPause(enabled: Boolean)
     fun setShowMarkWatchedButton(enabled: Boolean)
     fun setShowWatchedIndicators(enabled: Boolean)
+    fun setAutoTrailer(enabled: Boolean)
     fun setNavigationMode(mode: NavigationMode)
     fun getStartupTabOptions(mode: NavigationMode): List<TabType>
     fun setStartupTab(tab: TabType)
@@ -37,6 +38,7 @@ internal data class DeviceSettingsPreferencesSnapshot(
     val showMarkWatchedButton: Boolean,
     val preferSurroundAudio: Boolean,
     val watchedIndicatorsEnabled: Boolean,
+    val autoTrailerEnabled: Boolean,
     val navigationMode: NavigationMode,
     val startupTab: TabType,
     val startupTabOptions: List<TabType>,
@@ -70,6 +72,7 @@ internal class DefaultDeviceSettingsPreferencesStore(
             showMarkWatchedButton = playerPreferences.showMarkWatchedButton,
             preferSurroundAudio = playerPreferences.preferSurroundAudio,
             watchedIndicatorsEnabled = content.showWatchedIndicators,
+            autoTrailerEnabled = navigationPreferences.getAutoTrailerEnabled(),
             navigationMode = mode,
             startupTab = startupTab,
             startupTabOptions = startupOptions,
@@ -105,6 +108,10 @@ internal class DefaultDeviceSettingsPreferencesStore(
 
     override fun setShowWatchedIndicators(enabled: Boolean) {
         navigationPreferences.setShowWatchedIndicators(enabled)
+    }
+
+    override fun setAutoTrailer(enabled: Boolean) {
+        navigationPreferences.setAutoTrailerEnabled(enabled)
     }
 
     override fun setNavigationMode(mode: NavigationMode) {

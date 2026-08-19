@@ -170,6 +170,8 @@
     <string name="settings_show_anime_description">Doesn’t affect personal lists or the “Anime” tab</string>
     <string name="settings_hide_watched">Hide watched content</string>
     <string name="settings_hide_watched_description">Fully watched content is hidden from Home and the catalog. This doesn’t affect search, dedicated bookmark screens, or history</string>
+    <string name="settings_auto_trailer">Trailer on focus</string>
+    <string name="settings_auto_trailer_description">Rest on a card and the still gives way to the trailer, with sound</string>
 
     <string name="search_hint">Enter a title…</string>
     <string name="search_start_hint">Enter a movie or series title. Search starts automatically after 3 characters.</string>

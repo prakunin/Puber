@@ -19,6 +19,7 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleOkTogglesPlayPause : DeviceSettingsActions
     data object ToggleShowMarkWatchedButton : DeviceSettingsActions
     data object ToggleWatchedIndicators : DeviceSettingsActions
+    data object ToggleAutoTrailer : DeviceSettingsActions
     data class ChangeNavigationMode(val mode: NavigationMode) : DeviceSettingsActions
     data class ChangeStartupTab(val tab: TabType) : DeviceSettingsActions
     data class ToggleMenuSection(val tab: TabType) : DeviceSettingsActions

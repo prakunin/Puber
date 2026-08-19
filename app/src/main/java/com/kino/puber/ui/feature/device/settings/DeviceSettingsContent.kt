@@ -574,6 +574,14 @@ private fun LazyListScope.contentItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleHideWatched) },
         )
     }
+    item(key = "auto-trailer") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_auto_trailer),
+            description = stringResource(R.string.settings_auto_trailer_description),
+            checked = state.autoTrailerEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleAutoTrailer) },
+        )
+    }
 }
 
 private fun LazyListScope.navigationItems(
