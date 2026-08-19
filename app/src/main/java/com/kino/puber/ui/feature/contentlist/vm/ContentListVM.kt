@@ -39,6 +39,7 @@ internal class ContentListVM(
         isHeroLoading = heroConfigs.isNotEmpty(),
     )
     private var focusedItemJob: Job? = null
+    private var trailerGateJob: Job? = null
     private var heroLoadJob: Job? = null
 
     override fun onStart() {
@@ -88,6 +89,7 @@ internal class ContentListVM(
             // Counts from the moment focus landed, in parallel with the request: waiting for the
             // details first would push the trailer out by however long the network took.
             val trailerGate = async { delay(TRAILER_PREVIEW_DELAY_MS) }
+            trailerGateJob = trailerGate
             delay(FOCUS_DETAILS_DEBOUNCE_MS)
             updateViewState<ContentListViewState> { copy(selectedItem = VideoDetailsUIState.Loading) }
             val details = interactor.getItemDetails(item.id)
@@ -104,11 +106,11 @@ internal class ContentListVM(
     }
 
     private fun onItemSelected(item: VideoItemUIState) {
-        stopTrailerPreview()
         openDetails(item.id)
     }
 
     private fun openDetails(itemId: Int) {
+        stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.details(itemId),
             requestCode = RESULT_CONTENT_CHANGED,
@@ -128,9 +130,13 @@ internal class ContentListVM(
     /**
      * The ViewModel outlives a trip to the details screen or the player. Without this the trailer
      * would be playing the instant the user came back, with none of the pause that starts it.
+     *
+     * This cancels only the trailer gate, not [focusedItemJob] itself: an in-flight details
+     * request must be left to finish and publish `selectedItem`, or a change made while opening
+     * the item (e.g. marking it watched) would refresh against a stale id.
      */
     private fun stopTrailerPreview() {
-        focusedItemJob?.cancel()
+        trailerGateJob?.cancel()
         updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
     }
 

@@ -402,6 +402,48 @@ class ContentListVMTest {
         assertNull(vm.testStateValue.previewTrailerUrl)
     }
 
+    @Test
+    fun playingAnItemWhileDetailsAreInFlight_stillPublishesDetailsButNotThePreview() {
+        val screen = mockk<PuberScreen>()
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        every { screens.player(42, null, null) } returns screen
+        val detailsResult = CompletableDeferred<Item>()
+        coEvery { interactor.getItemDetails(42) } coAnswers { detailsResult.await() }
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(151)
+
+        vm.onAction(CommonAction.ItemPlayed(videoItem(42)))
+        verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
+        assertNull(vm.testStateValue.previewTrailerUrl)
+
+        detailsResult.complete(item(42, trailer = Trailer(url = "https://cdn/trailer.mp4")))
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(42, vm.testStateValue.selectedItem.id)
+        assertNull(vm.testStateValue.previewTrailerUrl)
+
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Watched))
+        mainDispatcher.dispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 2) { interactor.getItemDetails(42) }
+    }
+
+    @Test
+    fun heroSelected_stopsAPublishedTrailerPreview() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        every { screens.details(42) } returns mockk<PuberScreen>()
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+
+        vm.onAction(ContentListAction.HeroSelected(42))
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
     private fun createVM() = ContentListVM(
         router = router,
         interactor = interactor,
