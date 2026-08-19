@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.contentlist.content
 
+import android.os.PowerManager
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
@@ -56,15 +58,21 @@ internal class SectionRowFocusTraversalTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    // `SettleScene` composes unconditional infinite animations -- the real `HeroCarousel`'s Ken
-    // Burns transition, and the Loading shimmer's highlight -- that never let a clock-driven
-    // `waitForIdle()` go idle on its own; left on, it would spin forever instead of finishing.
-    // With auto-advance off, `waitForIdle()` only drains already-pending work at the current
-    // clock time, so every interaction that can start a (bounded) scroll animation instead nudges
-    // the clock forward by hand via `settleAfterInteraction()`.
+    // A television that has gone to sleep still launches the test activity, but never resumes it.
+    // Compose registers a root only on `Lifecycle.Event.ON_RESUME`, so every node lookup in this
+    // class then fails with "No compose hierarchies found in the app" -- a message that says
+    // nothing about the screen and reads like a broken test. Say what is actually wrong instead.
     @Before
-    fun disableAutoAdvance() {
-        composeRule.mainClock.autoAdvance = false
+    fun requireInteractiveDisplay() {
+        val powerManager = InstrumentationRegistry.getInstrumentation()
+            .targetContext
+            .getSystemService(PowerManager::class.java)
+        assertTrue(
+            "The device display is off. Wake it and re-run: a sleeping device never resumes the " +
+                "test activity, and Compose then reports \"No compose hierarchies found in the " +
+                "app\" for every assertion in this class, whatever the code under test does.",
+            powerManager.isInteractive,
+        )
     }
 
     @Test
@@ -371,7 +379,7 @@ internal class SectionRowFocusTraversalTest {
         composeRule
             .onAllNodes(isFocusable() and hasAnyAncestor(hasTestTag(rowTag)), useUnmergedTree = true)[0]
             .performSemanticsAction(SemanticsActions.RequestFocus)
-        settleAfterInteraction()
+        composeRule.waitForIdle()
     }
 
     private fun pressLeafFocused(key: Key) {
@@ -381,7 +389,7 @@ internal class SectionRowFocusTraversalTest {
                 keyDown(key)
                 keyUp(key)
             }
-        settleAfterInteraction()
+        composeRule.waitForIdle()
     }
 
     private fun seedStableTargets() {
@@ -406,7 +414,7 @@ internal class SectionRowFocusTraversalTest {
             .onNodeWithText(title)
             .performSemanticsAction(SemanticsActions.RequestFocus)
             .assertIsFocused()
-        settleAfterInteraction()
+        composeRule.waitForIdle()
     }
 
     private fun pressCurrent(key: Key) {
@@ -416,16 +424,6 @@ internal class SectionRowFocusTraversalTest {
                 keyDown(key)
                 keyUp(key)
             }
-        settleAfterInteraction()
-    }
-
-    // A focus change can start a bounded scroll animation (the automatic per-card bring-into-view
-    // request, or -- for `SettleScene` -- `rememberFocusedListItemScroller`'s explicit correction).
-    // With auto-advance off (see `disableAutoAdvance`), `waitForIdle()` alone will not drive that
-    // animation forward, so nudge the clock by hand first, long past any realistic animation
-    // duration, then let composition catch up.
-    private fun settleAfterInteraction() {
-        composeRule.mainClock.advanceTimeBy(ANIMATION_SETTLE_TIME_MS)
         composeRule.waitForIdle()
     }
 
@@ -495,10 +493,6 @@ internal class SectionRowFocusTraversalTest {
         const val BOUNDS_TOLERANCE = 1f
         val VIEWPORT_HEIGHT = 420.dp
         val MAX_VERTICAL_DELTA = 210.dp
-
-        // Comfortably past any bounded scroll animation's duration; harmless to overshoot since
-        // `advanceTimeBy` just steps the virtual clock forward, it does not sleep in real time.
-        const val ANIMATION_SETTLE_TIME_MS = 5_000L
 
         // Matches the real device: a 960x540 dp screen with a 270 dp list viewport below the
         // detail panel, and a 190 dp card (PuberTheme.Defaults.CatalogueRowItemHeight) — the
