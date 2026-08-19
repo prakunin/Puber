@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.contentlist.content
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -168,7 +167,6 @@ private fun ContentListLayout(
                     }
                     .focusRestorer()
                     .focusGroup(),
-                contentPadding = PaddingValues(bottom = PuberTheme.Defaults.HorizontalVideoItemHeight),
             ) {
                 heroItem(state, onAction)
                 sectionItems(
@@ -195,7 +193,7 @@ private fun LazyListScope.heroItem(
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(280.dp),
+                        .fillParentMaxHeight(),
                 )
             } else {
                 HeroCarousel(
@@ -203,7 +201,9 @@ private fun LazyListScope.heroItem(
                     onItemClick = { itemId ->
                         onAction(ContentListAction.HeroSelected(itemId))
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillParentMaxHeight(),
                     // D-pad up out of the top row lands here, inside the same focus group as the
                     // rows, so nothing else reports that the focused card is no longer focused.
                     onFocusedItemChanged = { onAction(ContentListAction.TrailerPreviewStopped) },
@@ -265,18 +265,7 @@ private fun LazyListScope.sectionItem(
     onAction: (UIAction) -> Unit,
     onRowEmpty: () -> Unit,
 ) {
-    item(key = "title_${config.id}", contentType = "section_title") {
-        val title = config.titleRes?.let { stringResource(it) } ?: config.title
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            text = title,
-            style = SectionTitleStyle,
-        )
-    }
-
-    item(key = "content_${config.id}", contentType = "section_content") {
+    item(key = "section_${config.id}", contentType = "section") {
         val rememberedOnItemClick = remember(config.id) {
             { item: VideoItemUIState -> onAction(CommonAction.ItemSelected(item)) }
         }
@@ -293,20 +282,43 @@ private fun LazyListScope.sectionItem(
                 null
             }
         }
-        SectionRowContent(
-            state = sectionState,
-            config = config,
-            isTargetRow = isTargetRow,
-            rowOrder = index,
-            onItemClick = rememberedOnItemClick,
-            onItemContextMenu = { onContextMenu(it, sectionVm) },
-            onItemFocused = rememberedOnItemFocused,
-            onSectionFocused = rememberedOnSectionFocused,
-            onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },
-            onLoadMore = { sectionVm.onAction(CommonAction.LoadMore) },
-            onShowAll = rememberedOnShowAll,
-            onRowEmpty = onRowEmpty,
-        )
+        val row: @Composable () -> Unit = {
+            SectionRowContent(
+                state = sectionState,
+                config = config,
+                isTargetRow = isTargetRow,
+                rowOrder = index,
+                onItemClick = rememberedOnItemClick,
+                onItemContextMenu = { onContextMenu(it, sectionVm) },
+                onItemFocused = rememberedOnItemFocused,
+                onSectionFocused = rememberedOnSectionFocused,
+                onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },
+                onLoadMore = { sectionVm.onAction(CommonAction.LoadMore) },
+                onShowAll = rememberedOnShowAll,
+                onRowEmpty = onRowEmpty,
+            )
+        }
+
+        if (sectionState is SectionState.Empty) {
+            // No heading, and no page: a section with nothing in it must not own a screen.
+            // It is still composed rather than skipped, because SectionRowContent carries the
+            // LaunchedEffect that reports the row empty and hands focus to the nearest
+            // non-empty one.
+            row()
+        } else {
+            Column(modifier = Modifier.fillParentMaxHeight()) {
+                val title = config.titleRes?.let { stringResource(it) } ?: config.title
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    text = title,
+                    style = SectionTitleStyle,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                row()
+            }
+        }
     }
 }
 
