@@ -16,6 +16,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.api.models.Trailer
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
@@ -34,6 +35,7 @@ import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -287,6 +289,119 @@ class ContentListVMTest {
         verify(exactly = 1) { refreshCoordinator.requestRefresh() }
     }
 
+    @Test
+    fun focusHeldForTwoSeconds_publishesTheTrailerUrl() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun focusMovedBeforeTwoSeconds_neverStartsATrailer() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        coEvery { interactor.getItemDetails(43) } returns item(43)
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(1500)
+        vm.onAction(CommonAction.ItemFocused(videoItem(43)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun autoTrailerDisabled_leavesTheStillInPlace() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = false)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun itemWithoutATrailer_leavesTheStillInPlace() {
+        coEvery { interactor.getItemDetails(42) } returns item(42)
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun trailerWithoutAUrl_fallsBackToTheFile() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = null, file = "https://cdn/trailer.file"))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertEquals("https://cdn/trailer.file", vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun trailerPreviewFinished_clearsTheUrlAndDoesNotReplay() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        vm.onAction(ContentListAction.TrailerPreviewFinished)
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(5000)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun openingAnItem_stopsTheTrailerPreview() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        every { screens.details(42) } returns mockk<PuberScreen>()
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        vm.onAction(CommonAction.ItemSelected(videoItem(42)))
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun withoutTheDetailPanel_noTrailerIsEverPublished() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = ContentListVM(
+            router = router,
+            interactor = interactor,
+            mapper = mapper,
+            genreInteractor = mockk(relaxed = true),
+            navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
+                every { getNavigationMode() } returns NavigationMode.TopTabs
+                every { getAutoTrailerEnabled() } returns true
+            },
+            contentListRefreshCoordinator = refreshCoordinator,
+        )
+        vm.testOnStart()
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
     private fun createVM() = ContentListVM(
         router = router,
         interactor = interactor,
@@ -310,16 +425,30 @@ class ContentListVMTest {
         heroConfigs = heroConfigs,
     )
 
+    private fun createVM(autoTrailerEnabled: Boolean) = ContentListVM(
+        router = router,
+        interactor = interactor,
+        mapper = mapper,
+        genreInteractor = mockk(relaxed = true),
+        navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
+            every { getNavigationMode() } returns NavigationMode.SideDrawer
+            every { getAutoTrailerEnabled() } returns autoTrailerEnabled
+        },
+        contentListRefreshCoordinator = refreshCoordinator,
+    )
+
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
 
     private fun item(
         id: Int,
         ratingPercentage: Int? = null,
+        trailer: Trailer? = null,
     ) = Item(
         id = id,
         title = "Item $id",
         type = ItemType.MOVIE,
         ratingPercentage = ratingPercentage,
+        trailer = trailer,
     )
 
     private fun page(items: List<Item>) = PaginatedResponse(

@@ -14,4 +14,9 @@ internal data class ContentListViewState(
     val selectedGenreId: Int? = null,
     val showDetailPanel: Boolean = true,
     val showGenreChips: Boolean = false,
+    /**
+     * The trailer to play over the still, or null for the still itself. Set only once focus has
+     * rested on a card long enough, and cleared the moment focus moves or playback stops.
+     */
+    val previewTrailerUrl: String? = null,
 )

@@ -63,6 +63,8 @@ internal class ContentListVM(
             is ContentListAction.ShowAll -> openShowAll(action.config)
             is ContentListAction.GenreSelected -> onGenreSelected(action.genreId)
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
+            is ContentListAction.TrailerPreviewFinished ->
+                updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
         }
     }
 
@@ -81,15 +83,28 @@ internal class ContentListVM(
     private fun onItemFocused(item: VideoItemUIState) {
         if (!stateValue.showDetailPanel) return
         focusedItemJob?.cancel()
+        updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
         focusedItemJob = launch {
+            // Counts from the moment focus landed, in parallel with the request: waiting for the
+            // details first would push the trailer out by however long the network took.
+            val trailerGate = async { delay(TRAILER_PREVIEW_DELAY_MS) }
             delay(FOCUS_DETAILS_DEBOUNCE_MS)
             updateViewState<ContentListViewState> { copy(selectedItem = VideoDetailsUIState.Loading) }
             val details = interactor.getItemDetails(item.id)
             updateViewState<ContentListViewState> { copy(selectedItem = mapper.mapDetailedItem(details)) }
+
+            val trailerUrl = details.trailer?.url ?: details.trailer?.file
+            if (trailerUrl == null || !navPrefs.getAutoTrailerEnabled()) {
+                trailerGate.cancel()
+                return@launch
+            }
+            trailerGate.await()
+            updateViewState<ContentListViewState> { copy(previewTrailerUrl = trailerUrl) }
         }
     }
 
     private fun onItemSelected(item: VideoItemUIState) {
+        stopTrailerPreview()
         openDetails(item.id)
     }
 
@@ -102,11 +117,21 @@ internal class ContentListVM(
     }
 
     private fun onItemPlayed(item: VideoItemUIState) {
+        stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.player(item.id),
             requestCode = RESULT_CONTENT_CHANGED,
             listener = ::onReturnedContentChanges,
         )
+    }
+
+    /**
+     * The ViewModel outlives a trip to the details screen or the player. Without this the trailer
+     * would be playing the instant the user came back, with none of the pause that starts it.
+     */
+    private fun stopTrailerPreview() {
+        focusedItemJob?.cancel()
+        updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
     }
 
     private fun openShowAll(config: SectionConfig) {
@@ -192,6 +217,7 @@ internal class ContentListVM(
 
     private companion object {
         const val FOCUS_DETAILS_DEBOUNCE_MS = 150L
+        const val TRAILER_PREVIEW_DELAY_MS = 2000L
         const val HERO_ITEMS_COUNT = 10
     }
 }
