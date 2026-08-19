@@ -2,6 +2,8 @@ package com.kino.puber.domain.interactor.bookmarks
 
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Bookmark
+import com.kino.puber.data.cache.ContentCacheRepository
+import com.kino.puber.util.FakePayloadStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -14,7 +16,7 @@ import org.junit.jupiter.api.Test
 class BookmarkFoldersInteractorTest {
 
     private val api = mockk<KinoPubApiClient>(relaxed = true)
-    private val interactor = BookmarkFoldersInteractor(api)
+    private val interactor = BookmarkFoldersInteractor(api, ContentCacheRepository(FakePayloadStore()))
 
     private val folders = listOf(
         Bookmark(id = 1, title = WatchLaterBookmarkInteractor.FOLDER_TITLE),

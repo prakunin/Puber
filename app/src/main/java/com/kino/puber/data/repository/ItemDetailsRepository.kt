@@ -3,36 +3,16 @@ package com.kino.puber.data.repository
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.CachedFeed
-import com.kino.puber.data.cache.CacheKeys
-import com.kino.puber.data.cache.CacheTtl
+import com.kino.puber.data.cache.ContentCacheRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onEach
-import kotlinx.serialization.builtins.ListSerializer
 
 class ItemDetailsRepository(
     private val api: KinoPubApiClient,
     private val watchStateRepository: WatchStateRepository,
-    store: PersistentPayloadStore,
-    clock: () -> Long = System::currentTimeMillis,
+    private val contentCache: ContentCacheRepository,
 ) {
-
-    private val details = CachedFeed(
-        store = store,
-        serializer = Item.serializer(),
-        ttl = CacheTtl.ItemDetails,
-        keyPrefix = CacheKeys.ItemPrefix,
-        clock = clock,
-    )
-
-    private val similar = CachedFeed(
-        store = store,
-        serializer = ListSerializer(Item.serializer()),
-        ttl = CacheTtl.SimilarItems,
-        keyPrefix = CacheKeys.SimilarPrefix,
-        clock = clock,
-    )
 
     fun observeItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
         return loadItemDetails(id, force = force).onEach { emission ->
@@ -76,11 +56,11 @@ class ItemDetailsRepository(
     }
 
     private fun loadItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
-        return details.load(CacheKeys.item(id), force = force) { fetchItem(id) }
+        return contentCache.observeItemDetails(id, force = force) { fetchItem(id) }
     }
 
     fun observeSimilarItems(id: Int, force: Boolean = false): Flow<Cached<List<Item>>> {
-        return similar.load(CacheKeys.similar(id), force = force) {
+        return contentCache.observeSimilarItems(id, force = force) {
             api.getSimilarItems(id).getOrThrow().items.orEmpty()
         }
     }
@@ -102,17 +82,15 @@ class ItemDetailsRepository(
     }
 
     suspend fun markStale(itemId: Int) {
-        details.markStale(CacheKeys.item(itemId))
+        contentCache.markItemDetailsStale(itemId)
     }
 
     suspend fun invalidate(itemId: Int) {
-        details.invalidate(CacheKeys.item(itemId))
+        contentCache.invalidateItemDetails(itemId)
     }
 
     suspend fun clear() {
-        // Both namespaces belong to this repository, and both describe the same catalogue.
-        details.invalidateNamespace()
-        similar.invalidateNamespace()
+        contentCache.clear()
     }
 
     private suspend fun fetchItem(id: Int): Item {

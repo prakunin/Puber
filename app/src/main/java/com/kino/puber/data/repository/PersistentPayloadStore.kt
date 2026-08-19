@@ -21,7 +21,13 @@ interface PersistentPayloadStore {
     val generation: Long
 
     suspend fun read(key: String): StoredPayload?
+    suspend fun readAll(keys: List<String>): Map<String, StoredPayload> = buildMap {
+        keys.forEach { key -> read(key)?.let { put(key, it) } }
+    }
     suspend fun write(key: String, payload: String, updatedAt: Long)
+    suspend fun writeAll(payloads: Map<String, StoredPayload>) {
+        payloads.forEach { (key, value) -> write(key, value.payload, value.updatedAt) }
+    }
     suspend fun touch(key: String, updatedAt: Long)
     suspend fun remove(key: String)
     suspend fun removeByPrefix(prefix: String)
@@ -48,11 +54,31 @@ class RoomPersistentPayloadStore(
         return dao.read(key)?.let { row -> StoredPayload(payload = row.payload, updatedAt = row.updatedAt) }
     }
 
+    override suspend fun readAll(keys: List<String>): Map<String, StoredPayload> {
+        if (keys.isEmpty()) return emptyMap()
+        return dao.readAll(keys).associate { row ->
+            row.key to StoredPayload(payload = row.payload, updatedAt = row.updatedAt)
+        }
+    }
+
     override suspend fun write(key: String, payload: String, updatedAt: Long) {
         val generation = this.generation
         dao.upsert(CachedPayloadEntity(key = key, payload = payload, updatedAt = updatedAt))
         if (generation != this.generation) {
             dao.delete(key)
+        }
+    }
+
+    override suspend fun writeAll(payloads: Map<String, StoredPayload>) {
+        if (payloads.isEmpty()) return
+        val generation = this.generation
+        dao.upsertAll(
+            payloads.map { (key, value) ->
+                CachedPayloadEntity(key = key, payload = value.payload, updatedAt = value.updatedAt)
+            }
+        )
+        if (generation != this.generation) {
+            payloads.keys.forEach { dao.delete(it) }
         }
     }
 

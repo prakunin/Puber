@@ -7,7 +7,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +18,7 @@ internal class HistoryInteractor(
     private val api: KinoPubApiClient,
     private val itemDetailsRepository: ItemDetailsRepository,
     navigationPreferencesRepository: NavigationPreferencesRepository,
-    private val contentPageCache: ContentPageCache,
+    private val contentCache: ContentCacheRepository,
 ) {
 
     /**
@@ -42,7 +42,7 @@ internal class HistoryInteractor(
      * "nothing to invalidate yet", not as "invalidation is wired".
      */
     fun observeFirstPage(force: Boolean = false): Flow<Cached<PaginatedResponse<History>>> =
-        contentPageCache.historyFirstPage(force = force) { getPage(FIRST_PAGE) }
+        contentCache.historyFirstPage(force = force) { getPage(FIRST_PAGE) }
 
     suspend fun getPage(page: Int): PaginatedResponse<History> {
         return api.getHistoryData(page).getOrThrow()

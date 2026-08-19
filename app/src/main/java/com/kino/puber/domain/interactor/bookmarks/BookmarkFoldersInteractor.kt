@@ -1,9 +1,12 @@
 package com.kino.puber.domain.interactor.bookmarks
 
-import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Bookmark
+import com.kino.puber.data.cache.CacheKeys
+import com.kino.puber.data.cache.CacheTtl
+import com.kino.puber.data.cache.ContentCacheRepository
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * The account's bookmark folders, fetched once for everyone who needs them.
@@ -17,18 +20,22 @@ import com.kino.puber.data.api.models.Bookmark
  */
 class BookmarkFoldersInteractor(
     private val api: KinoPubApiClient,
+    private val contentCache: ContentCacheRepository,
 ) {
 
-    private val cache = TypedTtlCacheImpl<Unit, List<Bookmark>>()
-
     /**
-     * Failures are deliberately not cached: [TypedTtlCacheImpl] stores a value only when the loader
-     * returns one, so a load that threw leaves nothing behind and the next caller retries for real.
+     * Failures are deliberately not cached, so the next caller retries for real.
      */
     suspend fun folders(): Result<List<Bookmark>> = runCatchingCancellable {
-        cache.getOrPut(Unit) { api.getBookmarks().getOrThrow() }
+        contentCache.getPayload(
+            key = CacheKeys.BookmarkFolders,
+            serializer = ListSerializer(Bookmark.serializer()),
+            ttl = CacheTtl.BookmarkFolders,
+        ) {
+            api.getBookmarks().getOrThrow()
+        }
     }
 
     /** Drops the list, for when something has changed which folders exist. */
-    fun invalidate() = cache.remove(Unit)
+    suspend fun invalidate() = contentCache.invalidateQuery(CacheKeys.BookmarkFolders)
 }

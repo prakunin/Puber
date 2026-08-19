@@ -8,7 +8,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.util.FakePayloadStore
 import com.kino.puber.util.stubNavigationPreferences
@@ -33,7 +33,7 @@ class HistoryInteractorTest {
         api = api,
         itemDetailsRepository = itemDetailsRepository,
         navigationPreferencesRepository = stubNavigationPreferences(),
-        contentPageCache = ContentPageCache(store = store, clock = { now }),
+        contentCache = ContentCacheRepository(store = store, clock = { now }),
     )
 
     /**
@@ -53,7 +53,7 @@ class HistoryInteractorTest {
             api = api,
             itemDetailsRepository = itemDetailsRepository,
             navigationPreferencesRepository = stubNavigationPreferences(),
-            contentPageCache = ContentPageCache(store = store, clock = { now }),
+            contentCache = ContentCacheRepository(store = store, clock = { now }),
         )
 
         val emissions = nextVisit.observeFirstPage().toList()

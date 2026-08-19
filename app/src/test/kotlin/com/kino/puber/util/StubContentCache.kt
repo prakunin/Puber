@@ -1,6 +1,6 @@
 package com.kino.puber.util
 
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.emptyFlow
@@ -17,6 +17,6 @@ import kotlinx.coroutines.flow.emptyFlow
  * cache path itself, by `HistoryVMStoredFirstPageTest` — including the failing read, which is the
  * one this stub would otherwise let past.
  */
-internal fun stubContentPageCache(): ContentPageCache = mockk {
+internal fun stubContentCache(): ContentCacheRepository = mockk {
     every { historyFirstPage(any(), any()) } returns emptyFlow()
 }

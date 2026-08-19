@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.history.vm
 
+import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
@@ -25,7 +26,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
-import com.kino.puber.util.stubContentPageCache
+import com.kino.puber.util.stubContentCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -333,7 +334,7 @@ internal class HistoryVMRefreshDepthTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
 
-        verify { router.navigateTo(playerScreen) }
+        verify { router.navigateForResult<ContentChangeSet>(playerScreen, any(), any()) }
         coVerify { itemDetailsRepository.invalidate(item.itemId) }
     }
 
@@ -344,7 +345,7 @@ internal class HistoryVMRefreshDepthTest {
                 api = api,
                 itemDetailsRepository = itemDetailsRepository,
                 navigationPreferencesRepository = stubNavigationPreferences(),
-                contentPageCache = stubContentPageCache(),
+                contentCache = stubContentCache(),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
             watchStateSyncInteractor = mockk(relaxed = true),

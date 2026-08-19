@@ -77,8 +77,8 @@ class HomeVMTest {
         every { interactor.observeFreshItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observePopularMovies() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observePopularSeries() } returns flowOf(Cached.Value(emptyList(), false))
-        every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(emptyList(), false))
-        every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(emptyList(), false))
+        every { interactor.observeWatchLaterItems(any()) } returns flowOf(Cached.Value(emptyList(), false))
+        every { interactor.observeBookmarkItems(any()) } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeCollections() } returns flowOf(Cached.Value(emptyList(), false))
         coEvery { interactor.lastWatchedAt() } returns emptyMap()
         every { interactor.prepareHomeItems(any(), any(), any()) } answers { firstArg() }
@@ -145,6 +145,69 @@ class HomeVMTest {
     }
 
     @Test
+    fun returnedBookmarkChange_refreshesOnlyPersonalBookmarkRows() {
+        val screen = mockk<PuberScreen>()
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        every { screens.details(42) } returns screen
+        val vm = createVM().also { it.testOnStart() }
+        vm.onAction(CommonAction.ItemSelected(videoItem(42)))
+        verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
+
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Bookmark))
+
+        verify(exactly = 1) { interactor.observeWatchLaterItems(true) }
+        verify(exactly = 1) { interactor.observeBookmarkItems(true) }
+        verify(exactly = 0) { interactor.observeWatchingItems(true) }
+    }
+
+    @Test
+    fun returnedWatchlistChange_refreshesOnlyContinueWatchingRow() {
+        val screen = mockk<PuberScreen>()
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        every { screens.details(42) } returns screen
+        val vm = createVM().also { it.testOnStart() }
+        vm.onAction(CommonAction.ItemSelected(videoItem(42)))
+        verify { router.navigateForResult<ContentChangeSet>(screen, RESULT_CONTENT_CHANGED, capture(listener)) }
+
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Watchlist))
+
+        verify(exactly = 1) { interactor.observeWatchingItems(true) }
+        verify(exactly = 0) { interactor.observeWatchLaterItems(true) }
+        verify(exactly = 0) { interactor.observeBookmarkItems(true) }
+    }
+
+    @Test
+    fun successfulMovieSave_refreshesPersonalBookmarkRows() {
+        coEvery { savedItemInteractor.setSaved(42, false, true) } returns Result.success(true)
+        val vm = createVM().also { it.testOnStart() }
+
+        vm.onAction(CommonAction.ItemSavedChanged(videoItem(42), true))
+
+        verify(exactly = 1) { interactor.observeWatchLaterItems(true) }
+        verify(exactly = 1) { interactor.observeBookmarkItems(true) }
+        verify(exactly = 0) { interactor.observeWatchingItems(true) }
+    }
+
+    @Test
+    fun collectionChanges_areReturnedToHome() {
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        val vm = createVM().also { it.testOnStart() }
+
+        vm.onCollectionClick(7, "Collection")
+
+        verify {
+            router.navigateForResult<ContentChangeSet>(
+                match { screen -> screen.key == "CollectionDetailScreen_7" },
+                RESULT_CONTENT_CHANGED,
+                capture(listener),
+            )
+        }
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Bookmark))
+        verify(exactly = 1) { interactor.observeWatchLaterItems(true) }
+        verify(exactly = 1) { interactor.observeBookmarkItems(true) }
+    }
+
+    @Test
     fun returnedChangesAndResume_keepOnlyLatestRefreshRunning() {
         val screen = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
@@ -197,8 +260,8 @@ class HomeVMTest {
         val hot = item(3)
         val lastWatched = mapOf(bookmark.id to 200L, watchLater.id to 100L)
         coEvery { interactor.lastWatchedAt() } returns lastWatched
-        every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(listOf(watchLater), false))
-        every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(listOf(bookmark), false))
+        every { interactor.observeWatchLaterItems(any()) } returns flowOf(Cached.Value(listOf(watchLater), false))
+        every { interactor.observeBookmarkItems(any()) } returns flowOf(Cached.Value(listOf(bookmark), false))
         every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(hot), false))
 
         createVM().testOnStart()

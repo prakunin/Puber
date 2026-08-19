@@ -2,6 +2,7 @@ package com.kino.puber.data.cache
 
 import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.data.repository.StoredPayload
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -44,21 +45,22 @@ sealed interface Cached<out V> {
 class CachedFeed<V : Any>(
     private val store: PersistentPayloadStore,
     private val serializer: KSerializer<V>,
-    private val ttl: Duration,
+    ttl: Duration,
     private val keyPrefix: String,
     private val json: Json = DefaultJson,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    private val defaultTtl = ttl
 
     /**
      * The current-memory tier and the single-flight coordinator behind it.
      *
-     * A completed value is kept only for the part of [ttl] that remains according to its original
+     * A completed value is kept only for the part of its TTL that remains according to its original
      * server timestamp. Room and memory therefore cannot disagree about freshness or silently
      * extend one another's lifetime.
      */
     private val memory = TypedTtlCacheImpl<String, Stamped<V>>(
-        defaultTtl = ttl,
+        defaultTtl = defaultTtl,
         // One clock has to govern both tiers, or a test that advances the fake clock leaves the
         // in-memory tier frozen in real time and the two disagree about what is fresh.
         nowNanos = { clock() * NANOS_PER_MILLI },
@@ -101,17 +103,18 @@ class CachedFeed<V : Any>(
     fun load(
         key: String,
         force: Boolean = false,
+        ttl: Duration = defaultTtl,
         loader: suspend () -> V,
     ): Flow<Cached<V>> = flow {
         dropMemoryTierIfStoreWasWiped()
 
-        val cached = readCached(key = key, force = force)
+        val cached = readCached(key = key, force = force, ttl = ttl)
         if (cached != null) {
             emit(cached)
             if (!cached.isStale) return@flow
         }
         try {
-            val fresh = loadFresh(key = key, force = force) {
+            val fresh = loadFresh(key = key, force = force, ttl = ttl) {
                 // Captured where the fetch begins, so it answers "was this key invalidated while I
                 // was away?". A retry the in-flight cache issues after an invalidation runs this
                 // lambda again and captures the new epoch, so legitimate reloads still write.
@@ -153,7 +156,7 @@ class CachedFeed<V : Any>(
      * worth drawing — a saved playback position, for instance. Deleting the row instead would trade a
      * slightly stale screen for a spinner.
      */
-    suspend fun markStale(key: String) {
+    suspend fun markStale(key: String, ttl: Duration = defaultTtl) {
         supersedeKey(key)
         memory.remove(key)
         try {
@@ -175,6 +178,76 @@ class CachedFeed<V : Any>(
         } finally {
             supersedeKey(key)
             memory.remove(key)
+        }
+    }
+
+    /** Reads a usable value without starting a loader. */
+    suspend fun peek(key: String): Cached.Value<V>? {
+        dropMemoryTierIfStoreWasWiped()
+        return readCached(key = key, force = false, ttl = HardCeiling)
+    }
+
+    /** Reads several independent entries with one persistent-store lookup on a cold start. */
+    suspend fun peekAll(keys: List<String>): Map<String, Cached.Value<V>> {
+        dropMemoryTierIfStoreWasWiped()
+        if (keys.isEmpty()) return emptyMap()
+
+        val result = mutableMapOf<String, Cached.Value<V>>()
+        val missing = keys.distinct().filter { key ->
+            val current = memory.get(key)
+            if (current != null) {
+                result[key] = Cached.Value(current.value, isStale = false, updatedAt = current.updatedAt)
+            }
+            current == null
+        }
+        val epochs = missing.associateWith(::epochOf)
+        store.readAll(missing).forEach { (key, stored) ->
+            val epoch = epochs.getValue(key)
+            if (epochOf(key) != epoch) return@forEach
+            val usable = decodeUsable(key, stored) ?: return@forEach
+            val selected = promoteToMemory(key, usable, epoch, HardCeiling) ?: return@forEach
+            if (epochOf(key) == epoch) {
+                result[key] = Cached.Value(selected.value, isStale = false, updatedAt = selected.updatedAt)
+            } else {
+                memory.remove(key)
+            }
+        }
+        return result
+    }
+
+    /** Stores a value produced as part of another cached request. */
+    suspend fun put(key: String, value: V, updatedAt: Long = clock()) {
+        putAll(mapOf(key to value), updatedAt)
+    }
+
+    /** Stores several values in one persistent transaction while preserving invalidation barriers. */
+    suspend fun putAll(values: Map<String, V>, updatedAt: Long = clock()) {
+        if (values.isEmpty()) return
+        dropMemoryTierIfStoreWasWiped()
+        values.keys.forEach { key ->
+            supersedeKey(key)
+            memory.remove(key)
+        }
+        val epochs = values.keys.associateWith(::epochOf)
+        store.writeAll(
+            values.mapValues { (_, value) ->
+                StoredPayload(
+                    payload = json.encodeToString(serializer, value),
+                    updatedAt = updatedAt,
+                )
+            }
+        )
+        values.forEach { (key, value) ->
+            val epoch = epochs.getValue(key)
+            if (epochOf(key) == epoch) {
+                memory.put(key, Stamped(value, updatedAt), ttl = HardCeiling)
+                if (epochOf(key) != epoch) memory.remove(key)
+            } else {
+                // An invalidate or session wipe crossed the database write. This payload belongs
+                // to the superseded snapshot and must not be handed to the next reader.
+                store.remove(key)
+                memory.remove(key)
+            }
         }
     }
 
@@ -239,7 +312,7 @@ class CachedFeed<V : Any>(
         }
     }
 
-    private fun remainingFreshness(updatedAt: Long): Duration {
+    private fun remainingFreshness(updatedAt: Long, ttl: Duration): Duration {
         val age = (clock() - updatedAt).coerceAtLeast(0L)
         return (ttl.inWholeMilliseconds - age).coerceAtLeast(0L).milliseconds
     }
@@ -247,9 +320,10 @@ class CachedFeed<V : Any>(
     private suspend fun loadFresh(
         key: String,
         force: Boolean,
+        ttl: Duration,
         loader: suspend () -> Stamped<V>,
     ): Stamped<V> {
-        val freshness: (Stamped<V>) -> Duration = { value -> remainingFreshness(value.updatedAt) }
+        val freshness: (Stamped<V>) -> Duration = { value -> remainingFreshness(value.updatedAt, ttl) }
         return if (force) {
             memory.reload(key, ttl = freshness, defaultValue = loader)
         } else {
@@ -260,7 +334,7 @@ class CachedFeed<V : Any>(
     // Each guard is a concurrency boundary: flattening them would make it easier to promote a value
     // after the epoch it was read under had already been superseded.
     @Suppress("ReturnCount")
-    private suspend fun readCached(key: String, force: Boolean): Cached.Value<V>? {
+    private suspend fun readCached(key: String, force: Boolean, ttl: Duration): Cached.Value<V>? {
         memory.get(key)?.let { current ->
             return Cached.Value(current.value, isStale = force, updatedAt = current.updatedAt)
         }
@@ -269,7 +343,7 @@ class CachedFeed<V : Any>(
         val stored = readUsable(key) ?: return null
         if (epochOf(key) != epoch) return null
         val isStale = force || clock() - stored.updatedAt > ttl.inWholeMilliseconds
-        val selected = if (isStale) stored else promoteToMemory(key, stored, epoch) ?: return null
+        val selected = if (isStale) stored else promoteToMemory(key, stored, epoch, ttl) ?: return null
         if (epochOf(key) != epoch) {
             memory.remove(key)
             return null
@@ -277,9 +351,14 @@ class CachedFeed<V : Any>(
         return Cached.Value(selected.value, isStale = isStale, updatedAt = selected.updatedAt)
     }
 
-    private fun promoteToMemory(key: String, stored: Usable<V>, epoch: Epoch): Usable<V>? {
+    private fun promoteToMemory(
+        key: String,
+        stored: Usable<V>,
+        epoch: Epoch,
+        ttl: Duration,
+    ): Usable<V>? {
         val promoted = Stamped(stored.value, stored.updatedAt)
-        if (memory.putIfAbsent(key, promoted, ttl = remainingFreshness(stored.updatedAt))) {
+        if (memory.putIfAbsent(key, promoted, ttl = remainingFreshness(stored.updatedAt, ttl))) {
             return stored.takeIf { epochOf(key) == epoch }.also { accepted ->
                 if (accepted == null) memory.remove(key)
             }
@@ -291,6 +370,11 @@ class CachedFeed<V : Any>(
     @Suppress("ReturnCount")
     private suspend fun readUsable(key: String): Usable<V>? {
         val stored = store.read(key) ?: return null
+        return decodeUsable(key, stored)
+    }
+
+    @Suppress("ReturnCount")
+    private suspend fun decodeUsable(key: String, stored: StoredPayload): Usable<V>? {
         if (clock() - stored.updatedAt > HardCeiling.inWholeMilliseconds) {
             // Past the ceiling nothing will read this row again, so keeping it only grows the
             // table — a details payload carries the item's seasons, videos and files. Dropped for

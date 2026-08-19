@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.history.vm
 
 import androidx.annotation.VisibleForTesting
 import com.kino.puber.core.collections.EquallyFunction
+import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
@@ -9,6 +10,7 @@ import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.paginator.PagingVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
+import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -502,13 +504,13 @@ internal class HistoryVM(
             } catch (error: Throwable) {
                 log(error, "Failed to invalidate cached item details before playback")
             }
-            router.navigateTo(screen())
+            router.navigateForContentChanges(screen(), ::requestResumeRefresh)
         }
     }
 
     private fun openDetails(item: HistoryItemUIState) {
         dismissContextMenu()
-        router.navigateTo(router.screens.historyDetails(item))
+        router.navigateForContentChanges(router.screens.historyDetails(item), ::requestResumeRefresh)
     }
 
     private fun deleteExactMedia(item: HistoryItemUIState) {
@@ -757,7 +759,16 @@ internal class HistoryVM(
             )
         }
     }
+}
 
+private fun AppRouter.navigateForContentChanges(screen: PuberScreen, onContentChanged: () -> Unit) {
+    navigateForResult<ContentChangeSet>(
+        screen = screen,
+        requestCode = RESULT_CONTENT_CHANGED,
+        listener = { changes ->
+            if (changes != null && !changes.isEmpty) onContentChanged()
+        },
+    )
 }
 
 /**

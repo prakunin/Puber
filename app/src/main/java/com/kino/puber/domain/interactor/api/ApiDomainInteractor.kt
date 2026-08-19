@@ -6,10 +6,8 @@ import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.network.EndpointProbe
 import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
-import com.kino.puber.data.repository.ItemDetailsRepository
-import com.kino.puber.data.repository.PersistentPayloadStore
-import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -46,9 +44,7 @@ internal sealed interface ApiDomainAutoResolveResult {
 
 internal class ApiDomainInteractor(
     private val preferences: ICryptoPreferenceRepository,
-    private val itemDetailsRepository: ItemDetailsRepository,
-    private val genreInteractor: GenreInteractor,
-    private val store: PersistentPayloadStore,
+    private val contentCache: ContentCacheRepository,
     private val probe: EndpointProbe,
     private val reachability: EndpointReachability,
     private val detailsPrefetcher: DetailsPrefetcher,
@@ -147,15 +143,9 @@ internal class ApiDomainInteractor(
      * the dialog, show the result, kick off the reload) that follows this call.
      */
     private suspend fun clearDomainSensitiveCaches() {
-        clearWithoutFailing { itemDetailsRepository.clear() }
-        clearWithoutFailing { genreInteractor.clearCache() }
-        // Every payload in the store describes one domain's catalogue; a switch makes all of them
-        // wrong at once. store.clear() (unlike the prefix removal above) also bumps the store's
-        // session generation, which does two jobs: a revalidation that was already in flight when
-        // the switch happened is withdrawn instead of landing after this wipe, and every CachedFeed
-        // — including the ones inside the screen-scoped HomeInteractor, which this global cannot
-        // reach — drops its own memory tier the next time it reads the store.
-        clearWithoutFailing { store.clear() }
+        // One owner clears both normalized item records and every query index. The underlying store
+        // generation also prevents an old-domain request already in flight from landing afterwards.
+        clearWithoutFailing { contentCache.clear() }
         // The prefetcher's own record of what is warm describes the caches just emptied above.
         // Kept, it would refuse to re-fetch those ids for up to a minute of browsing the new
         // domain — against a cache that no longer holds a single one of them.

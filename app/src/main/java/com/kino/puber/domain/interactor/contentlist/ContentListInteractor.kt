@@ -6,7 +6,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.isAnime
 import com.kino.puber.data.cache.CacheKeys
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.WatchStateRepository
@@ -21,7 +21,7 @@ internal class ContentListInteractor(
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val watchStateRepository: WatchStateRepository,
     private val itemDetailsRepository: ItemDetailsRepository,
-    private val contentPageCache: ContentPageCache,
+    private val contentCache: ContentCacheRepository,
 ) {
 
     private val freshPagers = ConcurrentHashMap<String, FreshSectionPager>()
@@ -66,7 +66,7 @@ internal class ContentListInteractor(
             }
         }
         val preferences = navigationPreferencesRepository.contentPreferences.value
-        return contentPageCache.sectionPage(
+        return contentCache.sectionPage(
             key = CacheKeys.section(cacheKey(config, preferences.showAnime, preferences.hideWatched)),
             // Only a page filtered against the index is baked against a version of it — see
             // [hideWatchedEnabled] and [fetchFilteredPage], which does not consult the index at all
@@ -77,7 +77,7 @@ internal class ContentListInteractor(
             watchStateVersion = if (preferences.hideWatched) {
                 watchStateRepository.version.value
             } else {
-                ContentPageCache.INDEX_INDEPENDENT
+                ContentCacheRepository.INDEX_INDEPENDENT
             },
             force = force,
         ) {

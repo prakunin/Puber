@@ -3,7 +3,7 @@ package com.kino.puber.domain.interactor.favorites
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import kotlinx.coroutines.flow.Flow
@@ -12,7 +12,7 @@ internal class FavoritesInteractor(
     private val api: KinoPubApiClient,
     private val itemDetailsRepository: ItemDetailsRepository,
     private val recentlyPlayedOrder: RecentlyPlayedOrder,
-    private val contentPageCache: ContentPageCache,
+    private val contentCache: ContentCacheRepository,
 ) {
 
     /**
@@ -20,7 +20,7 @@ internal class FavoritesInteractor(
      * cached list is ordered by what the index knows now rather than by what it knew at write time.
      */
     fun observeWatchlist(force: Boolean = false): Flow<Cached<List<Item>>> =
-        contentPageCache.watchlist(force = force) {
+        contentCache.watchlist(force = force) {
             api.getWatchingList(onlySubscribed = true).getOrThrow().items.orEmpty()
         }
 

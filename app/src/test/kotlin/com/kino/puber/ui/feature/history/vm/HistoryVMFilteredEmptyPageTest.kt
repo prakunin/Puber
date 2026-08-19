@@ -19,7 +19,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.history.model.HistoryUIMapper
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
-import com.kino.puber.util.stubContentPageCache
+import com.kino.puber.util.stubContentCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -61,7 +61,7 @@ class HistoryVMFilteredEmptyPageTest {
             api = api,
             itemDetailsRepository = itemDetailsRepository,
             navigationPreferencesRepository = stubNavigationPreferences(),
-            contentPageCache = stubContentPageCache(),
+            contentCache = stubContentCache(),
         )
         mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider()))
         router = mockk(relaxed = true)

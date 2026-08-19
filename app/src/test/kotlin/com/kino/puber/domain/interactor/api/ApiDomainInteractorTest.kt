@@ -4,10 +4,8 @@ import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.network.EndpointProbe
 import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
-import com.kino.puber.data.repository.ItemDetailsRepository
-import com.kino.puber.data.repository.PersistentPayloadStore
-import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -29,9 +27,7 @@ import kotlin.time.Duration.Companion.minutes
 internal class ApiDomainInteractorTest {
 
     private val preferences = mockk<ICryptoPreferenceRepository>(relaxed = true)
-    private val itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true)
-    private val genreInteractor = mockk<GenreInteractor>(relaxed = true)
-    private val store = mockk<PersistentPayloadStore>(relaxed = true)
+    private val contentCache = mockk<ContentCacheRepository>(relaxed = true)
     private val detailsPrefetcher = mockk<DetailsPrefetcher>(relaxed = true)
     private var reachableDomains = emptySet<String>()
     private val probeCalls = mutableListOf<String>()
@@ -39,9 +35,7 @@ internal class ApiDomainInteractorTest {
     private val reachability = EndpointReachability(clock = { now })
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
-        itemDetailsRepository = itemDetailsRepository,
-        genreInteractor = genreInteractor,
-        store = store,
+        contentCache = contentCache,
         probe = EndpointProbe { endpoint ->
             probeCalls += endpoint.domain
             endpoint.domain in reachableDomains
@@ -92,22 +86,20 @@ internal class ApiDomainInteractorTest {
      * updated — see Task 5 review finding 2.
      */
     @Test
-    fun resetToDefault_completesEvenWhenTheItemDetailsCacheFailsToClear() = runTest {
-        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+    fun resetToDefault_completesEvenWhenTheContentCacheFailsToClear() = runTest {
+        coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
         val state = interactor.resetToDefault()
 
         assertEquals("service-kp.test", state.domain)
         assertNull(state.customDomain)
         verify(exactly = 1) { preferences.saveApiDomain(null) }
-        // The other cache still gets its chance — one failing must not skip the other.
-        verify(exactly = 1) { genreInteractor.clearCache() }
-        coVerify(exactly = 1) { itemDetailsRepository.clear() }
+        coVerify(exactly = 1) { contentCache.clear() }
     }
 
     @Test
-    fun saveCustomDomain_completesEvenWhenTheItemDetailsCacheFailsToClear() = runTest {
-        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+    fun saveCustomDomain_completesEvenWhenTheContentCacheFailsToClear() = runTest {
+        coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
         val result = interactor.saveCustomDomain("api.custom.example")
 
@@ -116,7 +108,7 @@ internal class ApiDomainInteractorTest {
         assertEquals("api.custom.example", success.state.domain)
         assertEquals("api.custom.example", success.state.customDomain)
         verify(exactly = 1) { preferences.saveApiDomain("api.custom.example") }
-        verify(exactly = 1) { genreInteractor.clearCache() }
+        coVerify(exactly = 1) { contentCache.clear() }
     }
 
     /**
@@ -239,21 +231,20 @@ internal class ApiDomainInteractorTest {
     fun resetToDefault_dropsEveryCachedPayload() = runTest {
         interactor.resetToDefault()
 
-        coVerify(exactly = 1) { store.clear() }
+        coVerify(exactly = 1) { contentCache.clear() }
     }
 
     /**
-     * The store wipe is independent of the other domain-sensitive clears — see
-     * resetToDefault_completesEvenWhenTheItemDetailsCacheFailsToClear for why none of the three may
-     * skip the others.
+     * The prefetch index is independent from the content cache and must still be cleared if the
+     * persistent cache wipe fails.
      */
     @Test
-    fun resetToDefault_stillDropsTheStoreWhenTheItemDetailsCacheFailsToClear() = runTest {
-        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+    fun resetToDefault_stillClearsPrefetchWhenTheContentCacheFailsToClear() = runTest {
+        coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
         interactor.resetToDefault()
 
-        coVerify(exactly = 1) { store.clear() }
+        verify(exactly = 1) { detailsPrefetcher.invalidate() }
     }
 
     /**
@@ -269,8 +260,8 @@ internal class ApiDomainInteractorTest {
     }
 
     @Test
-    fun resetToDefault_stillClearsThePrefetcherWhenTheItemDetailsCacheFailsToClear() = runTest {
-        coEvery { itemDetailsRepository.clear() } throws IllegalStateException("disk full")
+    fun resetToDefault_stillClearsThePrefetcherWhenTheContentCacheFailsToClear() = runTest {
+        coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
         interactor.resetToDefault()
 

@@ -38,9 +38,7 @@ val interactorModule = module {
     single {
         ApiDomainInteractor(
             preferences = get(),
-            itemDetailsRepository = get(),
-            genreInteractor = get(),
-            store = get(),
+            contentCache = get(),
             probe = HttpEndpointProbe(get()),
             reachability = get(),
             detailsPrefetcher = get(),

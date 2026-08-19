@@ -7,6 +7,8 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.ContentCacheRepository
+import com.kino.puber.util.FakePayloadStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -23,7 +25,10 @@ class WatchLaterBookmarkInteractorTest {
 
     @BeforeEach
     fun setup() {
-        interactor = WatchLaterBookmarkInteractor(api, BookmarkFoldersInteractor(api))
+        interactor = WatchLaterBookmarkInteractor(
+            api,
+            BookmarkFoldersInteractor(api, ContentCacheRepository(FakePayloadStore())),
+        )
     }
 
     @Test

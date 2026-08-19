@@ -80,8 +80,8 @@ class HomeVMIncrementalPublishTest {
         every { interactor.observeFreshItems() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observePopularMovies() } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observePopularSeries() } returns flowOf(Cached.Value(emptyList(), false))
-        every { interactor.observeWatchLaterItems() } returns flowOf(Cached.Value(emptyList(), false))
-        every { interactor.observeBookmarkItems() } returns flowOf(Cached.Value(emptyList(), false))
+        every { interactor.observeWatchLaterItems(any()) } returns flowOf(Cached.Value(emptyList(), false))
+        every { interactor.observeBookmarkItems(any()) } returns flowOf(Cached.Value(emptyList(), false))
         every { interactor.observeCollections() } returns flowOf(Cached.Value(emptyList(), false))
         coEvery { interactor.lastWatchedAt() } returns emptyMap()
         every { interactor.prepareHomeItems(any(), any(), any()) } answers { firstArg() }
@@ -131,8 +131,8 @@ class HomeVMIncrementalPublishTest {
             { every { interactor.observeFreshItems() } returns failing() },
             { every { interactor.observePopularMovies() } returns failing() },
             { every { interactor.observePopularSeries() } returns failing() },
-            { every { interactor.observeWatchLaterItems() } returns failing() },
-            { every { interactor.observeBookmarkItems() } returns failing() },
+            { every { interactor.observeWatchLaterItems(any()) } returns failing() },
+            { every { interactor.observeBookmarkItems(any()) } returns failing() },
             { every { interactor.observeCollections() } returns failingCollections() },
         ).forEach { it() }
 
@@ -185,8 +185,8 @@ class HomeVMIncrementalPublishTest {
         val stillGated = flow<Cached<List<Item>>> { neverCompletes.await() }
         every { interactor.observePopularMovies() } returns stillGated
         every { interactor.observePopularSeries() } returns stillGated
-        every { interactor.observeWatchLaterItems() } returns stillGated
-        every { interactor.observeBookmarkItems() } returns stillGated
+        every { interactor.observeWatchLaterItems(any()) } returns stillGated
+        every { interactor.observeBookmarkItems(any()) } returns stillGated
         every { interactor.observeCollections() } returns
             flow { neverCompletes.await() }
 
@@ -231,8 +231,8 @@ class HomeVMIncrementalPublishTest {
         every { interactor.observeFreshItems() } returns stillGated
         every { interactor.observePopularMovies() } returns stillGated
         every { interactor.observePopularSeries() } returns stillGated
-        every { interactor.observeWatchLaterItems() } returns stillGated
-        every { interactor.observeBookmarkItems() } returns stillGated
+        every { interactor.observeWatchLaterItems(any()) } returns stillGated
+        every { interactor.observeBookmarkItems(any()) } returns stillGated
         every { interactor.observeCollections() } returns flow { neverCompletes.await() }
         every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(4)), false))
 
@@ -295,8 +295,8 @@ class HomeVMIncrementalPublishTest {
             { every { interactor.observeFreshItems() } returns failing() },
             { every { interactor.observePopularMovies() } returns failing() },
             { every { interactor.observePopularSeries() } returns failing() },
-            { every { interactor.observeWatchLaterItems() } returns failing() },
-            { every { interactor.observeBookmarkItems() } returns failing() },
+            { every { interactor.observeWatchLaterItems(any()) } returns failing() },
+            { every { interactor.observeBookmarkItems(any()) } returns failing() },
             { every { interactor.observeCollections() } returns failingCollections() },
         ).forEach { it() }
 

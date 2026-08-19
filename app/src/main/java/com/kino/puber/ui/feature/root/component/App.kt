@@ -18,7 +18,7 @@ import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
-import com.kino.puber.data.repository.PersistentPayloadStore
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import kotlinx.coroutines.CancellationException
@@ -65,7 +65,7 @@ private fun SessionExpiredHandler() {
     val router by scope.inject<AppRouter>()
     val sessionEventBus = getKoin().get<SessionEventBus>()
     val watchStateSyncInteractor = getKoin().get<WatchStateSyncInteractor>()
-    val payloadStore = getKoin().get<PersistentPayloadStore>()
+    val contentCache = getKoin().get<ContentCacheRepository>()
     val detailsPrefetcher = getKoin().get<DetailsPrefetcher>()
     val contentLaunchCoordinator = getKoin().get<ContentLaunchCoordinator>()
     val tvHomeSyncCoordinator = getKoin().get<TvHomeSyncCoordinator>()
@@ -88,13 +88,13 @@ private fun SessionExpiredHandler() {
                 SessionEvent.Unauthorized -> {
                     contentLaunchCoordinator.clearSession()
                     clearWithoutFailing { tvHomeSyncCoordinator.clearAccountPrograms() }
-                    // The watch-state index is one account's viewing history, and the payload store
+                    // The watch-state index is one account's viewing history, and the content cache
                     // is that account's cached view of one domain's catalogue; neither must outlive
                     // the session. Ejecting the user to auth is the part that must not be optional,
                     // so it runs unconditionally below; these clears ahead of it are best-effort,
                     // same as clearDomainSensitiveCaches's clears on a domain switch.
                     clearWithoutFailing { watchStateSyncInteractor.invalidate() }
-                    clearWithoutFailing { payloadStore.clear() }
+                    clearWithoutFailing { contentCache.clear() }
                     // Last, so it forgets a cache that is already gone rather than one a warm in
                     // flight could still refill behind it.
                     clearWithoutFailing { detailsPrefetcher.invalidate() }

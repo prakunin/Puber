@@ -23,6 +23,18 @@ class PersistentPayloadStoreTest {
     }
 
     @Test
+    fun batchWriteThenBatchReadRoundTrips() = runTest {
+        val payloads = mapOf(
+            "item:1" to StoredPayload("{\"id\":1}", 100),
+            "item:2" to StoredPayload("{\"id\":2}", 101),
+        )
+
+        store.writeAll(payloads)
+
+        assertEquals(payloads, store.readAll(payloads.keys.toList()))
+    }
+
+    @Test
     fun readReturnsNullForUnknownKey() = runTest {
         assertNull(store.read("item:404"))
     }
@@ -103,9 +115,15 @@ class PersistentPayloadStoreTest {
 
         override suspend fun read(key: String): CachedPayloadEntity? = rows[key]
 
+        override suspend fun readAll(keys: List<String>): List<CachedPayloadEntity> = keys.mapNotNull(rows::get)
+
         override suspend fun upsert(entity: CachedPayloadEntity) {
             onUpsert?.invoke()
             rows[entity.key] = entity
+        }
+
+        override suspend fun upsertAll(entities: List<CachedPayloadEntity>) {
+            entities.forEach { upsert(it) }
         }
 
         override suspend fun touch(key: String, updatedAt: Long) {

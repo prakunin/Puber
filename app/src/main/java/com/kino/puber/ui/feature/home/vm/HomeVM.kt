@@ -5,6 +5,7 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.content.ContentChangeSet
+import com.kino.puber.core.content.ContentChangeType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -132,12 +133,16 @@ internal class HomeVM(
     }
 
     fun onCollectionClick(id: Int, title: String) {
-        router.navigateTo(CollectionDetailScreen(id, title))
+        router.navigateForResult<ContentChangeSet>(
+            screen = CollectionDetailScreen(id, title),
+            requestCode = RESULT_CONTENT_CHANGED,
+            listener = ::onReturnedContentChanges,
+        )
     }
 
-    private fun silentRefresh() {
+    private fun silentRefresh(refreshTargets: HomeRefreshTargets = HomeRefreshTargets.ContinueWatching) {
         if (stateValue !is HomeViewState.Content) return
-        loadHome(showDomainSearch = false)
+        loadHome(showDomainSearch = false, refreshTargets = refreshTargets)
     }
 
     private fun openDetails(itemId: Int) {
@@ -158,10 +163,13 @@ internal class HomeVM(
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
         if (changes == null || changes.isEmpty || stateValue !is HomeViewState.Content) return
-        silentRefresh()
+        silentRefresh(HomeRefreshTargets.from(changes))
     }
 
-    private fun loadHome(showDomainSearch: Boolean = stateValue !is HomeViewState.Content) {
+    private fun loadHome(
+        showDomainSearch: Boolean = stateValue !is HomeViewState.Content,
+        refreshTargets: HomeRefreshTargets = HomeRefreshTargets.None,
+    ) {
         loadHomeJob?.cancel()
         loadHomeJob = launch {
             clearRowsIfContentCacheWasWiped()
@@ -196,11 +204,11 @@ internal class HomeVM(
                 }
             }
 
-            loadContentSections(forceWatching = !showDomainSearch)
+            loadContentSections(refreshTargets)
         }
     }
 
-    private suspend fun loadContentSections(forceWatching: Boolean) = supervisorScope {
+    private suspend fun loadContentSections(refreshTargets: HomeRefreshTargets) = supervisorScope {
         // Scoped to this call rather than kept on the instance: `loadHome` cancels the previous
         // job without joining it, so a stale collector's `finally` block can still be in flight
         // when this run starts. Reading a shared counter there would let up to TOTAL_SECTIONS
@@ -210,13 +218,16 @@ internal class HomeVM(
         lastWatchedAt = interactor.lastWatchedAt()
 
         val sections = listOf(
-            HomeSectionType.ContinueWatching to interactor.observeWatchingItems(force = forceWatching),
+            HomeSectionType.ContinueWatching to
+                interactor.observeWatchingItems(force = refreshTargets.continueWatching),
             HomeSectionType.Hot to interactor.observeHotItems(),
             HomeSectionType.Fresh to interactor.observeFreshItems(),
             HomeSectionType.PopularMovies to interactor.observePopularMovies(),
             HomeSectionType.PopularSeries to interactor.observePopularSeries(),
-            HomeSectionType.WatchLater to interactor.observeWatchLaterItems(),
-            HomeSectionType.Bookmarks to interactor.observeBookmarkItems(),
+            HomeSectionType.WatchLater to
+                interactor.observeWatchLaterItems(force = refreshTargets.watchLater),
+            HomeSectionType.Bookmarks to
+                interactor.observeBookmarkItems(force = refreshTargets.bookmarks),
         )
         sections.forEach { (type, flow) ->
             launch { collectSection(run, type, flow) }
@@ -452,6 +463,13 @@ internal class HomeVM(
             ).onSuccess { actualSaved ->
                 updateSavedItem(item.id, actualSaved)
                 showMessage(savedMessage(item, actualSaved))
+                silentRefresh(
+                    if (item.isSeriesLike) {
+                        HomeRefreshTargets.ContinueWatching
+                    } else {
+                        HomeRefreshTargets.PersonalBookmarks
+                    }
+                )
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it
@@ -492,5 +510,31 @@ internal class HomeVM(
             currentDomain = domain,
             customDomain = customDomain,
         )
+    }
+
+    private data class HomeRefreshTargets(
+        val continueWatching: Boolean = false,
+        val watchLater: Boolean = false,
+        val bookmarks: Boolean = false,
+    ) {
+        companion object {
+            val None = HomeRefreshTargets()
+            val ContinueWatching = HomeRefreshTargets(continueWatching = true)
+            val PersonalBookmarks = HomeRefreshTargets(watchLater = true, bookmarks = true)
+
+            fun from(changes: ContentChangeSet): HomeRefreshTargets {
+                val types = changes.types
+                return HomeRefreshTargets(
+                    continueWatching = types.any {
+                        it == ContentChangeType.PlaybackProgress ||
+                            it == ContentChangeType.Watched ||
+                            it == ContentChangeType.Watchlist ||
+                            it == ContentChangeType.History
+                    },
+                    watchLater = ContentChangeType.Bookmark in types,
+                    bookmarks = ContentChangeType.Bookmark in types,
+                )
+            }
+        }
     }
 }

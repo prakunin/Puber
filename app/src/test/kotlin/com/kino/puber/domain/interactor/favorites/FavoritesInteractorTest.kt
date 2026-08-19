@@ -8,7 +8,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
@@ -40,7 +40,7 @@ class FavoritesInteractorTest {
             // The real ordering, because what is under test is the watchlist arriving ordered — a
             // mocked one would only assert that the interactor calls something.
             recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
-            contentPageCache = ContentPageCache(store = store, clock = { now }),
+            contentCache = ContentCacheRepository(store = store, clock = { now }),
         )
     }
 
@@ -58,7 +58,7 @@ class FavoritesInteractorTest {
             api = api,
             itemDetailsRepository = mockk(relaxed = true),
             recentlyPlayedOrder = order,
-            contentPageCache = ContentPageCache(store = store, clock = { now }),
+            contentCache = ContentCacheRepository(store = store, clock = { now }),
         )
 
         subject.observeWatchlist().toList()

@@ -5,6 +5,7 @@ import com.kino.puber.data.api.models.ApiResponse
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentCacheRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -27,8 +28,7 @@ class ItemDetailsRepositoryTest {
     private val repository = ItemDetailsRepository(
         api = api,
         watchStateRepository = watchStateRepository,
-        store = store,
-        clock = { now },
+        contentCache = ContentCacheRepository(store = store, clock = { now }),
     )
 
     @Test
@@ -167,10 +167,9 @@ class ItemDetailsRepositoryTest {
         givenApiReturns(item(42, "Newer"))
 
         repository.markStale(42)
-        val markedStaleAt = checkNotNull(store.read("item:42")).updatedAt
         val emissions = repository.observeItemDetails(42).toList()
 
-        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true, updatedAt = markedStaleAt), emissions[0])
+        assertEquals(Cached.Value(item(42, "Fresh"), isStale = true, updatedAt = now), emissions[0])
         assertEquals(Cached.Value(item(42, "Newer"), isStale = false, updatedAt = now), emissions[1])
     }
 
@@ -210,7 +209,9 @@ class ItemDetailsRepositoryTest {
 
         repository.clear()
 
-        assertEquals(null, store.read("item:42"))
+        givenApiReturns(item(42, "Reloaded"))
+        assertEquals(item(42, "Reloaded"), repository.getItemDetails(42))
+        coVerify(exactly = 2) { api.getItemDetails(42) }
     }
 
     @Test

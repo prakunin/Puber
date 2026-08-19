@@ -1,11 +1,14 @@
 package com.kino.puber.ui.feature.history.vm
 
+import com.kino.puber.core.content.ContentChangeSet
+import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
+import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.data.api.KinoPubApiClient
@@ -25,7 +28,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
-import com.kino.puber.util.stubContentPageCache
+import com.kino.puber.util.stubContentCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -34,6 +37,7 @@ import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.AfterEach
@@ -79,7 +83,7 @@ class HistoryVMPlaybackTest {
                     api = api,
                     itemDetailsRepository = itemDetailsRepository,
                     navigationPreferencesRepository = stubNavigationPreferences(),
-                    contentPageCache = stubContentPageCache(),
+                    contentCache = stubContentCache(),
                 ),
             ),
             mapper = HistoryUIMapper(VideoItemUIMapper(FakeResourceProvider())),
@@ -120,9 +124,9 @@ class HistoryVMPlaybackTest {
 
         verify(exactly = 0) { screens.player(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
-        verify { router.navigateTo(movieDetails) }
-        verify { router.navigateTo(episodeDetails) }
-        verify { router.navigateTo(fallbackDetails) }
+        verify { router.navigateForResult<ContentChangeSet>(movieDetails, RESULT_CONTENT_CHANGED, any()) }
+        verify { router.navigateForResult<ContentChangeSet>(episodeDetails, RESULT_CONTENT_CHANGED, any()) }
+        verify { router.navigateForResult<ContentChangeSet>(fallbackDetails, RESULT_CONTENT_CHANGED, any()) }
     }
 
     @Test
@@ -165,7 +169,7 @@ class HistoryVMPlaybackTest {
                 videoNumber = 7,
                 startMode = PlayerStartMode.StartFromBeginning,
             )
-            router.navigateTo(player)
+            router.navigateForResult<ContentChangeSet>(player, RESULT_CONTENT_CHANGED, any())
         }
         verify(exactly = 0) { screens.details(any()) }
     }
@@ -196,7 +200,7 @@ class HistoryVMPlaybackTest {
                 videoNumber = null,
                 startMode = PlayerStartMode.ResumeIfAvailable,
             )
-            router.navigateTo(player)
+            router.navigateForResult<ContentChangeSet>(player, RESULT_CONTENT_CHANGED, any())
         }
         verify(exactly = 0) { screens.details(any()) }
     }
@@ -219,7 +223,9 @@ class HistoryVMPlaybackTest {
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
 
-        verify(exactly = 1) { router.navigateTo(player) }
+        verify(exactly = 1) {
+            router.navigateForResult<ContentChangeSet>(player, RESULT_CONTENT_CHANGED, any())
+        }
     }
 
     @Test
@@ -242,7 +248,32 @@ class HistoryVMPlaybackTest {
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.StartFromBeginning))
         mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
 
-        verify(exactly = 1) { router.navigateTo(player) }
+        verify(exactly = 1) {
+            router.navigateForResult<ContentChangeSet>(player, RESULT_CONTENT_CHANGED, any())
+        }
+    }
+
+    @Test
+    fun returnedPlayerChanges_refreshHistory() {
+        startWith(movie(itemId = 10, videoNumber = 7))
+        val item = awaitContent().items.single()
+        val player = mockk<PuberScreen>()
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        every { screens.player(10, null, null, 7, PlayerStartMode.ResumeIfAvailable) } returns player
+        clearAllMocks(answers = false)
+
+        vm.onAction(HistoryAction.Play(item, PlayerStartMode.ResumeIfAvailable))
+        verify {
+            router.navigateForResult<ContentChangeSet>(
+                player,
+                RESULT_CONTENT_CHANGED,
+                capture(listener),
+            )
+        }
+
+        listener.captured(ContentChangeSet.single(10, ContentChangeType.PlaybackProgress))
+
+        coVerify(exactly = 1) { api.getHistoryData(1) }
     }
 
     private fun startWith(vararg items: History) {

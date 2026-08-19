@@ -11,6 +11,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.KCollection
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -46,13 +47,14 @@ class HomeInteractorTest {
         contentPreferences = MutableStateFlow(defaultContentPreferences())
         every { navigationPreferencesRepository.contentPreferences } returns contentPreferences
         coEvery { watchState.lastWatchedAt() } returns emptyMap()
+        val contentCache = ContentCacheRepository(mockk<PersistentPayloadStore>(relaxed = true))
         interactor = HomeInteractor(
             api = api,
             watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
-            bookmarkFolders = BookmarkFoldersInteractor(api),
+            bookmarkFolders = BookmarkFoldersInteractor(api, contentCache),
             navigationPreferencesRepository = navigationPreferencesRepository,
             watchStateRepository = watchState,
-            store = mockk<PersistentPayloadStore>(relaxed = true),
+            contentCache = contentCache,
             recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )
     }
@@ -270,14 +272,15 @@ class HomeInteractorTest {
         coEvery { api.getBookmarkItems(any(), null) } returns Result.success(page(item))
         // The real watch-later interactor, because what is under test is the two of them sharing a
         // folder source — a mocked one cannot reach the request this is counting.
-        val bookmarkFolders = BookmarkFoldersInteractor(api)
+        val contentCache = ContentCacheRepository(mockk<PersistentPayloadStore>(relaxed = true))
+        val bookmarkFolders = BookmarkFoldersInteractor(api, contentCache)
         val subject = HomeInteractor(
             api = api,
             watchLaterBookmarkInteractor = WatchLaterBookmarkInteractor(api, bookmarkFolders),
             bookmarkFolders = bookmarkFolders,
             navigationPreferencesRepository = navigationPreferencesRepository,
             watchStateRepository = watchState,
-            store = mockk<PersistentPayloadStore>(relaxed = true),
+            contentCache = contentCache,
             recentlyPlayedOrder = RecentlyPlayedOrder(api = api, watchState = watchState),
         )
 

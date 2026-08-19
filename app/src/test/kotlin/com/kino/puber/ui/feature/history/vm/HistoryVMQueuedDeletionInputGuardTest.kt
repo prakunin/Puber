@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.history.vm
 
+import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
@@ -24,7 +25,7 @@ import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
-import com.kino.puber.util.stubContentPageCache
+import com.kino.puber.util.stubContentCache
 import com.kino.puber.util.stubNavigationPreferences
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
@@ -229,7 +230,7 @@ class HistoryVMQueuedDeletionInputGuardTest {
         }
         vm.onAction(CommonAction.ItemSelected(settled.items.first { it.itemId == retainedItemId }))
 
-        verify(exactly = 1) { router.navigateTo(any()) }
+        verify(exactly = 1) { router.navigateForResult<ContentChangeSet>(any(), any(), any()) }
         coVerify(exactly = 1) { api.clearExactMediaHistory(expectedDeletionMediaId) }
     }
 
@@ -250,7 +251,7 @@ class HistoryVMQueuedDeletionInputGuardTest {
     }
 
     private fun assertInputRejected() {
-        verify(exactly = 0) { router.navigateTo(any()) }
+        verify(exactly = 0) { router.navigateForResult<ContentChangeSet>(any(), any(), any()) }
         assertNull(vm.testRuntimeState.openMenuKey)
         assertNull(awaitContent().openMenuKey)
     }
@@ -280,7 +281,7 @@ class HistoryVMQueuedDeletionInputGuardTest {
                     api = api,
                     itemDetailsRepository = mockk<ItemDetailsRepository>(relaxed = true),
                     navigationPreferencesRepository = stubNavigationPreferences(),
-                    contentPageCache = stubContentPageCache(),
+                    contentCache = stubContentCache(),
                 ),
             ),
             mapper = mapper,

@@ -6,6 +6,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PersistentPayloadStore
@@ -31,14 +32,15 @@ class HomeInteractorCacheTest {
     private val navigationPreferencesRepository = mockk<NavigationPreferencesRepository>(relaxed = true)
     private val watchStateRepository = mockk<WatchStateRepository>(relaxed = true)
     private val store = InMemoryPayloadStore()
+    private val contentCache = ContentCacheRepository(store)
 
     private val interactor = HomeInteractor(
         api = api,
         watchLaterBookmarkInteractor = watchLaterBookmarkInteractor,
-        bookmarkFolders = BookmarkFoldersInteractor(api),
+        bookmarkFolders = BookmarkFoldersInteractor(api, contentCache),
         navigationPreferencesRepository = navigationPreferencesRepository,
         watchStateRepository = watchStateRepository,
-        store = store,
+        contentCache = contentCache,
         recentlyPlayedOrder = RecentlyPlayedOrder(
             api = api,
             watchState = watchStateRepository,
@@ -98,14 +100,19 @@ class HomeInteractorCacheTest {
 
     @Test
     fun theWatchingRowAndTheHotRowUseSeparateKeys() = runTest {
+        allowAnime()
         coEvery { api.getWatchingList(onlySubscribed = true) } returns Result.success(
             com.kino.puber.data.api.models.ApiResponseList(items = listOf(item(1)))
         )
+        coEvery { api.getItemsByShortcut("hot", type = "movie") } returns Result.success(page(item(2)))
+        coEvery { api.getItemsByShortcut("hot", type = "serial") } returns Result.success(page(item(3)))
 
         interactor.observeWatchingItems().toList()
+        interactor.observeWatchingItems().toList()
+        interactor.observeHotItems().toList()
 
-        assertEquals(null, store.read("home:hot"))
-        assertEquals(true, store.read("home:continue_watching") != null)
+        coVerify(exactly = 1) { api.getWatchingList(onlySubscribed = true) }
+        coVerify(exactly = 1) { api.getItemsByShortcut("hot", type = "movie") }
     }
 
     /**

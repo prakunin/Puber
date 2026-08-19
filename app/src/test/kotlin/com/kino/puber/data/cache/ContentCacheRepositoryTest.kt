@@ -9,15 +9,77 @@ import com.kino.puber.util.FakePayloadStore
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
-class ContentPageCacheTest {
+class ContentCacheRepositoryTest {
 
     private val store = FakePayloadStore()
     private var now = 1_000_000L
-    private val subject = ContentPageCache(store = store, clock = { now })
+    private val subject = ContentCacheRepository(store = store, clock = { now })
+
+    @Test
+    fun sparseListResponseDoesNotEraseFieldsLoadedByDetails() = runTest {
+        val details = item(7).copy(plot = "Full plot", year = 2024)
+        subject.observeItemDetails(7) { details }.toList()
+
+        val emissions = subject.observeItems("home", CacheTtl.HomeSection) {
+            listOf(item(7))
+        }.toList()
+
+        assertEquals(details, (emissions.single() as Cached.Value).value.single())
+    }
+
+    @Test
+    fun detailsResponseDoesNotEraseCardFieldsItOmits() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) {
+            listOf(item(7).copy(inWatchlist = true, ratingPercentage = 80))
+        }.toList()
+
+        val emissions = subject.observeItemDetails(7) {
+            item(7).copy(plot = "Full plot")
+        }.toList()
+
+        assertEquals(
+            item(7).copy(plot = "Full plot", inWatchlist = true, ratingPercentage = 80),
+            (emissions.single() as Cached.Value).value,
+        )
+    }
+
+    @Test
+    fun responseFromBeforeAStoreWipeCannotRepopulateItemRecords() = runTest {
+        val result = runCatching {
+            subject.observeItems("home", CacheTtl.HomeSection) {
+                store.clear()
+                listOf(item(7))
+            }.toList()
+        }
+
+        assertTrue(result.isFailure)
+        assertNull(store.read(ContentCacheRepository.itemKey(7)))
+    }
+
+    @Test
+    fun differentQueriesReadTheSameMergedItemRecord() = runTest {
+        subject.observeItems("first", CacheTtl.HomeSection) {
+            listOf(item(7).copy(year = 2024))
+        }.toList()
+        subject.observeItems("second", CacheTtl.HomeSection) {
+            listOf(item(7).copy(plot = "Plot"))
+        }.toList()
+
+        val emissions = subject.observeItems("first", CacheTtl.HomeSection) {
+            error("fresh query must come from cache")
+        }.toList()
+
+        assertEquals(
+            item(7).copy(year = 2024, plot = "Plot"),
+            (emissions.single() as Cached.Value).value.single(),
+        )
+    }
 
     @Test
     fun aFreshSectionPageIsServedWithoutTouchingTheLoader() = runTest {

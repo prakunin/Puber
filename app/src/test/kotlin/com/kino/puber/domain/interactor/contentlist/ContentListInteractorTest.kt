@@ -10,7 +10,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.cache.CacheTtl
 import com.kino.puber.data.cache.Cached
-import com.kino.puber.data.cache.ContentPageCache
+import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchStateRepository
@@ -68,13 +68,13 @@ internal open class ContentListInteractorTestFixture {
 
     /** The cache reads its clock rather than the wall, so a test can age an entry past its TTL. */
     protected var now = 0L
-    protected val contentPageCache = ContentPageCache(store = FakePayloadStore(), clock = { now })
+    protected val contentCache = ContentCacheRepository(store = FakePayloadStore(), clock = { now })
     protected val interactor = ContentListInteractor(
         api,
         navigationPreferencesRepository,
         watchStateRepository,
         itemDetailsRepository,
-        contentPageCache,
+        contentCache,
     )
 
     @BeforeEach

@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.collections.detail.vm
 
 import com.kino.puber.core.content.ContentChangeSet
+import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.PuberVM
@@ -13,6 +14,10 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.collections.CollectionInteractor
 import com.kino.puber.ui.feature.collections.detail.model.CollectionDetailViewState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
 
 internal class CollectionDetailVM(
     router: AppRouter,
@@ -25,6 +30,9 @@ internal class CollectionDetailVM(
 ) : PuberVM<CollectionDetailViewState>(router) {
 
     override val initialViewState = CollectionDetailViewState.Loading
+    private var contentChanges = ContentChangeSet.empty()
+    private val pendingMutations = mutableSetOf<Job>()
+    private var closing = false
 
     override fun dispatchError(error: ErrorEntity) {
         if (stateValue is CollectionDetailViewState.Content) {
@@ -39,6 +47,7 @@ internal class CollectionDetailVM(
     }
 
     override fun onAction(action: UIAction) {
+        if (closing) return
         when (action) {
             is CommonAction.ItemSelected<*> -> {
                 val item = action.item as VideoItemUIState
@@ -88,18 +97,29 @@ internal class CollectionDetailVM(
 
     private fun onReturnedContentChanges(changes: ContentChangeSet?) {
         if (changes == null || changes.isEmpty) return
+        contentChanges = contentChanges.merge(changes)
         loadItems()
     }
 
     private fun setItemSaved(item: VideoItemUIState, saved: Boolean) {
         updateSavedItem(item.id, saved)
-        launch {
+        launchMutation {
             savedItemInteractor.setSaved(
                 itemId = item.id,
                 isSeriesLike = item.isSeriesLike,
                 saved = saved,
             ).onSuccess { actualSaved ->
                 updateSavedItem(item.id, actualSaved)
+                contentChanges = contentChanges.merge(
+                    ContentChangeSet.single(
+                        itemId = item.id,
+                        type = if (item.isSeriesLike) {
+                            ContentChangeType.Watchlist
+                        } else {
+                            ContentChangeType.Bookmark
+                        },
+                    )
+                )
             }.onFailure {
                 updateSavedItem(item.id, item.isSaved)
                 throw it
@@ -114,6 +134,42 @@ internal class CollectionDetailVM(
                     if (item.id == itemId) item.copy(isSaved = saved) else item
                 },
             )
+        }
+    }
+
+    override fun onBackPressed() {
+        if (closing) {
+            router.addBackDispatcher(this)
+            return
+        }
+        closing = true
+        router.addBackDispatcher(this)
+        launch {
+            awaitPendingMutations()
+            router.removeBackDispatcher(this@CollectionDetailVM)
+            router.back(RESULT_CONTENT_CHANGED, contentChanges)
+        }
+    }
+
+    private fun launchMutation(block: suspend CoroutineScope.() -> Unit): Job {
+        lateinit var job: Job
+        job = launch(start = CoroutineStart.LAZY) {
+            try {
+                block()
+            } finally {
+                pendingMutations.remove(job)
+            }
+        }
+        pendingMutations += job
+        job.start()
+        return job
+    }
+
+    private suspend fun awaitPendingMutations() {
+        while (true) {
+            val activeJobs = pendingMutations.filter(Job::isActive)
+            if (activeJobs.isEmpty()) return
+            activeJobs.joinAll()
         }
     }
 }
