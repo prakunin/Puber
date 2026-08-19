@@ -219,14 +219,28 @@ private fun ContentListLayout(
 // zero-distance scroll. That holds for today's numbers; it is not guaranteed by anything here, and
 // this fix's correctness does not depend on it — only avoiding a second, redundant scroll pass
 // does.
+//
+// The index alone is not a safe `LaunchedEffect` key: callers compute it as an offset (hero
+// present or not) plus a position, and that offset can change without any new focus event —
+// `ContentListLayout`'s hero can disappear (a failed load) while focus sits still on what was
+// already the target section, shifting every section index below it by one. If the next real
+// focus event then happens to name the same integer the stale index already held (a different
+// section, coincidentally at the same list position under the new offset), keying on the index
+// alone would treat it as a no-op and skip the correction it actually needs. `focusEventToken`
+// makes every call distinct regardless of the index repeating, so the effect always restarts on
+// a real focus event.
 @Composable
 internal fun rememberFocusedListItemScroller(lazyListState: LazyListState): (Int) -> Unit {
     var focusedListItemIndex by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(focusedListItemIndex) {
+    var focusEventToken by remember { mutableIntStateOf(0) }
+    LaunchedEffect(focusedListItemIndex, focusEventToken) {
         val targetItemIndex = focusedListItemIndex ?: return@LaunchedEffect
         lazyListState.animateScrollToItem(index = targetItemIndex, scrollOffset = 0)
     }
-    return { index -> focusedListItemIndex = index }
+    return { index ->
+        focusedListItemIndex = index
+        focusEventToken++
+    }
 }
 
 private fun LazyListScope.heroItem(
