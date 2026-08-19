@@ -58,6 +58,10 @@ internal fun SectionRowContent(
     onLoadMore: () -> Unit,
     onShowAll: (() -> Unit)? = null,
     onRowEmpty: () -> Unit = {},
+    // Fires for real focus entering or leaving this row's content, in *any* section state --
+    // Content cards, the Loading shimmer, or the Error row's Retry button -- unlike
+    // `onSectionFocused`, which only the Content-card path invokes.
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val contentFocusRequester = remember { FocusRequester() }
     val hasFocusRef = remember { booleanArrayOf(false) }
@@ -68,7 +72,12 @@ internal fun SectionRowContent(
         }
     }
 
-    Box(modifier = Modifier.onFocusChanged { hasFocusRef[0] = it.hasFocus }) {
+    Box(
+        modifier = Modifier.onFocusChanged { focusState ->
+            hasFocusRef[0] = focusState.hasFocus
+            onFocusChanged(focusState.hasFocus)
+        },
+    ) {
         when (val s = state) {
             is SectionState.Loading -> ShimmerSectionCards()
             is SectionState.Empty -> { /* hidden */ }

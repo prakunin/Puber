@@ -4,26 +4,29 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -33,6 +36,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import com.kino.puber.core.ui.uikit.component.HeroCarousel
+import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
@@ -177,109 +182,195 @@ internal class SectionRowFocusTraversalTest {
         assertBoundsAndViewport(snapshots)
     }
 
-    // Mirrors the fix in ContentListScreenContent.ContentListLayout for the catalogue's
-    // one-section-per-screen layout: each section is a viewport-sized item (heading + gap +
-    // SectionRowContent, wrapped in `Modifier.fillParentMaxHeight()`), and while a row has real
-    // focus an explicit `animateScrollToItem(index, scrollOffset = 0)` keeps the *section's own
-    // item* — not the focused card inside it — settled flush with the viewport top. Without that
-    // explicit scroll, `PositionFocusedItemInLazyLayout`'s BringIntoViewSpec settles the focused
-    // card instead, landing the section short of the top by however far the card sits inside it.
+    // Drives the real `rememberFocusedListItemScroller` from ContentListScreenContent.kt --
+    // deleting or breaking that shared function breaks this test, not just a copy of it. Each
+    // section is a viewport-sized item (heading + gap + SectionRowContent, wrapped in
+    // `Modifier.fillParentMaxHeight()`), same as the hero. `SectionRowContent`'s `onFocusChanged`
+    // fires for a focused Content card, the Loading shimmer, or the Error row's Retry button
+    // alike, so all three states wire into the same scroller the same way production does.
     @Test
-    fun dpadDownSettlesEachSectionFlushWithViewportTop() {
-        val rows = (0 until SETTLE_ROW_COUNT).map { rowIndex ->
+    fun dpadDownSettlesHeroAndEverySectionStateFlushWithViewportTop() {
+        val rows = listOf(
             RowFixture(
-                config = SectionConfig(id = "settle_row_$rowIndex", title = "Settle row $rowIndex"),
-                state = SectionState.Content(
-                    items = listOf(
-                        item(rowIndex, 0),
-                        item(rowIndex, 1),
-                        item(rowIndex, 2),
-                    ),
-                ),
-            )
-        }
-        var focusedRowIndex by mutableIntStateOf(0)
-        var rowsHaveFocus by mutableStateOf(false)
+                config = SectionConfig(id = "settle_content_0", title = "Settle content 0"),
+                state = SectionState.Content(items = listOf(item(0, 0), item(0, 1))),
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_loading", title = "Settle loading"),
+                state = SectionState.Loading,
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_error", title = "Settle error"),
+                state = SectionState.Error("boom"),
+            ),
+            RowFixture(
+                config = SectionConfig(id = "settle_content_1", title = "Settle content 1"),
+                state = SectionState.Content(items = listOf(item(1, 0), item(1, 1))),
+            ),
+        )
 
         composeRule.setContent {
             PuberTheme {
-                val lazyListState = rememberLazyListState()
-                Box(
-                    Modifier
+                SettleScene(rows = rows)
+            }
+        }
+
+        requestFocusOnFirstFocusableIn(SETTLE_HERO_TAG)
+        assertSettleFlush(SETTLE_HERO_TAG)
+
+        (1..rows.size).forEach { rowIndex ->
+            pressLeafFocused(Key.DirectionDown)
+            assertSettleFlush(settleSectionTag(rowIndex))
+        }
+    }
+
+    // Covers the round trip the original fix missed: leaving a section for the hero, then coming
+    // straight back, without the section index itself ever changing. `focusedSectionIndex` alone
+    // (0 written over 0) would not restart a correction keyed on it; the scroller is keyed on the
+    // list-item index instead, which does change on this round trip (the hero and the section are
+    // different indices), so the correction re-fires and the section is flush again on return.
+    @Test
+    fun dpadUpIntoHeroThenDownReSettlesSameSectionFlushWithViewportTop() {
+        val rows = listOf(
+            RowFixture(
+                config = SectionConfig(id = "settle_roundtrip", title = "Settle roundtrip"),
+                state = SectionState.Content(items = listOf(item(0, 0), item(0, 1))),
+            ),
+        )
+
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = rows)
+            }
+        }
+
+        requestFocusOnFirstFocusableIn(SETTLE_HERO_TAG)
+        pressLeafFocused(Key.DirectionDown)
+        assertSettleFlush(settleSectionTag(1))
+
+        pressLeafFocused(Key.DirectionUp)
+        assertSettleFlush(SETTLE_HERO_TAG)
+
+        pressLeafFocused(Key.DirectionDown)
+        assertSettleFlush(settleSectionTag(1))
+    }
+
+    // Mirrors ContentListLayout's item wiring: a hero item followed by one viewport-sized item
+    // per section, sharing the same `rememberFocusedListItemScroller`.
+    @Composable
+    private fun SettleScene(rows: List<RowFixture>) {
+        val lazyListState = rememberLazyListState()
+        val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(SETTLE_VIEWPORT_HEIGHT)
+                .testTag(SETTLE_VIEWPORT_TAG),
+        ) {
+            PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier
                         .fillMaxWidth()
                         .height(SETTLE_VIEWPORT_HEIGHT)
-                        .testTag(SETTLE_VIEWPORT_TAG),
+                        .focusGroup(),
                 ) {
-                    LaunchedEffect(focusedRowIndex, rowsHaveFocus) {
-                        if (rowsHaveFocus) {
-                            lazyListState.animateScrollToItem(index = focusedRowIndex, scrollOffset = 0)
-                        }
-                    }
-                    PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
-                        LazyColumn(
-                            state = lazyListState,
+                    item(key = "hero", contentType = "hero") {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(SETTLE_VIEWPORT_HEIGHT)
-                                .onFocusChanged { rowsHaveFocus = it.hasFocus }
-                                .focusGroup(),
+                                .fillParentMaxHeight()
+                                .testTag(SETTLE_HERO_TAG),
                         ) {
-                            items(rows, key = { it.config.id }) { row ->
-                                val rowIndex = rows.indexOf(row)
-                                Column(
-                                    modifier = Modifier
-                                        .fillParentMaxHeight()
-                                        .testTag(settleSectionTag(rowIndex)),
-                                ) {
-                                    Text(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp),
-                                        text = row.config.title,
-                                        style = SectionTitleStyle,
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    SectionRowContent(
-                                        state = row.state,
-                                        config = row.config,
-                                        isTargetRow = rowIndex == focusedRowIndex,
-                                        onItemClick = {},
-                                        onItemContextMenu = {},
-                                        onItemFocused = {},
-                                        onSectionFocused = { focusedRowIndex = rowIndex },
-                                        onRetry = {},
-                                        onLoadMore = {},
-                                    )
-                                }
-                            }
+                            HeroCarousel(
+                                items = listOf(settleHeroItem()),
+                                onItemClick = {},
+                                modifier = Modifier.fillMaxSize(),
+                                onFocusedItemChanged = { onListItemFocused(0) },
+                            )
+                        }
+                    }
+                    items(rows, key = { it.config.id }) { row ->
+                        val rowIndex = rows.indexOf(row) + 1
+                        Column(
+                            modifier = Modifier
+                                .fillParentMaxHeight()
+                                .testTag(settleSectionTag(rowIndex)),
+                        ) {
+                            Text(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                text = row.config.title,
+                                style = SectionTitleStyle,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            SectionRowContent(
+                                state = row.state,
+                                config = row.config,
+                                isTargetRow = false,
+                                onItemClick = {},
+                                onItemContextMenu = {},
+                                onItemFocused = {},
+                                onSectionFocused = {},
+                                onFocusChanged = { hasFocus -> if (hasFocus) onListItemFocused(rowIndex) },
+                                onRetry = {},
+                                onLoadMore = {},
+                            )
                         }
                     }
                 }
             }
         }
+    }
 
-        requestFocus(itemTitle(0, 0))
-        composeRule.waitForIdle()
+    private fun settleHeroItem() = HeroItemState(
+        id = 0,
+        title = "Settle hero",
+        wideImageUrl = "",
+        fallbackImageUrl = "",
+        year = "",
+        genres = "",
+    )
+
+    private fun settleSectionTag(rowIndex: Int) = "settle_section_$rowIndex"
+
+    private fun assertSettleFlush(tag: String) {
         val viewportTop = composeRule
             .onNodeWithTag(SETTLE_VIEWPORT_TAG)
             .getUnclippedBoundsInRoot()
             .top
-
-        repeat(SETTLE_ROW_COUNT - 1) { step ->
-            pressCurrent(Key.DirectionDown)
-            val settledRowIndex = step + 1
-            val sectionTop = composeRule
-                .onNodeWithTag(settleSectionTag(settledRowIndex))
-                .getUnclippedBoundsInRoot()
-                .top
-            assertTrue(
-                "section $settledRowIndex top $sectionTop is not flush with viewport top $viewportTop",
-                abs(sectionTop.value - viewportTop.value) <= BOUNDS_TOLERANCE,
-            )
-        }
+        val itemTop = composeRule
+            .onNodeWithTag(tag)
+            .getUnclippedBoundsInRoot()
+            .top
+        assertTrue(
+            "$tag top $itemTop is not flush with viewport top $viewportTop",
+            abs(itemTop.value - viewportTop.value) <= BOUNDS_TOLERANCE,
+        )
     }
 
-    private fun settleSectionTag(rowIndex: Int) = "settle_section_$rowIndex"
+    // The initial focus target and each D-pad landing spot inside SettleScene has no text of its
+    // own (the hero card is an image, the Loading shimmer and the Error row's Retry button carry
+    // no label in this fixture), so unlike `requestFocus`/`pressCurrent` above, these can't select
+    // by text. `isFocusable()` finds every candidate node in the row; `leafFocusedMatcher` then
+    // picks out the one truly holding focus rather than an ancestor that merges it up.
+    private fun requestFocusOnFirstFocusableIn(rowTag: String) {
+        composeRule
+            .onAllNodes(isFocusable() and hasAnyAncestor(hasTestTag(rowTag)), useUnmergedTree = true)[0]
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+    }
+
+    private fun pressLeafFocused(key: Key) {
+        composeRule
+            .onNode(leafFocusedMatcher, useUnmergedTree = true)
+            .performKeyInput {
+                keyDown(key)
+                keyUp(key)
+            }
+        composeRule.waitForIdle()
+    }
 
     private fun seedStableTargets() {
         repeat(ROW_COUNT - 1) { index ->
@@ -363,7 +454,7 @@ internal class SectionRowFocusTraversalTest {
 
     private data class RowFixture(
         val config: SectionConfig,
-        val state: SectionState.Content,
+        val state: SectionState,
     )
 
     private data class FocusTarget(
@@ -386,12 +477,16 @@ internal class SectionRowFocusTraversalTest {
         // Matches the real device: a 960x540 dp screen with a 270 dp list viewport below the
         // detail panel, and a 190 dp card (PuberTheme.Defaults.CatalogueRowItemHeight) — the
         // exact numbers behind the bug this test guards against.
-        const val SETTLE_ROW_COUNT = 4
         const val SETTLE_VIEWPORT_TAG = "settle_viewport"
+        const val SETTLE_HERO_TAG = "settle_hero"
         val SETTLE_VIEWPORT_HEIGHT = 270.dp
         val focusedCardMatcher = isFocused() and hasAnyDescendant(
             hasText("row-", substring = true),
         )
+
+        // Picks out the node truly holding focus rather than an ancestor a component (Card,
+        // Button) merges it up to: the one with no focused descendant of its own.
+        val leafFocusedMatcher = isFocused() and hasAnyDescendant(isFocused()).not()
 
         fun item(row: Int, column: Int) = VideoItemUIState(
             id = row * 10 + column,

@@ -131,25 +131,8 @@ private fun ContentListLayout(
     PreserveLazyListAnchorOnRootReturn(lazyListState)
     var rowsHaveFocus by remember { mutableStateOf(false) }
     val isHeroItemPresent = state.isHeroLoading || state.heroItems.isNotEmpty()
-
-    // The vertical BringIntoViewSpec set up by PositionFocusedItemInLazyLayout below settles
-    // whatever rect asked to be brought into view — which, by default, is the focused card, not
-    // the section around it. For a viewport-sized section item that lands the card's own offset
-    // inside the section (heading + gap + row padding) at the viewport edge, not the section's
-    // top edge; those numbers lining up today is coincidental, not guaranteed. While a row has
-    // real focus, explicitly scroll so the *section's item* — not the card inside it — settles
-    // flush with the viewport top. This is independent of heading size, gap, row padding or
-    // card height: it targets the list item itself, at offset zero, by index.
-    //
-    // This scroll races the automatic per-card bring-into-view request triggered by the same
-    // focus change, but `LazyListState` serializes scroll mutations and the most recently
-    // issued one wins, so the section-aligned target is what the list settles on.
-    LaunchedEffect(focusedSectionIndex, rowsHaveFocus, isHeroItemPresent) {
-        if (rowsHaveFocus) {
-            val targetItemIndex = (if (isHeroItemPresent) 1 else 0) + focusedSectionIndex
-            lazyListState.animateScrollToItem(index = targetItemIndex, scrollOffset = 0)
-        }
-    }
+    val sectionItemIndexOffset = if (isHeroItemPresent) 1 else 0
+    val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
 
     Column(modifier = modifier) {
         if (state.showDetailPanel) {
@@ -190,13 +173,20 @@ private fun ContentListLayout(
                     .focusRestorer()
                     .focusGroup(),
             ) {
-                heroItem(state, isHeroItemPresent, onAction)
+                heroItem(
+                    state = state,
+                    isHeroItemPresent = isHeroItemPresent,
+                    onAction = onAction,
+                    onFocused = { onListItemFocused(0) },
+                )
                 sectionItems(
                     sections = sections,
                     sectionVms = sectionVms,
                     sectionStates = sectionStates,
                     focusedSectionIndex = focusedSectionIndex,
+                    sectionItemIndexOffset = sectionItemIndexOffset,
                     onSectionFocused = onSectionFocused,
+                    onListItemFocused = onListItemFocused,
                     onContextMenu = onContextMenu,
                     onAction = onAction,
                 )
@@ -205,10 +195,45 @@ private fun ContentListLayout(
     }
 }
 
+// The vertical BringIntoViewSpec set up by PositionFocusedItemInLazyLayout settles whatever rect
+// asked to be brought into view — which, by default, is the focused card, not the list item
+// around it (a section, or the hero).
+//
+// The returned function names whichever list item currently holds real focus — the hero, or a
+// section in any state (Content, Loading, Error) — and is meant to be invoked from every
+// focusable region in [lazyListState]'s content, not only from Content-card focus. While a real
+// target is named, this explicitly scrolls so that item — not the card inside it — settles at the
+// viewport top. The *target index* this computes is exact, independent of heading size, gap, row
+// padding or card height. It races the automatic per-card bring-into-view request triggered by
+// the same focus change, but `LazyListState` serializes scroll mutations and the most recently
+// issued one wins, so this is what the list settles on.
+//
+// Naming the list item rather than "which section" also survives leaving a section for the hero
+// and coming straight back: the hero and the section are different list indices, so the named
+// index changes on that round trip even though the section index itself does not, and the
+// correction re-fires.
+//
+// Once settled, the automatic per-card request degrades to a no-op only while the section's
+// heading + gap + row padding + card height together fit inside the viewport — that is what makes
+// the card "fully visible" and lets `keepFullyVisibleItemInPlace` short-circuit it to a
+// zero-distance scroll. That holds for today's numbers; it is not guaranteed by anything here, and
+// this fix's correctness does not depend on it — only avoiding a second, redundant scroll pass
+// does.
+@Composable
+internal fun rememberFocusedListItemScroller(lazyListState: LazyListState): (Int) -> Unit {
+    var focusedListItemIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(focusedListItemIndex) {
+        val targetItemIndex = focusedListItemIndex ?: return@LaunchedEffect
+        lazyListState.animateScrollToItem(index = targetItemIndex, scrollOffset = 0)
+    }
+    return { index -> focusedListItemIndex = index }
+}
+
 private fun LazyListScope.heroItem(
     state: ContentListViewState,
     isHeroItemPresent: Boolean,
     onAction: (UIAction) -> Unit,
+    onFocused: () -> Unit,
 ) {
     if (isHeroItemPresent) {
         item(key = "hero", contentType = "hero") {
@@ -229,7 +254,10 @@ private fun LazyListScope.heroItem(
                         .fillParentMaxHeight(),
                     // D-pad up out of the top row lands here, inside the same focus group as the
                     // rows, so nothing else reports that the focused card is no longer focused.
-                    onFocusedItemChanged = { onAction(ContentListAction.TrailerPreviewStopped) },
+                    onFocusedItemChanged = {
+                        onAction(ContentListAction.TrailerPreviewStopped)
+                        onFocused()
+                    },
                 )
             }
         }
@@ -241,7 +269,9 @@ private fun LazyListScope.sectionItems(
     sectionVms: List<SectionVM>,
     sectionStates: List<SectionState>,
     focusedSectionIndex: Int,
+    sectionItemIndexOffset: Int,
     onSectionFocused: (Int) -> Unit,
+    onListItemFocused: (Int) -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
     onAction: (UIAction) -> Unit,
 ) {
@@ -254,6 +284,7 @@ private fun LazyListScope.sectionItems(
             isLastSection = index == sections.lastIndex,
             isTargetRow = index == focusedSectionIndex,
             onSectionFocused = onSectionFocused,
+            onRowFocused = { onListItemFocused(sectionItemIndexOffset + index) },
             onContextMenu = onContextMenu,
             onAction = onAction,
             onRowEmpty = {
@@ -284,6 +315,7 @@ private fun LazyListScope.sectionItem(
     isLastSection: Boolean,
     isTargetRow: Boolean,
     onSectionFocused: (Int) -> Unit,
+    onRowFocused: () -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
     onAction: (UIAction) -> Unit,
     onRowEmpty: () -> Unit,
@@ -315,6 +347,7 @@ private fun LazyListScope.sectionItem(
                 onItemContextMenu = { onContextMenu(it, sectionVm) },
                 onItemFocused = rememberedOnItemFocused,
                 onSectionFocused = rememberedOnSectionFocused,
+                onFocusChanged = { hasFocus -> if (hasFocus) onRowFocused() },
                 onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },
                 onLoadMore = { sectionVm.onAction(CommonAction.LoadMore) },
                 onShowAll = rememberedOnShowAll,
