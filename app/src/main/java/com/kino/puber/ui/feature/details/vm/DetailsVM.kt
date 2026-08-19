@@ -291,7 +291,9 @@ internal class DetailsVM(
     }
 
     private fun showTrailer() {
-        val trailerUrl = currentItem?.trailer?.url ?: currentItem?.trailer?.file ?: return
+        val trailerUrl = currentItem?.trailer?.url?.takeIf(String::isNotBlank)
+            ?: currentItem?.trailer?.file?.takeIf(String::isNotBlank)
+            ?: return
         updateViewState<DetailsScreenState.Content> {
             copy(trailerUrl = trailerUrl)
         }

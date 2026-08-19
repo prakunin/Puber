@@ -95,7 +95,8 @@ internal class ContentListVM(
             val details = interactor.getItemDetails(item.id)
             updateViewState<ContentListViewState> { copy(selectedItem = mapper.mapDetailedItem(details)) }
 
-            val trailerUrl = details.trailer?.url ?: details.trailer?.file
+            val trailerUrl = details.trailer?.url?.takeIf(String::isNotBlank)
+                ?: details.trailer?.file?.takeIf(String::isNotBlank)
             if (trailerUrl == null || !navPrefs.getAutoTrailerEnabled()) {
                 trailerGate.cancel()
                 return@launch

@@ -444,6 +444,30 @@ class ContentListVMTest {
         assertNull(vm.testStateValue.previewTrailerUrl)
     }
 
+    @Test
+    fun blankTrailerUrl_fallsBackToTheFile() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "", file = "https://cdn/trailer.file"))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertEquals("https://cdn/trailer.file", vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
+    fun blankTrailerUrlAndFile_leaveTheStillInPlace() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "", file = "   "))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
     private fun createVM() = ContentListVM(
         router = router,
         interactor = interactor,
