@@ -53,8 +53,8 @@ class NavigationPreferencesRepository(context: Context) {
         .map { }
 
     fun getNavigationMode(): NavigationMode {
-        val name = prefs.getString(KEY_NAVIGATION_MODE, NavigationMode.TopTabs.name)
-        return NavigationMode.entries.find { it.name == name } ?: NavigationMode.TopTabs
+        val name = prefs.getString(KEY_NAVIGATION_MODE, NavigationMode.SideDrawer.name)
+        return NavigationMode.entries.find { it.name == name } ?: NavigationMode.SideDrawer
     }
 
     fun setNavigationMode(mode: NavigationMode) {

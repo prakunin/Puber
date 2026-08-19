@@ -33,7 +33,7 @@ internal sealed interface DeviceSettingsState {
         val showMarkWatchedButton: Boolean = false,
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
-        val navigationMode: NavigationMode = NavigationMode.TopTabs,
+        val navigationMode: NavigationMode = NavigationMode.SideDrawer,
         val startupTab: TabType = TabType.Home,
         val startupTabOptions: List<TabType> = listOf(TabType.Home),
         val menuSections: List<MenuSectionUi> = emptyList(),

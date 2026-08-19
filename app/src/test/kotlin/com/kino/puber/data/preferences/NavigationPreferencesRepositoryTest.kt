@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test
 private const val TOP_TABS_KEY = "toptabs_tabs_visible"
 private const val SIDE_DRAWER_KEY = "drawer_tabs_visible"
 private const val STARTUP_TAB_KEY = "startup_tab"
+private const val NAVIGATION_MODE_KEY = "navigation_mode"
 private const val TOP_TABS_SCHEMA_VERSION_KEY = "toptabs_schema_version"
 private const val SHOW_CARTOONS_TAB_KEY = "show_cartoons_tab"
 private const val SHOW_ANIME_TAB_KEY = "show_anime_tab"
@@ -56,6 +57,31 @@ internal class NavigationPreferencesRepositoryTest {
         val fixture = fixture(startupTab = "RemovedTab")
 
         assertEquals(TabType.Home, fixture.repository.getStartupTab())
+    }
+
+    @Test
+    fun navigationMode_defaultsToTheSideDrawerWithoutWritingPreferences() {
+        val fixture = fixture()
+
+        assertEquals(NavigationMode.SideDrawer, fixture.repository.getNavigationMode())
+        assertTrue(fixture.preferences.transactions.isEmpty())
+    }
+
+    @Test
+    fun navigationMode_keepsAnExplicitlyChosenTopTabs() {
+        val fixture = fixture()
+
+        fixture.repository.setNavigationMode(NavigationMode.TopTabs)
+
+        assertEquals(NavigationMode.TopTabs, fixture.repository.getNavigationMode())
+    }
+
+    @Test
+    fun navigationMode_fallsBackToTheSideDrawerForAnUnknownStoredValue() {
+        val fixture = fixture()
+        fixture.preferences.values[NAVIGATION_MODE_KEY] = "RemovedMode"
+
+        assertEquals(NavigationMode.SideDrawer, fixture.repository.getNavigationMode())
     }
 
     @Test
