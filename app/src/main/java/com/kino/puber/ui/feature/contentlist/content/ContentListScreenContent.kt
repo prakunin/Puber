@@ -38,6 +38,7 @@ import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchRow
 import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchSurface
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
@@ -143,6 +144,22 @@ private fun ContentListLayout(
     // section, where the same tab used to show two sections at once. So the page rule follows the
     // panel, and without it the hero and the sections keep their own heights.
     val itemsFillViewport = state.showDetailPanel
+
+    // Declared here rather than from inside the rows, because a `DetailsPrefetchRow` inside the
+    // `LazyColumn` only exists while the `LazyColumn` has composed it. `FocusNeighbourhood`
+    // prefetches the card one row below the focused one, and under the page layout exactly one
+    // section is composed at rest -- so the row below was never registered when it was asked for,
+    // and moving Down into a new section went to the network for the detail panel instead of
+    // finding it warm. The section list is the honest source of what rows exist; a section with
+    // no content registers an empty row, which yields no candidate exactly as an unregistered
+    // one did.
+    sections.forEachIndexed { index, config ->
+        DetailsPrefetchRow(
+            rowOrder = index,
+            rowKey = config.id,
+            items = (sectionStates[index] as? SectionState.Content)?.items.orEmpty(),
+        )
+    }
 
     Column(modifier = modifier) {
         if (state.showDetailPanel) {
@@ -381,7 +398,6 @@ private fun LazyListScope.sectionItem(
                 state = sectionState,
                 config = config,
                 isTargetRow = isTargetRow,
-                rowOrder = index,
                 onItemClick = rememberedOnItemClick,
                 onItemContextMenu = { onContextMenu(it, sectionVm) },
                 onItemFocused = rememberedOnItemFocused,
