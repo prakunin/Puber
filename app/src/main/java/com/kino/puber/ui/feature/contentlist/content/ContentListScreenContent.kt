@@ -134,6 +134,16 @@ private fun ContentListLayout(
     val sectionItemIndexOffset = if (isHeroItemPresent) 1 else 0
     val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
 
+    // One list item per screen is a rule about the space the detail panel leaves over, not about
+    // catalogue tabs in general. With the panel present the list viewport is a hair taller than a
+    // single section, so making each one a page removes the half-row of the next section that
+    // would otherwise peek in. `NavigationMode.TopTabs` has no panel (`ContentListVM.onStart`
+    // clears `showDetailPanel`), and its viewport is roughly twice as tall: pages there would
+    // leave better than half of every screen blank and cost a full screen of scrolling per
+    // section, where the same tab used to show two sections at once. So the page rule follows the
+    // panel, and without it the hero and the sections keep their own heights.
+    val itemsFillViewport = state.showDetailPanel
+
     Column(modifier = modifier) {
         if (state.showDetailPanel) {
             VideoItemGridDetails(
@@ -176,6 +186,7 @@ private fun ContentListLayout(
                 heroItem(
                     state = state,
                     isHeroItemPresent = isHeroItemPresent,
+                    fillsViewport = itemsFillViewport,
                     onAction = onAction,
                     onFocused = { onListItemFocused(0) },
                 )
@@ -185,6 +196,7 @@ private fun ContentListLayout(
                     sectionStates = sectionStates,
                     focusedSectionIndex = focusedSectionIndex,
                     sectionItemIndexOffset = sectionItemIndexOffset,
+                    fillsViewport = itemsFillViewport,
                     onSectionFocused = onSectionFocused,
                     onListItemFocused = onListItemFocused,
                     onContextMenu = onContextMenu,
@@ -246,16 +258,24 @@ internal fun rememberFocusedListItemScroller(lazyListState: LazyListState): (Int
 private fun LazyListScope.heroItem(
     state: ContentListViewState,
     isHeroItemPresent: Boolean,
+    fillsViewport: Boolean,
     onAction: (UIAction) -> Unit,
     onFocused: () -> Unit,
 ) {
     if (isHeroItemPresent) {
         item(key = "hero", contentType = "hero") {
+            // Off the page layout the carousel keeps the fixed height it sets on itself, and the
+            // still-loading placeholder has to name the same number to reserve the same space.
+            val heightModifier = if (fillsViewport) {
+                Modifier.fillParentMaxHeight()
+            } else {
+                Modifier.height(HeroCarouselHeight)
+            }
             if (state.heroItems.isEmpty()) {
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillParentMaxHeight(),
+                        .then(heightModifier),
                 )
             } else {
                 HeroCarousel(
@@ -265,7 +285,9 @@ private fun LazyListScope.heroItem(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillParentMaxHeight(),
+                        .then(
+                            if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
+                        ),
                     // D-pad up out of the top row lands here, inside the same focus group as the
                     // rows, so nothing else reports that the focused card is no longer focused.
                     onFocusedItemChanged = {
@@ -284,6 +306,7 @@ private fun LazyListScope.sectionItems(
     sectionStates: List<SectionState>,
     focusedSectionIndex: Int,
     sectionItemIndexOffset: Int,
+    fillsViewport: Boolean,
     onSectionFocused: (Int) -> Unit,
     onListItemFocused: (Int) -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
@@ -297,6 +320,7 @@ private fun LazyListScope.sectionItems(
             sectionState = sectionStates[index],
             isLastSection = index == sections.lastIndex,
             isTargetRow = index == focusedSectionIndex,
+            fillsViewport = fillsViewport,
             onSectionFocused = onSectionFocused,
             onRowFocused = { onListItemFocused(sectionItemIndexOffset + index) },
             onContextMenu = onContextMenu,
@@ -328,6 +352,7 @@ private fun LazyListScope.sectionItem(
     sectionState: SectionState,
     isLastSection: Boolean,
     isTargetRow: Boolean,
+    fillsViewport: Boolean,
     onSectionFocused: (Int) -> Unit,
     onRowFocused: () -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
@@ -376,7 +401,9 @@ private fun LazyListScope.sectionItem(
             // non-empty one.
             row()
         } else {
-            Column(modifier = Modifier.fillParentMaxHeight()) {
+            Column(
+                modifier = if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
+            ) {
                 val title = config.titleRes?.let { stringResource(it) } ?: config.title
                 Text(
                     modifier = Modifier
@@ -391,6 +418,12 @@ private fun LazyListScope.sectionItem(
         }
     }
 }
+
+// `HeroCarousel` sets this height on itself and takes no height parameter, so a hero that is still
+// loading has to name the same number to reserve the space the loaded carousel will take. It only
+// applies off the page layout: `fillParentMaxHeight` imposes fixed constraints that coerce both
+// this and the carousel's own height away.
+private val HeroCarouselHeight = 280.dp
 
 private data class ContentListContextMenuTarget(
     val item: VideoItemUIState,
