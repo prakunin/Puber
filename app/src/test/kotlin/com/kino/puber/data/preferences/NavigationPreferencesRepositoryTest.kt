@@ -28,6 +28,7 @@ private const val SHOW_ANIME_TAB_KEY = "show_anime_tab"
 private const val SHOW_ANIME_KEY = "show_anime"
 private const val HIDE_WATCHED_KEY = "hide_watched"
 private const val SHOW_WATCHED_INDICATORS_KEY = "show_watched_indicators"
+private const val AUTO_TRAILER_KEY = "auto_trailer_enabled"
 private const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
 private const val LEGACY_WATCHED_INDICATORS_KEY = "watched_indicators_enabled"
 private const val HISTORY_SCHEMA_VERSION = 1
@@ -82,6 +83,24 @@ internal class NavigationPreferencesRepositoryTest {
         fixture.preferences.values[NAVIGATION_MODE_KEY] = "RemovedMode"
 
         assertEquals(NavigationMode.SideDrawer, fixture.repository.getNavigationMode())
+    }
+
+    @Test
+    fun autoTrailer_defaultsToOnWithoutWritingPreferences() {
+        val fixture = fixture()
+
+        assertTrue(fixture.repository.getAutoTrailerEnabled())
+        assertTrue(fixture.preferences.transactions.isEmpty())
+    }
+
+    @Test
+    fun autoTrailer_persistsTheStoredChoice() {
+        val fixture = fixture()
+
+        fixture.repository.setAutoTrailerEnabled(false)
+
+        assertFalse(fixture.repository.getAutoTrailerEnabled())
+        assertEquals(false, fixture.preferences.values[AUTO_TRAILER_KEY])
     }
 
     @Test

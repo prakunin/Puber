@@ -61,6 +61,16 @@ class NavigationPreferencesRepository(context: Context) {
         prefs.edit().putString(KEY_NAVIGATION_MODE, mode.name).apply()
     }
 
+    /**
+     * Whether a card that keeps focus swaps its still for the trailer. Defaults to on; the key is
+     * written only when the user changes it, so nothing is stored for a default install.
+     */
+    fun getAutoTrailerEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_TRAILER, true)
+
+    fun setAutoTrailerEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_TRAILER, enabled).apply()
+    }
+
     fun getStartupTab(): TabType {
         val name = prefs.getString(KEY_STARTUP_TAB, TabType.Home.name)
         return TabType.entries.find { it.name == name } ?: TabType.Home
@@ -267,6 +277,7 @@ class NavigationPreferencesRepository(context: Context) {
         const val KEY_SHOW_ANIME = "show_anime"
         const val KEY_HIDE_WATCHED = "hide_watched"
         const val KEY_SHOW_WATCHED_INDICATORS = "show_watched_indicators"
+        const val KEY_AUTO_TRAILER = "auto_trailer_enabled"
         const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
         const val LEGACY_KEY_WATCHED_INDICATORS = "watched_indicators_enabled"
         const val TOP_TABS_SCHEMA_VERSION_HISTORY = 1
