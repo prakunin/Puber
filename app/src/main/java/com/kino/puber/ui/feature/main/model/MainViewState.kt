@@ -11,7 +11,7 @@ import kotlinx.parcelize.Parcelize
 internal data class MainViewState(
     val tabs: List<MainTab> = emptyList(),
     val selectedTab: TabType = TabType.Home,
-    val navigationMode: NavigationMode = NavigationMode.TopTabs,
+    val navigationMode: NavigationMode = NavigationMode.SideDrawer,
 )
 
 
