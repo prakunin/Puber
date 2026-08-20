@@ -22,7 +22,6 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
-import com.kino.puber.ui.feature.details.model.DetailsInfoRowUIState
 import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 
@@ -118,19 +117,9 @@ private val previewMovieButtons = listOf(
 )
 
 private fun previewInfo(details: VideoDetailsUIState) = DetailsInfoUIState(
-    description = details.description,
     ratings = details.ratings,
-    primaryRows = listOf(
-        DetailsInfoRowUIState("Оригинальное название", "Original title"),
-        DetailsInfoRowUIState("Год", details.year),
-        DetailsInfoRowUIState("Жанры", details.genres),
-        DetailsInfoRowUIState("Страна", details.country),
-    ),
-    secondaryRows = listOf(
-        DetailsInfoRowUIState("Режиссёр", "Ларри Ян"),
-        DetailsInfoRowUIState("Качество", "1080p"),
-    ),
-    castMembers = listOf("Джеки Чан", "Чжан Цзыфэн", "Тони Люн Ка-Фай"),
+    factsLine = "1080p · Объёмный звук · 16+ · Дубляж · Дорожек: 3 · Субтитры: 2",
+    creditsLine = "Режиссёр: Ларри Ян · В ролях: Джеки Чан, Чжан Цзыфэн, Тони Люн Ка-Фай",
 )
 
 private val previewEpisodes = VideoGridUIState(

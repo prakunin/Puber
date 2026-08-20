@@ -67,11 +67,6 @@ internal data class DetailsInfoUIState(
     val creditsLine: String,
 )
 
-@Immutable
-internal data class DetailsInfoRowUIState(
-    val label: String,
-    val value: String,
-)
 
 @Immutable
 internal sealed interface DetailsAction : UIAction {

@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.details.component
 
 import androidx.annotation.OptIn
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -85,7 +84,6 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
-import com.kino.puber.ui.feature.details.model.DetailsInfoRowUIState
 import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 import com.kino.puber.ui.feature.player.component.EpisodesPanel
@@ -97,9 +95,6 @@ private const val SEASONS_PANEL_FOCUS_DELAY_MS = 150L
 private const val DETAILS_BUTTONS_FOCUS_DELAY_MS = 100L
 private const val DETAILS_PAGE_FOCUS_DELAY_MS = 50L
 private const val CHEVRON_ALPHA = 0.5F
-private const val INFO_ROW_MAX_LINES = 2
-private const val INFO_CHIP_MAX_LINES = 1
-private val INFO_CHIP_FOCUS_SAFE_PADDING = 8.dp
 private val DETAILS_PAGE_PEEK_HEIGHT = 32.dp
 private val PAGE_FOCUS_BRIDGE_HEIGHT = 56.dp
 
@@ -175,33 +170,12 @@ private fun DetailsContentBody(
         val pageCount = if (state.similarItems.isNotEmpty()) DETAILS_PAGES_WITH_SIMILAR else DETAILS_PAGES_BASE
         val pagerState = rememberPagerState(pageCount = { pageCount })
         val coroutineScope = rememberCoroutineScope()
-        val infoPageFocusRequester = remember { FocusRequester() }
         val similarFirstItemFocusRequester = remember { FocusRequester() }
         val hasSimilarItems = state.similarItems.isNotEmpty()
         val focusMainPage = remember {
             {
                 coroutineScope.launch {
                     pagerState.animateScrollToPage(MAIN_PAGE_INDEX)
-                }
-                Unit
-            }
-        }
-        val focusInfoPage = remember {
-            {
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(INFO_PAGE_INDEX)
-                    delay(DETAILS_PAGE_FOCUS_DELAY_MS)
-                    runCatching { infoPageFocusRequester.requestFocus() }
-                }
-                Unit
-            }
-        }
-        val focusSimilarPage = remember {
-            {
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(SIMILAR_PAGE_INDEX)
-                    delay(DETAILS_PAGE_FOCUS_DELAY_MS)
-                    runCatching { similarFirstItemFocusRequester.requestFocus() }
                 }
                 Unit
             }
@@ -222,13 +196,10 @@ private fun DetailsContentBody(
                 onAction(DetailsAction.TrailerPreviewStopped)
             }
         }
-        LaunchedEffect(pagerState.currentPage, state.info.castMembers.size, hasSimilarItems) {
+        LaunchedEffect(pagerState.currentPage, hasSimilarItems) {
             delay(DETAILS_PAGE_FOCUS_DELAY_MS)
-            when (pagerState.currentPage) {
-                INFO_PAGE_INDEX -> runCatching { infoPageFocusRequester.requestFocus() }
-                SIMILAR_PAGE_INDEX -> if (hasSimilarItems) {
-                    runCatching { similarFirstItemFocusRequester.requestFocus() }
-                }
+            if (pagerState.currentPage == SIMILAR_PAGE_INDEX && hasSimilarItems) {
+                runCatching { similarFirstItemFocusRequester.requestFocus() }
             }
         }
         KeepFocusedChildVisibleWithoutRepositioning {
@@ -249,20 +220,11 @@ private fun DetailsContentBody(
                         showPageChevron = currentPage == MAIN_PAGE_INDEX,
                         scrollToMainPage = { pagerState.animateScrollToPage(MAIN_PAGE_INDEX) },
                     )
-                    INFO_PAGE_INDEX -> DetailsInfoPage(
-                        info = state.info,
-                        hasNextPage = hasSimilarItems,
-                        showPageChevrons = currentPage == INFO_PAGE_INDEX,
-                        focusRequester = infoPageFocusRequester,
-                        onPreviousPageRequested = focusMainPage,
-                        onNextPageRequested = focusSimilarPage,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                     SIMILAR_PAGE_INDEX -> DetailsSimilarPage(
                         items = state.similarItems,
                         onAction = onAction,
                         firstItemFocusRequester = similarFirstItemFocusRequester,
-                        onPreviousPageRequested = focusInfoPage,
+                        onPreviousPageRequested = focusMainPage,
                         showPageChevron = currentPage == SIMILAR_PAGE_INDEX,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -510,234 +472,6 @@ private fun DetailsWatchedButton(
 }
 
 @Composable
-private fun DetailsInfoPage(
-    info: DetailsInfoUIState,
-    hasNextPage: Boolean,
-    showPageChevrons: Boolean,
-    focusRequester: FocusRequester,
-    onPreviousPageRequested: () -> Unit,
-    onNextPageRequested: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        PageFocusBridge(
-            enabled = showPageChevrons,
-            onFocused = onPreviousPageRequested,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(PAGE_FOCUS_BRIDGE_HEIGHT),
-        )
-        if (showPageChevrons) {
-            ChevronIndicator(
-                direction = ChevronDirection.Up,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (info.castMembers.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier)
-                .focusable()
-                .onDirectionKey(Key.DirectionUp, onKey = onPreviousPageRequested)
-                .onDirectionKey(Key.DirectionDown, enabled = hasNextPage, onKey = onNextPageRequested)
-                .padding(start = 96.dp, top = 44.dp, end = 96.dp, bottom = 20.dp),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                DetailsInfoHeader(info)
-                Text(
-                    text = info.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                DetailsCastRow(
-                    info = info,
-                    firstItemFocusRequester = focusRequester,
-                    hasNextPage = hasNextPage,
-                    onPreviousPageRequested = onPreviousPageRequested,
-                    onNextPageRequested = onNextPageRequested,
-                )
-                DetailsInfoGrid(rows = info.primaryRows + info.secondaryRows)
-            }
-        }
-
-        if (hasNextPage) {
-            PageFocusBridge(
-                enabled = showPageChevrons,
-                onFocused = onNextPageRequested,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(PAGE_FOCUS_BRIDGE_HEIGHT),
-            )
-            if (showPageChevrons) {
-                ChevronIndicator(
-                    direction = ChevronDirection.Down,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailsInfoHeader(info: DetailsInfoUIState) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.video_details_info_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            info.ratings.forEach { rating -> Rating(rating) }
-        }
-    }
-}
-
-@Composable
-private fun DetailsInfoGrid(rows: List<DetailsInfoRowUIState>) {
-    val columnCount = DETAILS_INFO_COLUMN_COUNT
-    val chunkSize = ((rows.size + columnCount - 1) / columnCount).coerceAtLeast(1)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
-    ) {
-        rows.chunked(chunkSize).forEach { columnRows ->
-            DetailsInfoRows(
-                rows = columnRows,
-                modifier = Modifier.weight(1F),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailsInfoRows(
-    rows: List<DetailsInfoRowUIState>,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        rows.forEach { row ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = row.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54F),
-                )
-                Text(
-                    text = row.value,
-                    style = MaterialTheme.typography.titleSmall,
-                    overflow = TextOverflow.Ellipsis,
-                    maxLines = INFO_ROW_MAX_LINES,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailsCastRow(
-    info: DetailsInfoUIState,
-    firstItemFocusRequester: FocusRequester,
-    hasNextPage: Boolean,
-    onPreviousPageRequested: () -> Unit,
-    onNextPageRequested: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (info.castMembers.isEmpty()) return
-
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    val safeScrollOffset = with(LocalDensity.current) {
-        -INFO_CHIP_FOCUS_SAFE_PADDING.roundToPx()
-    }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.video_details_info_cast),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64F),
-        )
-        LazyRow(
-            state = listState,
-            modifier = Modifier
-                .focusRestorer(firstItemFocusRequester)
-                .focusGroup(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(
-                start = INFO_CHIP_FOCUS_SAFE_PADDING,
-                top = INFO_CHIP_FOCUS_SAFE_PADDING,
-                end = 64.dp,
-                bottom = INFO_CHIP_FOCUS_SAFE_PADDING,
-            ),
-        ) {
-            itemsIndexed(info.castMembers, key = { index, actor -> "$index:$actor" }) { index, actor ->
-                val itemModifier = if (index == 0) {
-                    Modifier.focusRequester(firstItemFocusRequester)
-                } else {
-                    Modifier
-                }
-                DetailsInfoChip(
-                    text = actor,
-                    modifier = itemModifier
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                coroutineScope.launch {
-                                    listState.scrollToItem(
-                                        index = (index - 1).coerceAtLeast(0),
-                                        scrollOffset = safeScrollOffset,
-                                    )
-                                }
-                            }
-                        }
-                        .onDirectionKey(Key.DirectionUp, onKey = onPreviousPageRequested)
-                        .onDirectionKey(Key.DirectionDown, enabled = hasNextPage, onKey = onNextPageRequested),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailsInfoChip(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = {},
-        modifier = modifier,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(100.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56F),
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContentColor = MaterialTheme.colorScheme.surface,
-        ),
-    ) {
-        Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = INFO_CHIP_MAX_LINES,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
 private fun DetailsSimilarPage(
     items: List<VideoItemUIState>,
     onAction: (UIAction) -> Unit,
@@ -937,8 +671,6 @@ private fun DetailsContentSkeleton() {
 
 private const val FIRST_PAGE_DESCRIPTION_LINES = 3
 private const val MAIN_PAGE_INDEX = 0
-private const val INFO_PAGE_INDEX = 1
-private const val SIMILAR_PAGE_INDEX = 2
-private const val DETAILS_INFO_COLUMN_COUNT = 4
-private const val DETAILS_PAGES_BASE = 2
-private const val DETAILS_PAGES_WITH_SIMILAR = 3
+private const val SIMILAR_PAGE_INDEX = 1
+private const val DETAILS_PAGES_BASE = 1
+private const val DETAILS_PAGES_WITH_SIMILAR = 2
