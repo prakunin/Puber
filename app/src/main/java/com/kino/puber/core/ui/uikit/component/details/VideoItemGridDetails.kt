@@ -132,6 +132,32 @@ fun VideoItemGridDetails(
     }
 }
 
+/**
+ * The still and trailer alone, full-bleed, without the description panel — for a screen like the
+ * details hero that draws its own text over the picture instead of beside it.
+ */
+@Composable
+fun VideoDetailsMedia(
+    modifier: Modifier,
+    state: VideoDetailsUIState,
+    trailerUrl: String? = null,
+    onTrailerFinished: () -> Unit = {},
+) {
+    Box(modifier = modifier) {
+        VideoDetailsPoster(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(MediaWidthFraction)
+                .align(Alignment.CenterEnd),
+            imageUrl = state.imageUrl,
+            imageFallbackUrls = state.imageFallbackUrls,
+            trailerUrl = trailerUrl,
+            onTrailerFinished = onTrailerFinished,
+            fullBleed = true,
+        )
+    }
+}
+
 @Composable
 fun VideoDetailsDescription(
     modifier: Modifier,

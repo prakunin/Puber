@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.Button
@@ -74,8 +75,8 @@ import com.kino.puber.core.ui.uikit.component.EpisodeContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.Rating
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
+import com.kino.puber.core.ui.uikit.component.details.VideoDetailsMedia
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
-import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItem
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
@@ -90,7 +91,6 @@ import com.kino.puber.ui.feature.player.component.EpisodesPanel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val DETAILS_CONTENT_WEIGHT = 3F
 private const val SEASONS_PANEL_FOCUS_DELAY_MS = 150L
 private const val DETAILS_BUTTONS_FOCUS_DELAY_MS = 100L
 private const val DETAILS_PAGE_FOCUS_DELAY_MS = 50L
@@ -216,7 +216,7 @@ private fun DetailsContentBody(
                         onAction = onAction,
                         onEpisodeContextMenu = onEpisodeContextMenu,
                         seasonsPanelVisible = state.seasonsPanelVisible,
-                        recoverActionFocus = isMainPageVisible,
+                        isPageVisible = isMainPageVisible,
                         showPageChevron = currentPage == MAIN_PAGE_INDEX,
                         scrollToMainPage = { pagerState.animateScrollToPage(MAIN_PAGE_INDEX) },
                     )
@@ -273,24 +273,77 @@ private fun DetailsMainPage(
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
     seasonsPanelVisible: Boolean,
-    recoverActionFocus: Boolean,
+    isPageVisible: Boolean,
     showPageChevron: Boolean,
     scrollToMainPage: suspend () -> Unit,
 ) {
-    Column(modifier = modifier) {
-        VideoItemGridDetails(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(DETAILS_CONTENT_WEIGHT),
+    Box(modifier = modifier) {
+        VideoDetailsMedia(
+            modifier = Modifier.fillMaxSize(),
             state = state.details,
-            descriptionMaxLines = FIRST_PAGE_DESCRIPTION_LINES,
             trailerUrl = state.previewTrailerUrl,
             onTrailerFinished = { onAction(DetailsAction.TrailerPreviewFinished) },
-            fullBleedMedia = true,
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // Drawn after the media: the trailer is a SurfaceView and clears whatever the window painted
+        // before it, so only what comes later survives over a playing video.
+        HeroColumn(
+            state = state,
+            onAction = onAction,
+            onEpisodeContextMenu = onEpisodeContextMenu,
+            seasonsPanelVisible = seasonsPanelVisible,
+            isPageVisible = isPageVisible,
+            showPageChevron = showPageChevron,
+            scrollToMainPage = scrollToMainPage,
+        )
+    }
+}
 
+@Composable
+private fun HeroColumn(
+    state: DetailsScreenState.Content,
+    onAction: (UIAction) -> Unit,
+    onEpisodeContextMenu: (VideoItemUIState) -> Unit,
+    seasonsPanelVisible: Boolean,
+    isPageVisible: Boolean,
+    showPageChevron: Boolean,
+    scrollToMainPage: suspend () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = HERO_PADDING_START, top = HERO_PADDING_TOP, bottom = HERO_PADDING_BOTTOM),
+    ) {
+        // `VideoItemUIMapper.formatTitle` has already split `Русское / Original` onto two lines, so
+        // this one Text carries both. It is left-aligned here, unlike the centred panel it replaces.
+        Text(
+            text = state.details.title,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = TITLE_MAX_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(DESCRIPTION_MEASURE),
+        )
+        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+        Row(horizontalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
+            state.info.ratings.forEach { rating -> Rating(rating) }
+        }
+        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+        HeroLine(text = metaLine(state.details))
+        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
+        SelfScrollingText(
+            text = state.details.description,
+            style = MaterialTheme.typography.bodySmall,
+            // The main page stays composed while the similar-items page is on screen, so without
+            // `isPageVisible` the text would keep animating out of sight underneath it.
+            enabled = isPageVisible && !state.seasonsPanelVisible && state.trailerUrl == null,
+            modifier = Modifier
+                .width(DESCRIPTION_MEASURE)
+                .weight(1F),
+        )
+        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
+        HeroLine(text = state.info.factsLine)
+        HeroLine(text = state.info.creditsLine)
+        Spacer(modifier = Modifier.height(HERO_SPACING_MD))
         ActionButtonsRow(
             buttons = state.buttons,
             isInWatchlist = state.isInWatchlist,
@@ -300,17 +353,39 @@ private fun DetailsMainPage(
             onEpisodeContextMenu = onEpisodeContextMenu,
             seasonsPanelVisible = seasonsPanelVisible,
             trailerVisible = state.trailerUrl != null,
-            recoverActionFocus = recoverActionFocus,
+            recoverActionFocus = isPageVisible,
             scrollToMainPage = scrollToMainPage,
         )
-
-        Spacer(modifier = Modifier.weight(1F))
-
         if (showPageChevron) {
             ChevronIndicator()
         }
     }
 }
+
+/**
+ * A single line of facts. It runs over the artwork rather than wrapping inside the text column: a
+ * list of countries folding onto a second line pushes everything below it down, and the scrim
+ * reaches zero at the same fraction this stops at, so no part of it lands on an unmuted frame.
+ */
+@Composable
+private fun HeroLine(text: String) {
+    if (text.isBlank()) return
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = HERO_LINE_ALPHA),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth(SIDE_TEXT_WIDTH_FRACTION),
+    )
+}
+
+private fun metaLine(details: VideoDetailsUIState): String = listOf(
+    details.year,
+    details.genres,
+    details.country,
+    details.duration,
+).filter { it.isNotBlank() }.joinToString(" · ")
 
 @Composable
 private fun ActionButtonsRow(
@@ -629,16 +704,24 @@ private fun ChevronIndicator(
 
 @Composable
 private fun DetailsContentSkeleton() {
-    Column(modifier = Modifier.fillMaxSize()) {
-        VideoItemGridDetails(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(DETAILS_CONTENT_WEIGHT),
-            state = VideoDetailsUIState.Loading,
-            fullBleedMedia = true,
-        )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = HERO_PADDING_START, top = HERO_PADDING_TOP, bottom = HERO_PADDING_BOTTOM),
+    ) {
+        SkeletonBar(width = SKELETON_TITLE_BAR_WIDTH, height = SKELETON_TITLE_BAR_HEIGHT)
+        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+        SkeletonBar(width = SKELETON_META_BAR_WIDTH, height = SKELETON_META_BAR_HEIGHT)
+        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
+        Column(verticalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
+            repeat(SKELETON_DESCRIPTION_LINE_COUNT) {
+                SkeletonBar(width = SKELETON_DESCRIPTION_BAR_WIDTH, height = SKELETON_LINE_HEIGHT)
+            }
+        }
+        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
+        SkeletonBar(width = SKELETON_FACTS_BAR_WIDTH, height = SKELETON_LINE_HEIGHT)
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
 
         Row(
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -669,8 +752,45 @@ private fun DetailsContentSkeleton() {
     }
 }
 
-private const val FIRST_PAGE_DESCRIPTION_LINES = 3
+@Composable
+private fun SkeletonBar(width: Dp, height: Dp) {
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .placeholder(visible = true, shape = RoundedCornerShape(2.dp)),
+    )
+}
+
 private const val MAIN_PAGE_INDEX = 0
 private const val SIMILAR_PAGE_INDEX = 1
 private const val DETAILS_PAGES_BASE = 1
 private const val DETAILS_PAGES_WITH_SIMILAR = 2
+
+private val HERO_PADDING_START = 48.dp
+private val HERO_PADDING_TOP = 40.dp
+private val HERO_PADDING_BOTTOM = 24.dp
+private val DESCRIPTION_MEASURE = 460.dp
+private const val SIDE_TEXT_WIDTH_FRACTION = 0.62F
+private const val HERO_LINE_ALPHA = 0.72F
+private const val TITLE_MAX_LINES = 3
+
+/** Gaps between the hero's own lines: title-to-ratings, the ratings row itself, ratings-to-meta. */
+private val HERO_SPACING_XS = 8.dp
+
+/** Gaps either side of the description: meta-to-description, description-to-facts. */
+private val HERO_SPACING_SM = 12.dp
+
+/** Gap between the last text line and the button row. */
+private val HERO_SPACING_MD = 16.dp
+
+private val SKELETON_TITLE_BAR_WIDTH = 320.dp
+private val SKELETON_TITLE_BAR_HEIGHT = 24.dp
+private val SKELETON_META_BAR_WIDTH = 280.dp
+private val SKELETON_META_BAR_HEIGHT = 16.dp
+private val SKELETON_DESCRIPTION_BAR_WIDTH = 440.dp
+
+/** Shared by the description bars and the facts bar; both stand for a `labelSmall`/`bodySmall` line. */
+private val SKELETON_LINE_HEIGHT = 12.dp
+private val SKELETON_FACTS_BAR_WIDTH = 380.dp
+private const val SKELETON_DESCRIPTION_LINE_COUNT = 4
