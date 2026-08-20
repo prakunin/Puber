@@ -10,14 +10,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -30,8 +26,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,15 +100,8 @@ internal fun PlayerTimedActionOverlay(
         ) { displayedPresentation ->
             displayedPresentation?.let { displayed ->
                 Row(
-                    modifier = Modifier
-                        .wrapContentWidth(Alignment.End)
-                        .playerGlass(
-                            shape = RoundedCornerShape(18.dp),
-                            level = PlayerGlass.Regular,
-                            elevation = 16.dp,
-                        )
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.wrapContentWidth(Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TimedActionButton(
@@ -145,14 +138,33 @@ private fun TimedActionButton(
             targetValue = it,
             animationSpec = tween(1000, easing = LinearEasing),
             label = "player_timed_action_progress",
-        ).value
+        )
     }
     val shape = RoundedCornerShape(12.dp)
+    val progressFill = Brush.horizontalGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.34f),
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+        ),
+    )
 
     Surface(
         onClick = onClick,
         modifier = Modifier
             .widthIn(min = if (emphasized) 144.dp else if (iconOnly) 48.dp else 88.dp)
+            .then(
+                if (emphasized) {
+                    Modifier.shadow(
+                        elevation = 14.dp,
+                        shape = shape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.58f),
+                        spotColor = Color.Black.copy(alpha = 0.76f),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .focusRequester(focusRequester),
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         colors = ClickableSurfaceDefaults.colors(
@@ -175,27 +187,24 @@ private fun TimedActionButton(
                     .size(24.dp),
             )
         } else {
-            Column {
+            Box(
+                modifier = Modifier.drawBehind {
+                    animatedProgress?.value?.let { progressValue ->
+                        drawRect(
+                            brush = progressFill,
+                            size = Size(
+                                width = size.width * progressValue.coerceIn(0f, 1f),
+                                height = size.height,
+                            ),
+                        )
+                    }
+                },
+            ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 )
-                if (animatedProgress != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(animatedProgress)
-                                .height(3.dp)
-                                .background(MaterialTheme.colorScheme.primary),
-                        )
-                    }
-                }
             }
         }
     }
