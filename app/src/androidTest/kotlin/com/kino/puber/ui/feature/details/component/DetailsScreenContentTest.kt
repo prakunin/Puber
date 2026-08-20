@@ -26,6 +26,16 @@ private const val PRIMARY_ACTION = "Primary details action"
 private const val DEFAULT_EPISODE = "S1E1"
 private const val TARGET_EPISODE = "S8E4 target"
 
+private const val HERO_TITLE = "Hero Title"
+private const val HERO_DESCRIPTION = "Short plot synopsis."
+private const val HERO_YEAR = "2024"
+private const val HERO_GENRES = "Drama"
+private const val HERO_COUNTRY = "US"
+private const val HERO_DURATION = "1h 40m"
+private const val HERO_FACTS_LINE = "4K · 16+"
+private const val HERO_CREDITS_LINE = "Режиссёр: Иван Иванов"
+private val HERO_META_LINE = listOf(HERO_YEAR, HERO_GENRES, HERO_COUNTRY, HERO_DURATION).joinToString(" · ")
+
 internal class DetailsScreenContentTest {
 
     @get:Rule
@@ -86,6 +96,60 @@ internal class DetailsScreenContentTest {
     }
 
     @Test
+    fun heroDisplaysTitleMetaFactsCreditsAndButtonsWithoutScrolling() {
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = content(
+                        episodes = episodes(),
+                        seasonsPanelVisible = false,
+                        initialEpisodeFocusId = null,
+                        title = HERO_TITLE,
+                        description = HERO_DESCRIPTION,
+                        year = HERO_YEAR,
+                        genres = HERO_GENRES,
+                        duration = HERO_DURATION,
+                        country = HERO_COUNTRY,
+                        factsLine = HERO_FACTS_LINE,
+                        creditsLine = HERO_CREDITS_LINE,
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        // All on the same screen, with no scroll action performed to reach any of them.
+        composeRule.onNodeWithText(HERO_TITLE).assertIsDisplayed()
+        composeRule.onNodeWithText(HERO_META_LINE).assertIsDisplayed()
+        composeRule.onNodeWithText(HERO_DESCRIPTION).assertIsDisplayed()
+        composeRule.onNodeWithText(HERO_FACTS_LINE).assertIsDisplayed()
+        composeRule.onNodeWithText(HERO_CREDITS_LINE).assertIsDisplayed()
+        composeRule.onNodeWithText(PRIMARY_ACTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun emptyFactsLineDoesNotHideCreditsLine() {
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = content(
+                        episodes = episodes(),
+                        seasonsPanelVisible = false,
+                        initialEpisodeFocusId = null,
+                        description = HERO_DESCRIPTION,
+                        factsLine = "",
+                        creditsLine = HERO_CREDITS_LINE,
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        // Fails if a blank facts row still consumed space and pushed the credits line out.
+        composeRule.onNodeWithText(HERO_CREDITS_LINE).assertIsDisplayed()
+    }
+
+    @Test
     fun visibleEpisodePanelWithoutTargetFocusesDefaultEpisode() {
         composeRule.setContent {
             PuberTheme {
@@ -114,26 +178,32 @@ internal class DetailsScreenContentTest {
         episodes: VideoGridUIState,
         seasonsPanelVisible: Boolean,
         initialEpisodeFocusId: Int?,
+        title: String = "Synthetic details",
+        description: String = "",
+        year: String = "",
+        genres: String = "",
+        duration: String = "",
+        country: String = "",
+        factsLine: String = "",
+        creditsLine: String = "",
     ): DetailsScreenState.Content {
         return DetailsScreenState.Content(
             details = VideoDetailsUIState(
                 id = 42,
-                title = "Synthetic details",
-                description = "",
+                title = title,
+                description = description,
                 imageUrl = "",
                 trailerUrl = "",
                 ratings = emptyList(),
-                year = "",
-                genres = "",
-                duration = "",
-                country = "",
+                year = year,
+                genres = genres,
+                duration = duration,
+                country = country,
             ),
             info = DetailsInfoUIState(
-                description = "",
                 ratings = emptyList(),
-                primaryRows = emptyList(),
-                secondaryRows = emptyList(),
-                castMembers = emptyList(),
+                factsLine = factsLine,
+                creditsLine = creditsLine,
             ),
             buttons = listOf(
                 DetailsButtonUIState.TextButton(

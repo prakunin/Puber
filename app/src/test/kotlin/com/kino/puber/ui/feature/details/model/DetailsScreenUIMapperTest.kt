@@ -140,6 +140,31 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
+    fun `a series states its seasons where a film states its duration`() {
+        val series = Item(
+            id = 1,
+            title = "Сериал",
+            type = ItemType.SERIAL,
+            seasons = listOf(Season(id = 1, number = 1, episodes = emptyList())),
+        )
+
+        val mapped = mapper.map(series, isInWatchlist = false)
+
+        assertTrue(mapped.details.duration.isNotBlank()) { mapped.details.duration }
+        assertFalse(mapped.info.factsLine.contains(mapped.details.duration)) { mapped.info.factsLine }
+    }
+
+    @Test
+    fun `an item with no facts and no credits maps to two empty lines`() {
+        val bare = Item(id = 1, title = "Фильм", type = ItemType.MOVIE)
+
+        val info = mapper.map(bare, isInWatchlist = false).info
+
+        assertEquals("", info.factsLine)
+        assertEquals("", info.creditsLine)
+    }
+
+    @Test
     fun map_initialEpisodeSelectsExactEpisodeForPanelFocus() {
         val state = mapper.map(
             item = series(
