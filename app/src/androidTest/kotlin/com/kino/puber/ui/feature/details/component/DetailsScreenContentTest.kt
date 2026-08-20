@@ -213,6 +213,41 @@ internal class DetailsScreenContentTest {
     }
 
     @Test
+    fun downFromTheButtonsOnASeriesReachesTheSeasonsRatherThanThePageBelow() {
+        // The other half of the same handover. The hero keeps a DOWN handler for films, where it is
+        // the bottom of the page; on a series that handler must not fire, or the buttons would jump
+        // straight past every season to the similar items.
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = content(
+                        episodes = twoSeasonEpisodes(),
+                        initialEpisodeFocusId = null,
+                        title = HERO_TITLE,
+                        description = HERO_DESCRIPTION,
+                        similarItems = listOf(
+                            VideoItemUIState(
+                                id = 7,
+                                title = SIMILAR_ITEM_TITLE,
+                                imageUrl = "",
+                                bigImageUrl = "",
+                                showTitle = true,
+                            ),
+                        ),
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText(PRIMARY_ACTION).assertIsDisplayed()
+
+        composeRule.onNodeWithText(PRIMARY_ACTION).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(FIRST_SEASON_EPISODE).assertIsDisplayed()
+    }
+
+    @Test
     fun downFromTheLastSeasonReachesTheSimilarItems() {
         // On a series the hero is no longer the bottom of the page -- the season list is -- so its
         // own DOWN handler must step aside and let the grid catch the key once the last season has
