@@ -72,7 +72,6 @@ internal data class DetailsInfoUIState(
 internal sealed interface DetailsAction : UIAction {
     data object PlayClicked : DetailsAction
     data object TrailerClicked : DetailsAction
-    data object SelectSeasonClicked : DetailsAction
     data object WatchlistToggleClicked : DetailsAction
     data object WatchedToggleClicked : DetailsAction
     data object ShareClicked : DetailsAction
@@ -80,7 +79,6 @@ internal sealed interface DetailsAction : UIAction {
     data class EpisodeWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
-    data object CloseSeasonsPanel : DetailsAction
     data object CloseTrailer : DetailsAction
     data object TrailerPreviewFinished : DetailsAction
     data object TrailerPreviewStopped : DetailsAction

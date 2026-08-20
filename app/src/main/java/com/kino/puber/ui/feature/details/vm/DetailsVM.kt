@@ -170,7 +170,6 @@ internal class DetailsVM(
             is DetailsAction.CloseTrailer -> hideTrailer()
             is DetailsAction.TrailerPreviewFinished -> stopTrailerPreview()
             is DetailsAction.TrailerPreviewStopped -> stopTrailerPreview()
-            is DetailsAction.SelectSeasonClicked -> showSeasonsPanel()
             is DetailsAction.WatchlistToggleClicked -> onWatchlistToggle()
             is DetailsAction.WatchedToggleClicked -> onWatchedToggle()
             is DetailsAction.ShareClicked -> shareContent()
@@ -178,7 +177,6 @@ internal class DetailsVM(
             is DetailsAction.EpisodeWatchedChanged -> onEpisodeWatchedChanged(action.item, action.watched)
             is DetailsAction.SeasonWatchedChanged -> onSeasonWatchedChanged(action.item, action.watched)
             is DetailsAction.SimilarSelected -> openDetails(action.item.id)
-            is DetailsAction.CloseSeasonsPanel -> hideSeasonsPanel()
             is CommonAction.ItemSelected<*> -> {
                 val item = action.item as VideoItemUIState
                 openDetails(item.id)
@@ -209,20 +207,6 @@ internal class DetailsVM(
             chooserTitle = resources.getString(R.string.video_details_share_chooser),
         )
         if (!shared) showMessage(resources.getString(R.string.error_generic))
-    }
-
-    private fun showSeasonsPanel() {
-        stopTrailerPreview()
-        cancelPendingTrailerRequest()
-        updateViewState<DetailsScreenState.Content> {
-            copy(seasonsPanelVisible = true)
-        }
-    }
-
-    private fun hideSeasonsPanel() {
-        updateViewState<DetailsScreenState.Content> {
-            copy(seasonsPanelVisible = false)
-        }
     }
 
     private fun onEpisodeSelected(episodeItem: VideoItemUIState) {
@@ -379,7 +363,6 @@ internal class DetailsVM(
         val state = stateValue as? DetailsScreenState.Content
         when {
             state?.trailerUrl != null -> hideTrailer()
-            state?.seasonsPanelVisible == true -> hideSeasonsPanel()
             else -> {
                 closeDetails()
                 return

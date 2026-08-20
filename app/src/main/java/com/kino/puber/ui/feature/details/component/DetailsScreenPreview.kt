@@ -10,7 +10,6 @@ import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.BookmarkSimple
 import com.adamglin.phosphoricons.duotone.FilmSlate
 import com.adamglin.phosphoricons.duotone.Play
-import com.adamglin.phosphoricons.duotone.Playlist
 import com.adamglin.phosphoricons.duotone.ShareNetwork
 import com.adamglin.phosphoricons.duotone.VideoCamera
 import com.kino.puber.R
@@ -68,11 +67,6 @@ private val previewSeriesButtons = listOf(
         icon = PhosphorIcons.Duotone.Play,
         action = DetailsAction.PlayClicked,
         textOverride = "2 сезон, 6 серия",
-    ),
-    DetailsButtonUIState.TextButton(
-        textRes = R.string.video_details_button_select_season,
-        icon = PhosphorIcons.Duotone.Playlist,
-        action = DetailsAction.SelectSeasonClicked,
     ),
     DetailsButtonUIState.IconOnly(
         icon = PhosphorIcons.Duotone.VideoCamera,

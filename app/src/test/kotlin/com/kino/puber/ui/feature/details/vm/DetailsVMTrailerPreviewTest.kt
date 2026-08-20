@@ -163,11 +163,12 @@ class DetailsVMTrailerPreviewTest {
     }
 
     @Test
-    fun openingTheSeasonsPanelStopsIt() {
+    fun leavingForThePlayerAfterThePreviewStartedStopsIt() {
+        every { screens.player(42, null, null) } returns mockk<PuberScreen>()
         val vm = startedVM()
         mainDispatcher.dispatcher.scheduler.advanceTimeBy(TRAILER_PAUSE_MS + 1)
 
-        vm.onAction(DetailsAction.SelectSeasonClicked)
+        vm.onAction(DetailsAction.PlayClicked)
 
         assertNull(previewTrailerUrl(vm))
     }
@@ -241,6 +242,7 @@ class DetailsVMTrailerPreviewTest {
     fun aSlowTrailerRequestIsDroppedWhenSomethingElseSupersedesIt() {
         val pending = CompletableDeferred<Result<TrailerLinksResponse>>()
         givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
+        every { screens.player(42, null, null) } returns mockk<PuberScreen>()
         val vm = startedVM(
             trailerLinks = TrailerLinkInteractor(
                 mockk { coEvery { getTrailerLinks(any()) } coAnswers { pending.await() } }
@@ -248,7 +250,7 @@ class DetailsVMTrailerPreviewTest {
         )
 
         vm.onAction(DetailsAction.TrailerClicked)
-        vm.onAction(DetailsAction.SelectSeasonClicked)
+        vm.onAction(DetailsAction.PlayClicked)
         pending.complete(
             Result.success(
                 TrailerLinksResponse(trailer = listOf(Trailer(id = 42, url = TRAILER_URL)))
