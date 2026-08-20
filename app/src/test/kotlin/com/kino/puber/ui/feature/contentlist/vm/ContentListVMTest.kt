@@ -352,6 +352,18 @@ class ContentListVMTest {
     }
 
     @Test
+    fun trailerGivenAsABarePath_isNotPlayed() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "/trailers/d/02/d88196ed.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
     fun trailerPreviewFinished_clearsTheUrlAndDoesNotReplay() {
         coEvery { interactor.getItemDetails(42) } returns
             item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))

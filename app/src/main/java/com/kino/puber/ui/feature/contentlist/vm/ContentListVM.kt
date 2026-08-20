@@ -11,6 +11,7 @@ import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.data.api.models.playableUrl
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
@@ -95,8 +96,7 @@ internal class ContentListVM(
             val details = interactor.getItemDetails(item.id)
             updateViewState<ContentListViewState> { copy(selectedItem = mapper.mapDetailedItem(details)) }
 
-            val trailerUrl = details.trailer?.url?.takeIf(String::isNotBlank)
-                ?: details.trailer?.file?.takeIf(String::isNotBlank)
+            val trailerUrl = details.trailer?.playableUrl()
             if (trailerUrl == null || !navPrefs.getAutoTrailerEnabled()) {
                 trailerGate.cancel()
                 return@launch

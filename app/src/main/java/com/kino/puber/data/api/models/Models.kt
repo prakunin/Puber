@@ -210,6 +210,17 @@ data class Trailer(
     val quality: String? = null,
 )
 
+/**
+ * The trailer to hand a player, or null when there is nothing playable.
+ *
+ * Either field can arrive as a bare path -- `/trailers/d/02/....mp4` -- which a player resolves
+ * against the filesystem and fails to open. Whatever host such a path belongs to, we do not know
+ * it, so an item like that has no trailer as far as this app is concerned.
+ */
+fun Trailer.playableUrl(): String? =
+    listOfNotNull(url, file)
+        .firstOrNull { it.isNotBlank() && it.startsWith("http", ignoreCase = true) }
+
 @Serializable
 data class Tracklist(
     val artists: String? = null,

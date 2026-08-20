@@ -21,6 +21,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.api.models.playableUrl
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
@@ -324,7 +325,9 @@ internal class DetailsVM(
      */
     private fun startTrailerPreview() {
         val seasonsPanelUp = (stateValue as? DetailsScreenState.Content)?.seasonsPanelVisible == true
-        val trailerUrl = currentTrailerUrl()
+        // Not `currentTrailerUrl`: the Trailer button keeps its long-standing behaviour, but there
+        // is no point starting a preview on a URL no player can open.
+        val trailerUrl = currentItem?.trailer?.playableUrl()
         if (trailerPreviewOffered || seasonsPanelUp || trailerUrl == null) return
         if (!navPrefs.getAutoTrailerEnabled()) return
         trailerPreviewOffered = true

@@ -103,6 +103,16 @@ class DetailsVMTrailerPreviewTest {
     }
 
     @Test
+    fun aTrailerGivenAsABarePathIsNotPlayed() {
+        givenItem(item.copy(trailer = Trailer(url = "/trailers/d/02/d88196ed.mp4")))
+        val vm = startedVM()
+
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(TRAILER_PAUSE_MS + 1)
+
+        assertNull(previewTrailerUrl(vm))
+    }
+
+    @Test
     fun theTrailerStaysOffWhenTheSettingIsOff() {
         every { navPrefs.getAutoTrailerEnabled() } returns false
         val vm = startedVM()
