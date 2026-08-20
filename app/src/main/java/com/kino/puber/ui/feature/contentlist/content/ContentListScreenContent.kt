@@ -175,6 +175,7 @@ private fun ContentListLayout(
                 state = state.selectedItem,
                 trailerUrl = state.previewTrailerUrl,
                 onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
+                fullBleedMedia = true,
             )
         }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +46,26 @@ import com.kino.puber.core.ui.uikit.model.Lorem
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 
 
+/**
+ * The share of the panel width the description occupies. It is [DescriptionWeight] of the whole in
+ * either layout, so the text wraps the same way whether the picture is beside it or behind it.
+ */
+private const val DescriptionWeight = 3F
+private const val PosterWeight = 5F
+private const val DescriptionWidthFraction = DescriptionWeight / (DescriptionWeight + PosterWeight)
+
+/** How much of the picture the full-bleed scrim still holds back under the last column of text. */
+private const val ScrimAlphaAtTextEdge = 0.80F
+
+/** How far across the panel that scrim has faded out completely. */
+private const val ScrimEndFraction = 0.62F
+
+/**
+ * @param fullBleedMedia lays the still and the trailer across the whole panel and puts the
+ * description on top of their left edge, the way Prime does it, instead of standing the two side
+ * by side. Off by default: only the catalogue panel plays trailers, and the screens that show a
+ * static poster read better with the picture in its own column.
+ */
 @Composable
 fun VideoItemGridDetails(
     modifier: Modifier,
@@ -51,22 +73,44 @@ fun VideoItemGridDetails(
     descriptionMaxLines: Int = Int.MAX_VALUE,
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
+    fullBleedMedia: Boolean = false,
 ) {
-    Row(modifier = modifier) {
-        VideoDetailsDescription(
-            modifier = Modifier.weight(3F),
-            state = state,
-            descriptionMaxLines = descriptionMaxLines,
-        )
-        VideoDetailsPoster(
-            modifier = Modifier
-                .fillMaxHeight()
-                .weight(5F),
-            imageUrl = state.imageUrl,
-            imageFallbackUrls = state.imageFallbackUrls,
-            trailerUrl = trailerUrl,
-            onTrailerFinished = onTrailerFinished,
-        )
+    if (fullBleedMedia) {
+        Box(modifier = modifier) {
+            VideoDetailsPoster(
+                modifier = Modifier.fillMaxSize(),
+                imageUrl = state.imageUrl,
+                imageFallbackUrls = state.imageFallbackUrls,
+                trailerUrl = trailerUrl,
+                onTrailerFinished = onTrailerFinished,
+                fullBleed = true,
+            )
+            // Drawn after the poster on purpose. The trailer is a `SurfaceView`, which clears
+            // everything the window painted before it; only what comes later survives on top of a
+            // playing video.
+            VideoDetailsDescription(
+                modifier = Modifier.fillMaxWidth(DescriptionWidthFraction),
+                state = state,
+                descriptionMaxLines = descriptionMaxLines,
+            )
+        }
+    } else {
+        Row(modifier = modifier) {
+            VideoDetailsDescription(
+                modifier = Modifier.weight(DescriptionWeight),
+                state = state,
+                descriptionMaxLines = descriptionMaxLines,
+            )
+            VideoDetailsPoster(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(PosterWeight),
+                imageUrl = state.imageUrl,
+                imageFallbackUrls = state.imageFallbackUrls,
+                trailerUrl = trailerUrl,
+                onTrailerFinished = onTrailerFinished,
+            )
+        }
     }
 }
 
@@ -157,9 +201,13 @@ private fun VideoDetailsPoster(
     imageFallbackUrls: List<String>,
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
+    fullBleed: Boolean = false,
 ) {
     Box(
-        modifier = modifier,
+        // The panel is far wider than 16:9, so a still scaled to its width stands taller than the
+        // panel does. Across the whole width that overflow would otherwise land on the carousel
+        // below.
+        modifier = modifier.clipToBounds(),
     ) {
         val imageUrls = remember(imageUrl, imageFallbackUrls) {
             (listOf(imageUrl) + imageFallbackUrls)
@@ -212,22 +260,41 @@ private fun VideoDetailsPoster(
             }
         }
 
-        val gradientWidth = 48.dp
-        Box(
-            modifier = Modifier
-                .width(gradientWidth)
-                .fillMaxHeight()
-                .align(Alignment.CenterStart)
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.0F),
-                        ),
-                        endX = with(LocalDensity.current) { gradientWidth.toPx() },
+        if (fullBleed) {
+            // The description lies on top of the picture here, so the scrim is what keeps it
+            // readable: solid under the text column, then a long ramp so the picture emerges
+            // gradually instead of starting at a seam. It ends before the right half, which is
+            // therefore the trailer at full brightness.
+            val surface = MaterialTheme.colorScheme.surface
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            0.00F to surface,
+                            DescriptionWidthFraction to surface.copy(alpha = ScrimAlphaAtTextEdge),
+                            ScrimEndFraction to surface.copy(alpha = 0.0F),
+                        )
                     )
-                )
-        )
+            )
+        } else {
+            val gradientWidth = 48.dp
+            Box(
+                modifier = Modifier
+                    .width(gradientWidth)
+                    .fillMaxHeight()
+                    .align(Alignment.CenterStart)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surface,
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.0F),
+                            ),
+                            endX = with(LocalDensity.current) { gradientWidth.toPx() },
+                        )
+                    )
+            )
+        }
 
         val gradientHeight = 48.dp
         Box(
@@ -241,7 +308,7 @@ private fun VideoDetailsPoster(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.0F),
                             MaterialTheme.colorScheme.surface,
                         ),
-                        endY = with(LocalDensity.current) { gradientWidth.toPx() },
+                        endY = with(LocalDensity.current) { gradientHeight.toPx() },
                     )
                 )
         )
