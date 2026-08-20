@@ -222,6 +222,7 @@ private fun VideoGridContent(
 
                             is VideoGridItemUIState.Items -> VideoGridItems(
                                 items = columnItem,
+                                wideCards = false,
                                 rowOrder = rowOrders[index],
                                 detailsPrefetchEnabled = detailsPrefetchEnabled,
                                 isTargetRow = columnItem.rowKey == gridFocus.rowFocus.focusedRowKey,
@@ -351,6 +352,7 @@ private fun LazyItemScope.VideoGridSection(
         if (items != null) {
             VideoGridItems(
                 items = items,
+                wideCards = true,
                 rowOrder = rowOrder,
                 detailsPrefetchEnabled = detailsPrefetchEnabled,
                 isTargetRow = isTargetRow,
@@ -396,6 +398,7 @@ private fun BoxScope.VideoGridTopGradient(visible: Boolean) {
 @Composable
 private fun VideoGridItems(
     items: VideoGridItemUIState.Items,
+    wideCards: Boolean,
     rowOrder: Int,
     detailsPrefetchEnabled: Boolean,
     isTargetRow: Boolean,
@@ -441,6 +444,7 @@ private fun VideoGridItems(
                 val isFallbackTarget = item.id == itemFocus.targetItemId
                 VideoGridRowItem(
                     item = item,
+                    wideCards = wideCards,
                     itemIndex = indexR,
                     isFallbackTarget = isFallbackTarget,
                     rowFocusRequester = rowFocusRequester,
@@ -461,6 +465,7 @@ private fun VideoGridItems(
 @Composable
 private fun VideoGridRowItem(
     item: VideoItemUIState,
+    wideCards: Boolean,
     itemIndex: Int,
     isFallbackTarget: Boolean,
     rowFocusRequester: FocusRequester,
@@ -482,18 +487,35 @@ private fun VideoGridRowItem(
             onItemClick(item)
         }
     }
-    VideoItem(
-        modifier = Modifier
-            .then(
-                if (isFallbackTarget) {
-                    Modifier.focusRequester(savedItemFocusRequester)
-                } else {
-                    Modifier
-                },
-            )
-            .then(focusModifier),
-        state = item,
-        onClick = clickCallback,
-        onContextMenu = onItemContextMenu?.let { callback -> { callback(item) } },
-    )
+    val cardModifier = Modifier
+        .then(
+            if (isFallbackTarget) {
+                Modifier.focusRequester(savedItemFocusRequester)
+            } else {
+                Modifier
+            },
+        )
+        .then(focusModifier)
+    // An episode's still is 16:9. In the season list -- the only place that asks for wide cards --
+    // it is shown at that shape rather than cropped into a portrait poster, which also gives the
+    // page above it the height its plot needs.
+    if (wideCards) {
+        VideoItemHorizontal(
+            modifier = cardModifier,
+            state = item,
+            itemHeight = WIDE_CARD_HEIGHT,
+            onClick = clickCallback,
+            onContextMenu = onItemContextMenu?.let { callback -> { callback(item) } },
+        )
+    } else {
+        VideoItem(
+            modifier = cardModifier,
+            state = item,
+            onClick = clickCallback,
+            onContextMenu = onItemContextMenu?.let { callback -> { callback(item) } },
+        )
+    }
 }
+
+/** The season list's card: a 16:9 still, and short enough to leave the plot above it room. */
+private val WIDE_CARD_HEIGHT = 150.dp

@@ -421,13 +421,17 @@ private fun HeroColumn(
             enabled = isPageVisible && state.trailerUrl == null,
             // `fill = false`: it may take everything that is left, but a short plot takes only what
             // it needs, so on a film the block still hugs its text instead of floating in a hole.
+            // As wide as the single-line rows, not as wide as the paragraph: the facts and the
+            // credits are meant to run over the artwork rather than wrap, and inside a 460 dp
+            // column they would have been cut instead.
             modifier = Modifier
-                .width(DESCRIPTION_MEASURE)
+                .fillMaxWidth(SIDE_TEXT_WIDTH_FRACTION)
                 .weight(1F, fill = false),
         ) {
             Text(
                 text = state.details.description,
                 style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.width(DESCRIPTION_MEASURE),
             )
             Spacer(modifier = Modifier.height(HERO_SPACING_SM))
             HeroLine(text = state.info.factsLine)
@@ -866,9 +870,10 @@ private val HERO_COMPACT_PADDING_BOTTOM = 8.dp
 private val DESCRIPTION_MEASURE = 460.dp
 
 /** The heading and one card, which is what leaves the hero its 306 dp on a 540 dp screen. */
-// The heading, then the row: 16 dp of padding above and below a 180 dp card. Measured on the
-// television at 234 dp, the row had 176 dp to give and the cards were clipped by four.
-private val SEASON_AREA_HEIGHT = 240.dp
+// The heading, then the row: 16 dp of padding above and below the card. At a 180 dp portrait card
+// this was 240 dp and the plot above it was left with under a line; a 16:9 still is 150 dp, and the
+// 32 dp that frees is what the plot reads in.
+private val SEASON_AREA_HEIGHT = 210.dp
 private const val SIDE_TEXT_WIDTH_FRACTION = 0.62F
 private const val HERO_LINE_ALPHA = 0.72F
 private const val TITLE_MAX_LINES = 3
