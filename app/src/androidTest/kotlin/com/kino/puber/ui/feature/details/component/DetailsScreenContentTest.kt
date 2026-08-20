@@ -46,14 +46,13 @@ internal class DetailsScreenContentTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun visibleEpisodePanelFocusesExactTargetInLaterSeason() {
+    fun episodeGridFocusesExactTargetInLaterSeason() {
         val episodes = episodes()
         composeRule.setContent {
             PuberTheme {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes,
-                        seasonsPanelVisible = true,
                         initialEpisodeFocusId = TARGET_EPISODE_ID,
                     ),
                     onAction = {},
@@ -80,7 +79,6 @@ internal class DetailsScreenContentTest {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes(),
-                        seasonsPanelVisible = false,
                         initialEpisodeFocusId = null,
                     ),
                     onAction = {},
@@ -106,7 +104,6 @@ internal class DetailsScreenContentTest {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes(),
-                        seasonsPanelVisible = false,
                         initialEpisodeFocusId = null,
                         title = HERO_TITLE,
                         description = HERO_DESCRIPTION,
@@ -138,7 +135,6 @@ internal class DetailsScreenContentTest {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes(),
-                        seasonsPanelVisible = false,
                         initialEpisodeFocusId = null,
                         description = HERO_DESCRIPTION,
                         factsLine = "",
@@ -154,13 +150,12 @@ internal class DetailsScreenContentTest {
     }
 
     @Test
-    fun visibleEpisodePanelWithoutTargetFocusesDefaultEpisode() {
+    fun episodeGridWithoutTargetFocusesDefaultEpisode() {
         composeRule.setContent {
             PuberTheme {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes(),
-                        seasonsPanelVisible = true,
                         initialEpisodeFocusId = null,
                     ),
                     onAction = {},
@@ -188,7 +183,6 @@ internal class DetailsScreenContentTest {
                 DetailsScreenContent(
                     state = content(
                         episodes = episodes(),
-                        seasonsPanelVisible = false,
                         initialEpisodeFocusId = null,
                         title = HERO_TITLE,
                         description = HERO_DESCRIPTION,
@@ -218,7 +212,6 @@ internal class DetailsScreenContentTest {
 
     private fun content(
         episodes: VideoGridUIState,
-        seasonsPanelVisible: Boolean,
         initialEpisodeFocusId: Int?,
         title: String = "Synthetic details",
         description: String = "",
@@ -258,7 +251,6 @@ internal class DetailsScreenContentTest {
             ),
             isInWatchlist = false,
             isWatched = false,
-            seasonsPanelVisible = seasonsPanelVisible,
             episodes = episodes,
             initialEpisodeFocusId = initialEpisodeFocusId,
             similarItems = similarItems,

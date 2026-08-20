@@ -77,6 +77,7 @@ import com.kino.puber.core.ui.uikit.component.Rating
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsMedia
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoGrid
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItem
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
@@ -87,11 +88,9 @@ import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
 import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
-import com.kino.puber.ui.feature.player.component.EpisodesPanel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val SEASONS_PANEL_FOCUS_DELAY_MS = 150L
 private const val DETAILS_BUTTONS_FOCUS_DELAY_MS = 100L
 private const val DETAILS_PAGE_FOCUS_DELAY_MS = 50L
 private const val CHEVRON_ALPHA = 0.5F
@@ -112,34 +111,13 @@ internal fun DetailsScreenContent(
         )
 
         is DetailsScreenState.Content -> {
-            val seasonsPanelFocusRequester = remember { FocusRequester() }
             var episodeContextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
-            LaunchedEffect(state.seasonsPanelVisible, state.initialEpisodeFocusId) {
-                if (state.seasonsPanelVisible && state.initialEpisodeFocusId == null) {
-                    delay(SEASONS_PANEL_FOCUS_DELAY_MS)
-                    try {
-                        seasonsPanelFocusRequester.requestFocus()
-                    } catch (_: Exception) {
-                    }
-                }
-            }
             Box(modifier = Modifier.fillMaxSize()) {
                 DetailsContentBody(
                     state = state,
                     onAction = onAction,
                     onEpisodeContextMenu = { episodeContextMenuItem = it },
                 )
-                if (state.episodes != null) {
-                    EpisodesPanel(
-                        visible = state.seasonsPanelVisible,
-                        episodes = state.episodes,
-                        initialFocusedItemId = state.initialEpisodeFocusId,
-                        onEpisodeSelected = { item -> onAction(DetailsAction.EpisodeSelected(item)) },
-                        onEpisodeContextMenu = { episodeContextMenuItem = it },
-                        allowFocusExit = episodeContextMenuItem != null,
-                        modifier = Modifier.focusRequester(seasonsPanelFocusRequester),
-                    )
-                }
                 EpisodeContextMenuDialog(
                     episode = episodeContextMenuItem,
                     onDismiss = { episodeContextMenuItem = null },
@@ -225,7 +203,6 @@ private fun DetailsContentBody(
                         state = state,
                         onAction = onAction,
                         onEpisodeContextMenu = onEpisodeContextMenu,
-                        seasonsPanelVisible = state.seasonsPanelVisible,
                         isPageVisible = isMainPageVisible,
                         // The chevron promises a page below. With the information page gone there
                         // is one only when the item has similar items, and this account's answers
@@ -287,35 +264,86 @@ private fun DetailsMainPage(
     state: DetailsScreenState.Content,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    seasonsPanelVisible: Boolean,
     isPageVisible: Boolean,
     showPageChevron: Boolean,
     hasSimilarItems: Boolean,
     onNextPageRequested: () -> Unit,
     scrollToMainPage: suspend () -> Unit,
 ) {
-    Box(modifier = modifier) {
-        VideoDetailsMedia(
-            modifier = Modifier.fillMaxSize(),
-            state = state.details,
-            trailerUrl = state.previewTrailerUrl,
-            onTrailerFinished = { onAction(DetailsAction.TrailerPreviewFinished) },
-        )
+    val episodes = state.episodes
+    if (episodes == null) {
+        Box(modifier = modifier) {
+            DetailsHero(
+                state = state,
+                onAction = onAction,
+                onEpisodeContextMenu = onEpisodeContextMenu,
+                isPageVisible = isPageVisible,
+                showPageChevron = showPageChevron,
+                hasSimilarItems = hasSimilarItems,
+                onNextPageRequested = onNextPageRequested,
+                scrollToMainPage = scrollToMainPage,
+            )
+        }
+        return
+    }
 
-        // Drawn after the media: the trailer is a SurfaceView and clears whatever the window painted
-        // before it, so only what comes later survives over a playing video.
-        HeroColumn(
-            state = state,
-            onAction = onAction,
-            onEpisodeContextMenu = onEpisodeContextMenu,
-            seasonsPanelVisible = seasonsPanelVisible,
-            isPageVisible = isPageVisible,
-            showPageChevron = showPageChevron,
-            hasSimilarItems = hasSimilarItems,
-            onNextPageRequested = onNextPageRequested,
-            scrollToMainPage = scrollToMainPage,
+    Column(modifier = modifier) {
+        Box(modifier = Modifier.fillMaxWidth().weight(1F)) {
+            DetailsHero(
+                state = state,
+                onAction = onAction,
+                onEpisodeContextMenu = onEpisodeContextMenu,
+                isPageVisible = isPageVisible,
+                showPageChevron = showPageChevron,
+                hasSimilarItems = hasSimilarItems,
+                onNextPageRequested = onNextPageRequested,
+                scrollToMainPage = scrollToMainPage,
+            )
+        }
+        VideoGrid(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SEASON_AREA_HEIGHT),
+            state = episodes,
+            rowsFillViewport = true,
+            initialFocusedItemId = state.initialEpisodeFocusId ?: state.currentEpisode?.id,
+            onItemClick = { episode -> onAction(DetailsAction.EpisodeSelected(episode)) },
+            onItemContextMenu = onEpisodeContextMenu,
         )
     }
+}
+
+/** The media still (or preview trailer) with the hero text drawn over it. */
+@Composable
+private fun DetailsHero(
+    state: DetailsScreenState.Content,
+    onAction: (UIAction) -> Unit,
+    onEpisodeContextMenu: (VideoItemUIState) -> Unit,
+    isPageVisible: Boolean,
+    showPageChevron: Boolean,
+    hasSimilarItems: Boolean,
+    onNextPageRequested: () -> Unit,
+    scrollToMainPage: suspend () -> Unit,
+) {
+    VideoDetailsMedia(
+        modifier = Modifier.fillMaxSize(),
+        state = state.details,
+        trailerUrl = state.previewTrailerUrl,
+        onTrailerFinished = { onAction(DetailsAction.TrailerPreviewFinished) },
+    )
+
+    // Drawn after the media: the trailer is a SurfaceView and clears whatever the window painted
+    // before it, so only what comes later survives over a playing video.
+    HeroColumn(
+        state = state,
+        onAction = onAction,
+        onEpisodeContextMenu = onEpisodeContextMenu,
+        isPageVisible = isPageVisible,
+        showPageChevron = showPageChevron,
+        hasSimilarItems = hasSimilarItems,
+        onNextPageRequested = onNextPageRequested,
+        scrollToMainPage = scrollToMainPage,
+    )
 }
 
 @Composable
@@ -323,7 +351,6 @@ private fun HeroColumn(
     state: DetailsScreenState.Content,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    seasonsPanelVisible: Boolean,
     isPageVisible: Boolean,
     showPageChevron: Boolean,
     hasSimilarItems: Boolean,
@@ -361,7 +388,7 @@ private fun HeroColumn(
             style = MaterialTheme.typography.bodySmall,
             // The main page stays composed while the similar-items page is on screen, so without
             // `isPageVisible` the text would keep animating out of sight underneath it.
-            enabled = isPageVisible && !state.seasonsPanelVisible && state.trailerUrl == null,
+            enabled = isPageVisible && state.trailerUrl == null,
             // `fill = false`: the description may take everything that is left, but a short plot
             // takes only what it needs, and the facts follow the text instead of floating at the
             // bottom of a hole. A long one still gets the whole remainder, and scrolls inside it.
@@ -380,7 +407,6 @@ private fun HeroColumn(
             onAction = onAction,
             currentEpisode = state.currentEpisode,
             onEpisodeContextMenu = onEpisodeContextMenu,
-            seasonsPanelVisible = seasonsPanelVisible,
             trailerVisible = state.trailerUrl != null,
             recoverActionFocus = isPageVisible,
             scrollToMainPage = scrollToMainPage,
@@ -424,7 +450,6 @@ private fun ActionButtonsRow(
     onAction: (UIAction) -> Unit,
     currentEpisode: VideoItemUIState?,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    seasonsPanelVisible: Boolean,
     trailerVisible: Boolean,
     recoverActionFocus: Boolean,
     scrollToMainPage: suspend () -> Unit,
@@ -434,9 +459,9 @@ private fun ActionButtonsRow(
 
     // Request a concrete child, not the Row container. TV focus can otherwise
     // stay on the previous card/details area and make OK look unresponsive.
-    LaunchedEffect(seasonsPanelVisible, trailerVisible, recoverActionFocus, buttons.size) {
+    LaunchedEffect(trailerVisible, recoverActionFocus, buttons.size) {
         delay(DETAILS_BUTTONS_FOCUS_DELAY_MS)
-        if (!seasonsPanelVisible && !trailerVisible && recoverActionFocus) {
+        if (!trailerVisible && recoverActionFocus) {
             scrollToMainPage()
             runCatching { firstButtonFocusRequester.requestFocus() }
         }
@@ -446,7 +471,7 @@ private fun ActionButtonsRow(
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .onFocusChanged { focusState ->
-                if (!seasonsPanelVisible && !trailerVisible && focusState.hasFocus) {
+                if (!trailerVisible && focusState.hasFocus) {
                     coroutineScope.launch { scrollToMainPage() }
                 }
             }
@@ -800,6 +825,9 @@ private val HERO_PADDING_START = 48.dp
 private val HERO_PADDING_TOP = 40.dp
 private val HERO_PADDING_BOTTOM = 24.dp
 private val DESCRIPTION_MEASURE = 460.dp
+
+/** The heading and one card, which is what leaves the hero its 306 dp on a 540 dp screen. */
+private val SEASON_AREA_HEIGHT = 234.dp
 private const val SIDE_TEXT_WIDTH_FRACTION = 0.62F
 private const val HERO_LINE_ALPHA = 0.72F
 private const val TITLE_MAX_LINES = 3

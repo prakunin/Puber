@@ -142,7 +142,6 @@ private val previewEpisodes = VideoGridUIState(
 )
 
 private fun previewSeriesContent(
-    seasonsPanelVisible: Boolean = false,
     trailerUrl: String? = null,
 ) = DetailsScreenState.Content(
     details = previewSeriesDetails,
@@ -150,7 +149,6 @@ private fun previewSeriesContent(
     buttons = previewSeriesButtons,
     isInWatchlist = true,
     isWatched = false,
-    seasonsPanelVisible = seasonsPanelVisible,
     episodes = previewEpisodes,
     trailerUrl = trailerUrl,
 )
@@ -220,15 +218,6 @@ private fun SeriesInWatchlistPreview() = PuberTheme {
 private fun MovieNotInWatchlistPreview() = PuberTheme {
     DetailsScreenContent(
         state = previewMovieContent(),
-        onAction = {},
-    )
-}
-
-@Preview(name = "Series — seasons panel open", device = TV_1080p)
-@Composable
-private fun SeasonsPanelPreview() = PuberTheme {
-    DetailsScreenContent(
-        state = previewSeriesContent(seasonsPanelVisible = true),
         onAction = {},
     )
 }

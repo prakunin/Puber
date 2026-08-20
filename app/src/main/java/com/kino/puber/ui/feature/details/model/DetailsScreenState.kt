@@ -18,7 +18,6 @@ internal sealed interface DetailsScreenState {
         val buttons: List<DetailsButtonUIState>,
         val isInWatchlist: Boolean,
         val isWatched: Boolean,
-        val seasonsPanelVisible: Boolean = false,
         val episodes: VideoGridUIState? = null,
         val currentEpisode: VideoItemUIState? = null,
         val initialEpisodeFocusId: Int? = null,

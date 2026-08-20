@@ -184,7 +184,7 @@ class DetailsVMTest {
     }
 
     @Test
-    fun historyEpisodeParamsOpenPanelWithExactEpisodeFocusTarget() {
+    fun historyEpisodeParamsSetExactEpisodeFocusTarget() {
         val target = DetailsEpisodeTarget(seasonNumber = 1, episodeNumber = 2)
         val mapped = content().copy(
             currentEpisode = videoItem(id = 101, seasonNumber = 1, episodeNumber = 2),
@@ -205,7 +205,6 @@ class DetailsVMTest {
         )
 
         val content = vm.testStateValue as DetailsScreenState.Content
-        assertTrue(content.seasonsPanelVisible)
         assertEquals(101, content.currentEpisode?.id)
         assertEquals(101, content.initialEpisodeFocusId)
     }

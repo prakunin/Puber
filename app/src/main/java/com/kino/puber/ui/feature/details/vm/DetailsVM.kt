@@ -123,11 +123,7 @@ internal class DetailsVM(
         }
         rendered = true
         val mapped = mapDetails(item = item, isInWatchlist = seeded)
-        updateViewState(
-            mapped.copy(
-                seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
-            ),
-        )
+        updateViewState(mapped)
         startTrailerPreview()
         loadSimilarItems()
         resolveWatchlistFlag(item)
@@ -272,7 +268,6 @@ internal class DetailsVM(
             mapped.copy(
                 isInWatchlist = isInWatchlist,
                 isWatched = isWatched ?: mapped.isWatched,
-                seasonsPanelVisible = state?.seasonsPanelVisible ?: false,
                 similarItems = state?.similarItems.orEmpty(),
                 trailerUrl = state?.trailerUrl,
                 previewTrailerUrl = state?.previewTrailerUrl,
@@ -315,9 +310,8 @@ internal class DetailsVM(
      * sound on.
      */
     private fun startTrailerPreview() {
-        val seasonsPanelUp = (stateValue as? DetailsScreenState.Content)?.seasonsPanelVisible == true
         val item = currentItem?.takeIf { it.trailer != null }
-        if (trailerPreviewOffered || seasonsPanelUp || item == null) return
+        if (trailerPreviewOffered || item == null) return
         if (!navPrefs.getAutoTrailerEnabled()) return
         trailerPreviewOffered = true
         previewTrailerJob?.cancel()
