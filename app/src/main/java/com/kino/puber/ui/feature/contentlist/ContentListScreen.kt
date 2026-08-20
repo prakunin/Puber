@@ -10,6 +10,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.paginator.Paginator
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
+import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.contentlist.content.ContentListScreenContent
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
 import com.kino.puber.ui.feature.contentlist.vm.ContentListRefreshCoordinator
@@ -41,6 +42,7 @@ internal class ContentListScreen(
     private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
         scope(named(scopeId)) {
             scopedOf(::ContentListInteractor)
+            scopedOf(::TrailerLinkInteractor)
             scopedOf(::ContentListRefreshCoordinator)
             scoped { VideoItemUIMapper(get(), get(), get()) }
             viewModel {
@@ -50,6 +52,7 @@ internal class ContentListScreen(
                     mapper = get(),
                     genreInteractor = get(),
                     navPrefs = get(),
+                    trailerLinks = get(),
                     contentListRefreshCoordinator = get(),
                     contentType = sections.firstOrNull()?.type,
                     heroConfigs = TabTypeConfig.heroConfigsFor(tabType),

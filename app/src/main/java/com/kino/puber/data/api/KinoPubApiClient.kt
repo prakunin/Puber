@@ -17,6 +17,7 @@ import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.api.network.meansHostUnreachable
 import com.kino.puber.data.api.config.UserAgentBuilder
 import com.kino.puber.data.api.models.ApiResponse
+import com.kino.puber.data.api.models.TrailerLinksResponse
 import com.kino.puber.data.api.models.ApiResponseList
 import com.kino.puber.data.api.models.Bookmark
 import com.kino.puber.data.api.models.BookmarkFolder
@@ -343,11 +344,15 @@ class KinoPubApiClient(
     }
 
     /**
-     * Get trailer URL
+     * The playable links for an item's trailer.
+     *
+     * The item payload itself carries a signed CDN link for a few titles and, for most, only a
+     * storage path such as `/trailers/d/02/....mp4`, which no player can open. This is where the
+     * signed link comes from. The response holds a list, one entry per available rendition.
      */
-    suspend fun getTrailerUrl(sid: String): Result<String> = apiCall {
+    suspend fun getTrailerLinks(id: Int): Result<TrailerLinksResponse> = apiCall {
         httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/trailer") {
-            parameter("sid", sid)
+            parameter("id", id)
         }
     }
 

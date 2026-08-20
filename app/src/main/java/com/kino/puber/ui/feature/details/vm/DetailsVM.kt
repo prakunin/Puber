@@ -21,12 +21,12 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
-import com.kino.puber.data.api.models.playableUrl
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
+import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsScreenParams
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
@@ -50,6 +50,7 @@ internal class DetailsVM(
     private val contentUriCodec: ContentUriCodec,
     private val contentSharer: ContentSharer,
     private val navPrefs: NavigationPreferencesRepository,
+    private val trailerLinks: TrailerLinkInteractor,
     override val errorHandler: ErrorHandler,
     private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<DetailsScreenState>(router) {
@@ -307,16 +308,19 @@ internal class DetailsVM(
     }
 
     private fun showTrailer() {
-        val trailerUrl = currentTrailerUrl() ?: return
+        val item = currentItem?.takeIf { it.trailer != null } ?: return
         stopTrailerPreview()
-        updateViewState<DetailsScreenState.Content> {
-            copy(trailerUrl = trailerUrl)
+        launch {
+            val trailerUrl = trailerLinks.resolve(item)
+            if (trailerUrl == null) {
+                showMessage(resources.getString(R.string.video_details_trailer_unavailable))
+            } else {
+                updateViewState<DetailsScreenState.Content> {
+                    copy(trailerUrl = trailerUrl)
+                }
+            }
         }
     }
-
-    private fun currentTrailerUrl(): String? =
-        currentItem?.trailer?.url?.takeIf(String::isNotBlank)
-            ?: currentItem?.trailer?.file?.takeIf(String::isNotBlank)
 
     /**
      * Starts the panel trailer the same way the catalogue does: a pause first, so opening an item
@@ -325,15 +329,14 @@ internal class DetailsVM(
      */
     private fun startTrailerPreview() {
         val seasonsPanelUp = (stateValue as? DetailsScreenState.Content)?.seasonsPanelVisible == true
-        // Not `currentTrailerUrl`: the Trailer button keeps its long-standing behaviour, but there
-        // is no point starting a preview on a URL no player can open.
-        val trailerUrl = currentItem?.trailer?.playableUrl()
-        if (trailerPreviewOffered || seasonsPanelUp || trailerUrl == null) return
+        val item = currentItem?.takeIf { it.trailer != null }
+        if (trailerPreviewOffered || seasonsPanelUp || item == null) return
         if (!navPrefs.getAutoTrailerEnabled()) return
         trailerPreviewOffered = true
         previewTrailerJob?.cancel()
         previewTrailerJob = launch {
             delay(TRAILER_PREVIEW_DELAY_MS)
+            val trailerUrl = trailerLinks.resolve(item) ?: return@launch
             updateViewState<DetailsScreenState.Content> { copy(previewTrailerUrl = trailerUrl) }
         }
     }

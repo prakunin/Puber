@@ -210,12 +210,18 @@ data class Trailer(
     val quality: String? = null,
 )
 
+@Serializable
+data class TrailerLinksResponse(
+    val status: Int? = null,
+    val trailer: List<Trailer>? = null,
+)
+
 /**
- * The trailer to hand a player, or null when there is nothing playable.
+ * The trailer to hand a player as it stands, or null when this object only names a path.
  *
  * Either field can arrive as a bare path -- `/trailers/d/02/....mp4` -- which a player resolves
- * against the filesystem and fails to open. Whatever host such a path belongs to, we do not know
- * it, so an item like that has no trailer as far as this app is concerned.
+ * against the filesystem and fails to open. The signed link for such a trailer has to be asked
+ * for; see `TrailerLinkInteractor`.
  */
 fun Trailer.playableUrl(): String? =
     listOfNotNull(url, file)

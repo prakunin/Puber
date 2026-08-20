@@ -11,10 +11,10 @@ import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.data.api.models.playableUrl
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.ContentListViewState
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -31,6 +31,7 @@ internal class ContentListVM(
     private val mapper: VideoItemUIMapper,
     private val genreInteractor: GenreInteractor,
     private val navPrefs: NavigationPreferencesRepository,
+    private val trailerLinks: TrailerLinkInteractor,
     private val contentListRefreshCoordinator: ContentListRefreshCoordinator,
     private val contentType: String? = null,
     private val heroConfigs: List<SectionConfig> = emptyList(),
@@ -105,8 +106,13 @@ internal class ContentListVM(
                 trailerGate.cancel()
                 return@launch
             }
-            val trailerUrl = details.trailer?.playableUrl()
-            if (trailerUrl == null || !navPrefs.getAutoTrailerEnabled()) {
+            // Most items name only a storage path for their trailer, so this can be a request of
+            // its own. It runs while the gate is still counting down, and the trailer is published
+            // the moment both are done.
+            val trailerUrl = details.trailer
+                ?.takeIf { navPrefs.getAutoTrailerEnabled() }
+                ?.let { trailerLinks.resolve(details) }
+            if (trailerUrl == null) {
                 trailerGate.cancel()
                 return@launch
             }

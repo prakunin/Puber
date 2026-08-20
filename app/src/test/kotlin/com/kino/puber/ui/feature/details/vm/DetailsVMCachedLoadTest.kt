@@ -34,6 +34,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import com.kino.puber.data.api.models.TrailerLinksResponse
+import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 
 class DetailsVMCachedLoadTest {
 
@@ -227,6 +229,17 @@ class DetailsVMCachedLoadTest {
         isWatched = false,
     )
 
+
+    /**
+     * A resolver that answers only from the item payload. A trailer given as a bare path goes to
+     * the API for a signed link, and this stands in for an API that has none to give.
+     */
+    private fun noTrailerLinks() = TrailerLinkInteractor(
+        mockk {
+            coEvery { getTrailerLinks(any()) } returns Result.success(TrailerLinksResponse())
+        }
+    )
+
     private fun createVM() = DetailsVM(
         router = router,
         params = DetailsScreenParams(itemId = 42),
@@ -237,6 +250,7 @@ class DetailsVMCachedLoadTest {
         contentUriCodec = ContentUriCodec(),
         contentSharer = mockk(relaxed = true),
         navPrefs = mockk(relaxed = true),
+        trailerLinks = noTrailerLinks(),
         errorHandler = errorHandler,
     )
 }

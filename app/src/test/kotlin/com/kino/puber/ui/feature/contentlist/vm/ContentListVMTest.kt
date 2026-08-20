@@ -17,9 +17,11 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Trailer
+import com.kino.puber.data.api.models.TrailerLinksResponse
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
@@ -400,6 +402,7 @@ class ContentListVMTest {
             interactor = interactor,
             mapper = mapper,
             genreInteractor = mockk(relaxed = true),
+            trailerLinks = noTrailerLinks(),
             navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
                 every { getNavigationMode() } returns NavigationMode.TopTabs
                 every { getAutoTrailerEnabled() } returns true
@@ -589,6 +592,7 @@ class ContentListVMTest {
         interactor = interactor,
         mapper = mapper,
         genreInteractor = mockk(relaxed = true),
+        trailerLinks = noTrailerLinks(),
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
             every { getNavigationMode() } returns NavigationMode.SideDrawer
         },
@@ -600,6 +604,7 @@ class ContentListVMTest {
         interactor = interactor,
         mapper = mapper,
         genreInteractor = mockk(relaxed = true),
+        trailerLinks = noTrailerLinks(),
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
             every { getNavigationMode() } returns NavigationMode.SideDrawer
         },
@@ -612,11 +617,22 @@ class ContentListVMTest {
         interactor = interactor,
         mapper = mapper,
         genreInteractor = mockk(relaxed = true),
+        trailerLinks = noTrailerLinks(),
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
             every { getNavigationMode() } returns NavigationMode.SideDrawer
             every { getAutoTrailerEnabled() } returns autoTrailerEnabled
         },
         contentListRefreshCoordinator = refreshCoordinator,
+    )
+
+    /**
+     * A resolver that answers only from the item payload. A trailer given as a bare path goes to
+     * the API for a signed link, and this stands in for an API that has none to give.
+     */
+    private fun noTrailerLinks() = TrailerLinkInteractor(
+        mockk {
+            coEvery { getTrailerLinks(any()) } returns Result.success(TrailerLinksResponse())
+        }
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")

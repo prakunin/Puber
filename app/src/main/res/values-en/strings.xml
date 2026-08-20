@@ -315,6 +315,7 @@
     <string name="video_details_button_watch_movie">Watch movie</string>
     <string name="video_details_button_watch_series">Watch series</string>
     <string name="video_details_button_trailer">Trailer</string>
+    <string name="video_details_trailer_unavailable">Trailer unavailable</string>
     <string name="video_details_button_select_season">Select season</string>
     <string name="video_details_button_add_to_watchlist">Watch later</string>
     <string name="video_details_button_add_to_bookmarks">Add to bookmarks</string>
