@@ -22,11 +22,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,10 +38,7 @@ import com.kino.puber.ui.feature.player.model.ResumeDialogState
 
 private const val DIALOG_ENTER_MS = 210
 private const val DIALOG_EXIT_MS = 150
-private const val DIALOG_BACKGROUND_ALPHA = 0.90f
 private const val SCRIM_MIDDLE_STOP = 0.48f
-
-private val DialogBackground = Color(0xFF0E1116)
 
 @Composable
 internal fun ResumeDialog(
@@ -112,8 +107,11 @@ private fun ResumeDialogCard(
     Column(
         modifier = Modifier
             .width(520.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(DialogBackground.copy(alpha = DIALOG_BACKGROUND_ALPHA))
+            .playerGlass(
+                shape = RoundedCornerShape(24.dp),
+                level = PlayerGlass.Strong,
+                elevation = 24.dp,
+            )
             .padding(horizontal = 30.dp, vertical = 26.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -139,9 +137,9 @@ private fun ResumeDialogCard(
                 onClick = onResume,
                 modifier = Modifier.focusRequester(resumeFocusRequester),
                 colors = ButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-                    contentColor = MaterialTheme.colorScheme.surface,
-                    focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+                    containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
                     focusedContentColor = MaterialTheme.colorScheme.surface,
                 ),
             ) {
@@ -152,8 +150,8 @@ private fun ResumeDialogCard(
                 colors = ButtonDefaults.colors(
                     containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
                     contentColor = MaterialTheme.colorScheme.onSurface,
-                    focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-                    focusedContentColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+                    focusedContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             ) {
                 Text(text = stringResource(R.string.player_resume_from_start))

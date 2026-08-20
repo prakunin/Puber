@@ -29,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -48,7 +47,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
 private const val PANEL_WIDTH_FRACTION = 0.34f
-private const val PANEL_BACKGROUND_ALPHA = 0.90f
 private const val PANEL_GRADIENT_START = 0.52f
 private const val PANEL_GRADIENT_ALPHA = 0.42f
 private const val PANEL_ENTER_DURATION_MS = 210
@@ -57,7 +55,6 @@ private const val PANEL_SLIDE_DIVISOR = 7
 
 private val PanelMaxWidth = 420.dp
 private val PanelCornerRadius = 20.dp
-private val PanelColor = Color(0xFF0E1116)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -101,8 +98,14 @@ internal fun PlayerSidePanel(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(topStart = PanelCornerRadius, bottomStart = PanelCornerRadius))
-                    .background(PanelColor.copy(alpha = PANEL_BACKGROUND_ALPHA))
+                    .playerGlass(
+                        shape = RoundedCornerShape(
+                            topStart = PanelCornerRadius,
+                            bottomStart = PanelCornerRadius,
+                        ),
+                        level = PlayerGlass.Strong,
+                        elevation = 20.dp,
+                    )
                     .focusProperties { onExit = { cancelFocusChange() } }
                     .focusGroup()
                     .padding(start = 28.dp, top = 32.dp, end = 32.dp, bottom = 28.dp),
@@ -156,15 +159,15 @@ internal fun PlayerPanelItem(
             .semantics { this.selected = selected },
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
             } else {
                 Color.Transparent
             },
             contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.94f),
-            focusedContentColor = MaterialTheme.colorScheme.surface,
-            pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
-            pressedContentColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f),
+            focusedContentColor = MaterialTheme.colorScheme.onSurface,
+            pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+            pressedContentColor = MaterialTheme.colorScheme.onSurface,
         ),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
     ) {

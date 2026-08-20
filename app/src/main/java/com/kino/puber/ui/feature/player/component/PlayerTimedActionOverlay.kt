@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -44,9 +43,6 @@ import androidx.tv.material3.Text
 
 private const val TIMED_ACTION_ENTER_MS = 190
 private const val TIMED_ACTION_EXIT_MS = 140
-private const val TIMED_ACTION_BACKGROUND_ALPHA = 0.88f
-
-private val TimedActionBackground = Color(0xFF0E1116)
 private val TimedActionMaxWidth = 300.dp
 
 private data class TimedActionPresentation(
@@ -106,8 +102,11 @@ internal fun PlayerTimedActionOverlay(
                 Row(
                     modifier = Modifier
                         .wrapContentWidth(Alignment.End)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(TimedActionBackground.copy(alpha = TIMED_ACTION_BACKGROUND_ALPHA))
+                        .playerGlass(
+                            shape = RoundedCornerShape(18.dp),
+                            level = PlayerGlass.Regular,
+                            elevation = 16.dp,
+                        )
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -163,8 +162,8 @@ private fun TimedActionButton(
                 Color.Transparent
             },
             contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.96f),
-            focusedContentColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+            focusedContentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
         if (iconOnly) {

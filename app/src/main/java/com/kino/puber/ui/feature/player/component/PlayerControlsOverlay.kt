@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 
 @Composable
@@ -166,7 +169,17 @@ private fun ControlsBottomBar(
     actions: PlayerControlActions,
     focusRequesters: PlayerControlFocusRequesters,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 24.dp)
+            .playerGlass(
+                shape = RoundedCornerShape(28.dp),
+                level = PlayerGlass.Regular,
+                elevation = 16.dp,
+            )
+            .padding(top = 14.dp, bottom = 4.dp),
+    ) {
         PlayerProgressBar(
             currentPosition = progressState.currentPosition,
             duration = progressState.duration,
@@ -198,4 +211,4 @@ private fun controlsScrimBrush(): Brush {
 }
 
 private const val TOP_SCRIM_ALPHA = 0.55f
-private const val BOTTOM_SCRIM_ALPHA = 0.78f
+private const val BOTTOM_SCRIM_ALPHA = 0.52f

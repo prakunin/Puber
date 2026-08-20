@@ -1,12 +1,12 @@
 package com.kino.puber.ui.feature.player.component
 
 import android.view.KeyEvent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -22,7 +22,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -59,22 +58,16 @@ internal fun PlayerInfoPanel(
         Column(
             modifier = Modifier
                 .focusRequester(focusRequester)
-                .border(
-                    width = 1.dp,
-                    color = if (isFocused) {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f)
+                .then(
+                    if (isFocused) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
+                            shape = focusShape,
+                        )
                     } else {
-                        Color.Transparent
+                        Modifier
                     },
-                    shape = focusShape,
-                )
-                .background(
-                    color = if (isFocused) {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
-                    } else {
-                        Color.Transparent
-                    },
-                    shape = focusShape,
                 )
                 .onPreviewKeyEvent { event ->
                     if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
@@ -88,62 +81,112 @@ internal fun PlayerInfoPanel(
                 }
                 .focusable(interactionSource = interactionSource)
                 .verticalScroll(scrollState)
-                .padding(4.dp),
+                .padding(2.dp),
         ) {
             InfoSection(
                 title = stringResource(R.string.player_info_section_video),
-                entries = entries.take(VIDEO_ENTRY_COUNT),
-            )
-            InfoSection(
-                title = stringResource(R.string.player_info_section_audio),
-                entries = entries.drop(VIDEO_ENTRY_COUNT).take(AUDIO_ENTRY_COUNT),
+                entries = entries.filter { it.section == PlayerInfoSection.Video },
             )
             InfoSection(
                 title = stringResource(R.string.player_info_section_playback),
-                entries = entries.drop(VIDEO_ENTRY_COUNT + AUDIO_ENTRY_COUNT),
+                entries = entries.filter { it.section == PlayerInfoSection.Playback },
+            )
+            InfoSection(
+                title = stringResource(R.string.player_info_section_audio),
+                entries = entries.filter { it.section == PlayerInfoSection.Audio },
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
-internal data class PlayerInfoEntry(val label: String, val value: String)
+internal enum class PlayerInfoSection {
+    Video,
+    Playback,
+    Audio,
+}
+
+internal data class PlayerInfoEntry(
+    val section: PlayerInfoSection,
+    val label: String,
+    val value: String,
+)
 
 @Composable
 internal fun playerInfoEntries(content: PlayerContentState): List<PlayerInfoEntry> {
     val unknown = stringResource(R.string.player_info_unknown)
     val debug = content.debugInfo
-    val pairs = listOf(
-        stringResource(R.string.player_info_quality) to
+    val rows = listOf(
+        InfoRow(
+            PlayerInfoSection.Video,
+            R.string.player_info_quality,
             content.qualities.getOrNull(content.selectedQualityIndex)?.label,
-        stringResource(R.string.player_info_resolution) to debug?.videoResolution,
-        stringResource(R.string.player_info_video_codec) to debug?.videoCodec,
-        stringResource(R.string.player_info_bitrate) to debug?.videoBitrate,
-        stringResource(R.string.player_info_frame_rate) to debug?.videoFrameRate,
-        stringResource(R.string.player_info_audio_track) to
-            content.audioTracks.getOrNull(content.selectedAudioTrackIndex)?.label,
-        stringResource(R.string.player_info_audio_codec) to
-            debug?.let { "${it.audioCodec} · ${it.audioChannels}" },
-        stringResource(R.string.player_info_source) to debug?.streamSource,
-        stringResource(R.string.player_info_buffer) to
-            debug?.let { "${it.bufferedDuration} · ${it.bufferedBytes}" },
-        stringResource(R.string.player_info_buffer_preset) to
+        ),
+        InfoRow(PlayerInfoSection.Video, R.string.player_info_resolution, debug?.videoResolution),
+        InfoRow(PlayerInfoSection.Video, R.string.player_info_bitrate, debug?.videoBitrate),
+        InfoRow(PlayerInfoSection.Video, R.string.player_info_frame_rate, debug?.videoFrameRate),
+        InfoRow(PlayerInfoSection.Playback, R.string.player_info_source, debug?.streamSource),
+        InfoRow(
+            PlayerInfoSection.Playback,
+            R.string.player_info_buffer,
+            cleanInfoParts(debug?.bufferedDuration, debug?.bufferedBytes),
+        ),
+        InfoRow(
+            PlayerInfoSection.Playback,
+            R.string.player_info_buffer_preset,
             content.bufferPresets.getOrNull(content.selectedBufferPresetIndex)?.label,
-        stringResource(R.string.player_info_dropped_frames) to debug?.droppedFrames,
+        ),
+        InfoRow(PlayerInfoSection.Playback, R.string.player_info_dropped_frames, debug?.droppedFrames),
+        InfoRow(PlayerInfoSection.Playback, R.string.player_info_video_codec, debug?.videoCodec),
+        InfoRow(
+            PlayerInfoSection.Playback,
+            R.string.player_info_audio_codec,
+            cleanInfoParts(debug?.audioCodec, debug?.audioChannels),
+        ),
+        InfoRow(
+            PlayerInfoSection.Audio,
+            R.string.player_info_audio_track,
+            content.audioTracks.getOrNull(content.selectedAudioTrackIndex)?.label,
+        ),
     )
-    return pairs.map { (label, value) ->
-        PlayerInfoEntry(label, value?.takeIf(String::isNotBlank) ?: unknown)
+    return rows.map { row ->
+        PlayerInfoEntry(
+            section = row.section,
+            label = stringResource(row.labelRes),
+            value = row.value?.takeIf(String::isNotBlank) ?: unknown,
+        )
     }
+}
+
+private class InfoRow(
+    val section: PlayerInfoSection,
+    val labelRes: Int,
+    val value: String?,
+)
+
+internal fun cleanInfoParts(vararg parts: String?): String? {
+    return parts
+        .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+        .joinToString(separator = " · ")
+        .takeIf(String::isNotEmpty)
 }
 
 @Composable
 private fun InfoSection(title: String, entries: List<PlayerInfoEntry>) {
     if (entries.isEmpty()) return
-    PlayerPanelSectionHeader(text = title)
-    entries.forEach { entry ->
-        PlayerPanelReadOnlyRow(label = entry.label, value = entry.value)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .playerGlass(
+                shape = RoundedCornerShape(16.dp),
+                level = PlayerGlass.Soft,
+            )
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    ) {
+        PlayerPanelSectionHeader(text = title)
+        entries.forEach { entry ->
+            PlayerPanelReadOnlyRow(label = entry.label, value = entry.value)
+        }
     }
 }
-
-private const val VIDEO_ENTRY_COUNT = 5
-private const val AUDIO_ENTRY_COUNT = 2

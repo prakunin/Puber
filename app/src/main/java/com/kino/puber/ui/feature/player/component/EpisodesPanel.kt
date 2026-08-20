@@ -61,12 +61,10 @@ private const val PANEL_HEIGHT_FRACTION = 0.64f
 private const val PANEL_ENTER_DURATION_MS = 240
 private const val PANEL_EXIT_DURATION_MS = 180
 private const val SCRIM_START = 0.55f
-private const val PANEL_GRADIENT_MIDDLE = 0.30f
 
 private val PanelMinHeight = 300.dp
 private val PanelMaxHeight = 400.dp
 private val EpisodeCornerRadius = 12.dp
-private val PanelColor = Color(0xFF0E1116)
 private val FullScreenPanelColor = Color(0xFF090B0F)
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -166,7 +164,11 @@ internal fun PlayerEpisodesPanel(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(episodesPanelBackground())
+                    .playerGlass(
+                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                        level = PlayerGlass.Strong,
+                        elevation = 20.dp,
+                    )
                     .focusProperties {
                         onExit = {
                             if (!allowFocusExit) cancelFocusChange()
@@ -295,19 +297,6 @@ private fun episodesPanelScrim(): Brush {
                 0f to scrim.copy(alpha = 0f),
                 SCRIM_START to scrim.copy(alpha = 0.04f),
                 1f to scrim.copy(alpha = 0.30f),
-            ),
-        )
-    }
-}
-
-@Composable
-private fun episodesPanelBackground(): Brush {
-    return remember {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to PanelColor.copy(alpha = 0f),
-                PANEL_GRADIENT_MIDDLE to PanelColor.copy(alpha = 0.30f),
-                1f to PanelColor.copy(alpha = 0.68f),
             ),
         )
     }

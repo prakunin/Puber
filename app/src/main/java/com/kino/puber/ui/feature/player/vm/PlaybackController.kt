@@ -307,7 +307,11 @@ internal class PlaybackController(
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
+            .setMediaSourceFactory(
+                // Covers the progressive fallback; the HLS source sets the same policy itself.
+                DefaultMediaSourceFactory(sourceFactory)
+                    .setLoadErrorHandlingPolicy(PlaybackErrorPolicy()),
+            )
             .setHandleAudioBecomingNoisy(true)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
@@ -355,22 +359,30 @@ internal class PlaybackController(
             .build()
     }
 
+    /**
+     * Points the player at another URL for the media it is already playing, at the position it
+     * already reached.
+     *
+     * Deliberately no `stop()`: that drops the player to idle and takes `DefaultLoadControl` with
+     * it, which resets the allocator and — because the allocator trims on reset — hands the whole
+     * pooled buffer back to the heap to be re-allocated a moment later. The buffered media itself
+     * cannot survive a source swap either way, but the pool can, and giving it up costs a GC pause
+     * at the one moment playback has nothing in reserve. Handing the position to `setMediaSource`
+     * rather than seeking afterwards saves a second buffering round-trip on top.
+     */
     override fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         val player = exoPlayer ?: return
         val savedPosition = player.currentPosition
         val wasPlaying = player.playWhenReady
         val savedTrackParams = player.trackSelectionParameters
 
-        player.stop()
-
         val mediaItem = buildMediaItem(stream.url, subtitles)
-        setMediaSource(player, mediaItem, stream.type)
+        setMediaSource(player, mediaItem, stream.type, startPositionMs = savedPosition)
         currentStreamUrl = stream.url
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
-        player.seekTo(savedPosition)
         player.playWhenReady = wasPlaying
     }
 
@@ -497,8 +509,14 @@ internal class PlaybackController(
     @OptIn(UnstableApi::class)
     private fun createDataSourceFactory(): DataSource.Factory {
         val builder = okHttpClient.newBuilder()
-            .connectTimeout(PLAYER_NETWORK_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(PLAYER_NETWORK_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(
+                PlaybackNetworkTuning.CONNECT_TIMEOUT_SECONDS,
+                java.util.concurrent.TimeUnit.SECONDS,
+            )
+            .readTimeout(
+                PlaybackNetworkTuning.READ_TIMEOUT_SECONDS,
+                java.util.concurrent.TimeUnit.SECONDS,
+            )
         if (useFastDns) {
             builder.dns(okhttp3.Dns.SYSTEM)
         }
@@ -512,16 +530,27 @@ internal class PlaybackController(
     }
 
     @OptIn(UnstableApi::class)
-    private fun setMediaSource(player: ExoPlayer, mediaItem: MediaItem, streamType: StreamType) {
+    private fun setMediaSource(
+        player: ExoPlayer,
+        mediaItem: MediaItem,
+        streamType: StreamType,
+        startPositionMs: Long? = null,
+    ) {
         val dsFactory = dataSourceFactory ?: return
-        if (streamType == StreamType.HLS) {
-            val hlsSource = HlsMediaSource.Factory(dsFactory)
+        val hlsSource = if (streamType == StreamType.HLS) {
+            HlsMediaSource.Factory(dsFactory)
                 .setAllowChunklessPreparation(true)
-                .setLoadErrorHandlingPolicy(HlsErrorPolicy())
+                .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
                 .createMediaSource(mediaItem)
-            player.setMediaSource(hlsSource)
         } else {
-            player.setMediaItem(mediaItem)
+            null
+        }
+        when {
+            hlsSource != null && startPositionMs != null ->
+                player.setMediaSource(hlsSource, startPositionMs)
+            hlsSource != null -> player.setMediaSource(hlsSource)
+            startPositionMs != null -> player.setMediaItem(mediaItem, startPositionMs)
+            else -> player.setMediaItem(mediaItem)
         }
     }
 
@@ -707,7 +736,6 @@ internal class PlaybackController(
         const val MAX_DURATION_FOR_QUALITY_DECREASE_MS = 15_000
         const val MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS = 25_000
         const val BANDWIDTH_FRACTION = 0.75f
-        const val PLAYER_NETWORK_TIMEOUT_SECONDS = 20L
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
         const val HTTP_NOT_FOUND = 404

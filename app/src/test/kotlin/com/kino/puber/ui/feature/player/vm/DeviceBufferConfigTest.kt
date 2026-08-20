@@ -50,8 +50,8 @@ internal class DeviceBufferConfigTest {
 
     @Test
     fun `auto scales past the flat 32 MiB on a capable device`() {
-        val onStick = DeviceBufferConfig.resolve(stick, BufferPreset.AUTO).targetBufferBytes
-        val onFlagship = DeviceBufferConfig.resolve(flagship, BufferPreset.AUTO).targetBufferBytes
+        val onStick = DeviceBufferConfig.resolve(stick, BufferPreset.AUTO).forwardBufferBytes
+        val onFlagship = DeviceBufferConfig.resolve(flagship, BufferPreset.AUTO).forwardBufferBytes
 
         assertEquals(24 * MIB, onStick)
         assertEquals(64 * MIB, onFlagship)

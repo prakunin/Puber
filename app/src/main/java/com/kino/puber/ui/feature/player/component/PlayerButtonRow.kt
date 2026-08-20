@@ -21,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -272,16 +271,20 @@ private fun ControlButton(
 
 @Composable
 private fun transparentButtonColors() = ButtonDefaults.colors(
-    containerColor = Color.Transparent,
-    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
-    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-    focusedContentColor = MaterialTheme.colorScheme.surface,
+    containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
+    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f),
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+    focusedContentColor = MaterialTheme.colorScheme.onSurface,
+    pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+    pressedContentColor = MaterialTheme.colorScheme.onSurface,
 )
 
 @Composable
 private fun selectedButtonColors() = ButtonDefaults.colors(
-    containerColor = Color.Transparent,
+    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
     contentColor = MaterialTheme.colorScheme.primary,
-    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-    focusedContentColor = MaterialTheme.colorScheme.surface,
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f),
+    focusedContentColor = MaterialTheme.colorScheme.onSurface,
+    pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+    pressedContentColor = MaterialTheme.colorScheme.onSurface,
 )
