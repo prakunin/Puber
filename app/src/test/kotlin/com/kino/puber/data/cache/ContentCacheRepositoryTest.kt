@@ -229,6 +229,25 @@ class ContentCacheRepositoryTest {
     }
 
     @Test
+    fun firstUseRemovesLegacyCacheRowsWithoutTouchingUnrelatedStorage() = runTest {
+        val legacyKeys = listOf(
+            "home:hot",
+            "item:7",
+            "similar:7",
+            "section:popular",
+            "watchlist:subscribed",
+            "history:1",
+        )
+        legacyKeys.forEach { key -> store.write(key, "legacy", updatedAt = now) }
+        store.write("unrelated", "keep", updatedAt = now)
+
+        subject.getPayload("probe", String.serializer(), 10.minutes) { "fresh" }
+
+        legacyKeys.forEach { key -> assertNull(store.read(key), key) }
+        assertEquals("keep", store.read("unrelated")?.payload)
+    }
+
+    @Test
     fun anInvalidationCrossingADetailsWriteIsNotUndoneByIt() = runTest {
         subject.observeItemDetails(7) { item(7).copy(plot = "Fresh") }.toList()
         // The bookmark toggle lands while the revalidation's row is already in the database but its

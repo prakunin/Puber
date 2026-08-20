@@ -538,6 +538,22 @@ class ContentListVMTest {
     }
 
     @Test
+    fun focusLeavingBeforeThePreviewJobStarts_neverPublishesTheTrailer() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        // Do not run the test dispatcher between these actions: this is the window where the
+        // DEFAULT-start coroutine has not assigned trailerGateJob yet.
+        vm.onAction(ContentListAction.TrailerPreviewStopped)
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(42, vm.testStateValue.selectedItem.id)
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    @Test
     fun trailerPreviewFinishedDuringTheCountdown_cancelsTheGate() {
         coEvery { interactor.getItemDetails(42) } returns
             item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))

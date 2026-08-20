@@ -607,6 +607,37 @@ class CachedFeedTest {
     }
 
     @Test
+    fun wipingTheStoreDuringALoadRetriesInsteadOfEmittingThePreviousSessionsValue() = runTest {
+        val subject = feed()
+        val firstLoaderStarted = CompletableDeferred<Unit>()
+        val releaseFirstLoader = CompletableDeferred<Unit>()
+        var loaderCalls = 0
+        val loading = async {
+            subject.load("k") {
+                loaderCalls++
+                if (loaderCalls == 1) {
+                    firstLoaderStarted.complete(Unit)
+                    releaseFirstLoader.await()
+                    "previous session"
+                } else {
+                    "current session"
+                }
+            }.toList()
+        }
+        firstLoaderStarted.await()
+
+        store.clear()
+        releaseFirstLoader.complete(Unit)
+
+        assertEquals(
+            listOf(Cached.Value("current session", isStale = false, updatedAt = now)),
+            loading.await(),
+        )
+        assertEquals(2, loaderCalls)
+        assertEquals("\"current session\"", store.read("k")?.payload)
+    }
+
+    @Test
     fun aLoaderThatLandsAfterAWipeCannotRefillTheMemoryTier() = runTest {
         // The other half of the same hole. The generation check at the top of load() fires once per
         // generation, so a load that consumes it leaves a leader still out on the network free to

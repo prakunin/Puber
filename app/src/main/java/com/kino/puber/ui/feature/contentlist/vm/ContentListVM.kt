@@ -42,6 +42,7 @@ internal class ContentListVM(
     private var focusedItemJob: Job? = null
     private var trailerGateJob: Job? = null
     private var heroLoadJob: Job? = null
+    private var trailerPreviewRequestId = 0L
 
     override fun onStart() {
         val isTopTabs = navPrefs.getNavigationMode() == NavigationMode.TopTabs
@@ -85,6 +86,7 @@ internal class ContentListVM(
     private fun onItemFocused(item: VideoItemUIState) {
         if (!stateValue.showDetailPanel) return
         focusedItemJob?.cancel()
+        val requestId = ++trailerPreviewRequestId
         updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
         focusedItemJob = launch {
             // Counts from the moment focus landed, in parallel with the request: waiting for the
@@ -96,13 +98,22 @@ internal class ContentListVM(
             val details = interactor.getItemDetails(item.id)
             updateViewState<ContentListViewState> { copy(selectedItem = mapper.mapDetailedItem(details)) }
 
+            // A stop can arrive before this DEFAULT-start coroutine has run far enough to publish
+            // trailerGateJob. Keep the details result above, but never let that unregistered gate
+            // publish playback after focus or the whole composition has already left.
+            if (requestId != trailerPreviewRequestId) {
+                trailerGate.cancel()
+                return@launch
+            }
             val trailerUrl = details.trailer?.playableUrl()
             if (trailerUrl == null || !navPrefs.getAutoTrailerEnabled()) {
                 trailerGate.cancel()
                 return@launch
             }
             trailerGate.await()
-            updateViewState<ContentListViewState> { copy(previewTrailerUrl = trailerUrl) }
+            if (requestId == trailerPreviewRequestId) {
+                updateViewState<ContentListViewState> { copy(previewTrailerUrl = trailerUrl) }
+            }
         }
     }
 
@@ -142,6 +153,7 @@ internal class ContentListVM(
      * onto a screen the user has already left.
      */
     private fun stopTrailerPreview() {
+        trailerPreviewRequestId++
         trailerGateJob?.cancel()
         updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }
     }

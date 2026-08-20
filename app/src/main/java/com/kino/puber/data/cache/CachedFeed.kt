@@ -174,20 +174,21 @@ class CachedFeed<V : Any>(
             emit(cached)
             if (!cached.isStale) return@flow
         }
-        // Set by the loader when what it produced must not be left behind as this key's value. It
-        // cannot act on that itself: the memory tier records a flight's value once loadFresh
-        // returns, so a removal performed inside the loader is put straight back — which is how an
-        // invalidation that crossed a details write ended up undone by the very write it crossed.
-        var discardValue = false
+        // Once the store generation moves, even a cached value emitted before the loader began is
+        // no longer a fallback: it belongs to the session or domain that was just cleared.
+        var cachedStillBelongsToCurrentGeneration = cached != null
         try {
-            val fresh = loadFresh(key = key, force = force, ttl = ttl) {
-                // Captured where the fetch begins, so it answers "was this key invalidated while I
-                // was away?". A retry the in-flight cache issues after an invalidation runs this
-                // lambda again and captures the new epoch, so legitimate reloads still write.
-                val epoch = epochOf(key)
-                // Stamped once, here, and carried by everyone who joins this flight — including a
-                // reader that arrives after the memory tier has held the value for a while.
-                Stamped(loader(), clock()).also { (value, updatedAt) ->
+            var fresh: Stamped<V>
+            var generationMoved: Boolean
+            do {
+                fresh = loadFresh(key = key, force = force, ttl = ttl) {
+                    // Captured where the fetch begins, so it answers "was this key invalidated while I
+                    // was away?". A retry the in-flight cache issues after an invalidation runs this
+                    // lambda again and captures the new epoch, so legitimate reloads still write.
+                    val epoch = epochOf(key)
+                    val value = loader()
+                    val updatedAt = clock()
+                    var discardValue = false
                     val settled = epochOf(key)
                     if (settled == epoch) {
                         store.write(
@@ -205,14 +206,32 @@ class CachedFeed<V : Any>(
                     } else if (settled.generation != epoch.generation) {
                         discardValue = true
                     }
+                    // The generation travels with the exact flight value that won. A cache wipe does
+                    // not directly invalidate an in-memory flight, so checking a shared flag here
+                    // would either publish that old-session value or accidentally discard a valid
+                    // retry issued after a key-level invalidation.
+                    Stamped(
+                        value = value,
+                        updatedAt = updatedAt,
+                        generation = epoch.generation,
+                        discardValue = discardValue,
+                    )
                 }
-            }
-            if (discardValue) detachSupersededValue(key)
+                if (fresh.discardValue) detachSupersededValue(key)
+                generationMoved = fresh.generation != store.generation
+                if (generationMoved) {
+                    // Nothing emitted before the wipe is a fallback for the new session. Retry the
+                    // loader under its generation; if that fails, surface the failure instead of
+                    // leaving the previous account's cached value on screen.
+                    detachSupersededValue(key)
+                    cachedStillBelongsToCurrentGeneration = false
+                }
+            } while (generationMoved)
             emit(Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt))
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
-            if (cached == null) throw error
+            if (!cachedStillBelongsToCurrentGeneration) throw error
             emit(Cached.RefreshFailed(error))
         }
     }
@@ -259,7 +278,7 @@ class CachedFeed<V : Any>(
     @Suppress("ReturnCount")
     suspend fun peek(key: String): Cached.Value<V>? {
         dropMemoryTierIfStoreWasWiped()
-        memory.get(key)?.let { current ->
+        readCurrentGenerationFromMemory(key)?.let { current ->
             return Cached.Value(current.value, isStale = false, updatedAt = current.updatedAt)
         }
         val epoch = epochOf(key)
@@ -275,7 +294,7 @@ class CachedFeed<V : Any>(
 
         val result = mutableMapOf<String, Cached.Value<V>>()
         val missing = keys.distinct().filter { key ->
-            val current = memory.get(key)
+            val current = readCurrentGenerationFromMemory(key)
             if (current != null) {
                 result[key] = Cached.Value(current.value, isStale = false, updatedAt = current.updatedAt)
             }
@@ -332,7 +351,11 @@ class CachedFeed<V : Any>(
             val settled = epochOf(key)
             when {
                 settled == epoch -> {
-                    memory.put(key, Stamped(value, updatedAt), ttl = HardCeiling)
+                    memory.put(
+                        key,
+                        Stamped(value, updatedAt, generation = epoch.generation),
+                        ttl = HardCeiling,
+                    )
                     if (epochOf(key) != epoch) memory.remove(key)
                 }
                 settled.supersedesWrite(epoch) -> {
@@ -450,7 +473,7 @@ class CachedFeed<V : Any>(
         // getOrPut, such an entry would answer the revalidation this call exists to perform. Asked
         // of the tier rather than tracked from the read above so that a second reader arriving after
         // the first has already displaced it joins that flight instead of displacing it again.
-        val memoryIsStale = memory.get(key)?.let { current ->
+        val memoryIsStale = readCurrentGenerationFromMemory(key)?.let { current ->
             clock() - current.updatedAt > ttl.inWholeMilliseconds
         } == true
         return if (force || memoryIsStale) {
@@ -464,7 +487,7 @@ class CachedFeed<V : Any>(
     // after the epoch it was read under had already been superseded.
     @Suppress("ReturnCount")
     private suspend fun readCached(key: String, force: Boolean, ttl: Duration): Cached.Value<V>? {
-        memory.get(key)?.let { current ->
+        readCurrentGenerationFromMemory(key)?.let { current ->
             // Asked of the stamp rather than of the tier: entries written by put/putAll or promoted
             // by peekAll are pinned to the hard ceiling regardless of the TTL a reader governs this
             // key by, so the tier's own expiry would report a week-old payload as fresh.
@@ -490,14 +513,24 @@ class CachedFeed<V : Any>(
         epoch: Epoch,
         ttl: Duration,
     ): Usable<V>? {
-        val promoted = Stamped(stored.value, stored.updatedAt)
+        val promoted = Stamped(stored.value, stored.updatedAt, generation = epoch.generation)
         if (memory.putIfAbsent(key, promoted, ttl = remainingFreshness(stored.updatedAt, ttl))) {
             return stored.takeIf { epochOf(key) == epoch }.also { accepted ->
                 if (accepted == null) memory.remove(key)
             }
         }
         if (epochOf(key) != epoch) return null
-        return memory.get(key)?.let { current -> Usable(current.value, current.updatedAt) } ?: stored
+        return readCurrentGenerationFromMemory(key)
+            ?.let { current -> Usable(current.value, current.updatedAt) }
+            ?: stored
+    }
+
+    /** Rejects the small window where an old in-flight value lands after another key saw the wipe. */
+    private fun readCurrentGenerationFromMemory(key: String): Stamped<V>? {
+        val current = memory.get(key) ?: return null
+        if (current.generation == store.generation) return current
+        memory.remove(key)
+        return null
     }
 
     @Suppress("ReturnCount")
@@ -527,7 +560,12 @@ class CachedFeed<V : Any>(
     private class Usable<V>(val value: V, val updatedAt: Long)
 
     /** A value together with the moment it was accepted, so the memory tier keeps ages too. */
-    private data class Stamped<V : Any>(val value: V, val updatedAt: Long)
+    private data class Stamped<V : Any>(
+        val value: V,
+        val updatedAt: Long,
+        val generation: Long,
+        val discardValue: Boolean = false,
+    )
 
     companion object {
         /**
