@@ -275,6 +275,7 @@ private fun DetailsMainPage(
         Box(modifier = modifier) {
             DetailsHero(
                 state = state,
+                compact = false,
                 onAction = onAction,
                 onEpisodeContextMenu = onEpisodeContextMenu,
                 isPageVisible = isPageVisible,
@@ -291,6 +292,7 @@ private fun DetailsMainPage(
         Box(modifier = Modifier.fillMaxWidth().weight(1F)) {
             DetailsHero(
                 state = state,
+                compact = true,
                 onAction = onAction,
                 onEpisodeContextMenu = onEpisodeContextMenu,
                 isPageVisible = isPageVisible,
@@ -317,6 +319,7 @@ private fun DetailsMainPage(
 @Composable
 private fun DetailsHero(
     state: DetailsScreenState.Content,
+    compact: Boolean,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
     isPageVisible: Boolean,
@@ -336,6 +339,7 @@ private fun DetailsHero(
     // before it, so only what comes later survives over a playing video.
     HeroColumn(
         state = state,
+        compact = compact,
         onAction = onAction,
         onEpisodeContextMenu = onEpisodeContextMenu,
         isPageVisible = isPageVisible,
@@ -349,6 +353,7 @@ private fun DetailsHero(
 @Composable
 private fun HeroColumn(
     state: DetailsScreenState.Content,
+    compact: Boolean,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
     isPageVisible: Boolean,
@@ -365,7 +370,13 @@ private fun HeroColumn(
             // the similar items became unreachable. The page deleted from between the two used to
             // catch this key.
             .onDirectionKey(Key.DirectionDown, enabled = hasSimilarItems, onKey = onNextPageRequested)
-            .padding(start = HERO_PADDING_START, top = HERO_PADDING_TOP, bottom = HERO_PADDING_BOTTOM),
+            .padding(
+                start = HERO_PADDING_START,
+                // A series shares the page with its season list, so the block's own breathing room
+                // is what gives way -- before the plot, which is the part worth reading.
+                top = if (compact) HERO_COMPACT_PADDING_TOP else HERO_PADDING_TOP,
+                bottom = if (compact) HERO_COMPACT_PADDING_BOTTOM else HERO_PADDING_BOTTOM,
+            ),
     ) {
         // `VideoItemUIMapper.formatTitle` has already split `Русское / Original` onto two lines, so
         // this one Text carries both. It is left-aligned here, unlike the centred panel it replaces.
@@ -824,6 +835,8 @@ private const val DETAILS_PAGES_WITH_SIMILAR = 2
 private val HERO_PADDING_START = 48.dp
 private val HERO_PADDING_TOP = 40.dp
 private val HERO_PADDING_BOTTOM = 24.dp
+private val HERO_COMPACT_PADDING_TOP = 20.dp
+private val HERO_COMPACT_PADDING_BOTTOM = 8.dp
 private val DESCRIPTION_MEASURE = 460.dp
 
 /** The heading and one card, which is what leaves the hero its 306 dp on a 540 dp screen. */

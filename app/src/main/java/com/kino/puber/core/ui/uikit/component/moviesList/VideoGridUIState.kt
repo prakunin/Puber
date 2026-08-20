@@ -139,7 +139,16 @@ private fun VideoGridContent(
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = PuberTheme.Defaults.VideoItemHeight),
+                // The player's list is taller than the screen and needs room under its last row.
+                // A viewport-paged list is exactly as tall as the screen, and that padding would be
+                // subtracted from every item's height instead: with a 234 dp area and 180 dp of it
+                // spoken for, `fillParentMaxHeight` hands each season 54 dp and the cards are
+                // squeezed from 180 dp to 48.
+                contentPadding = if (rowsFillViewport) {
+                    PaddingValues()
+                } else {
+                    PaddingValues(bottom = PuberTheme.Defaults.VideoItemHeight)
+                },
             ) {
                 if (rowsFillViewport) {
                     itemsIndexed(
