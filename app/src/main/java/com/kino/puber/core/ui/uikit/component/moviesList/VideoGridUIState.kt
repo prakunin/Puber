@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -35,6 +37,7 @@ import com.kino.puber.core.ui.uikit.component.FadeGradient
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.ui.feature.contentlist.content.rememberFocusedListItemScroller
 
 @Immutable
 data class VideoGridUIState(
@@ -57,6 +60,10 @@ sealed interface VideoGridItemUIState {
  * @param detailsPrefetchEnabled whether this grid's cards open `DetailsScreen`. Off by default
  * because the grid is also the player's episode list, whose ids are episode ids: prefetching those
  * would call the item-details endpoint with an id that means something else entirely.
+ * @param rowsFillViewport when true, each [VideoGridItemUIState.Title] and the
+ * [VideoGridItemUIState.Items] that follows it are drawn as one list item that fills the viewport
+ * height, and focus landing in that row scrolls it to the top. Off by default, which is also the
+ * player's episode-list case: there rows keep their own height and sit one after another.
  */
 @Composable
 fun VideoGrid(
@@ -68,6 +75,7 @@ fun VideoGrid(
     enableTopSideGradient: Boolean = true,
     initialFocusedItemId: Int? = null,
     detailsPrefetchEnabled: Boolean = false,
+    rowsFillViewport: Boolean = false,
 ) {
     DetailsPrefetchSurface(enabled = detailsPrefetchEnabled) {
         VideoGridContent(
@@ -79,6 +87,7 @@ fun VideoGrid(
             enableTopSideGradient = enableTopSideGradient,
             initialFocusedItemId = initialFocusedItemId,
             detailsPrefetchEnabled = detailsPrefetchEnabled,
+            rowsFillViewport = rowsFillViewport,
         )
     }
 }
@@ -93,6 +102,7 @@ private fun VideoGridContent(
     enableTopSideGradient: Boolean,
     initialFocusedItemId: Int?,
     detailsPrefetchEnabled: Boolean,
+    rowsFillViewport: Boolean,
 ) {
     val lazyListState = rememberLazyListState()
     val gridFocus = rememberVideoGridFocusState(
@@ -111,6 +121,19 @@ private fun VideoGridContent(
         state.list.map { entry -> if (entry is VideoGridItemUIState.Items) order++ else NOT_A_ROW }
     }
 
+    // Sections are only drawn under rowsFillViewport, but the lookup they need — a row's order,
+    // keyed by rowKey rather than by its position in `sections` — is cheap to keep around
+    // unconditionally rather than worth guarding.
+    val sections = remember(state.list) { state.list.asSections() }
+    val rowOrderByKey = remember(state.list, rowOrders) {
+        buildMap {
+            state.list.forEachIndexed { index, entry ->
+                if (entry is VideoGridItemUIState.Items) put(entry.rowKey, rowOrders[index])
+            }
+        }
+    }
+    val onSectionFocused = rememberFocusedListItemScroller(lazyListState)
+
     PositionFocusedItemInLazyLayout {
         Box(modifier = modifier.fillMaxSize()) {
             LazyColumn(
@@ -118,47 +141,142 @@ private fun VideoGridContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = PuberTheme.Defaults.VideoItemHeight),
             ) {
-                itemsIndexed(state.list, key = { _, item ->
-                    when (item) {
-                        is VideoGridItemUIState.Title -> "title_${item.title}"
-                        is VideoGridItemUIState.Items -> "items_${item.rowKey}"
-                    }
-                }) { index, columnItem ->
-                    when (columnItem) {
-
-                        is VideoGridItemUIState.Title -> Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            text = columnItem.title,
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-
-                        is VideoGridItemUIState.Items -> VideoGridItems(
-                            items = columnItem,
-                            rowOrder = rowOrders[index],
+                if (rowsFillViewport) {
+                    itemsIndexed(
+                        sections,
+                        key = { _, s -> "section_${s.items?.rowKey ?: s.title?.title}" },
+                    ) { sectionIndex, section ->
+                        VideoGridSection(
+                            section = section,
+                            sectionIndex = sectionIndex,
+                            rowOrder = section.items?.let { rowOrderByKey[it.rowKey] } ?: NOT_A_ROW,
                             detailsPrefetchEnabled = detailsPrefetchEnabled,
-                            isTargetRow = columnItem.rowKey == gridFocus.rowFocus.focusedRowKey,
+                            isTargetRow = section.items?.rowKey == gridFocus.rowFocus.focusedRowKey,
                             initialFocusedItemId = initialFocusedItemId?.takeIf { itemId ->
-                                columnItem.items.any { it.id == itemId }
+                                section.items?.items?.any { it.id == itemId } == true
                             },
+                            gridFocus = gridFocus,
                             onItemClick = onItemClick,
                             onItemContextMenu = onItemContextMenu,
-                            onItemFocused = { item ->
-                                gridFocus.rowFocus.onRowFocused(columnItem.rowKey)
-                                onItemFocused(item)
-                            },
-                            onRowEmpty = {
-                                gridFocus.rowFocus.onRowEmpty(
-                                    gridFocus.rows.indexOfFirst { it.key == columnItem.rowKey }
-                                )
-                            },
+                            onItemFocused = onItemFocused,
+                            onSectionFocused = onSectionFocused,
                         )
+                    }
+                } else {
+                    itemsIndexed(state.list, key = { _, item ->
+                        when (item) {
+                            is VideoGridItemUIState.Title -> "title_${item.title}"
+                            is VideoGridItemUIState.Items -> "items_${item.rowKey}"
+                        }
+                    }) { index, columnItem ->
+                        when (columnItem) {
+
+                            is VideoGridItemUIState.Title -> Text(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                text = columnItem.title,
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+
+                            is VideoGridItemUIState.Items -> VideoGridItems(
+                                items = columnItem,
+                                rowOrder = rowOrders[index],
+                                detailsPrefetchEnabled = detailsPrefetchEnabled,
+                                isTargetRow = columnItem.rowKey == gridFocus.rowFocus.focusedRowKey,
+                                initialFocusedItemId = initialFocusedItemId?.takeIf { itemId ->
+                                    columnItem.items.any { it.id == itemId }
+                                },
+                                onItemClick = onItemClick,
+                                onItemContextMenu = onItemContextMenu,
+                                onItemFocused = { item ->
+                                    gridFocus.rowFocus.onRowFocused(columnItem.rowKey)
+                                    onItemFocused(item)
+                                },
+                                onRowEmpty = {
+                                    gridFocus.rowFocus.onRowEmpty(
+                                        gridFocus.rows.indexOfFirst { it.key == columnItem.rowKey }
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
 
             VideoGridTopGradient(visible = enableTopSideGradient && showTopGradient)
+        }
+    }
+}
+
+/** A season heading and the episodes under it, drawn as one item so the pair cannot be split. */
+private data class GridSection(
+    val title: VideoGridItemUIState.Title?,
+    val items: VideoGridItemUIState.Items?,
+)
+
+private fun List<VideoGridItemUIState>.asSections(): List<GridSection> = buildList {
+    var pendingTitle: VideoGridItemUIState.Title? = null
+    this@asSections.forEach { entry ->
+        when (entry) {
+            is VideoGridItemUIState.Title -> {
+                if (pendingTitle != null) add(GridSection(pendingTitle, items = null))
+                pendingTitle = entry
+            }
+            is VideoGridItemUIState.Items -> {
+                add(GridSection(pendingTitle, entry))
+                pendingTitle = null
+            }
+        }
+    }
+    pendingTitle?.let { add(GridSection(it, items = null)) }
+}
+
+@Composable
+private fun LazyItemScope.VideoGridSection(
+    section: GridSection,
+    sectionIndex: Int,
+    rowOrder: Int,
+    detailsPrefetchEnabled: Boolean,
+    isTargetRow: Boolean,
+    initialFocusedItemId: Int?,
+    gridFocus: VideoGridFocusState,
+    onItemClick: (VideoItemUIState) -> Unit,
+    onItemContextMenu: ((VideoItemUIState) -> Unit)?,
+    onItemFocused: (VideoItemUIState) -> Unit,
+    onSectionFocused: (Int) -> Unit,
+) {
+    Column(modifier = Modifier.fillParentMaxHeight()) {
+        section.title?.let { title ->
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                text = title.title,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+        val items = section.items
+        if (items != null) {
+            VideoGridItems(
+                items = items,
+                rowOrder = rowOrder,
+                detailsPrefetchEnabled = detailsPrefetchEnabled,
+                isTargetRow = isTargetRow,
+                initialFocusedItemId = initialFocusedItemId,
+                onItemClick = onItemClick,
+                onItemContextMenu = onItemContextMenu,
+                onItemFocused = { item ->
+                    gridFocus.rowFocus.onRowFocused(items.rowKey)
+                    onSectionFocused(sectionIndex)
+                    onItemFocused(item)
+                },
+                onRowEmpty = {
+                    gridFocus.rowFocus.onRowEmpty(
+                        gridFocus.rows.indexOfFirst { it.key == items.rowKey },
+                    )
+                },
+            )
         }
     }
 }
