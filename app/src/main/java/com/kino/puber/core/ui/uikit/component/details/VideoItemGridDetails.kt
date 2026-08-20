@@ -54,17 +54,32 @@ private const val DescriptionWeight = 3F
 private const val PosterWeight = 5F
 private const val DescriptionWidthFraction = DescriptionWeight / (DescriptionWeight + PosterWeight)
 
-/** How much of the picture the full-bleed scrim still holds back under the last column of text. */
-private const val ScrimAlphaAtTextEdge = 0.80F
-
-/** How far across the panel that scrim has faded out completely. */
-private const val ScrimEndFraction = 0.62F
+/** How far the picture reaches into the description in the overlapping layout. */
+private const val MediaOverlapOfDescription = 1F / 3F
 
 /**
- * @param fullBleedMedia lays the still and the trailer across the whole panel and puts the
- * description on top of their left edge, the way Prime does it, instead of standing the two side
- * by side. Off by default: only the catalogue panel plays trailers, and the screens that show a
- * static poster read better with the picture in its own column.
+ * The picture is as wide as it can be while still stopping a third of the way into the
+ * description. Running it the whole width instead would scale a 16:9 frame to a panel nearer 3.5:1
+ * and throw away half its height; this keeps most of the frame.
+ */
+private const val MediaWidthFraction =
+    1F - DescriptionWidthFraction * (1F - MediaOverlapOfDescription)
+
+/** Where the description's edge falls across the picture, measured from the picture's own left. */
+private const val DescriptionEdgeInMedia =
+    (DescriptionWidthFraction - (1F - MediaWidthFraction)) / MediaWidthFraction
+
+/** How much of the picture the scrim still holds back under the last column of text. */
+private const val ScrimAlphaAtTextEdge = 0.80F
+
+/** How far across the picture that scrim has faded out completely. */
+private const val ScrimEndFraction = 0.45F
+
+/**
+ * @param fullBleedMedia lets the still and the trailer reach across most of the panel and under
+ * the right edge of the description, the way Prime does it, instead of standing the two side by
+ * side. Off by default: only the catalogue and details panels play trailers, and the screens that
+ * show a static poster read better with the picture in its own column.
  */
 @Composable
 fun VideoItemGridDetails(
@@ -78,7 +93,10 @@ fun VideoItemGridDetails(
     if (fullBleedMedia) {
         Box(modifier = modifier) {
             VideoDetailsPoster(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(MediaWidthFraction)
+                    .align(Alignment.CenterEnd),
                 imageUrl = state.imageUrl,
                 imageFallbackUrls = state.imageFallbackUrls,
                 trailerUrl = trailerUrl,
@@ -261,10 +279,9 @@ private fun VideoDetailsPoster(
         }
 
         if (fullBleed) {
-            // The description lies on top of the picture here, so the scrim is what keeps it
-            // readable: solid under the text column, then a long ramp so the picture emerges
-            // gradually instead of starting at a seam. It ends before the right half, which is
-            // therefore the trailer at full brightness.
+            // The description's last third lies on top of the picture, so the scrim is what keeps
+            // it readable: solid where the two meet, then a ramp well past the text so the picture
+            // emerges gradually instead of starting at a seam.
             val surface = MaterialTheme.colorScheme.surface
             Box(
                 modifier = Modifier
@@ -272,7 +289,7 @@ private fun VideoDetailsPoster(
                     .background(
                         brush = Brush.horizontalGradient(
                             0.00F to surface,
-                            DescriptionWidthFraction to surface.copy(alpha = ScrimAlphaAtTextEdge),
+                            DescriptionEdgeInMedia to surface.copy(alpha = ScrimAlphaAtTextEdge),
                             ScrimEndFraction to surface.copy(alpha = 0.0F),
                         )
                     )
