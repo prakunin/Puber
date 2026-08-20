@@ -27,12 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -75,11 +77,17 @@ private const val ScrimAlphaAtTextEdge = 0.80F
 /** How far across the picture that scrim has faded out completely. */
 private const val ScrimEndFraction = 0.45F
 
+/** The catalogue artwork and trailers are supplied as landscape 16:9 media. */
+private const val LandscapeMediaAspectRatio = 16F / 9F
+
 /**
  * @param fullBleedMedia lets the still and the trailer reach across most of the panel and under
  * the right edge of the description, the way Prime does it, instead of standing the two side by
  * side. Off by default: only the catalogue and details panels play trailers, and the screens that
  * show a static poster read better with the picture in its own column.
+ * @param expandMediaIntoContent keeps a playing trailer at full 16:9 and lets its bottom overflow
+ * behind the catalogue rows instead of cropping it to the height of the details panel. The static
+ * still keeps the panel's original bounds.
  */
 @Composable
 fun VideoItemGridDetails(
@@ -89,6 +97,7 @@ fun VideoItemGridDetails(
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     fullBleedMedia: Boolean = false,
+    expandMediaIntoContent: Boolean = false,
 ) {
     if (fullBleedMedia) {
         Box(modifier = modifier) {
@@ -99,6 +108,7 @@ fun VideoItemGridDetails(
                 state = state,
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
+                expandIntoContent = expandMediaIntoContent && trailerUrl != null,
             )
             // Drawn after the poster on purpose. The trailer is a `SurfaceView`, which clears
             // everything the window painted before it; only what comes later survives on top of a
@@ -139,7 +149,23 @@ fun VideoDetailsMedia(
     state: VideoDetailsUIState,
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
+    expandIntoContent: Boolean = false,
 ) {
+    if (expandIntoContent) {
+        ExpandedMediaLayout(modifier = modifier) {
+            VideoDetailsPoster(
+                modifier = Modifier,
+                imageUrl = state.imageUrl,
+                imageFallbackUrls = state.imageFallbackUrls,
+                trailerUrl = trailerUrl,
+                onTrailerFinished = onTrailerFinished,
+                fullBleed = true,
+                scaleTrailerToFit = true,
+            )
+        }
+        return
+    }
+
     Box(modifier = modifier) {
         VideoDetailsPoster(
             modifier = Modifier
@@ -152,6 +178,34 @@ fun VideoDetailsMedia(
             onTrailerFinished = onTrailerFinished,
             fullBleed = true,
         )
+    }
+}
+
+/**
+ * Reports the panel's original size to its parent while measuring the media itself at a full 16:9.
+ * Compose does not clip overflowing children by default, so the extra height continues behind the
+ * catalogue below; that later content is still drawn over it and keeps its normal focus geometry.
+ */
+@Composable
+private fun ExpandedMediaLayout(
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(
+        modifier = modifier,
+        content = content,
+    ) { measurables, constraints ->
+        val layoutWidth = constraints.maxWidth
+        val layoutHeight = constraints.maxHeight
+        val mediaWidth = (layoutWidth * MediaWidthFraction).toInt()
+        val mediaHeight = (mediaWidth / LandscapeMediaAspectRatio).toInt()
+        val media = measurables.single().measure(
+            Constraints.fixed(width = mediaWidth, height = mediaHeight),
+        )
+
+        layout(width = layoutWidth, height = layoutHeight) {
+            media.placeRelative(x = layoutWidth - mediaWidth, y = 0)
+        }
     }
 }
 
@@ -243,6 +297,7 @@ private fun VideoDetailsPoster(
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     fullBleed: Boolean = false,
+    scaleTrailerToFit: Boolean = false,
 ) {
     Box(
         // The panel is far wider than 16:9, so a still scaled to its width stands taller than the
@@ -277,6 +332,7 @@ private fun VideoDetailsPoster(
                 url = trailerUrl,
                 onFinished = onTrailerFinished,
                 onFirstFrameRendered = { trailerRendered = true },
+                scaleToFit = scaleTrailerToFit,
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(),

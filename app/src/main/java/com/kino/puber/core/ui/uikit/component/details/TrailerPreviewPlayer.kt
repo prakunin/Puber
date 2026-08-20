@@ -40,10 +40,16 @@ internal fun TrailerPreviewPlayer(
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
     onFirstFrameRendered: () -> Unit = {},
+    scaleToFit: Boolean = false,
 ) {
     val context = LocalContext.current
     val currentOnFinished by rememberUpdatedState(onFinished)
     val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
+    val playerResizeMode = if (scaleToFit) {
+        AspectRatioFrameLayout.RESIZE_MODE_FIT
+    } else {
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    }
     val exoPlayer = remember {
         ExoPlayer.Builder(context)
             .build()
@@ -111,9 +117,12 @@ internal fun TrailerPreviewPlayer(
         factory = { ctx ->
             PlayerView(ctx).apply {
                 useController = false
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                resizeMode = playerResizeMode
                 player = exoPlayer
             }
+        },
+        update = { playerView ->
+            playerView.resizeMode = playerResizeMode
         },
         modifier = modifier,
     )
