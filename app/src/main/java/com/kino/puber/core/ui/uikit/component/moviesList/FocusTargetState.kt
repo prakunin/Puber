@@ -317,13 +317,20 @@ internal fun rememberReconciledRowFocus(
 internal class VideoGridFocusState(
     val rows: List<FocusableRow>,
     val rowFocus: ReconciledRowFocusState,
+    /**
+     * The row the grid should be scrolled to when it first appears, named rather than numbered.
+     *
+     * An index would have to mean a position in whatever list the caller actually draws, and the
+     * grid draws two different ones: the entries as they come, or a season and its episodes merged
+     * into a single item. A key means the same row in both.
+     */
+    val initialRowKey: String?,
 )
 
 @Composable
 internal fun rememberVideoGridFocusState(
     list: List<VideoGridItemUIState>,
     initialFocusedItemId: Int?,
-    lazyListState: LazyListState,
 ): VideoGridFocusState {
     val initialColumnIndex = remember(list, initialFocusedItemId) {
         list.indexOfFirst { gridItem ->
@@ -343,10 +350,5 @@ internal fun rememberVideoGridFocusState(
         initialRowKey = initialRowKey,
         resetKey = initialFocusedItemId,
     )
-    LaunchedEffect(initialColumnIndex) {
-        if (initialColumnIndex >= 0) {
-            lazyListState.scrollToItem(initialColumnIndex)
-        }
-    }
-    return VideoGridFocusState(rows = rows, rowFocus = rowFocus)
+    return VideoGridFocusState(rows = rows, rowFocus = rowFocus, initialRowKey = initialRowKey)
 }

@@ -16,7 +16,9 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -116,7 +118,6 @@ private fun VideoGridContent(
     val gridFocus = rememberVideoGridFocusState(
         list = state.list,
         initialFocusedItemId = initialFocusedItemId,
-        lazyListState = lazyListState,
     )
 
     val showTopGradient by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset > 0 } }
@@ -133,6 +134,14 @@ private fun VideoGridContent(
     // keyed by rowKey rather than by its position in `sections` — is cheap to keep around
     // unconditionally rather than worth guarding.
     val sections = remember(state.list) { state.list.asSections() }
+
+    ScrollToInitialRow(
+        rowKey = gridFocus.initialRowKey,
+        rowsFillViewport = rowsFillViewport,
+        sections = sections,
+        list = state.list,
+        lazyListState = lazyListState,
+    )
     val rowOrderByKey = remember(state.list, rowOrders) {
         buildMap {
             state.list.forEachIndexed { index, entry ->
@@ -172,7 +181,11 @@ private fun VideoGridContent(
                 if (rowsFillViewport) {
                     itemsIndexed(
                         sections,
-                        key = { _, s -> "section_${s.items?.rowKey ?: s.title?.title}" },
+                        // Prefixed, like the default branch's keys: a heading's text and a row's
+                        // key live in the same namespace otherwise, and a collision throws.
+                        key = { index, s ->
+                            s.items?.let { "items_${it.rowKey}" } ?: "title_${s.title?.title}_$index"
+                        },
                     ) { sectionIndex, section ->
                         VideoGridSection(
                             section = section,
@@ -281,6 +294,33 @@ private fun List<VideoGridItemUIState>.asSections(): List<GridSection> = buildLi
         }
     }
     pendingTitle?.let { add(GridSection(it, items = null)) }
+}
+
+/**
+ * Puts the row the caller asked for at the top when the grid first appears.
+ *
+ * By key rather than by index, because the two modes draw different lists: the entries as they
+ * come, or a season merged with its episodes. An index taken from one and used on the other lands
+ * on the wrong season -- and on a short series it lands on the right one by accident, because
+ * `scrollToItem` clamps.
+ */
+@Composable
+private fun ScrollToInitialRow(
+    rowKey: String?,
+    rowsFillViewport: Boolean,
+    sections: List<GridSection>,
+    list: List<VideoGridItemUIState>,
+    lazyListState: LazyListState,
+) {
+    LaunchedEffect(rowKey, rowsFillViewport, sections, list) {
+        if (rowKey == null) return@LaunchedEffect
+        val target = if (rowsFillViewport) {
+            sections.indexOfFirst { section -> section.items?.rowKey == rowKey }
+        } else {
+            list.indexOfFirst { entry -> entry is VideoGridItemUIState.Items && entry.rowKey == rowKey }
+        }
+        if (target >= 0) lazyListState.scrollToItem(target)
+    }
 }
 
 @Composable

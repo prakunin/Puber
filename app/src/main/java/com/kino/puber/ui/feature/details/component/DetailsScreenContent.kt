@@ -844,7 +844,9 @@ private val HERO_COMPACT_PADDING_BOTTOM = 8.dp
 private val DESCRIPTION_MEASURE = 460.dp
 
 /** The heading and one card, which is what leaves the hero its 306 dp on a 540 dp screen. */
-private val SEASON_AREA_HEIGHT = 234.dp
+// The heading, then the row: 16 dp of padding above and below a 180 dp card. Measured on the
+// television at 234 dp, the row had 176 dp to give and the cards were clipped by four.
+private val SEASON_AREA_HEIGHT = 240.dp
 private const val SIDE_TEXT_WIDTH_FRACTION = 0.62F
 private const val HERO_LINE_ALPHA = 0.72F
 private const val TITLE_MAX_LINES = 3

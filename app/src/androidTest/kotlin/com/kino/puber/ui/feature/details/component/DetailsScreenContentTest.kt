@@ -27,7 +27,10 @@ import org.junit.Test
 
 private const val PRIMARY_ACTION = "Primary details action"
 private const val DEFAULT_EPISODE = "S1E1"
-private const val TARGET_EPISODE = "S8E4 target"
+// Deliberately a middle season, not the last one. With the target in season 8 of 8 this test
+// passed even while the initial scroll used an index from the wrong list: `scrollToItem` clamps,
+// and clamping happened to land on the right season. A middle season has nothing to clamp to.
+private const val TARGET_EPISODE = "S4E4 target"
 
 private const val HERO_TITLE = "Hero Title"
 private const val HERO_DESCRIPTION = "Short plot synopsis."
@@ -62,7 +65,7 @@ internal class DetailsScreenContentTest {
             }
         }
 
-        composeRule.onNodeWithText("Season 8").assertIsDisplayed()
+        composeRule.onNodeWithText("Season 4").assertIsDisplayed()
         composeRule.onNodeWithText(TARGET_EPISODE).assertIsDisplayed()
         composeRule.waitUntil {
             composeRule
@@ -76,11 +79,15 @@ internal class DetailsScreenContentTest {
 
     @Test
     fun ordinaryDetailsWithoutEpisodeTargetKeepsPrimaryActionFocused() {
+        // A film: no season list, so the buttons are the only thing that can hold focus. Passing a
+        // series here would contradict `episodeGridWithoutTargetFocusesDefaultEpisode` below, which
+        // asserts that a series hands focus to its episodes -- the two used to be told apart by the
+        // seasons panel's visibility flag, and that flag is gone.
         composeRule.setContent {
             PuberTheme {
                 DetailsScreenContent(
                     state = content(
-                        episodes = episodes(),
+                        episodes = null,
                         initialEpisodeFocusId = null,
                     ),
                     onAction = {},
@@ -242,9 +249,17 @@ internal class DetailsScreenContentTest {
         composeRule.onNodeWithText(PRIMARY_ACTION).assertIsDisplayed()
 
         composeRule.onNodeWithText(PRIMARY_ACTION).performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(FIRST_SEASON_EPISODE).assertIsDisplayed()
+        // Focused, not merely displayed: the season is on screen before the key is pressed, so
+        // asserting that it is visible would pass with the handover deleted.
+        composeRule.waitUntil {
+            composeRule
+                .onNodeWithText(FIRST_SEASON_EPISODE)
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.Focused) == true
+        }
+        composeRule.onNodeWithText(FIRST_SEASON_EPISODE).assertIsFocused()
     }
 
     @Test
@@ -319,7 +334,7 @@ internal class DetailsScreenContentTest {
     }
 
     private fun content(
-        episodes: VideoGridUIState,
+        episodes: VideoGridUIState?,
         initialEpisodeFocusId: Int?,
         title: String = "Synthetic details",
         description: String = "",
@@ -377,7 +392,7 @@ internal class DetailsScreenContentTest {
                                 seasonNumber = seasonNumber,
                                 episodeNumber = 1,
                             ),
-                            if (seasonNumber == 8) {
+                            if (seasonNumber == 4) {
                                 episode(
                                     id = TARGET_EPISODE_ID,
                                     seasonNumber = seasonNumber,
