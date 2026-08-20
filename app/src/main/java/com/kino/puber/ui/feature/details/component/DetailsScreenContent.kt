@@ -158,6 +158,7 @@ internal fun DetailsScreenContent(
                 )
                 TrailerOverlay(
                     url = state.trailerUrl,
+                    title = state.details.title,
                 )
             }
         }
