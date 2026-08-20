@@ -23,8 +23,8 @@ same scrim the catalogue uses.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ ПАДЕНИЕ СЭРА ДУГЛАСА УИТЕРФОРДА                                │
-│ The Fall of Sir Douglas Weatherford                            │
+│ Падение сэра Дугласа Уитерфорда                                │
+│ The Fall of Sir Douglas Weatherford        (one Text, 2 lines) │
 │ IMDb 6.1   KP 2.5                                              │
 │ 2026 · Комедия · Великобритания · 1 ч 35 мин ─────────┐        │
 │                                        (line runs over the art)│
@@ -54,8 +54,7 @@ picture.
 
 | Row | Content |
 | --- | --- |
-| Title | the Russian title, up to two lines |
-| Original title | the part after `/`, dimmed; omitted when there is none |
+| Title | the mapper has already split `Русское / Original` onto two lines; this row carries both |
 | Ratings | IMDb, KP, PUB — as now |
 | Meta | year · genres · countries · duration, or · seasons for a series |
 | Description | the plot |
