@@ -51,6 +51,14 @@ private const val PROGRESS_POLL_MS = 250L
 private const val SEEK_STEP_MS = 10_000L
 
 /**
+ * The progress bar can be asked for focus before it has been placed, and a request that arrives
+ * then throws rather than queueing. Everything the remote does depends on that focus landing, so
+ * the request is retried rather than attempted once.
+ */
+private const val FOCUS_ATTEMPTS = 20
+private const val FOCUS_RETRY_MS = 50L
+
+/**
  * The trailer at full screen, with the controls the player screen has: elapsed and remaining time,
  * a progress bar, seek on LEFT/RIGHT and play/pause on OK. They fade out on their own and any key
  * brings them back.
@@ -144,7 +152,12 @@ internal fun TrailerOverlay(
         }
 
         LaunchedEffect(Unit) {
-            runCatching { progressFocusRequester.requestFocus() }
+            repeat(FOCUS_ATTEMPTS) {
+                if (runCatching { progressFocusRequester.requestFocus() }.isSuccess) {
+                    return@LaunchedEffect
+                }
+                delay(FOCUS_RETRY_MS)
+            }
         }
 
         val togglePlayPause: () -> Unit = {

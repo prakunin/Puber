@@ -224,8 +224,10 @@ data class TrailerLinksResponse(
  * for; see `TrailerLinkInteractor`.
  */
 fun Trailer.playableUrl(): String? =
-    listOfNotNull(url, file)
-        .firstOrNull { it.isNotBlank() && it.startsWith("http", ignoreCase = true) }
+    listOfNotNull(url, file).firstOrNull { candidate ->
+        candidate.startsWith("http://", ignoreCase = true) ||
+            candidate.startsWith("https://", ignoreCase = true)
+    }
 
 @Serializable
 data class Tracklist(
