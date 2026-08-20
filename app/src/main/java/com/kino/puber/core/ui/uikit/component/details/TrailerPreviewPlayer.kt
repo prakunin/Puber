@@ -1,5 +1,7 @@
 package com.kino.puber.core.ui.uikit.component.details
 
+import android.view.Gravity
+import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +23,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.R as Media3UiR
 
 /**
  * The trailer that replaces the still in a detail panel once focus has rested on a card.
@@ -41,6 +44,7 @@ internal fun TrailerPreviewPlayer(
     modifier: Modifier = Modifier,
     onFirstFrameRendered: () -> Unit = {},
     scaleToFit: Boolean = false,
+    alignContentToTop: Boolean = false,
 ) {
     val context = LocalContext.current
     val currentOnFinished by rememberUpdatedState(onFinished)
@@ -122,12 +126,27 @@ internal fun TrailerPreviewPlayer(
             PlayerView(ctx).apply {
                 useController = false
                 resizeMode = playerResizeMode
+                updateContentGravity(alignContentToTop)
                 player = exoPlayer
             }
         },
         update = { playerView ->
             playerView.resizeMode = playerResizeMode
+            playerView.updateContentGravity(alignContentToTop)
         },
         modifier = modifier,
     )
+}
+
+private fun PlayerView.updateContentGravity(alignContentToTop: Boolean) {
+    val contentFrame = findViewById<AspectRatioFrameLayout>(Media3UiR.id.exo_content_frame) ?: return
+    val params = contentFrame.layoutParams as? FrameLayout.LayoutParams ?: return
+    val targetGravity = if (alignContentToTop) {
+        Gravity.TOP or Gravity.CENTER_HORIZONTAL
+    } else {
+        Gravity.CENTER
+    }
+    if (params.gravity != targetGravity) {
+        contentFrame.layoutParams = params.apply { gravity = targetGravity }
+    }
 }

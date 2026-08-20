@@ -85,9 +85,8 @@ private const val LandscapeMediaAspectRatio = 16F / 9F
  * the right edge of the description, the way Prime does it, instead of standing the two side by
  * side. Off by default: only the catalogue and details panels play trailers, and the screens that
  * show a static poster read better with the picture in its own column.
- * @param expandMediaIntoContent keeps a playing trailer at full 16:9 and lets its bottom overflow
- * behind the catalogue rows instead of cropping it to the height of the details panel. The static
- * still keeps the panel's original bounds.
+ * @param expandMediaIntoContent gives the still and trailer one top-aligned 16:9 frame whose bottom
+ * can overflow behind the catalogue rows instead of cropping either medium to the details panel.
  */
 @Composable
 fun VideoItemGridDetails(
@@ -108,7 +107,7 @@ fun VideoItemGridDetails(
                 state = state,
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
-                expandIntoContent = expandMediaIntoContent && trailerUrl != null,
+                expandIntoContent = expandMediaIntoContent,
             )
             // Drawn after the poster on purpose. The trailer is a `SurfaceView`, which clears
             // everything the window painted before it; only what comes later survives on top of a
@@ -161,6 +160,7 @@ fun VideoDetailsMedia(
                 onTrailerFinished = onTrailerFinished,
                 fullBleed = true,
                 scaleTrailerToFit = true,
+                alignMediaToTop = true,
             )
         }
         return
@@ -298,6 +298,7 @@ private fun VideoDetailsPoster(
     onTrailerFinished: () -> Unit = {},
     fullBleed: Boolean = false,
     scaleTrailerToFit: Boolean = false,
+    alignMediaToTop: Boolean = false,
 ) {
     Box(
         // The panel is far wider than 16:9, so a still scaled to its width stands taller than the
@@ -320,6 +321,7 @@ private fun VideoDetailsPoster(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(),
+            alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
             onError = {
                 if (urlIndex < imageUrls.lastIndex) {
                     urlIndex++
@@ -333,6 +335,7 @@ private fun VideoDetailsPoster(
                 onFinished = onTrailerFinished,
                 onFirstFrameRendered = { trailerRendered = true },
                 scaleToFit = scaleTrailerToFit,
+                alignContentToTop = alignMediaToTop,
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(),
@@ -353,6 +356,7 @@ private fun VideoDetailsPoster(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(),
+                    alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
                 )
             }
         }
@@ -415,6 +419,7 @@ private fun VideoDetailsPoster(
 private fun PosterStill(
     imageUrl: String?,
     modifier: Modifier,
+    alignment: Alignment = Alignment.Center,
     onError: () -> Unit = {},
 ) {
     AsyncImage(
@@ -426,6 +431,7 @@ private fun PosterStill(
         onError = { onError() },
         contentDescription = null,
         contentScale = ContentScale.FillWidth,
+        alignment = alignment,
     )
 }
 
