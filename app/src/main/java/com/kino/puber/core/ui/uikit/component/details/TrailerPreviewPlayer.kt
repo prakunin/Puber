@@ -99,6 +99,9 @@ internal fun TrailerPreviewPlayer(
         }
     }
 
+    // Stop the player directly before clearing the state. Once the app is in the background,
+    // Compose may defer the recomposition that removes this composable; waiting for onDispose in
+    // that case leaves ExoPlayer audible over the device launcher.
     // Coming back from the background into a running trailer is not what the user left.
     // `LifecycleAction` is not used here: it dispatches a `UIAction`, and `CommonAction` has no
     // no-op member to dispatch. The shape below is the one `AppForegroundReporter.kt:25-27` uses.
@@ -106,6 +109,7 @@ internal fun TrailerPreviewPlayer(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
+                exoPlayer.stop()
                 currentOnFinished()
             }
         }
