@@ -236,6 +236,7 @@ class DetailsVMCachedLoadTest {
         resources = FakeResourceProvider(),
         contentUriCodec = ContentUriCodec(),
         contentSharer = mockk(relaxed = true),
+        navPrefs = mockk(relaxed = true),
         errorHandler = errorHandler,
     )
 }

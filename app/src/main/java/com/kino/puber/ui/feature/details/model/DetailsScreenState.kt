@@ -24,6 +24,11 @@ internal sealed interface DetailsScreenState {
         val initialEpisodeFocusId: Int? = null,
         val similarItems: List<VideoItemUIState> = emptyList(),
         val trailerUrl: String? = null,
+        /**
+         * The trailer playing behind the description at the top of the screen, or null for the
+         * still. Distinct from [trailerUrl], which is the full-screen trailer the user asked for.
+         */
+        val previewTrailerUrl: String? = null,
     ) : DetailsScreenState
 }
 
@@ -82,4 +87,6 @@ internal sealed interface DetailsAction : UIAction {
     data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
     data object CloseSeasonsPanel : DetailsAction
     data object CloseTrailer : DetailsAction
+    data object TrailerPreviewFinished : DetailsAction
+    data object TrailerPreviewStopped : DetailsAction
 }

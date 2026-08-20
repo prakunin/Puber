@@ -22,6 +22,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
@@ -33,6 +34,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +48,7 @@ internal class DetailsVM(
     private val resources: ResourceProvider,
     private val contentUriCodec: ContentUriCodec,
     private val contentSharer: ContentSharer,
+    private val navPrefs: NavigationPreferencesRepository,
     override val errorHandler: ErrorHandler,
     private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<DetailsScreenState>(router) {
@@ -65,6 +68,13 @@ internal class DetailsVM(
     private val mutationMutex = Mutex()
     private var closeJob: Job? = null
     private var closing = false
+    private var previewTrailerJob: Job? = null
+
+    // The preview is offered once per visit to this screen. `rendered` is reset whenever a change
+    // made elsewhere forces a reload, and without this flag every such reload -- coming back from
+    // the player having marked the item watched, for one -- would start the trailer over on a
+    // screen the user has been looking at for a while.
+    private var trailerPreviewOffered = false
 
     override fun onStart() {
         loadData()
@@ -115,6 +125,7 @@ internal class DetailsVM(
                 seasonsPanelVisible = mapped.initialEpisodeFocusId != null,
             ),
         )
+        startTrailerPreview()
         loadSimilarItems()
         resolveWatchlistFlag(item)
     }
@@ -154,6 +165,8 @@ internal class DetailsVM(
             is DetailsAction.PlayClicked -> openPlayer(params.itemId)
             is DetailsAction.TrailerClicked -> showTrailer()
             is DetailsAction.CloseTrailer -> hideTrailer()
+            is DetailsAction.TrailerPreviewFinished -> stopTrailerPreview()
+            is DetailsAction.TrailerPreviewStopped -> stopTrailerPreview()
             is DetailsAction.SelectSeasonClicked -> showSeasonsPanel()
             is DetailsAction.WatchlistToggleClicked -> onWatchlistToggle()
             is DetailsAction.WatchedToggleClicked -> onWatchedToggle()
@@ -196,6 +209,7 @@ internal class DetailsVM(
     }
 
     private fun showSeasonsPanel() {
+        stopTrailerPreview()
         updateViewState<DetailsScreenState.Content> {
             copy(seasonsPanelVisible = true)
         }
@@ -273,6 +287,7 @@ internal class DetailsVM(
                 seasonsPanelVisible = state?.seasonsPanelVisible ?: false,
                 similarItems = state?.similarItems.orEmpty(),
                 trailerUrl = state?.trailerUrl,
+                previewTrailerUrl = state?.previewTrailerUrl,
             )
         )
     }
@@ -291,12 +306,43 @@ internal class DetailsVM(
     }
 
     private fun showTrailer() {
-        val trailerUrl = currentItem?.trailer?.url?.takeIf(String::isNotBlank)
-            ?: currentItem?.trailer?.file?.takeIf(String::isNotBlank)
-            ?: return
+        val trailerUrl = currentTrailerUrl() ?: return
+        stopTrailerPreview()
         updateViewState<DetailsScreenState.Content> {
             copy(trailerUrl = trailerUrl)
         }
+    }
+
+    private fun currentTrailerUrl(): String? =
+        currentItem?.trailer?.url?.takeIf(String::isNotBlank)
+            ?: currentItem?.trailer?.file?.takeIf(String::isNotBlank)
+
+    /**
+     * Starts the panel trailer the same way the catalogue does: a pause first, so opening an item
+     * and moving straight on -- into the episodes, the player, or back out -- never turns the
+     * sound on.
+     */
+    private fun startTrailerPreview() {
+        val seasonsPanelUp = (stateValue as? DetailsScreenState.Content)?.seasonsPanelVisible == true
+        val trailerUrl = currentTrailerUrl()
+        if (trailerPreviewOffered || seasonsPanelUp || trailerUrl == null) return
+        if (!navPrefs.getAutoTrailerEnabled()) return
+        trailerPreviewOffered = true
+        previewTrailerJob?.cancel()
+        previewTrailerJob = launch {
+            delay(TRAILER_PREVIEW_DELAY_MS)
+            updateViewState<DetailsScreenState.Content> { copy(previewTrailerUrl = trailerUrl) }
+        }
+    }
+
+    /**
+     * Every way the preview can end goes through here -- the end of the trailer, the screen
+     * scrolling past the panel, anything that navigates away -- so a pending start cannot publish
+     * a trailer onto a screen the user has already left.
+     */
+    private fun stopTrailerPreview() {
+        previewTrailerJob?.cancel()
+        updateViewState<DetailsScreenState.Content> { copy(previewTrailerUrl = null) }
     }
 
     private fun hideTrailer() {
@@ -463,6 +509,7 @@ internal class DetailsVM(
     }
 
     private fun openPlayer(itemId: Int, seasonNumber: Int? = null, episodeNumber: Int? = null) {
+        stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.player(itemId, seasonNumber, episodeNumber),
             requestCode = RESULT_CONTENT_CHANGED,
@@ -471,6 +518,7 @@ internal class DetailsVM(
     }
 
     private fun openDetails(itemId: Int) {
+        stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.details(itemId),
             requestCode = RESULT_CONTENT_CHANGED,
@@ -529,6 +577,7 @@ internal class DetailsVM(
 
     private fun closeDetails() {
         if (closeJob != null) return
+        stopTrailerPreview()
         closing = true
         router.addBackDispatcher(this)
         closeJob = launch {
@@ -618,5 +667,8 @@ internal class DetailsVM(
     private companion object {
         const val WATCHED_STATUS = 1
         const val UNWATCHED_STATUS = 0
+
+        /** The same pause the catalogue waits before a trailer takes over from the still. */
+        const val TRAILER_PREVIEW_DELAY_MS = 2000L
     }
 }

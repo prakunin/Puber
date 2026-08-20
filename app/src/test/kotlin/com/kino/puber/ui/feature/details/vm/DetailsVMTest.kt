@@ -17,6 +17,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
 import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
 import com.kino.puber.domain.interactor.details.MovieBookmarkUpdate
@@ -60,6 +61,7 @@ class DetailsVMTest {
     private lateinit var savedItemInteractor: SavedItemInteractor
     private lateinit var errorHandler: ErrorHandler
     private lateinit var contentSharer: ContentSharer
+    private lateinit var navPrefs: NavigationPreferencesRepository
 
     private val params = DetailsScreenParams(itemId = 42)
 
@@ -78,6 +80,9 @@ class DetailsVMTest {
         errorHandler = mockk {
             every { proceed(any()) } returns { }
             every { proceedInvoke(any(), any()) } returns Unit
+        }
+        navPrefs = mockk(relaxed = true) {
+            every { getAutoTrailerEnabled() } returns true
         }
 
         every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(testItem, isStale = false))
@@ -659,6 +664,7 @@ class DetailsVMTest {
         resources = FakeResourceProvider(),
         contentUriCodec = ContentUriCodec(),
         contentSharer = contentSharer,
+        navPrefs = navPrefs,
         errorHandler = errorHandler,
     )
 
@@ -745,6 +751,7 @@ class DetailsVMTest {
     )
 
     private val refreshedItem = testItem.copy(title = "Series refreshed")
+
 
     private val similarItem = Item(
         id = 100,

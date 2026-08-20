@@ -214,6 +214,13 @@ private fun DetailsContentBody(
         val currentPage by remember {
             derivedStateOf { pagerState.currentPage }
         }
+        // The panel lives on the main page alone, and the pager keeps its neighbour composed. Without
+        // this the trailer would carry on playing, with sound, underneath a page the user scrolled to.
+        LaunchedEffect(currentPage) {
+            if (currentPage != MAIN_PAGE_INDEX) {
+                onAction(DetailsAction.TrailerPreviewStopped)
+            }
+        }
         LaunchedEffect(pagerState.currentPage, state.info.castMembers.size, hasSimilarItems) {
             delay(DETAILS_PAGE_FOCUS_DELAY_MS)
             when (pagerState.currentPage) {
@@ -314,6 +321,9 @@ private fun DetailsMainPage(
                 .weight(DETAILS_CONTENT_WEIGHT),
             state = state.details,
             descriptionMaxLines = FIRST_PAGE_DESCRIPTION_LINES,
+            trailerUrl = state.previewTrailerUrl,
+            onTrailerFinished = { onAction(DetailsAction.TrailerPreviewFinished) },
+            fullBleedMedia = true,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -890,6 +900,7 @@ private fun DetailsContentSkeleton() {
                 .fillMaxWidth()
                 .weight(DETAILS_CONTENT_WEIGHT),
             state = VideoDetailsUIState.Loading,
+            fullBleedMedia = true,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
