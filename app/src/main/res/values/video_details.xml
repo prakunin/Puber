@@ -47,6 +47,10 @@
     <string name="video_details_info_quality">Качество</string>
     <string name="video_details_info_sound">Звук</string>
     <string name="video_details_info_sound_surround">Объёмный звук</string>
+    <string name="video_details_facts_audio_tracks">Дорожек: %1$d</string>
+    <string name="video_details_facts_subtitles">Субтитры: %1$d</string>
+    <string name="video_details_facts_director">Режиссёр: %1$s</string>
+    <string name="video_details_facts_cast">В ролях: %1$s</string>
     <string name="video_details_similar_title">Похожее</string>
     <string name="video_details_trailer_unavailable">Трейлер недоступен</string>
 </resources>

@@ -9,14 +9,18 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
 import com.kino.puber.data.api.models.Trailer
 import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DetailsScreenUIMapperTest {
 
+    private val resources = FakeResourceProvider()
     private val mapper = DetailsScreenUIMapper(
-        resources = FakeResourceProvider(),
+        resources = resources,
         itemMapper = VideoItemUIMapper(FakeResourceProvider()),
     )
 
@@ -57,7 +61,7 @@ class DetailsScreenUIMapperTest {
             )
         )
 
-        assertEquals("2", state.audioTracksRowValue())
+        assertTrue(state.info.factsLine.contains(resources.getString(R.string.video_details_facts_audio_tracks, 2)))
     }
 
     @Test
@@ -78,7 +82,61 @@ class DetailsScreenUIMapperTest {
             )
         )
 
-        assertEquals("2", state.audioTracksRowValue())
+        assertTrue(state.info.factsLine.contains(resources.getString(R.string.video_details_facts_audio_tracks, 2)))
+    }
+
+    @Test
+    fun `the facts line carries what the meta line does not`() {
+        val item = Item(
+            id = 1,
+            title = "Фильм / Movie",
+            type = ItemType.MOVIE,
+            videos = listOf(Video(id = 1, files = listOf(VideoFile(quality = "1080")))),
+            ac3 = 1,
+            ageRating = "16+",
+            voice = "Дубляж",
+        )
+
+        val facts = mapper.map(item, isInWatchlist = false).info.factsLine
+
+        assertTrue(facts.contains("1080")) { facts }
+        assertTrue(facts.contains("16+")) { facts }
+        assertTrue(facts.contains("Дубляж")) { facts }
+        // The meta line already carries these; they must not be repeated here.
+        assertFalse(facts.contains("2026")) { facts }
+    }
+
+    @Test
+    fun `an item with nothing to state has an empty facts line`() {
+        val item = Item(id = 1, title = "Фильм", type = ItemType.MOVIE)
+
+        assertEquals("", mapper.map(item, isInWatchlist = false).info.factsLine)
+    }
+
+    @Test
+    fun `the credits line names the director and the cast`() {
+        val item = Item(
+            id = 1,
+            title = "Фильм",
+            type = ItemType.MOVIE,
+            director = "Иван Иванов",
+            cast = "А Актёр, Б Актёр",
+        )
+
+        val credits = mapper.map(item, isInWatchlist = false).info.creditsLine
+
+        assertTrue(credits.contains("Иван Иванов")) { credits }
+        assertTrue(credits.contains("А Актёр")) { credits }
+    }
+
+    @Test
+    fun `a missing director leaves no dangling separator`() {
+        val item = Item(id = 1, title = "Фильм", type = ItemType.MOVIE, cast = "А Актёр")
+
+        val credits = mapper.map(item, isInWatchlist = false).info.creditsLine
+
+        assertFalse(credits.startsWith(" · ")) { credits }
+        assertFalse(credits.endsWith(" · ")) { credits }
     }
 
     @Test
@@ -124,12 +182,6 @@ class DetailsScreenUIMapperTest {
                 is DetailsButtonUIState.WatchedToggle -> button.action == action
             }
         }
-    }
-
-    private fun DetailsScreenState.Content.audioTracksRowValue(): String? {
-        return info.secondaryRows.firstOrNull { row ->
-            row.label == "string_${R.string.video_details_info_audio_tracks}"
-        }?.value
     }
 
     private fun audio(lang: String): Audio {

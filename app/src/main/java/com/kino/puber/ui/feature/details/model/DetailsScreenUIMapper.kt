@@ -243,66 +243,35 @@ internal class DetailsScreenUIMapper(
     private fun buildInfo(item: Item): DetailsInfoUIState {
         val details = itemMapper.mapDetailedItem(item)
         return DetailsInfoUIState(
-            description = item.plot.orEmpty(),
             ratings = details.ratings,
-            primaryRows = buildPrimaryRows(item),
-            secondaryRows = buildSecondaryRows(item),
-            castMembers = item.castMembers(),
+            factsLine = buildFactsLine(item),
+            creditsLine = buildCreditsLine(item),
         )
     }
 
-    private fun buildPrimaryRows(item: Item): List<DetailsInfoRowUIState> = buildList {
-        item.originalTitle()?.let { add(row(R.string.video_details_info_original_title, it)) }
-        item.year?.let { add(row(R.string.video_details_info_year, it.toString())) }
-        item.durationRowValue()?.let { add(row(it.first, it.second)) }
-        item.genres.orEmpty()
-            .joinToString(", ") { it.title }
-            .takeIf { it.isNotBlank() }
-            ?.let { add(row(R.string.video_details_info_genres, it)) }
-        item.countries.orEmpty()
-            .joinToString(", ") { it.title }
-            .takeIf { it.isNotBlank() }
-            ?.let { add(row(R.string.video_details_info_country, it)) }
-        item.ageRating?.takeIf { it.isNotBlank() }?.let { add(row(R.string.video_details_info_age_rating, it)) }
-    }
-
-    private fun buildSecondaryRows(item: Item): List<DetailsInfoRowUIState> = buildList {
-        item.voice?.takeIf { it.isNotBlank() }?.let { add(row(R.string.video_details_info_translation, it)) }
-        item.playbackAudioTrackCount().takeIf { it > 0 }?.let { count ->
-            add(row(R.string.video_details_info_audio_tracks, count.toString()))
-        }
-        item.subtitleCount().takeIf { it > 0 }?.let {
-            add(row(R.string.video_details_info_subtitles, it.toString()))
-        }
-        item.director?.takeIf { it.isNotBlank() }?.let { add(row(R.string.video_details_info_director, it)) }
-        item.displayQuality()?.let { add(row(R.string.video_details_info_quality, it)) }
+    private fun buildFactsLine(item: Item): String = buildList {
+        item.displayQuality()?.let(::add)
         if (item.ac3 == 1 || item.mediaItemsHaveSurroundSound()) {
-            add(row(R.string.video_details_info_sound, resources.getString(R.string.video_details_info_sound_surround)))
+            add(resources.getString(R.string.video_details_info_sound_surround))
         }
-    }
-
-    private fun row(labelRes: Int, value: String): DetailsInfoRowUIState {
-        return DetailsInfoRowUIState(
-            label = resources.getString(labelRes),
-            value = value,
-        )
-    }
-
-    private fun Item.originalTitle(): String? {
-        return title.substringAfter("/", missingDelimiterValue = "")
-            .trim()
-            .takeIf { it.isNotBlank() }
-    }
-
-    private fun Item.durationRowValue(): Pair<Int, String>? {
-        return if (type.isSeriesLike()) {
-            seasons?.size?.takeIf { it > 0 }?.let { R.string.video_details_info_seasons to it.toString() }
-        } else {
-            duration?.total?.let { total ->
-                R.string.video_details_info_duration to itemMapper.run { total.formatDurationWithResources() }
-            }
+        item.ageRating?.takeIf(String::isNotBlank)?.let(::add)
+        item.voice?.takeIf(String::isNotBlank)?.let(::add)
+        item.playbackAudioTrackCount().takeIf { it > 0 }?.let { count ->
+            add(resources.getString(R.string.video_details_facts_audio_tracks, count))
         }
-    }
+        item.subtitleCount().takeIf { it > 0 }?.let { count ->
+            add(resources.getString(R.string.video_details_facts_subtitles, count))
+        }
+    }.joinToString(FACT_SEPARATOR)
+
+    private fun buildCreditsLine(item: Item): String = buildList {
+        item.director?.takeIf(String::isNotBlank)?.let { director ->
+            add(resources.getString(R.string.video_details_facts_director, director))
+        }
+        item.castMembers().takeIf { it.isNotEmpty() }?.let { cast ->
+            add(resources.getString(R.string.video_details_facts_cast, cast.joinToString(", ")))
+        }
+    }.joinToString(FACT_SEPARATOR)
 
     private fun Item.subtitleCount(): Int {
         return videos.orEmpty().sumOf { video -> video.subtitles.orEmpty().size } +
@@ -363,5 +332,6 @@ internal class DetailsScreenUIMapper(
 
     private companion object {
         const val SURROUND_CHANNELS = 6
+        const val FACT_SEPARATOR = " · "
     }
 }

@@ -60,11 +60,11 @@ internal sealed interface DetailsButtonUIState {
 
 @Immutable
 internal data class DetailsInfoUIState(
-    val description: String,
     val ratings: List<RatingUIState>,
-    val primaryRows: List<DetailsInfoRowUIState>,
-    val secondaryRows: List<DetailsInfoRowUIState>,
-    val castMembers: List<String>,
+    /** Quality, sound, age rating, translation, track and subtitle counts, joined by " · ". */
+    val factsLine: String,
+    /** `Режиссёр: …` and `В ролях: …`, joined by " · ". */
+    val creditsLine: String,
 )
 
 @Immutable

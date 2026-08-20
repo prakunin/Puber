@@ -292,11 +292,9 @@ class DetailsVMTrailerPreviewTest {
     private fun content() = DetailsScreenState.Content(
         details = VideoDetailsUIState.Loading,
         info = DetailsInfoUIState(
-            description = "",
             ratings = emptyList(),
-            primaryRows = emptyList(),
-            secondaryRows = emptyList(),
-            castMembers = emptyList(),
+            factsLine = "",
+            creditsLine = "",
         ),
         buttons = emptyList(),
         isInWatchlist = false,
