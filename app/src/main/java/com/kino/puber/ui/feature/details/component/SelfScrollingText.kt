@@ -1,0 +1,75 @@
+package com.kino.puber.ui.feature.details.component
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
+
+/** Still at the top before anything moves, so the opening can be read. */
+private const val SCROLL_START_DELAY_MS = 3_000L
+
+/** Still at the bottom before the snap back. */
+private const val SCROLL_END_PAUSE_MS = 2_000L
+
+/** Slow enough to read along with. */
+private const val SCROLL_SPEED_DP_PER_SECOND = 18F
+
+private const val MILLIS_PER_SECOND = 1_000F
+
+/**
+ * Text that scrolls itself when it does not fit, and loops.
+ *
+ * The remote never drives this: the description is not focusable, and on a screen where LEFT and
+ * RIGHT move between buttons there is nothing to spare for scrolling text. So it either fits, or it
+ * shows itself in turn.
+ */
+@Composable
+internal fun SelfScrollingText(
+    text: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+
+    // `maxValue` is how much of the text is out of sight: zero means it fits, and nothing runs.
+    val overflow = scrollState.maxValue
+    LaunchedEffect(text, enabled, overflow) {
+        if (!enabled || overflow <= 0) {
+            scrollState.scrollTo(0)
+            return@LaunchedEffect
+        }
+        while (true) {
+            scrollState.scrollTo(0)
+            delay(SCROLL_START_DELAY_MS)
+            val distanceDp = with(density) { overflow.toDp().value }
+            val durationMs = (distanceDp / SCROLL_SPEED_DP_PER_SECOND * MILLIS_PER_SECOND).toInt()
+            scrollState.animateScrollTo(
+                value = overflow,
+                animationSpec = tween(durationMillis = durationMs, easing = LinearEasing),
+            )
+            delay(SCROLL_END_PAUSE_MS)
+        }
+    }
+
+    Box(modifier = modifier.clipToBounds()) {
+        Text(
+            text = text,
+            style = style,
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scrollState, enabled = false),
+        )
+    }
+}
