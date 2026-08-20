@@ -302,10 +302,23 @@ private fun DetailsMainPage(
                 scrollToMainPage = scrollToMainPage,
             )
         }
+        // Returning from the page below has to put focus back on the season the user left. The
+        // buttons no longer take it (see `recoverActionFocus`), so somebody must: the restorer
+        // remembers the card that had it, and this asks the group to take it back.
+        val seasonsFocusRequester = remember { FocusRequester() }
+        LaunchedEffect(isPageVisible) {
+            if (isPageVisible) {
+                delay(DETAILS_BUTTONS_FOCUS_DELAY_MS)
+                runCatching { seasonsFocusRequester.requestFocus() }
+            }
+        }
         VideoGrid(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SEASON_AREA_HEIGHT),
+                .height(SEASON_AREA_HEIGHT)
+                .focusRequester(seasonsFocusRequester)
+                .focusRestorer()
+                .focusGroup(),
             state = episodes,
             rowsFillViewport = true,
             initialFocusedItemId = state.initialEpisodeFocusId ?: state.currentEpisode?.id,
@@ -423,7 +436,10 @@ private fun HeroColumn(
             currentEpisode = state.currentEpisode,
             onEpisodeContextMenu = onEpisodeContextMenu,
             trailerVisible = state.trailerUrl != null,
-            recoverActionFocus = isPageVisible,
+            // A film's buttons are the only thing on the page that can hold focus, so taking it
+            // back when the page returns is right there. A series has a season list, and grabbing
+            // focus would drag the user off the season they left to go and look at «Похожее».
+            recoverActionFocus = isPageVisible && !compact,
             scrollToMainPage = scrollToMainPage,
         )
         if (showPageChevron) {
