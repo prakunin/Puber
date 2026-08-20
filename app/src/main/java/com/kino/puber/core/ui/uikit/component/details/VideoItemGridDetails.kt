@@ -92,16 +92,13 @@ fun VideoItemGridDetails(
 ) {
     if (fullBleedMedia) {
         Box(modifier = modifier) {
-            VideoDetailsPoster(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(MediaWidthFraction)
-                    .align(Alignment.CenterEnd),
-                imageUrl = state.imageUrl,
-                imageFallbackUrls = state.imageFallbackUrls,
+            // The same placement the details hero uses, from one definition: where the picture sits
+            // and how wide it is must not be able to drift between the two screens that show it.
+            VideoDetailsMedia(
+                modifier = Modifier.fillMaxSize(),
+                state = state,
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
-                fullBleed = true,
             )
             // Drawn after the poster on purpose. The trailer is a `SurfaceView`, which clears
             // everything the window painted before it; only what comes later survives on top of a
