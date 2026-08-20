@@ -310,6 +310,19 @@ internal class DetailsScreenContentTest {
         composeRule.onNodeWithText(SECOND_SEASON_EPISODE).performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.waitForIdle()
         composeRule.onNodeWithText(SIMILAR_ITEM_TITLE).assertIsDisplayed()
+
+        // And UP comes back to the episode that was left, not to the first season and not to the
+        // buttons. Without the handover this test would still have passed on the two assertions
+        // above, which is what the review pointed out.
+        composeRule.onNodeWithText(SIMILAR_ITEM_TITLE).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitUntil {
+            composeRule
+                .onNodeWithText(SECOND_SEASON_EPISODE)
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.Focused) == true
+        }
+        composeRule.onNodeWithText(SECOND_SEASON_EPISODE).assertIsFocused()
     }
 
     private fun twoSeasonEpisodes(): VideoGridUIState {

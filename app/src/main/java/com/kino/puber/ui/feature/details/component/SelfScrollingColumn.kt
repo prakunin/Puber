@@ -83,7 +83,12 @@ internal fun SelfScrollingColumn(
                 // Faded by taking the text's own alpha away at the edges rather than by painting a
                 // band of surface colour over it: the block sits on top of the artwork, and a band
                 // would be a rectangle of flat colour across the picture.
-                .verticalFadingEdges(enabled = overflow > 0)
+                .verticalFadingEdges(
+                    // Only an edge with something hidden behind it. At rest at the top, the first
+                    // line is whole; at rest at the bottom, so is the last.
+                    fadeTop = scrollState.value > 0,
+                    fadeBottom = scrollState.value < overflow,
+                )
                 .verticalScroll(scrollState, enabled = false),
             content = content,
         )
@@ -91,8 +96,8 @@ internal fun SelfScrollingColumn(
 }
 
 /** A hard edge across the middle of a line reads as a rendering fault; this says it continues. */
-private fun Modifier.verticalFadingEdges(enabled: Boolean): Modifier {
-    if (!enabled) return this
+private fun Modifier.verticalFadingEdges(fadeTop: Boolean, fadeBottom: Boolean): Modifier {
+    if (!fadeTop && !fadeBottom) return this
     return this
         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithContent {
@@ -102,10 +107,10 @@ private fun Modifier.verticalFadingEdges(enabled: Boolean): Modifier {
             val stop = fade / size.height
             drawRect(
                 brush = Brush.verticalGradient(
-                    0F to Color.Transparent,
+                    0F to if (fadeTop) Color.Transparent else Color.Black,
                     stop to Color.Black,
                     1F - stop to Color.Black,
-                    1F to Color.Transparent,
+                    1F to if (fadeBottom) Color.Transparent else Color.Black,
                 ),
                 blendMode = BlendMode.DstIn,
             )
