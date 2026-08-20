@@ -172,6 +172,16 @@ private fun DetailsContentBody(
         val coroutineScope = rememberCoroutineScope()
         val similarFirstItemFocusRequester = remember { FocusRequester() }
         val hasSimilarItems = state.similarItems.isNotEmpty()
+        val focusSimilarPage = remember {
+            {
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(SIMILAR_PAGE_INDEX)
+                    delay(DETAILS_PAGE_FOCUS_DELAY_MS)
+                    runCatching { similarFirstItemFocusRequester.requestFocus() }
+                }
+                Unit
+            }
+        }
         val focusMainPage = remember {
             {
                 coroutineScope.launch {
@@ -217,7 +227,12 @@ private fun DetailsContentBody(
                         onEpisodeContextMenu = onEpisodeContextMenu,
                         seasonsPanelVisible = state.seasonsPanelVisible,
                         isPageVisible = isMainPageVisible,
-                        showPageChevron = currentPage == MAIN_PAGE_INDEX,
+                        // The chevron promises a page below. With the information page gone there
+                        // is one only when the item has similar items, and this account's answers
+                        // are routinely empty.
+                        showPageChevron = currentPage == MAIN_PAGE_INDEX && hasSimilarItems,
+                        hasSimilarItems = hasSimilarItems,
+                        onNextPageRequested = focusSimilarPage,
                         scrollToMainPage = { pagerState.animateScrollToPage(MAIN_PAGE_INDEX) },
                     )
                     SIMILAR_PAGE_INDEX -> DetailsSimilarPage(
@@ -275,6 +290,8 @@ private fun DetailsMainPage(
     seasonsPanelVisible: Boolean,
     isPageVisible: Boolean,
     showPageChevron: Boolean,
+    hasSimilarItems: Boolean,
+    onNextPageRequested: () -> Unit,
     scrollToMainPage: suspend () -> Unit,
 ) {
     Box(modifier = modifier) {
@@ -294,6 +311,8 @@ private fun DetailsMainPage(
             seasonsPanelVisible = seasonsPanelVisible,
             isPageVisible = isPageVisible,
             showPageChevron = showPageChevron,
+            hasSimilarItems = hasSimilarItems,
+            onNextPageRequested = onNextPageRequested,
             scrollToMainPage = scrollToMainPage,
         )
     }
@@ -307,11 +326,18 @@ private fun HeroColumn(
     seasonsPanelVisible: Boolean,
     isPageVisible: Boolean,
     showPageChevron: Boolean,
+    hasSimilarItems: Boolean,
+    onNextPageRequested: () -> Unit,
     scrollToMainPage: suspend () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // The page below has nothing focusable while it is off screen -- its own focus bridge
+            // only wakes once it is the current page -- so DOWN from a button had nowhere to go and
+            // the similar items became unreachable. The page deleted from between the two used to
+            // catch this key.
+            .onDirectionKey(Key.DirectionDown, enabled = hasSimilarItems, onKey = onNextPageRequested)
             .padding(start = HERO_PADDING_START, top = HERO_PADDING_TOP, bottom = HERO_PADDING_BOTTOM),
     ) {
         // `VideoItemUIMapper.formatTitle` has already split `Русское / Original` onto two lines, so
@@ -336,9 +362,12 @@ private fun HeroColumn(
             // The main page stays composed while the similar-items page is on screen, so without
             // `isPageVisible` the text would keep animating out of sight underneath it.
             enabled = isPageVisible && !state.seasonsPanelVisible && state.trailerUrl == null,
+            // `fill = false`: the description may take everything that is left, but a short plot
+            // takes only what it needs, and the facts follow the text instead of floating at the
+            // bottom of a hole. A long one still gets the whole remainder, and scrolls inside it.
             modifier = Modifier
                 .width(DESCRIPTION_MEASURE)
-                .weight(1F),
+                .weight(1F, fill = false),
         )
         Spacer(modifier = Modifier.height(HERO_SPACING_SM))
         HeroLine(text = state.info.factsLine)
