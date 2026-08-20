@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -60,6 +61,26 @@ private const val INDICATOR_CORNER_PERCENT = 50
 private const val KEN_BURNS_DURATION_MS = 10_000
 private const val KEN_BURNS_DRIFT_PX = 20f
 
+/**
+ * Tells the caller which title the carousel is showing while it holds focus.
+ *
+ * Keyed on [items] as well as the page: a refresh can replace what this page shows without moving
+ * either the page or the focus, and a caller that heard nothing would go on holding the title that
+ * used to be here — and open it when the user pressed Select.
+ */
+@Composable
+private fun ReportFocusedHeroEffect(
+    items: List<HeroItemState>,
+    pagerState: PagerState,
+    isFocused: Boolean,
+    onFocusedItemChanged: (Int) -> Unit,
+) {
+    LaunchedEffect(items, pagerState.currentPage, isFocused) {
+        if (!isFocused) return@LaunchedEffect
+        items.getOrNull(pagerState.currentPage)?.let { onFocusedItemChanged(it.id) }
+    }
+}
+
 @Composable
 fun HeroCarousel(
     items: List<HeroItemState>,
@@ -95,11 +116,7 @@ fun HeroCarousel(
             }
         }
     }
-    LaunchedEffect(pagerState.currentPage, isFocused) {
-        if (isFocused) {
-            onFocusedItemChanged(items[pagerState.currentPage].id)
-        }
-    }
+    ReportFocusedHeroEffect(items, pagerState, isFocused, onFocusedItemChanged)
 
     Box(
         modifier = modifier

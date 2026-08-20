@@ -19,6 +19,15 @@ internal sealed interface HomeViewState {
     data class Content(
         val heroItems: List<HeroItemState> = emptyList(),
         val sections: List<HomeSectionState> = emptyList(),
+        /**
+         * Whether the section the carousel is built from has answered yet.
+         *
+         * Sections arrive independently, so an empty [heroItems] means one of two opposite things:
+         * this catalogue has no carousel, or the request behind it simply has not landed. Focus has
+         * to tell them apart — the rows may only claim it in the first case — and an empty list
+         * cannot.
+         */
+        val heroSettled: Boolean = false,
         override val apiDomainDialog: ApiDomainDialogState? = null,
     ) : HomeViewState
 

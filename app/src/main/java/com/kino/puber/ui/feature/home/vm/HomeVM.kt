@@ -94,6 +94,20 @@ internal class HomeVM(
     private var lastWatchedAt: Map<Int, Long> = emptyMap()
 
     /**
+     * Whether the [HomeSectionType.Hot] section — the one the hero carousel is drawn from — has
+     * answered for the catalogue currently on screen.
+     *
+     * Published so the screen can tell "this catalogue has no carousel" from "the carousel has not
+     * arrived yet". Only the first of those frees the rows to take focus; without the distinction
+     * whichever section answered first took it, and the carousel it belongs above was left
+     * scrolled off the top of a Home the user had only just opened.
+     *
+     * Set from the collector rather than from its `finally`, which also runs when [loadHome]
+     * cancels the previous job — a cancelled run has answered nothing.
+     */
+    private var heroSettled = false
+
+    /**
      * The content-cache generation the rows above were built under.
      *
      * A domain switch performed anywhere else in the app — the device settings screen is the one that
@@ -280,18 +294,38 @@ internal class HomeVM(
                 when (cached) {
                     is Cached.Value -> {
                         loadedSections[type] = cached.value
+                        if (type == HomeSectionType.Hot) {
+                            heroSettled = true
+                        }
                         run.publishedAnything = true
                         publishSections()
                     }
                     is Cached.RefreshFailed -> log(cached.error, "Failed to refresh $type")
                 }
             }
+            markHeroSettled(type)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             log(error, "Failed to load $type")
+            markHeroSettled(type)
         } finally {
             onSectionFinished(run)
+        }
+    }
+
+    /**
+     * Reports a hot section that finished without leaving a carousel behind, so the rows stop
+     * waiting for one. A section that failed has answered as definitively as one that succeeded.
+     */
+    private fun markHeroSettled(type: HomeSectionType) {
+        if (type != HomeSectionType.Hot || heroSettled) return
+        heroSettled = true
+        // Nothing else republishes on a section that produced no value, and a screen still on its
+        // spinner has [onSectionFinished] to decide its fate rather than a row list this would
+        // publish empty.
+        if (stateValue is HomeViewState.Content) {
+            publishSections()
         }
     }
 
@@ -364,6 +398,9 @@ internal class HomeVM(
         loadedSections.clear()
         loadedCollections = null
         savedOverrides.clear()
+        // The new catalogue's hot section has not answered, so its carousel is pending again rather
+        // than absent — the same distinction the flag exists to keep.
+        heroSettled = false
         loadedCacheGeneration = interactor.cacheGeneration
         if (stateValue is HomeViewState.Content) {
             updateViewState(HomeViewState.Loading(apiDomainDialog = currentDialogState()))
@@ -413,6 +450,7 @@ internal class HomeVM(
             HomeViewState.Content(
                 heroItems = videoItemMapper.mapHeroItems(hotItems.take(HERO_ITEMS_COUNT)),
                 sections = mapped,
+                heroSettled = heroSettled,
                 apiDomainDialog = currentDialogState(),
             )
         )

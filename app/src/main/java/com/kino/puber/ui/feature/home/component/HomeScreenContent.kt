@@ -19,10 +19,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -42,6 +45,7 @@ import com.kino.puber.core.ui.uikit.component.ApiDomainDialog
 import com.kino.puber.core.ui.uikit.component.DpadScrollAxis
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
+import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.TvSafeButton
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
@@ -53,6 +57,7 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
 import com.kino.puber.core.ui.uikit.component.moviesList.ReconciledRowFocusState
 import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledRowFocus
 import com.kino.puber.core.ui.uikit.state.rememberSessionLazyListState
@@ -162,14 +167,42 @@ private fun HomeContent(
     onCollectionClick: (Int, String) -> Unit,
     lazyListState: LazyListState,
 ) {
-    var focusedTarget by remember(state.heroItems, state.sections) {
-        mutableStateOf(state.defaultFocusedTarget())
+    // What Select would act on. Held for the composition rather than re-derived per publish: a
+    // refresh republishes both lists without moving the focus, and re-deriving there pointed Select
+    // back at the carousel while the user was still looking at the card they had walked to — OK
+    // then opened the hero instead of that card.
+    var focusedTarget by remember { mutableStateOf<HomeFocusedTarget?>(null) }
+    // Until something reports itself focused there is nothing to have been focused, so the screen
+    // falls back to whatever would hold focus if the user acted right now.
+    val selectTarget = remember(focusedTarget, state) {
+        focusedTarget?.reconciledWith(state) ?: state.defaultFocusedTarget()
     }
     // Which of the two regions — the carousel or the rows — the user was last in. Kept for the
     // session rather than for the composition, because a screen that is returned to has lost its
     // composition but not the position the user left, and that position is what the restore aims at.
     var rowsHeldFocus by rememberSaveable(saver = sessionMutableStateSaver()) { mutableStateOf(false) }
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
+    // Whether the user has pressed anything yet. Focus arriving in a row is not the same fact: with
+    // the carousel still in flight the rows are the only focusable thing on screen, so an ordinary
+    // focus search drops focus into one the moment it publishes, with nobody having asked for it.
+    var userDroveFocus by remember { mutableStateOf(false) }
+    val heroFocusRequester = remember { FocusRequester() }
+    // Asked once and answered once: the carousel either took the focus Home opens with or proved it
+    // cannot, and asking again on a later publish would drag focus off wherever the user has since
+    // gone.
+    var heroFocusResolved by remember { mutableStateOf(false) }
+    var heroRefusedFocus by remember { mutableStateOf(false) }
+    val contentFocusActive = LocalContentFocusActive.current
+    ClaimHeroFocusEffect(
+        heroItems = state.heroItems,
+        lazyListState = lazyListState,
+        enabled = !heroFocusResolved && !rowsHeldFocus && !userDroveFocus && contentFocusActive,
+        focusRequester = heroFocusRequester,
+        onOutcome = { claimed ->
+            heroFocusResolved = true
+            heroRefusedFocus = !claimed
+        },
+    )
     val rows = remember(state.sections) {
         state.sections.map { row ->
             FocusableRow(row.type.name, row.items.size)
@@ -184,18 +217,31 @@ private fun HomeContent(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
+                    // Declared first so it sees every key the screen gets, including the ones the
+                    // handlers below consume.
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            userDroveFocus = true
+                            // Select on a card the user never moved to still counts as leaving from
+                            // the rows, and a return has to restore to it rather than to the hero.
+                            if (selectTarget != null && selectTarget !is HomeFocusedTarget.Hero) {
+                                rowsHeldFocus = true
+                            }
+                        }
+                        false
+                    }
                     .focusRestorer()
                     .focusGroup()
                     .onTvContextMenuKey(
-                        enabled = focusedTarget is HomeFocusedTarget.Video,
+                        enabled = selectTarget is HomeFocusedTarget.Video,
                         onOpen = {
-                            contextMenuItem = (focusedTarget as? HomeFocusedTarget.Video)?.item
+                            contextMenuItem = (selectTarget as? HomeFocusedTarget.Video)?.item
                         },
                     )
                     .onSelectKeyClick(
-                        canHandle = { focusedTarget != null },
+                        canHandle = { selectTarget != null },
                         onClick = {
-                            when (val target = focusedTarget) {
+                            when (val target = selectTarget) {
                                 is HomeFocusedTarget.Collection -> onCollectionClick(target.id, target.title)
                                 is HomeFocusedTarget.Hero -> onHeroClick(target.id)
                                 is HomeFocusedTarget.Video -> onAction(CommonAction.ItemSelected(target.item))
@@ -214,7 +260,9 @@ private fun HomeContent(
                                 focusedTarget = HomeFocusedTarget.Hero(id)
                                 rowsHeldFocus = false
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(heroFocusRequester),
                         )
                     }
                 }
@@ -226,12 +274,25 @@ private fun HomeContent(
                     // loads, or the moment a refresh lands under a user who is looking at it. A user
                     // who left from the rows is a different matter: the row they left is exactly what
                     // a return has to restore to.
-                    rowsMayTakeFocus = state.heroItems.isEmpty() || rowsHeldFocus,
+                    //
+                    // Asked of a *settled* carousel rather than an empty one. Sections publish as
+                    // they answer, so on a fresh Home the carousel is empty for as long as its own
+                    // request is in flight — and every row that landed first read that emptiness as
+                    // its cue to take focus, leaving Home opened somewhere down the middle of
+                    // itself with the carousel scrolled off the top.
+                    rowsMayTakeFocus = (state.heroSettled && state.heroItems.isEmpty()) ||
+                        rowsHeldFocus ||
+                        heroRefusedFocus,
                     onAction = onAction,
                     onCollectionClick = onCollectionClick,
                     onFocusedTarget = {
                         focusedTarget = it
-                        rowsHeldFocus = true
+                        // Only a row the user steered into means "the user was last in the rows",
+                        // which is what a return restores to and what keeps the hero from claiming
+                        // the focus it opens with. A row that focus merely landed in means nothing.
+                        if (userDroveFocus) {
+                            rowsHeldFocus = true
+                        }
                     },
                     onContextMenuItem = { contextMenuItem = it },
                 )
@@ -244,6 +305,46 @@ private fun HomeContent(
         }
     }
 }
+
+/**
+ * Hands the carousel the focus a fresh Home opens with.
+ *
+ * The rows ask for theirs, the carousel never did, and the one auto-request the navigation host
+ * makes is spent 100ms after launch — while Home is still on its spinner — and never repeats. So
+ * whoever asked was who got it. Answered once either way: [heroItems] changes on every published
+ * section, and re-asking there would drag focus back off whatever the user had already moved to.
+ *
+ * Retried across a few frames rather than asked once, because the carousel is published in the same
+ * frame as the request and is not laid out yet when the effect first runs.
+ */
+@Composable
+private fun ClaimHeroFocusEffect(
+    heroItems: List<HeroItemState>,
+    lazyListState: LazyListState,
+    enabled: Boolean,
+    focusRequester: FocusRequester,
+    onOutcome: (claimed: Boolean) -> Unit,
+) {
+    LaunchedEffect(heroItems, enabled) {
+        if (!enabled || heroItems.isEmpty()) return@LaunchedEffect
+        // Focus landing in a row pulls that row up the screen, which leaves the carousel — the
+        // first item — outside the composed window, and a requester attached to nothing cannot be
+        // asked. Nobody has steered anything yet, so the list is free to go back to its top.
+        lazyListState.scrollToItem(0)
+        repeat(HERO_FOCUS_REQUEST_ATTEMPTS) {
+            withFrameNanos { }
+            if (runCatching { focusRequester.requestFocus() }.getOrDefault(false)) {
+                onOutcome(true)
+                return@LaunchedEffect
+            }
+        }
+        // Every attempt spent without the carousel taking it. Something has to be focusable on a TV
+        // screen, so the rows get their claim back rather than the screen sitting unreachable.
+        onOutcome(false)
+    }
+}
+
+private const val HERO_FOCUS_REQUEST_ATTEMPTS = 5
 
 private fun LazyListScope.homeSections(
     state: HomeViewState.Content,
@@ -291,7 +392,7 @@ private fun LazyListScope.homeSections(
                             if (section.type == HomeSectionType.Collections) {
                                 HomeFocusedTarget.Collection(id = item.id, title = item.title)
                             } else {
-                                HomeFocusedTarget.Video(item)
+                                HomeFocusedTarget.Video(item, section.type)
                             }
                         )
                     },
@@ -367,8 +468,40 @@ internal fun HomeSectionRow(
 
 private sealed interface HomeFocusedTarget {
     data class Hero(val id: Int) : HomeFocusedTarget
-    data class Video(val item: VideoItemUIState) : HomeFocusedTarget
+
+    /**
+     * [sectionType] is carried because the same title appears in several rows at once, drawn
+     * differently in each — the personal rows mark everything saved — and a card looked up by id
+     * alone would answer with whichever row happened to come first.
+     */
+    data class Video(val item: VideoItemUIState, val sectionType: HomeSectionType) : HomeFocusedTarget
     data class Collection(val id: Int, val title: String) : HomeFocusedTarget
+}
+
+/**
+ * Points a target held across publishes back at the state now on screen.
+ *
+ * The target is kept rather than re-derived so a refresh cannot move what Select acts on. The cost
+ * is that it goes on describing the payload it was made from — a heart toggled elsewhere, a title
+ * that has left the row — so what it names is looked up again each time the state changes, and a
+ * target whose subject is gone gives way to the default.
+ */
+private fun HomeFocusedTarget.reconciledWith(state: HomeViewState.Content): HomeFocusedTarget? {
+    return when (this) {
+        is HomeFocusedTarget.Hero -> takeIf { state.heroItems.any { it.id == id } }
+
+        is HomeFocusedTarget.Video -> state.sections
+            .firstOrNull { it.type == sectionType }
+            ?.items
+            ?.firstOrNull { it.id == item.id }
+            ?.let { HomeFocusedTarget.Video(it, sectionType) }
+
+        is HomeFocusedTarget.Collection -> state.sections
+            .firstOrNull { it.type == HomeSectionType.Collections }
+            ?.items
+            ?.firstOrNull { it.id == id }
+            ?.let { HomeFocusedTarget.Collection(id = it.id, title = it.title) }
+    }
 }
 
 private fun HomeViewState.Content.defaultFocusedTarget(): HomeFocusedTarget? {
@@ -376,13 +509,14 @@ private fun HomeViewState.Content.defaultFocusedTarget(): HomeFocusedTarget? {
     if (hero != null) {
         return HomeFocusedTarget.Hero(hero.id)
     }
-
-    val section = sections.firstOrNull { it.items.isNotEmpty() } ?: return null
-    val item = section.items.first()
+    // A carousel still in flight owns the focus nobody holds yet, so Select has nothing to act on:
+    // seeding the first row's first card here would open a title the user never focused.
+    val section = if (heroSettled) sections.firstOrNull { it.items.isNotEmpty() } else null
+    val item = section?.items?.first() ?: return null
     return if (section.type == HomeSectionType.Collections) {
         HomeFocusedTarget.Collection(id = item.id, title = item.title)
     } else {
-        HomeFocusedTarget.Video(item)
+        HomeFocusedTarget.Video(item, section.type)
     }
 }
 

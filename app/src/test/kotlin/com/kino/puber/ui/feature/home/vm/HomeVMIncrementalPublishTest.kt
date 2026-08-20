@@ -350,6 +350,102 @@ class HomeVMIncrementalPublishTest {
         verify { mapper.mapItemSection(listOf(item(1)), HomeSectionType.ContinueWatching) }
     }
 
+    @Test
+    fun aRowPublishedWhileTheHotSectionIsStillInFlightLeavesTheHeroUnsettled() = runTest {
+        // The regression: an empty hero read as "this catalogue has no carousel" freed the rows to
+        // take focus, so whichever section answered first opened Home scrolled past the carousel.
+        every { mapper.mapItemSection(any(), HomeSectionType.Collections) } returns
+            stateFor(HomeSectionType.Collections)
+        every { mapper.mapCollectionSection(any()) } returns stateFor(HomeSectionType.Collections)
+        every { interactor.observeCollections() } returns flowOf(Cached.Value(listOf(collection(1)), false))
+        val neverCompletes = CompletableDeferred<Unit>()
+        every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+
+        val state = vm.testStateValue as HomeViewState.Content
+        assertTrue(state.heroItems.isEmpty())
+        assertEquals(false, state.heroSettled)
+    }
+
+    @Test
+    fun theHotSectionAnsweringSettlesTheHero() = runTest {
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(2)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(true, (vm.testStateValue as HomeViewState.Content).heroSettled)
+    }
+
+    @Test
+    fun aHotSectionThatFailsSettlesTheHeroAndRepublishes() = runTest {
+        // A section that failed has answered as definitively as one that succeeded: there is no
+        // carousel, and the rows must stop waiting for one rather than sit unfocusable forever.
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        every { interactor.observeHotItems() } returns failing()
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.testStateValue as HomeViewState.Content
+        assertTrue(state.heroItems.isEmpty())
+        assertEquals(true, state.heroSettled)
+    }
+
+    @Test
+    fun cancellingARunDoesNotSettleTheHeroTheNextOneIsStillWaitingFor() = runTest {
+        // `loadHome` cancels the previous job without joining it, so a stale collector's teardown
+        // can still run inside this run. Settling the hero there would report an answer no request
+        // ever gave, and hand the rows the focus the pending carousel is owed.
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        val neverCompletes = CompletableDeferred<Unit>()
+        every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+
+        val vm = createVM().also { it.testOnStart() }
+        runCurrent()
+        assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled)
+
+        vm.onAction(CommonAction.OnResume)
+        runCurrent()
+
+        assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled) {
+            "the cancelled run's teardown settled a hero the new run has not heard from"
+        }
+    }
+
+    @Test
+    fun aDomainChangeLeavesTheNewCataloguesHeroUnsettled() = runTest {
+        every { mapper.mapItemSection(any(), HomeSectionType.ContinueWatching) } returns
+            stateFor(HomeSectionType.ContinueWatching)
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(1)), false))
+        every { interactor.observeHotItems() } returns flowOf(Cached.Value(listOf(item(2)), false))
+
+        val vm = createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(true, (vm.testStateValue as HomeViewState.Content).heroSettled)
+
+        coEvery { apiDomainInteractor.autoResolveWorkingDomain() } returns ApiDomainAutoResolveResult.Success(
+            state = ApiDomainState(domain = "other.example", customDomain = null),
+            changed = true,
+        )
+        val neverCompletes = CompletableDeferred<Unit>()
+        every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+        every { interactor.observeWatchingItems(any()) } returns flowOf(Cached.Value(listOf(item(3)), false))
+
+        vm.onAction(CommonAction.OnResume)
+        runCurrent()
+
+        assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled)
+    }
+
+    private fun collection(id: Int) = KCollection(id = id, title = "Collection $id")
+
     private fun stateFor(type: HomeSectionType) =
         HomeSectionState(title = type.name, items = emptyList(), type = type)
 
