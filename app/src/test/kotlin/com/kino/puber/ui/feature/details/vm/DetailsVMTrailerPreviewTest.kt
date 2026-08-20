@@ -23,6 +23,7 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -198,6 +199,28 @@ class DetailsVMTrailerPreviewTest {
         }
     )
 
+    @Test
+    fun aSlowTrailerRequestIsDroppedWhenSomethingElseSupersedesIt() {
+        val pending = CompletableDeferred<Result<TrailerLinksResponse>>()
+        givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
+        val vm = startedVM(
+            trailerLinks = TrailerLinkInteractor(
+                mockk { coEvery { getTrailerLinks(any()) } coAnswers { pending.await() } }
+            )
+        )
+
+        vm.onAction(DetailsAction.TrailerClicked)
+        vm.onAction(DetailsAction.SelectSeasonClicked)
+        pending.complete(
+            Result.success(
+                TrailerLinksResponse(trailer = listOf(Trailer(id = 42, url = TRAILER_URL)))
+            )
+        )
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertNull((vm.testStateValue as DetailsScreenState.Content).trailerUrl)
+    }
+
     private fun givenItem(item: Item) {
         every { interactor.observeItemDetails(42) } returns flowOf(Cached.Value(item, isStale = false))
     }
@@ -205,7 +228,9 @@ class DetailsVMTrailerPreviewTest {
     private fun previewTrailerUrl(vm: DetailsVM) =
         (vm.testStateValue as DetailsScreenState.Content).previewTrailerUrl
 
-    private fun startedVM(): DetailsVM = DetailsVM(
+    private fun startedVM(
+        trailerLinks: TrailerLinkInteractor = noTrailerLinks(),
+    ): DetailsVM = DetailsVM(
         router = router,
         params = DetailsScreenParams(itemId = 42),
         mapper = mapper,
@@ -215,7 +240,7 @@ class DetailsVMTrailerPreviewTest {
         contentUriCodec = ContentUriCodec(),
         contentSharer = mockk(relaxed = true),
         navPrefs = navPrefs,
-        trailerLinks = noTrailerLinks(),
+        trailerLinks = trailerLinks,
         errorHandler = errorHandler,
     ).also { it.testOnStart() }
 

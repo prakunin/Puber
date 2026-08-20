@@ -134,13 +134,18 @@ internal fun TrailerOverlay(
 
         // Leaving the app does not take the trailer's sound with it: the overlay stays composed and
         // the player goes on playing, over the television's home screen. The panel preview has
-        // always reported ON_STOP for the same reason; this one pauses, so coming back resumes
-        // where the user left rather than starting over.
+        // always reported ON_STOP for the same reason.
+        //
+        // This one pauses and stays paused -- coming back to sound starting by itself is not what
+        // anyone left the app for -- so returning shows the controls again rather than a frame
+        // that looks frozen, and OK carries on from the same position.
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) {
-                    exoPlayer.playWhenReady = false
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> exoPlayer.playWhenReady = false
+                    Lifecycle.Event.ON_START -> interactions++
+                    else -> Unit
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)

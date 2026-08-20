@@ -106,17 +106,15 @@ internal class ContentListVM(
                 trailerGate.cancel()
                 return@launch
             }
-            // Most items name only a storage path for their trailer, so this can be a request of
-            // its own. It runs while the gate is still counting down, and the trailer is published
-            // the moment both are done.
-            val trailerUrl = details.trailer
-                ?.takeIf { navPrefs.getAutoTrailerEnabled() }
-                ?.let { trailerLinks.resolve(details) }
-            if (trailerUrl == null) {
+            if (details.trailer == null || !navPrefs.getAutoTrailerEnabled()) {
                 trailerGate.cancel()
                 return@launch
             }
+            // The signed link is asked for only once the dwell is over. Most items name a storage
+            // path rather than a link, so resolving eagerly would put a request on the server for
+            // every card focus travels across, none of which was ever going to play a trailer.
             trailerGate.await()
+            val trailerUrl = trailerLinks.resolve(details) ?: return@launch
             if (requestId == trailerPreviewRequestId) {
                 updateViewState<ContentListViewState> { copy(previewTrailerUrl = trailerUrl) }
             }

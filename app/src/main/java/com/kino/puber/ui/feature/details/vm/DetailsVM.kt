@@ -71,6 +71,7 @@ internal class DetailsVM(
     private var closeJob: Job? = null
     private var closing = false
     private var previewTrailerJob: Job? = null
+    private var trailerRequestJob: Job? = null
 
     // The preview is offered once per visit to this screen. `rendered` is reset whenever a change
     // made elsewhere forces a reload, and without this flag every such reload -- coming back from
@@ -212,6 +213,7 @@ internal class DetailsVM(
 
     private fun showSeasonsPanel() {
         stopTrailerPreview()
+        cancelPendingTrailerRequest()
         updateViewState<DetailsScreenState.Content> {
             copy(seasonsPanelVisible = true)
         }
@@ -310,7 +312,8 @@ internal class DetailsVM(
     private fun showTrailer() {
         val item = currentItem?.takeIf { it.trailer != null } ?: return
         stopTrailerPreview()
-        launch {
+        cancelPendingTrailerRequest()
+        trailerRequestJob = launch {
             val trailerUrl = trailerLinks.resolve(item)
             if (trailerUrl == null) {
                 showMessage(resources.getString(R.string.video_details_trailer_unavailable))
@@ -346,12 +349,23 @@ internal class DetailsVM(
      * scrolling past the panel, anything that navigates away -- so a pending start cannot publish
      * a trailer onto a screen the user has already left.
      */
+    /**
+     * Most trailers need a signed link fetched before the full-screen player can open, and a slow
+     * one must not arrive to cover whatever the user moved on to. Anything that supersedes the
+     * request drops it here.
+     */
+    private fun cancelPendingTrailerRequest() {
+        trailerRequestJob?.cancel()
+        trailerRequestJob = null
+    }
+
     private fun stopTrailerPreview() {
         previewTrailerJob?.cancel()
         updateViewState<DetailsScreenState.Content> { copy(previewTrailerUrl = null) }
     }
 
     private fun hideTrailer() {
+        cancelPendingTrailerRequest()
         updateViewState<DetailsScreenState.Content> {
             copy(trailerUrl = null)
         }
@@ -516,6 +530,7 @@ internal class DetailsVM(
 
     private fun openPlayer(itemId: Int, seasonNumber: Int? = null, episodeNumber: Int? = null) {
         stopTrailerPreview()
+        cancelPendingTrailerRequest()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.player(itemId, seasonNumber, episodeNumber),
             requestCode = RESULT_CONTENT_CHANGED,
@@ -525,6 +540,7 @@ internal class DetailsVM(
 
     private fun openDetails(itemId: Int) {
         stopTrailerPreview()
+        cancelPendingTrailerRequest()
         router.navigateForResult<ContentChangeSet>(
             screen = router.screens.details(itemId),
             requestCode = RESULT_CONTENT_CHANGED,
@@ -584,6 +600,7 @@ internal class DetailsVM(
     private fun closeDetails() {
         if (closeJob != null) return
         stopTrailerPreview()
+        cancelPendingTrailerRequest()
         closing = true
         router.addBackDispatcher(this)
         closeJob = launch {
