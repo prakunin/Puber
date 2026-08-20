@@ -176,6 +176,12 @@ class CachedFeed<V : Any>(
         }
         // Once the store generation moves, even a cached value emitted before the loader began is
         // no longer a fallback: it belongs to the session or domain that was just cleared.
+        //
+        // The generation is captured here as well as watched inside the loop, because the loop only
+        // reaches its own check when the loader returns. A loader that throws -- the wipe was a
+        // logout, so the credentials it used have just been rejected -- would otherwise leave this
+        // flag as it started, and the failure would be reported as one to shrug off.
+        val generationWhenCachedWasRead = store.generation
         var cachedStillBelongsToCurrentGeneration = cached != null
         try {
             var fresh: Stamped<V>
@@ -231,7 +237,8 @@ class CachedFeed<V : Any>(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
-            if (!cachedStillBelongsToCurrentGeneration) throw error
+            val wipedWhileLoading = store.generation != generationWhenCachedWasRead
+            if (!cachedStillBelongsToCurrentGeneration || wipedWhileLoading) throw error
             emit(Cached.RefreshFailed(error))
         }
     }

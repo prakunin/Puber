@@ -294,6 +294,70 @@ class CachedFeedTest {
     }
 
     @Test
+    fun aLoaderThatFailsAfterAWipeSurfacesTheFailureRatherThanKeepingThePreviousSessionsValue() =
+        runTest {
+            // Logout wipes the store while a stale entry's refresh is in flight, and that refresh
+            // then fails on the credentials the logout just retired. Reporting RefreshFailed would
+            // leave the previous account's value standing on screen, which is the one outcome the
+            // generation handling exists to prevent.
+            feed().load("k") { "previous session" }.toList()
+            now += 11.minutes.inWholeMilliseconds
+            val subject = feed()
+            val loaderStarted = CompletableDeferred<Unit>()
+            val releaseLoader = CompletableDeferred<Unit>()
+            val failure = IllegalStateException("401")
+
+            val loading = async {
+                runCatching {
+                    subject.load("k") {
+                        loaderStarted.complete(Unit)
+                        releaseLoader.await()
+                        throw failure
+                    }.toList()
+                }
+            }
+            loaderStarted.await()
+            store.clear()
+            releaseLoader.complete(Unit)
+
+            assertEquals(failure, loading.await().exceptionOrNull())
+        }
+
+    @Test
+    fun anInvalidateCrossingALoadMakesThatLoadFetchAgain() = runTest {
+        // The user toggles a bookmark while the title's details are being revalidated. The payload
+        // in flight predates the toggle, so it must not be what the load settles on, what the store
+        // keeps, or what the next reader is handed.
+        val subject = feed()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        val loading = async {
+            subject.load("k") {
+                calls++
+                if (calls == 1) {
+                    started.complete(Unit)
+                    release.await()
+                    "before the toggle"
+                } else {
+                    "after the toggle"
+                }
+            }.toList()
+        }
+        started.await()
+
+        subject.invalidate("k")
+        release.complete(Unit)
+
+        assertEquals(
+            listOf(Cached.Value("after the toggle", isStale = false, updatedAt = now)),
+            loading.await(),
+        )
+        assertEquals(2, calls)
+        assertEquals("\"after the toggle\"", store.read("k")?.payload)
+    }
+
+    @Test
     fun aLoaderFailureWithNothingCachedThrows() = runTest {
         val failure = IllegalStateException("offline")
 
