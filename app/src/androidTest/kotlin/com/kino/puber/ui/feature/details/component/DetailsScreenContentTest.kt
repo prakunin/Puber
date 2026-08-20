@@ -39,6 +39,8 @@ private const val HERO_FACTS_LINE = "4K · 16+"
 private const val HERO_CREDITS_LINE = "Режиссёр: Иван Иванов"
 private val HERO_META_LINE = listOf(HERO_YEAR, HERO_GENRES, HERO_COUNTRY, HERO_DURATION).joinToString(" · ")
 private const val SIMILAR_ITEM_TITLE = "A similar film"
+private const val FIRST_SEASON_EPISODE = "First season episode"
+private const val SECOND_SEASON_EPISODE = "Second season episode"
 
 internal class DetailsScreenContentTest {
 
@@ -208,6 +210,77 @@ internal class DetailsScreenContentTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText(SIMILAR_ITEM_TITLE).assertIsDisplayed()
+    }
+
+    @Test
+    fun downFromTheLastSeasonReachesTheSimilarItems() {
+        // On a series the hero is no longer the bottom of the page -- the season list is -- so its
+        // own DOWN handler must step aside and let the grid catch the key once the last season has
+        // focus. Nothing on the device can exercise this: every similar-items answer this account
+        // returns is empty, so the page below never appears there. This test is the only thing
+        // holding the behaviour.
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = content(
+                        episodes = twoSeasonEpisodes(),
+                        initialEpisodeFocusId = null,
+                        title = HERO_TITLE,
+                        description = HERO_DESCRIPTION,
+                        similarItems = listOf(
+                            VideoItemUIState(
+                                id = 7,
+                                title = SIMILAR_ITEM_TITLE,
+                                imageUrl = "",
+                                bigImageUrl = "",
+                                showTitle = true,
+                            ),
+                        ),
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.waitUntil {
+            composeRule
+                .onNodeWithText(FIRST_SEASON_EPISODE)
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.Focused) == true
+        }
+
+        // DOWN from the first season's episode reaches the second season -- there is no page-below
+        // handoff yet, because this is not the last row.
+        composeRule.onNodeWithText(FIRST_SEASON_EPISODE).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(SECOND_SEASON_EPISODE).assertIsDisplayed()
+
+        // DOWN again, now from the last season, reaches the page below.
+        composeRule.onNodeWithText(SECOND_SEASON_EPISODE).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(SIMILAR_ITEM_TITLE).assertIsDisplayed()
+    }
+
+    private fun twoSeasonEpisodes(): VideoGridUIState {
+        return VideoGridUIState(
+            list = listOf(
+                VideoGridItemUIState.Title("Season 1"),
+                VideoGridItemUIState.Items(
+                    items = listOf(
+                        episode(id = 101, seasonNumber = 1, episodeNumber = 1, title = FIRST_SEASON_EPISODE),
+                    ),
+                    rowKey = "season_1",
+                ),
+                VideoGridItemUIState.Title("Season 2"),
+                VideoGridItemUIState.Items(
+                    items = listOf(
+                        episode(id = 201, seasonNumber = 2, episodeNumber = 1, title = SECOND_SEASON_EPISODE),
+                    ),
+                    rowKey = "season_2",
+                ),
+            ),
+        )
     }
 
     private fun content(

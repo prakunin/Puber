@@ -28,6 +28,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -76,6 +81,7 @@ fun VideoGrid(
     initialFocusedItemId: Int? = null,
     detailsPrefetchEnabled: Boolean = false,
     rowsFillViewport: Boolean = false,
+    onDownFromLastRow: (() -> Unit)? = null,
 ) {
     DetailsPrefetchSurface(enabled = detailsPrefetchEnabled) {
         VideoGridContent(
@@ -88,6 +94,7 @@ fun VideoGrid(
             initialFocusedItemId = initialFocusedItemId,
             detailsPrefetchEnabled = detailsPrefetchEnabled,
             rowsFillViewport = rowsFillViewport,
+            onDownFromLastRow = onDownFromLastRow,
         )
     }
 }
@@ -103,6 +110,7 @@ private fun VideoGridContent(
     initialFocusedItemId: Int?,
     detailsPrefetchEnabled: Boolean,
     rowsFillViewport: Boolean,
+    onDownFromLastRow: (() -> Unit)?,
 ) {
     val lazyListState = rememberLazyListState()
     val gridFocus = rememberVideoGridFocusState(
@@ -134,8 +142,19 @@ private fun VideoGridContent(
     }
     val onSectionFocused = rememberFocusedListItemScroller(lazyListState)
 
+    val lastRowKey = remember(state.list) {
+        state.list.filterIsInstance<VideoGridItemUIState.Items>().lastOrNull()?.rowKey
+    }
+
     PositionFocusedItemInLazyLayout {
-        Box(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .onDownFromLastRow(
+                    handler = onDownFromLastRow,
+                    atLastRow = { lastRowKey != null && gridFocus.rowFocus.focusedRowKey == lastRowKey },
+                ),
+        ) {
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
@@ -214,6 +233,29 @@ private fun VideoGridContent(
             }
 
             VideoGridTopGradient(visible = enableTopSideGradient && showTopGradient)
+        }
+    }
+}
+
+/**
+ * Lets a DOWN press through to [handler] when the focused row is the last one, and leaves every
+ * other key event -- including DOWN from any other row, which the list keeps handling itself --
+ * untouched. A null [handler] (the player's case) changes nothing.
+ */
+private fun Modifier.onDownFromLastRow(
+    handler: (() -> Unit)?,
+    atLastRow: () -> Boolean,
+): Modifier {
+    if (handler == null) {
+        return this
+    }
+    return onPreviewKeyEvent { event ->
+        val isDownPress = event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown
+        if (isDownPress && atLastRow()) {
+            handler()
+            true
+        } else {
+            false
         }
     }
 }

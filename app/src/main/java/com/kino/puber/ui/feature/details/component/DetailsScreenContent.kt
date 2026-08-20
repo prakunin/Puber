@@ -311,6 +311,7 @@ private fun DetailsMainPage(
             initialFocusedItemId = state.initialEpisodeFocusId ?: state.currentEpisode?.id,
             onItemClick = { episode -> onAction(DetailsAction.EpisodeSelected(episode)) },
             onItemContextMenu = onEpisodeContextMenu,
+            onDownFromLastRow = onNextPageRequested.takeIf { hasSimilarItems },
         )
     }
 }
@@ -368,8 +369,11 @@ private fun HeroColumn(
             // The page below has nothing focusable while it is off screen -- its own focus bridge
             // only wakes once it is the current page -- so DOWN from a button had nowhere to go and
             // the similar items became unreachable. The page deleted from between the two used to
-            // catch this key.
-            .onDirectionKey(Key.DirectionDown, enabled = hasSimilarItems, onKey = onNextPageRequested)
+            // catch this key. On a series (`compact`) the hero is no longer the bottom of the page --
+            // the season list sits below it -- so this handler steps aside and lets DOWN reach the
+            // grid; `VideoGrid`'s own `onDownFromLastRow` picks the key back up once the last season
+            // row has focus.
+            .onDirectionKey(Key.DirectionDown, enabled = hasSimilarItems && !compact, onKey = onNextPageRequested)
             .padding(
                 start = HERO_PADDING_START,
                 // A series shares the page with its season list, so the block's own breathing room
