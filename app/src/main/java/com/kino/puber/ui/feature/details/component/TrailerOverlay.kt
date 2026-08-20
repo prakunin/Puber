@@ -28,6 +28,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -127,6 +130,21 @@ internal fun TrailerOverlay(
             onDispose {
                 exoPlayer.release()
             }
+        }
+
+        // Leaving the app does not take the trailer's sound with it: the overlay stays composed and
+        // the player goes on playing, over the television's home screen. The panel preview has
+        // always reported ON_STOP for the same reason; this one pauses, so coming back resumes
+        // where the user left rather than starting over.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) {
+                    exoPlayer.playWhenReady = false
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
         LaunchedEffect(exoPlayer) {
