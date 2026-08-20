@@ -4,6 +4,7 @@ import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.R
 import com.kino.puber.data.api.models.Audio
 import com.kino.puber.data.api.models.Episode
+import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
@@ -91,19 +92,28 @@ class DetailsScreenUIMapperTest {
             id = 1,
             title = "Фильм / Movie",
             type = ItemType.MOVIE,
+            // The year and the genres belong to the meta line. They are set here so the assertions
+            // that they stay out of the facts line have something to catch: without them the item
+            // could not have produced either string, and the check would pass on emptiness alone.
+            year = 2026,
+            genres = listOf(Genre(id = 1, title = "Комедия")),
             videos = listOf(Video(id = 1, files = listOf(VideoFile(quality = "1080")))),
             ac3 = 1,
             ageRating = "16+",
             voice = "Дубляж",
         )
 
-        val facts = mapper.map(item, isInWatchlist = false).info.factsLine
+        val mapped = mapper.map(item, isInWatchlist = false)
+        val facts = mapped.info.factsLine
 
         assertTrue(facts.contains("1080")) { facts }
         assertTrue(facts.contains("16+")) { facts }
         assertTrue(facts.contains("Дубляж")) { facts }
-        // The meta line already carries these; they must not be repeated here.
         assertFalse(facts.contains("2026")) { facts }
+        assertFalse(facts.contains("Комедия")) { facts }
+        // ...and the meta line is where they did go.
+        assertTrue(mapped.details.year.contains("2026")) { mapped.details.year }
+        assertTrue(mapped.details.genres.contains("Комедия")) { mapped.details.genres }
     }
 
     @Test

@@ -1,11 +1,14 @@
 package com.kino.puber.ui.feature.details.component
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.Play
@@ -35,6 +38,7 @@ private const val HERO_DURATION = "1h 40m"
 private const val HERO_FACTS_LINE = "4K · 16+"
 private const val HERO_CREDITS_LINE = "Режиссёр: Иван Иванов"
 private val HERO_META_LINE = listOf(HERO_YEAR, HERO_GENRES, HERO_COUNTRY, HERO_DURATION).joinToString(" · ")
+private const val SIMILAR_ITEM_TITLE = "A similar film"
 
 internal class DetailsScreenContentTest {
 
@@ -174,6 +178,44 @@ internal class DetailsScreenContentTest {
         composeRule.onNodeWithText(DEFAULT_EPISODE).assertIsFocused()
     }
 
+    @Test
+    fun downFromTheButtonsReachesTheSimilarItems() {
+        // The page that used to sit between these two caught this key. Nothing on the device can
+        // exercise this: every similar-items answer this account returns is empty, so the page
+        // below never appears there. This test is the only thing holding the behaviour.
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = content(
+                        episodes = episodes(),
+                        seasonsPanelVisible = false,
+                        initialEpisodeFocusId = null,
+                        title = HERO_TITLE,
+                        description = HERO_DESCRIPTION,
+                        similarItems = listOf(
+                            VideoItemUIState(
+                                id = 7,
+                                title = SIMILAR_ITEM_TITLE,
+                                imageUrl = "",
+                                bigImageUrl = "",
+                                showTitle = true,
+                            ),
+                        ),
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText(PRIMARY_ACTION).assertIsDisplayed()
+
+        composeRule.onNodeWithText(PRIMARY_ACTION).performKeyInput { pressKey(Key.DirectionDown) }
+        // Safe to wait for idleness here, unlike anywhere near a long plot: HERO_DESCRIPTION fits,
+        // so the description's own scroll never starts and the pager's animation is all there is.
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(SIMILAR_ITEM_TITLE).assertIsDisplayed()
+    }
+
     private fun content(
         episodes: VideoGridUIState,
         seasonsPanelVisible: Boolean,
@@ -186,6 +228,7 @@ internal class DetailsScreenContentTest {
         country: String = "",
         factsLine: String = "",
         creditsLine: String = "",
+        similarItems: List<VideoItemUIState> = emptyList(),
     ): DetailsScreenState.Content {
         return DetailsScreenState.Content(
             details = VideoDetailsUIState(
@@ -218,6 +261,7 @@ internal class DetailsScreenContentTest {
             seasonsPanelVisible = seasonsPanelVisible,
             episodes = episodes,
             initialEpisodeFocusId = initialEpisodeFocusId,
+            similarItems = similarItems,
         )
     }
 
