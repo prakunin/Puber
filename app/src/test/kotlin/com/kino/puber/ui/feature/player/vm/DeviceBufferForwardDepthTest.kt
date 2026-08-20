@@ -4,6 +4,7 @@ import com.kino.puber.ui.feature.player.model.BufferPreset
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.Locale
 
 /**
  * The back buffer and the forward buffer draw on the same allocator, so a preset's real forward
@@ -76,8 +77,12 @@ internal class DeviceBufferForwardDepthTest {
                 assertTrue(
                     mbitPerSecond >= MIN_DEADLOCK_BITRATE_MBIT,
                     "$preset on a ${memory.heapLimitMb} MB heap deadlocks from " +
-                        "%.0f Mbit/s, under the %.0f Mbit/s floor"
-                            .format(mbitPerSecond, MIN_DEADLOCK_BITRATE_MBIT),
+                        String.format(
+                            Locale.ROOT,
+                            "%.0f Mbit/s, under the %.0f Mbit/s floor",
+                            mbitPerSecond,
+                            MIN_DEADLOCK_BITRATE_MBIT,
+                        ),
                 )
             }
         }
