@@ -37,6 +37,8 @@ MockK for unit tests, Compose UI test for instrumented tests.
   `ReturnCount` (max 3) and `LongMethod` rules are enforced — name constants, keep functions short.
 - Do not run `connectedAndroidTest`: it uninstalls the app and wipes the device's login. The
   controller runs instrumented checks on the television separately.
+- Never `git add -A` or `git add .`. The repository owner works in this tree at the same time, and a
+  blanket add sweeps their uncommitted work into your commit. Add the paths your task names.
 
 ---
 
@@ -557,7 +559,18 @@ git commit -m "Rebuild the film's screen as one hero with everything on it"
 
 ---
 
-### Task 4: Delete the information page
+### Task 4: Delete the information page — FOLDED INTO TASK 1
+
+**Do not dispatch this task.** It moved into Task 1 during execution and is recorded here only so
+the numbering of the tasks around it stays stable.
+
+Why it moved: unit tests and detekt both compile against the main variant, so Task 1 — which changes
+`DetailsInfoUIState` out from under `DetailsScreenContent.kt` — could not be verified while the page
+that reads the old shape still existed. Splitting a compile-breaking change across two tasks left
+the first one unverifiable. The deletion belongs with the change that makes it necessary.
+
+The steps below were carried out as part of Task 1.
+
 
 **Files:**
 - Modify: `app/src/main/java/com/kino/puber/ui/feature/details/component/DetailsScreenContent.kt`
@@ -600,7 +613,7 @@ Expected: BUILD SUCCESSFUL.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git add app/src/main/java/com/kino/puber/ui/feature/details
 git commit -m "Delete the information page the film's screen replaced"
 ```
 
@@ -668,7 +681,7 @@ Expected: PASS. Do **not** run `connectedAndroidTest` — see the global constra
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -A
+git add app/src/test/kotlin/com/kino/puber/ui/feature/details app/src/androidTest
 git commit -m "Pin the film screen's rows and buttons with tests"
 ```
 
