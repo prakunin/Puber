@@ -20,12 +20,15 @@ import com.kino.puber.ui.feature.details.model.DetailsScreenState
 import com.kino.puber.ui.feature.details.model.DetailsScreenUIMapper
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.data.api.KinoPubApiClient
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -48,6 +51,7 @@ class DetailsVMTrailerPreviewTest {
         /** Mirrors `DetailsVM.TRAILER_PREVIEW_DELAY_MS`, which is private to the ViewModel. */
         private const val TRAILER_PAUSE_MS = 2000L
         private const val TRAILER_URL = "https://cdn/trailer.mp4"
+        private const val SIGNED_URL = "https://cdn/signed.m3u8"
     }
 
     private lateinit var router: AppRouter
@@ -200,6 +204,40 @@ class DetailsVMTrailerPreviewTest {
     )
 
     @Test
+    fun aBarePathIsExchangedForASignedLinkBeforeThePanelPlaysIt() {
+        givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
+        val vm = startedVM(trailerLinks = TrailerLinkInteractor(signedLinkApi))
+
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(TRAILER_PAUSE_MS + 1)
+
+        assertEquals(SIGNED_URL, previewTrailerUrl(vm))
+        coVerify(exactly = 1) { signedLinkApi.getTrailerLinks(42) }
+    }
+
+    @Test
+    fun theTrailerButtonPlaysTheSignedLinkForABarePath() {
+        givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
+        val vm = startedVM(trailerLinks = TrailerLinkInteractor(signedLinkApi))
+
+        vm.onAction(DetailsAction.TrailerClicked)
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(SIGNED_URL, (vm.testStateValue as DetailsScreenState.Content).trailerUrl)
+    }
+
+    @Test
+    fun theTrailerButtonSaysSoWhenNoLinkCanBeHad() {
+        givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
+        val vm = startedVM()
+
+        vm.onAction(DetailsAction.TrailerClicked)
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertNull((vm.testStateValue as DetailsScreenState.Content).trailerUrl)
+        assertNotNull(vm.testMessageValue)
+    }
+
+    @Test
     fun aSlowTrailerRequestIsDroppedWhenSomethingElseSupersedesIt() {
         val pending = CompletableDeferred<Result<TrailerLinksResponse>>()
         givenItem(item.copy(trailer = Trailer(file = "/trailers/d/02/x.mp4")))
@@ -219,6 +257,13 @@ class DetailsVMTrailerPreviewTest {
         mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
 
         assertNull((vm.testStateValue as DetailsScreenState.Content).trailerUrl)
+    }
+
+    /** An API that hands back a signed link for whatever item it is asked about. */
+    private val signedLinkApi = mockk<KinoPubApiClient> {
+        coEvery { getTrailerLinks(any()) } returns Result.success(
+            TrailerLinksResponse(trailer = listOf(Trailer(id = 42, url = SIGNED_URL)))
+        )
     }
 
     private fun givenItem(item: Item) {

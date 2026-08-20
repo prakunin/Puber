@@ -183,11 +183,13 @@ internal fun TrailerOverlay(
             }
         }
 
+        // Neither of these counts an interaction: they are only ever reached through a key the
+        // preview handler below has already counted, and bumping twice tore down and restarted the
+        // hide effect twice per press -- dozens of times a second under autorepeat.
         val togglePlayPause: () -> Unit = {
             val resuming = !exoPlayer.playWhenReady
             exoPlayer.playWhenReady = resuming
             playPauseIndicator = PlayPauseIndicatorState(isPlaying = resuming)
-            interactions++
         }
 
         val seekBy: (Long) -> Unit = { deltaMs ->
@@ -195,7 +197,6 @@ internal fun TrailerOverlay(
             val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, end.coerceAtLeast(0L))
             exoPlayer.seekTo(target)
             position = target
-            interactions++
         }
 
         Box(

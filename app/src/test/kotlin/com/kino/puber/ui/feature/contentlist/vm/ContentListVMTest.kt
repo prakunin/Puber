@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
@@ -354,6 +355,24 @@ class ContentListVMTest {
     }
 
     @Test
+    fun trailerGivenAsABarePath_isExchangedForASignedLink() {
+        val api = mockk<KinoPubApiClient> {
+            coEvery { getTrailerLinks(42) } returns Result.success(
+                TrailerLinksResponse(trailer = listOf(Trailer(id = 42, url = "https://cdn/signed.m3u8")))
+            )
+        }
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(file = "/trailers/d/02/x.mp4"))
+        val vm = createVM(autoTrailerEnabled = true, trailerLinks = TrailerLinkInteractor(api))
+
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+
+        assertEquals("https://cdn/signed.m3u8", vm.testStateValue.previewTrailerUrl)
+        coVerify(exactly = 1) { api.getTrailerLinks(42) }
+    }
+
+    @Test
     fun trailerGivenAsABarePath_isNotPlayed() {
         coEvery { interactor.getItemDetails(42) } returns
             item(42, trailer = Trailer(url = "/trailers/d/02/d88196ed.mp4"))
@@ -612,12 +631,15 @@ class ContentListVMTest {
         heroConfigs = heroConfigs,
     )
 
-    private fun createVM(autoTrailerEnabled: Boolean) = ContentListVM(
+    private fun createVM(
+        autoTrailerEnabled: Boolean,
+        trailerLinks: TrailerLinkInteractor = noTrailerLinks(),
+    ) = ContentListVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
         genreInteractor = mockk(relaxed = true),
-        trailerLinks = noTrailerLinks(),
+        trailerLinks = trailerLinks,
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
             every { getNavigationMode() } returns NavigationMode.SideDrawer
             every { getAutoTrailerEnabled() } returns autoTrailerEnabled

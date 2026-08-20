@@ -4,6 +4,8 @@ import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.playableUrl
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Turns an item's trailer into something a player can open.
@@ -23,9 +25,20 @@ internal class TrailerLinkInteractor(
     }
 
     private suspend fun requestSignedLink(itemId: Int): String? =
-        runCatchingCancellable { api.getTrailerLinks(itemId).getOrThrow() }
-            .getOrNull()
-            ?.trailer
-            .orEmpty()
-            .firstNotNullOfOrNull { it.playableUrl() }
+        withTimeoutOrNull(REQUEST_TIMEOUT) {
+            runCatchingCancellable { api.getTrailerLinks(itemId).getOrThrow() }
+                .getOrNull()
+                ?.trailer
+                .orEmpty()
+                .firstNotNullOfOrNull { it.playableUrl() }
+        }
+
+    private companion object {
+        /**
+         * The client's own ceiling is two minutes, which is a long time to stare at a screen that
+         * has not changed since the button was pressed. A trailer is not worth waiting that long
+         * for: past this, the item is treated as having none.
+         */
+        val REQUEST_TIMEOUT = 15.seconds
+    }
 }
