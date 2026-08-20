@@ -3,6 +3,8 @@ package com.kino.puber.ui.feature.details.component
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,8 +13,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
 /** Still at the top before anything moves, so the opening can be read. */
@@ -27,25 +27,28 @@ private const val SCROLL_SPEED_DP_PER_SECOND = 18F
 private const val MILLIS_PER_SECOND = 1_000F
 
 /**
- * Text that scrolls itself when it does not fit, and loops.
+ * A block that scrolls itself when it does not fit, and loops.
  *
- * The remote never drives this: the description is not focusable, and on a screen where LEFT and
- * RIGHT move between buttons there is nothing to spare for scrolling text. So it either fits, or it
- * shows itself in turn.
+ * The remote never drives this: nothing inside is focusable, and on a screen where LEFT and RIGHT
+ * move between buttons there is nothing to spare for scrolling text. So it either fits, or it shows
+ * itself in turn.
+ *
+ * It holds a column rather than one string because the plot is not the only thing worth reading and
+ * not the only thing that runs out of room. A series' screen shares its height with a season list,
+ * and the facts and the credits ride along inside here rather than being cut from the screen.
  */
 @Composable
-internal fun SelfScrollingText(
-    text: String,
-    style: TextStyle,
+internal fun SelfScrollingColumn(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
     // `maxValue` is how much of the text is out of sight: zero means it fits, and nothing runs.
     val overflow = scrollState.maxValue
-    LaunchedEffect(text, enabled, overflow) {
+    LaunchedEffect(enabled, overflow) {
         if (!enabled || overflow <= 0) {
             scrollState.scrollTo(0)
             return@LaunchedEffect
@@ -64,12 +67,11 @@ internal fun SelfScrollingText(
     }
 
     Box(modifier = modifier.clipToBounds()) {
-        Text(
-            text = text,
-            style = style,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(scrollState, enabled = false),
+            content = content,
         )
     }
 }

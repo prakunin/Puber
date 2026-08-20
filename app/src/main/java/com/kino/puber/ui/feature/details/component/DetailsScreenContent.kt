@@ -404,30 +404,36 @@ private fun HeroColumn(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.width(DESCRIPTION_MEASURE),
         )
-        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_XS))
         Row(horizontalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
             state.info.ratings.forEach { rating -> Rating(rating) }
         }
-        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_XS))
         HeroLine(text = metaLine(state.details))
-        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
-        SelfScrollingText(
-            text = state.details.description,
-            style = MaterialTheme.typography.bodySmall,
+        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_SM))
+        // The plot, the facts and the credits ride together. A series' hero shares its height with
+        // the season list and cannot hold all three as fixed rows -- the plot was left with under a
+        // line and drew nothing at all. Inside here they take what is left, in order, and scroll
+        // when there is not enough of it, so none of them is cut from the screen.
+        SelfScrollingColumn(
             // The main page stays composed while the similar-items page is on screen, so without
-            // `isPageVisible` the text would keep animating out of sight underneath it.
+            // `isPageVisible` the block would keep animating out of sight underneath it.
             enabled = isPageVisible && state.trailerUrl == null,
-            // `fill = false`: the description may take everything that is left, but a short plot
-            // takes only what it needs, and the facts follow the text instead of floating at the
-            // bottom of a hole. A long one still gets the whole remainder, and scrolls inside it.
+            // `fill = false`: it may take everything that is left, but a short plot takes only what
+            // it needs, so on a film the block still hugs its text instead of floating in a hole.
             modifier = Modifier
                 .width(DESCRIPTION_MEASURE)
                 .weight(1F, fill = false),
-        )
-        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
-        HeroLine(text = state.info.factsLine)
-        HeroLine(text = state.info.creditsLine)
-        Spacer(modifier = Modifier.height(HERO_SPACING_MD))
+        ) {
+            Text(
+                text = state.details.description,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(modifier = Modifier.height(HERO_SPACING_SM))
+            HeroLine(text = state.info.factsLine)
+            HeroLine(text = state.info.creditsLine)
+        }
+        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XS else HERO_SPACING_MD))
         ActionButtonsRow(
             buttons = state.buttons,
             isInWatchlist = state.isInWatchlist,
@@ -868,6 +874,7 @@ private const val HERO_LINE_ALPHA = 0.72F
 private const val TITLE_MAX_LINES = 3
 
 /** Gaps between the hero's own lines: title-to-ratings, the ratings row itself, ratings-to-meta. */
+private val HERO_SPACING_XXS = 4.dp
 private val HERO_SPACING_XS = 8.dp
 
 /** Gaps either side of the description: meta-to-description, description-to-facts. */
