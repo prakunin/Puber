@@ -13,8 +13,8 @@ is wrong and should be fixed.
 - [ui-and-compose.md](ui-and-compose.md) - shared components, focus, performance, previews.
 - [testing.md](testing.md) - JUnit 5 setup, fakes, what a good test asserts.
 
-These supersede the recipes under
-`.kent/skills/puber-android-workflow/references/recipes/`, which were written
-for an older shape of the code: they teach `androidx.tv.foundation` lists the
-app never imported, router methods `AppRouter` does not have, a bottom sheet
-container that exists nowhere, and JUnit 4 rules for a JUnit 5 suite.
+These replaced a recipe tree under `.kent/`, removed in the same change,
+which had been written for an older shape of the code: it taught
+`androidx.tv.foundation` lists the app never imported, router methods
+`AppRouter` does not have, a bottom sheet container that exists nowhere, and
+JUnit 4 rules for a JUnit 5 suite.

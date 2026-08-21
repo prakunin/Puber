@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # agentw — wrapper for ./gradlew that isolates GRADLE_USER_HOME when run
-# from a git worktree. Intended for Kent agents working in
-# .kent/worktrees/* so their builds do not contend with the main
-# Android Studio daemon/cache.
+# from a git worktree, so an agent's builds do not contend with the main
+# checkout's Android Studio daemon and cache.
 #
 # Usage (same as ./gradlew):
 #   ./tools/agentw :app:assembleDevDebug

@@ -7,11 +7,11 @@ script_path="$(
   cd "$(dirname "${BASH_SOURCE[0]}")"
   printf '%s/%s\n' "$PWD" "$(basename "${BASH_SOURCE[0]}")"
 )"
-runtime_root="${KENT_RESOURCE_LOCK_DIR:-$HOME/.kent/runtime/resource-locks}"
+runtime_root="${PUBER_DEVICE_LOCK_DIR:-$HOME/.puber/device-locks}"
 guard_root="$runtime_root/.guards"
 mkdir -p "$runtime_root" "$guard_root"
-if [[ -z "${KENT_RESOURCE_LOCK_OWNER_PID:-}" ]]; then
-  export KENT_RESOURCE_LOCK_OWNER_PID="$PPID"
+if [[ -z "${PUBER_DEVICE_LOCK_OWNER_PID:-}" ]]; then
+  export PUBER_DEVICE_LOCK_OWNER_PID="$PPID"
 fi
 
 usage() {
@@ -26,11 +26,11 @@ Usage:
   emulator-resource-lock.sh adb-emulators [any|phone|tv]
   emulator-resource-lock.sh adb-physical-devices
 
-Coordinates Android emulator usage across Kent sessions on this machine.
-Physical devices are listed separately and must be used only with explicit user
-permission and an explicit serial.
-Locks live under ~/.kent/runtime/resource-locks so main checkouts and Kent
-worktrees share them.
+Coordinates Android device and emulator usage across agent sessions on this
+machine. Physical devices are listed separately and must be used only with
+explicit user permission and an explicit serial.
+Locks live under ~/.puber/device-locks so the main checkout and every worktree
+share them.
 USAGE
 }
 
@@ -96,7 +96,7 @@ locked_try_acquire() {
   local ttl_seconds="$2"
   local dir age token owner_pid
 
-  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  owner_pid="$PUBER_DEVICE_LOCK_OWNER_PID"
   require_nonnegative_integer owner_pid "$owner_pid"
 
   dir="$(lock_dir_for "$resource")"
@@ -119,8 +119,8 @@ locked_try_acquire() {
     printf 'pid=%s\n' "$owner_pid"
     printf 'cwd=%s\n' "$PWD"
     printf 'created_at=%s\n' "$(now_epoch)"
-    printf 'task_id=%s\n' "${KENT_TASK_ID:-unknown}"
-    printf 'session_id=%s\n' "${KENT_SESSION_ID:-unknown}"
+    printf 'task_id=%s\n' "${PUBER_TASK_ID:-unknown}"
+    printf 'session_id=%s\n' "${PUBER_SESSION_ID:-unknown}"
   } >"$dir/owner"
   printf '%s\n' "$(now_epoch)" >"$dir/created_at"
   printf '%s\n' "$token"
@@ -152,7 +152,7 @@ locked_resume() {
   local token="$2"
   local dir current owner_pid
 
-  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  owner_pid="$PUBER_DEVICE_LOCK_OWNER_PID"
   require_nonnegative_integer owner_pid "$owner_pid"
 
   dir="$(lock_dir_for "$resource")"
@@ -173,8 +173,8 @@ locked_resume() {
     printf 'pid=%s\n' "$owner_pid"
     printf 'cwd=%s\n' "$PWD"
     printf 'created_at=%s\n' "$(now_epoch)"
-    printf 'task_id=%s\n' "${KENT_TASK_ID:-unknown}"
-    printf 'session_id=%s\n' "${KENT_SESSION_ID:-unknown}"
+    printf 'task_id=%s\n' "${PUBER_TASK_ID:-unknown}"
+    printf 'session_id=%s\n' "${PUBER_SESSION_ID:-unknown}"
   } >"$dir/owner"
   printf '%s\n' "$(now_epoch)" >"$dir/created_at"
   printf '%s\n' "$token"
@@ -184,14 +184,14 @@ locked_resume_owned() {
   local resource="$1"
   local dir token owner_task_id task_id owner_pid
 
-  task_id="${KENT_TASK_ID:-}"
+  task_id="${PUBER_TASK_ID:-}"
   if [[ -z "$task_id" || "$task_id" == "unknown" ]]; then
     printf 'resource_lock_task_identity_required resource=%s\n' \
       "$resource" >&2
     return 64
   fi
 
-  owner_pid="$KENT_RESOURCE_LOCK_OWNER_PID"
+  owner_pid="$PUBER_DEVICE_LOCK_OWNER_PID"
   require_nonnegative_integer owner_pid "$owner_pid"
 
   dir="$(lock_dir_for "$resource")"
@@ -224,7 +224,7 @@ locked_resume_owned() {
     printf 'cwd=%s\n' "$PWD"
     printf 'created_at=%s\n' "$(now_epoch)"
     printf 'task_id=%s\n' "$task_id"
-    printf 'session_id=%s\n' "${KENT_SESSION_ID:-unknown}"
+    printf 'session_id=%s\n' "${PUBER_SESSION_ID:-unknown}"
   } >"$dir/owner"
   printf '%s\n' "$(now_epoch)" >"$dir/created_at"
   printf '%s\n' "$token"
@@ -270,7 +270,7 @@ with_resource_guard() {
   local guard_file backend
 
   guard_file="$(guard_file_for "$resource")"
-  backend="${KENT_RESOURCE_LOCK_BACKEND:-auto}"
+  backend="${PUBER_DEVICE_LOCK_BACKEND:-auto}"
 
   case "$backend" in
     auto)

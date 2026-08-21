@@ -4,18 +4,41 @@
 
 Releases are published by `.github/workflows/release.yml`.
 
-The canonical release path is the Kent `Puber Release` workflow described by
-`.kent/commands/release.md`. It performs the complete lifecycle:
+## The release procedure
 
-1. Create `release/<version>` from the current `origin/master`.
-2. Update `currentVersion`, verify it, and deliver the version-bump PR.
-3. Wait until GitHub reports that PR merged; neither the agent nor the workflow merges it.
-4. Prepare concise user-facing release notes in Russian.
-5. After publication approval, create `v<version>` on the merged `master` commit and push it.
-6. Monitor release automation, apply the prepared notes, verify the GitHub Release, and clean up conservatively.
+The default bump is the next **minor** version: `X.Y.Z` -> `X.(Y+1).0`. A patch
+(`X.Y.(Z+1)`) or a major (`(X+1).0.0`) happens only when the task says so
+explicitly.
 
-The default bump is the next minor version. Patch/hotfix and major releases must be requested explicitly. Never push a
-release commit directly to `master`, and never create the tag before the version-bump PR is merged.
+1. Fetch `origin/master` and tags, and read `currentVersion` from
+   `app/build.gradle.kts` on that base.
+2. Create or reuse `release/<version>` from the fetched base.
+3. Update `currentVersion`, commit as `Bump version to <version>`, and verify
+   with compile checks. Missing local signing secrets are not a reason to hold
+   the version-bump PR - report that production packaging was not proven
+   locally and continue.
+4. Open or update the PR for `release/<version>` and watch its checks:
+   `gh pr checks <pr> --watch --interval 30`. Queued or running checks are not
+   a blocker; wait for the terminal state and then re-read the status.
+5. Wait until GitHub reports the PR merged. Neither an agent nor this workflow
+   merges it.
+6. Prepare concise user-facing release notes in Russian for the range between
+   the previous tag and the merged commit. Keep them under an ignored path such
+   as `.todo/<task>/release-notes-ru.md`. Drop release-only chores and rewrite
+   technical commit titles into user-visible changes.
+7. Ask for publication approval, and only then create `v<version>` on the
+   merged `master` commit and push the tag. The merge is not the approval:
+   tagging is what publishes, so it needs its own explicit go-ahead.
+8. Watch the release automation to its terminal state:
+   `gh run watch <run-id> --exit-status --interval 30`.
+9. Apply the prepared notes with
+   `gh release edit <tag> --notes-file <path>` and verify the published body
+   before cleaning up.
+
+Hard rules: never push a release commit directly to `master`, never merge the
+version PR yourself, and never create or push the tag before the version bump is
+on `origin/master`. If a tag already exists and points somewhere other than the
+intended commit, stop and say so.
 
 The workflow builds `prodRelease`, uploads the APK and SHA-256 checksum as a workflow artifact, and attaches both files
 to the GitHub Release for the tag.
@@ -66,6 +89,10 @@ app/src/main/generated/baselineProfiles/startup-prof.txt
 ```
 
 ## Refresh Baseline Profiles
+
+Regenerating profiles installs a build on a real device, drives it through the
+OAuth device-code flow, and rewrites files that are checked in - ask before
+starting it, and never fold it into an unrelated change.
 
 Use the helper script:
 

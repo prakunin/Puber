@@ -120,9 +120,9 @@ resource shrinking не замедляют локальную сборку. Об
 Готовые APK находятся в `app/build/outputs/apk/dev/debug/` и `app/build/outputs/apk/dev/deploy/`.
 Dev-сборка устанавливается как `com.kino.puber.stage`, production application ID — `com.kino.puber`.
 
-Для работы агента, worktree-сборок и проверок на TV сначала прочитайте [`AGENTS.md`](AGENTS.md): там описаны Kent
-workflow, `./tools/agentw`, обязательная аренда эмулятора и безопасная установка APK. Процесс публикации описан в
-[`docs/release.md`](docs/release.md).
+Для работы агента, worktree-сборок и проверок на TV сначала прочитайте [`AGENTS.md`](AGENTS.md): там описаны
+`./tools/agentw`, обязательная аренда устройства и безопасная установка APK. Как устроено приложение —
+[`docs/architecture/`](docs/architecture/), процесс публикации — [`docs/release.md`](docs/release.md).
 
 ## Статус проекта
 

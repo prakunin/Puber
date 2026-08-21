@@ -10,4 +10,4 @@
 #
 # A worktree build therefore ships an empty CLIENT_SECRET and cannot complete a
 # fresh login. Smoke still installs the worktree's own APK, preserving app data
-# through .kent/adapters/mobile/android-apk-install-preserve.
+# through tools/android-apk-install-preserve.

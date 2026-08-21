@@ -10,14 +10,10 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
   code, each claim naming the file it came from. Load the one document your step
   touches.
 - Plans, specs, and evidence for in-flight work: `docs/superpowers/`.
-- The recipes under `.kent/skills/puber-android-workflow/references/recipes/`
-  are superseded by `docs/architecture/` and describe an older shape of the
-  code. Do not follow them, and do not cite them as the reason for a change.
-  The same goes for the rest of `.kent/`: it belongs to a workflow runner that
-  is not installed here.
-- Two scripts are the exception and still run standalone:
-  `.kent/adapters/mobile/emulator-resource-lock.sh` and
-  `.kent/adapters/mobile/android-apk-install-preserve`, both named below.
+- Release procedure: `docs/release.md`.
+- Repository tooling lives in `tools/`: `agentw`, `configure-worktree-sdk`,
+  `emulator-resource-lock.sh`, `android-apk-install-preserve`,
+  `mobile-evidence-audit.sh`, `generate-baseline-profile.sh`.
 
 ## Build And Worktrees
 
@@ -66,18 +62,26 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
 
 ## Runtime And External Systems
 
+- Decide whether a change needs on-device verification before looking at what
+  hardware is free. It needs it when the change touches TV UI, focus, D-pad
+  input, navigation or overlays; ViewModel state, screen wiring, DI, startup or
+  deep links; playback, networking, persistence, auth or permissions; packaged
+  resources, manifest behaviour or build variants; or when a crash or
+  acceptance criterion only shows up at runtime. Documentation, prompts, repo
+  metadata, and tests that leave production sources alone do not. Compiling
+  cleanly, or having no device at hand, is not evidence that a change is safe -
+  when the device is unavailable, say so and ask, do not silently skip.
 - Acquire a device lease before install, launch, input, or logs through
-  `.kent/adapters/mobile/emulator-resource-lock.sh`, and release it when done.
-  Use the exact serial for every adb call.
+  `tools/emulator-resource-lock.sh`, and release it when done. Use the exact
+  serial for every adb call.
 - Devices are shared with every parallel agent on this host, and
   `connectedAndroidTest` runs on every connected device regardless of the
   serial it is given. Do not start instrumented tests while another device is
   attached, and never detach a device whose lease you do not hold; ask for
   explicit authorization instead.
 - Install the freshly built dev APK; do not use an implicit Gradle install
-  target. Preserve app data with
-  `.kent/adapters/mobile/android-apk-install-preserve`: a wiped app cannot log
-  in again from a worktree build.
+  target. Preserve app data with `tools/android-apk-install-preserve`: a wiped
+  app cannot log in again from a worktree build.
 - A failed install blocks the change; it is never a reason to uninstall, clear
   package data, allow a downgrade, or replace a signer. Each of those needs
   separate explicit authorization, as does any use of a physical TV rather than
@@ -85,6 +89,8 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
 - Keep credentials, broad UI dumps/logs, playback/account mutations, and raw
   authenticated responses out of Git and out of any evidence file unless an
   explicit task authorization permits the exact action.
+  `tools/mobile-evidence-audit.sh <evidence-dir> [package]` scans a directory
+  for secrets and raw logcat before it is shared.
 
 ## Repository Hygiene
 
