@@ -203,7 +203,9 @@ internal class DeviceSettingsContentFocusTest {
         val network = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Network.name))
         network.requestFocus()
         network.press(Key.DirectionRight)
-        focusedNode().press(Key.DirectionDown).press(Key.Enter)
+        // The panel is entered on the diagnostics row now, so it takes two Down presses — past
+        // the mirror row — to reach the server-location list before it can be expanded.
+        focusedNode().press(Key.DirectionDown).press(Key.DirectionDown).press(Key.Enter)
 
         focusedItem("Automatic").assertIsFocused().press(Key.Back)
         composeRule.waitForIdle()
@@ -316,7 +318,9 @@ internal class DeviceSettingsContentFocusTest {
             SettingsTestTags.section(SettingsSection.Network.name)
         )
         network.requestFocus().press(Key.DirectionRight)
-        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
+        // Entering the panel from the section list always lands on its top row, which is the
+        // diagnostics row now that it sits above the mirror row.
+        focusedItem(context.getString(R.string.diagnostics_open_action)).assertIsFocused()
 
         // The dialog is a sibling of this content, so the test can only play its effect on focus:
         // it takes focus away while open, and on close there is nothing left holding any.
@@ -325,7 +329,7 @@ internal class DeviceSettingsContentFocusTest {
         dialogOpen = false
         composeRule.waitForIdle()
 
-        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
+        focusedItem(context.getString(R.string.diagnostics_open_action)).assertIsFocused()
     }
 
     @Test
