@@ -267,4 +267,40 @@ internal class ApiDomainInteractorTest {
 
         verify(exactly = 1) { detailsPrefetcher.invalidate() }
     }
+
+    @Test
+    fun switchToBuiltInDomain_appliesTheMirror_whenItIsBuiltIn() = runTest {
+        val state = interactor.switchToBuiltInDomain("api.alador.test")
+
+        assertEquals("api.alador.test", state?.domain)
+        assertEquals("api.alador.test", state?.customDomain)
+        verify(exactly = 1) { preferences.saveApiDomain("api.alador.test") }
+    }
+
+    /**
+     * The default domain is stored as "no override" rather than as itself, so returning to it has
+     * to clear the preference — otherwise a later change to the built-in default would be pinned
+     * shut by a value the user never chose.
+     */
+    @Test
+    fun switchToBuiltInDomain_clearsTheOverride_whenTheTargetIsTheDefault() = runTest {
+        interactor.switchToBuiltInDomain("api.alador.test")
+
+        val state = interactor.switchToBuiltInDomain("service-kp.test")
+
+        assertEquals("service-kp.test", state?.domain)
+        assertNull(state?.customDomain)
+        verify(exactly = 1) { preferences.saveApiDomain(null) }
+    }
+
+    /** A domain that is not one of ours is not something a diagnostic may switch to. */
+    @Test
+    fun switchToBuiltInDomain_changesNothing_whenTheDomainIsUnknown() = runTest {
+        val state = interactor.switchToBuiltInDomain("evil.test")
+
+        assertNull(state)
+        // Any save at all, not just one carrying the rejected string: falling through to a default
+        // preset would be the mistake worth catching, and it would never save "evil.test".
+        verify(exactly = 0) { preferences.saveApiDomain(any()) }
+    }
 }

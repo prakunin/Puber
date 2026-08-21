@@ -15,6 +15,7 @@ import com.kino.puber.ui.feature.contentlist.ContentListScreen
 import com.kino.puber.ui.feature.details.component.DetailsScreen
 import com.kino.puber.ui.feature.details.model.DetailsScreenParams
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
+import com.kino.puber.ui.feature.device.diagnostics.NetworkDiagnosticsScreen
 import com.kino.puber.ui.feature.device.settings.flow.DeviceSettingsFlowScreen
 import com.kino.puber.ui.feature.player.component.PlayerScreen
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
@@ -60,6 +61,8 @@ internal object ScreensImpl : Screens {
     override fun deviceSettings(): PuberScreen {
         return DeviceSettingsFlowScreen()
     }
+
+    override fun networkDiagnostics(): PuberScreen = NetworkDiagnosticsScreen()
 
     override fun contentList(tabType: TabType): PuberScreen {
         return ContentListScreen(tabType)

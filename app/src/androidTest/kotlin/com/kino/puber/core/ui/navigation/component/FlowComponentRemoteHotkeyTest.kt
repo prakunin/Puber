@@ -116,6 +116,8 @@ private object ProbeScreens : Screens {
 
     override fun deviceSettings(): PuberScreen = ProbeSettingsScreen
 
+    override fun networkDiagnostics(): PuberScreen = unsupported()
+
     override fun contentList(tabType: TabType): PuberScreen = unsupported()
 
     override fun underDevelopment(): PuberScreen = unsupported()
