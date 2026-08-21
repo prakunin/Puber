@@ -5,18 +5,16 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
 
 ## Context Index
 
+- How the app is built: `docs/architecture/` - screens and DI, ViewModels,
+  navigation, paging and filters, API, UI and Compose, testing. Written from the
+  code, each claim naming the file it came from. Load the one document your step
+  touches.
 - Plans, specs, and evidence for in-flight work: `docs/superpowers/`.
-- Architecture recipes verified against the code on 2026-08-21, under
-  `.kent/skills/puber-android-workflow/references/recipes/`: `viewmodel.md`,
-  `di-setup.md`, `compose-screen.md`, and `compose-performance.md`. In the last
-  one, ignore the list examples: they use the removed `androidx.tv.foundation`
-  API, while this project uses the standard `LazyRow`/`LazyColumn`/
-  `LazyVerticalGrid`.
-- Every other document under `.kent/` is unverified legacy from a workflow
-  runner that is no longer installed here. Parts of it are accurate and parts
-  prescribe APIs, screens, and test infrastructure that do not exist, so treat
-  all of it as untrusted: check a claim against the code before acting on it,
-  and never cite it as the reason for a change.
+- The recipes under `.kent/skills/puber-android-workflow/references/recipes/`
+  are superseded by `docs/architecture/` and describe an older shape of the
+  code. Do not follow them, and do not cite them as the reason for a change.
+  The same goes for the rest of `.kent/`: it belongs to a workflow runner that
+  is not installed here.
 - Two scripts are the exception and still run standalone:
   `.kent/adapters/mobile/emulator-resource-lock.sh` and
   `.kent/adapters/mobile/android-apk-install-preserve`, both named below.
@@ -57,6 +55,8 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
   `onAction: (UIAction) -> Unit`.
 - UI uses Compose TV Material3 (`androidx.tv.material3`); lists use the
   standard Compose `Lazy*` APIs, not `androidx.tv.foundation`.
+- Screens resolve their ViewModel with `puberViewModel<VM>()` inside `DIScope`,
+  not with bare `koinViewModel()`.
 - Unit tests are JUnit 5: `@RegisterExtension` with `MainDispatcherExtension`,
   and `FakeResourceProvider` for anything that maps strings.
 - API access is centralized in `KinoPubApiClient`; API models are used directly
