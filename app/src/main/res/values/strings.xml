@@ -70,6 +70,7 @@
     <string name="diagnostics_summary_slow_hint">Если видео тормозит, попробуй другую локацию сервера или другой тип потока в этом разделе настроек.</string>
     <string name="diagnostics_mirror_proposal">Зеркало %1$s не отвечает, %2$s отвечает.</string>
     <string name="diagnostics_mirror_switch">Переключить на %1$s</string>
+    <string name="diagnostics_mirror_switching">Переключаю…</string>
     <string name="diagnostics_mirror_switched">Зеркало переключено на %1$s.</string>
     <string name="diagnostics_cancel">Отмена</string>
     <string name="diagnostics_restart">Повторить</string>

@@ -383,6 +383,7 @@
     <string name="diagnostics_summary_slow_hint">If video stutters, try a different server location or a different streaming type in this settings section.</string>
     <string name="diagnostics_mirror_proposal">Mirror %1$s does not answer; %2$s does.</string>
     <string name="diagnostics_mirror_switch">Switch to %1$s</string>
+    <string name="diagnostics_mirror_switching">Switching…</string>
     <string name="diagnostics_mirror_switched">The mirror was switched to %1$s.</string>
     <string name="diagnostics_cancel">Cancel</string>
     <string name="diagnostics_restart">Run again</string>

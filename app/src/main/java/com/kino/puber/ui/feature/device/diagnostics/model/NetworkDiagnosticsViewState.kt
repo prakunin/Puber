@@ -28,4 +28,5 @@ internal data class NetworkDiagnosticsViewState(
     val advice: DiagnosticsAdvice? = null,
     val applyingMirror: Boolean = false,
     val appliedMirror: String? = null,
+    val workingMirrorDomain: String? = null,
 )

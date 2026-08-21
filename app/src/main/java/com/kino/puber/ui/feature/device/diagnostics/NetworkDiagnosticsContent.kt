@@ -13,7 +13,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -55,8 +58,18 @@ internal fun NetworkDiagnosticsContent(
     // takes focus at the moment it appears instead.
     val mirrorFocusRequester = remember { FocusRequester() }
     val proposal = state.advice?.mirrorProposal
+    // Whether the proposal was on screen the last time this ran, so its disappearance — the switch
+    // resolved and the button left composition — can be told apart from a screen that never had a
+    // proposal to begin with. Only the former has to hand focus back to the primary action.
+    var proposalWasShown by remember { mutableStateOf(false) }
     LaunchedEffect(proposal) {
-        if (proposal != null) mirrorFocusRequester.requestFocus()
+        if (proposal != null) {
+            proposalWasShown = true
+            mirrorFocusRequester.requestFocus()
+        } else if (proposalWasShown) {
+            proposalWasShown = false
+            primaryFocusRequester.requestFocus()
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -81,9 +94,14 @@ internal fun NetworkDiagnosticsContent(
                 items(state.steps, key = { it.step.name }) { row ->
                     StepRow(
                         row = row,
-                        // The one host the screen is allowed to name, and only on the row it is
-                        // the subject of. It is the user's own setting, shown next door already.
-                        detail = state.apiDomain.takeIf { row.step == DiagnosticStep.ApiReachability },
+                        // The one host each row is allowed to name, and only on the row it is the
+                        // subject of: the current mirror beside the reachability check that is
+                        // about it, the mirror the sweep found beside the sweep that found it.
+                        detail = when (row.step) {
+                            DiagnosticStep.ApiReachability -> state.apiDomain
+                            DiagnosticStep.MirrorSweep -> state.workingMirrorDomain
+                            else -> null
+                        },
                     )
                 }
             }
@@ -110,6 +128,15 @@ internal fun NetworkDiagnosticsContent(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            if (proposal != null) {
+                Text(
+                    text = stringResource(R.string.diagnostics_mirror_proposal, state.apiDomain, proposal),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.testTag(NetworkDiagnosticsTestTags.MirrorProposal),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Row(
                 modifier = Modifier.focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,12 +145,21 @@ internal fun NetworkDiagnosticsContent(
                 if (proposal != null) {
                     Button(
                         onClick = { onAction(NetworkDiagnosticsActions.ConfirmMirrorSwitch) },
-                        enabled = !state.applyingMirror,
+                        // Disabling this button while the switch is in flight would drop it out of
+                        // the focus chain the user's thumb is already on. The view model already
+                        // ignores a repeat press while applying, so staying enabled is safe — the
+                        // button's own label is what tells the user a press landed.
                         modifier = Modifier
                             .focusRequester(mirrorFocusRequester)
                             .testTag(NetworkDiagnosticsTestTags.MirrorSwitch),
                     ) {
-                        Text(stringResource(R.string.diagnostics_mirror_switch, proposal))
+                        Text(
+                            if (state.applyingMirror) {
+                                stringResource(R.string.diagnostics_mirror_switching)
+                            } else {
+                                stringResource(R.string.diagnostics_mirror_switch, proposal)
+                            }
+                        )
                     }
                 }
                 Button(

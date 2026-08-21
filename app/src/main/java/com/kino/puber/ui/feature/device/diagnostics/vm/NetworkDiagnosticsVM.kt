@@ -75,6 +75,7 @@ internal class NetworkDiagnosticsVM(
                 running = !run.finished,
                 finished = run.finished,
                 advice = if (run.finished) advise(run) else null,
+                workingMirrorDomain = run.workingMirrorDomain,
             )
         )
     }
