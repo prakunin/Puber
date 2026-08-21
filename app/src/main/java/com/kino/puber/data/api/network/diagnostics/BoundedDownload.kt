@@ -39,6 +39,13 @@ fun interface BoundedDownloader {
  * [com.kino.puber.data.api.network.HttpEndpointProbe] already does it — the singleton's own
  * configuration is never touched, because a diagnostic must not be able to change how the app talks
  * to the network.
+ *
+ * What the elapsed time covers, because the rate it feeds is read as a quality claim: the clock
+ * starts before the call is made, so name resolution, the TCP and TLS handshakes and however long
+ * the server thinks before its first byte are all divided into the bytes that arrive. The figure is
+ * therefore how fast the video *arrives*, not how fast the link carries it, and on a high-latency
+ * link it reads lower than the link's own capacity. That is the number worth reporting on a screen
+ * about stuttering playback — a player waits through setup too — but it is not a link speed test.
  */
 class OkHttpBoundedDownloader(
     okHttpClient: OkHttpClient,

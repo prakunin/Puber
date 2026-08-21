@@ -299,6 +299,8 @@ internal class ApiDomainInteractorTest {
         val state = interactor.switchToBuiltInDomain("evil.test")
 
         assertNull(state)
-        verify(exactly = 0) { preferences.saveApiDomain("evil.test") }
+        // Any save at all, not just one carrying the rejected string: falling through to a default
+        // preset would be the mistake worth catching, and it would never save "evil.test".
+        verify(exactly = 0) { preferences.saveApiDomain(any()) }
     }
 }

@@ -25,6 +25,11 @@ internal class NetworkDiagnosticsAdviceTest {
     }
 
     @Test
+    fun qualityCeiling_is720p_justBelowThe1080pThreshold() {
+        assertEquals(QualityCeiling.Hd720, qualityCeiling(9_999_999.0))
+    }
+
+    @Test
     fun qualityCeiling_is4k_atItsThreshold() {
         assertEquals(QualityCeiling.Uhd4k, qualityCeiling(25_000_000.0))
     }

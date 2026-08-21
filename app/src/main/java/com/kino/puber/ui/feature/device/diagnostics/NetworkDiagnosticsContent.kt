@@ -57,8 +57,9 @@ private class DiagnosticsFocus(
 /**
  * The whole of this screen's focus handling, and the only place that calls `requestFocus()`:
  * **the button that matches the current state — the mirror switch while a proposal is standing,
- * the primary action otherwise — is asked for focus once, each time which button that is changes,
- * and each time permission to focus at all is withdrawn and restored.**
+ * the primary action otherwise — is asked for focus once, and asked again whenever either of the
+ * two things the request depends on changes: which button the state points at, and whether focus
+ * may be forced at all.**
  *
  * That rule is stateless on purpose. [target] is derived from [proposal] alone, so it is the same
  * answer on a first composition, a recomposition and a composition rebuilt after an Activity

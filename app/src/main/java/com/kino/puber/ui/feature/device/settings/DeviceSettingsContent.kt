@@ -706,20 +706,20 @@ private fun LazyListScope.networkItems(
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
 ) {
-    item(key = "api-domain") {
-        SettingsListItem(
-            headline = stringResource(R.string.api_domain_open_action),
-            supportingText = stringResource(R.string.api_domain_settings_subtitle),
-            trailingText = apiDomain.currentDomain,
-            onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
-        )
-    }
     item(key = "network-diagnostics") {
         SettingsListItem(
             headline = stringResource(R.string.diagnostics_open_action),
             supportingText = stringResource(R.string.diagnostics_settings_subtitle),
             role = Role.Button,
             onClick = { onAction(DeviceSettingsActions.OpenNetworkDiagnostics) },
+        )
+    }
+    item(key = "api-domain") {
+        SettingsListItem(
+            headline = stringResource(R.string.api_domain_open_action),
+            supportingText = stringResource(R.string.api_domain_settings_subtitle),
+            trailingText = apiDomain.currentDomain,
+            onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
         )
     }
     // Which server and which stream decide what actually plays, so they belong with the mirror at
