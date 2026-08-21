@@ -98,6 +98,22 @@ internal class ApiDomainInteractor(
         ApiDomainDetectionResult.Success(getState())
     }
 
+    /**
+     * Switches to a named built-in endpoint, or does nothing when the name is not one of ours.
+     *
+     * The diagnostics screen has already probed the mirror it is proposing, so re-running a
+     * detection walk would be both wasteful and wrong — the walk could settle on a different
+     * endpoint than the one the user was shown and agreed to.
+     */
+    suspend fun switchToBuiltInDomain(domain: String): ApiDomainState? =
+        withContext(Dispatchers.IO) {
+            val preset = KinoPubConfig.BUILT_IN_ENDPOINTS.firstOrNull { it.domain == domain }
+                ?: return@withContext null
+
+            applyEndpoint(preset)
+            getState()
+        }
+
     suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult = withContext(Dispatchers.IO) {
         val currentDomain = KinoPubConfig.CURRENT_API_DOMAIN
         // The home screen resolves before every load, and the load behind an ON_RESUME is by far the
