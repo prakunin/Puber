@@ -24,6 +24,8 @@ interface Screens {
 
     fun deviceSettings(): PuberScreen
 
+    fun networkDiagnostics(): PuberScreen
+
     fun contentList(tabType: TabType): PuberScreen
 
     fun underDevelopment(): PuberScreen

@@ -714,6 +714,14 @@ private fun LazyListScope.networkItems(
             onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
         )
     }
+    item(key = "network-diagnostics") {
+        SettingsListItem(
+            headline = stringResource(R.string.diagnostics_open_action),
+            supportingText = stringResource(R.string.diagnostics_settings_subtitle),
+            role = Role.Button,
+            onClick = { onAction(DeviceSettingsActions.OpenNetworkDiagnostics) },
+        )
+    }
     // Which server and which stream decide what actually plays, so they belong with the mirror at
     // the top. The switches below only report what this box can decode, and stay under their own
     // heading.

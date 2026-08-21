@@ -159,6 +159,8 @@ internal class DeviceSettingsVM(
             is DeviceSettingsActions.ChangeAppLanguage -> onChangeAppLanguage(action.language)
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
+            DeviceSettingsActions.OpenNetworkDiagnostics ->
+                router.navigateTo(router.screens.networkDiagnostics())
             is DeviceSettingsActions.SaveApiDomain -> saveApiDomain(action.domain)
             DeviceSettingsActions.DetectApiDomain -> detectApiDomain()
             DeviceSettingsActions.ResetApiDomain -> resetApiDomain()

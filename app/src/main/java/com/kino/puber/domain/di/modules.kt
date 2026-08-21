@@ -3,6 +3,9 @@ package com.kino.puber.domain.di
 import com.kino.puber.core.lifecycle.AppForegroundState
 import com.kino.puber.data.api.network.HttpEndpointProbe
 import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.api.network.diagnostics.DnsHostResolver
+import com.kino.puber.data.api.network.diagnostics.KinoPubDiagnosticsApi
+import com.kino.puber.data.api.network.diagnostics.OkHttpBoundedDownloader
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.auth.AuthInteractor
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
@@ -13,6 +16,7 @@ import com.kino.puber.domain.interactor.device.DeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.DeviceSettingInteractor
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
+import com.kino.puber.domain.interactor.diagnostics.NetworkDiagnosticsInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
@@ -21,6 +25,7 @@ import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
+import okhttp3.OkHttpClient
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -42,6 +47,15 @@ val interactorModule = module {
             probe = HttpEndpointProbe(get()),
             reachability = get(),
             detailsPrefetcher = get(),
+        )
+    }
+    single {
+        NetworkDiagnosticsInteractor(
+            probe = HttpEndpointProbe(get()),
+            resolver = DnsHostResolver(get<OkHttpClient>().dns),
+            api = KinoPubDiagnosticsApi(get()),
+            downloader = OkHttpBoundedDownloader(get()),
+            reachability = get(),
         )
     }
     singleOf(::AppForegroundState)
