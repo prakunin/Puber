@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -166,6 +167,34 @@ internal class NetworkDiagnosticsContentFocusTest {
 
         awaitFocus(NetworkDiagnosticsTestTags.PrimaryAction)
         composeRule.onNodeWithTag(NetworkDiagnosticsTestTags.PrimaryAction).assertIsFocused()
+    }
+
+    /**
+     * Reproduces an Activity recreation without a real Activity or ViewModel — a locale, night-mode
+     * or font-scale change tears the composition down and rebuilds it, and the app's own in-app
+     * language switch is exactly that. `StateRestorationTester` disposes and recomposes the tree the
+     * same way: `rememberFocusRequesterOnLaunch()`'s one-shot guard is `rememberSaveable`, so it
+     * survives and reads "already requested" on the rebuilt tree, while actual system focus and
+     * every plain `remember` in the content — including the proposal/primary-button coin flip — do
+     * not survive and start over. A retained ViewModel would still be reporting the same finished
+     * run's proposal at that point, which this reproduces by simply passing the same state again.
+     * With the auto-focus path already spent and nothing focused, only the safety net can recover
+     * it — so this proves that net, not the ordinary first-launch path the other tests exercise.
+     */
+    @Test
+    fun mirrorSwitchRegainsFocusAfterStateRestoration() {
+        val stateRestorationTester = StateRestorationTester(composeRule)
+        stateRestorationTester.setContent {
+            PuberTheme {
+                NetworkDiagnosticsContent(state = proposalState())
+            }
+        }
+        awaitFocus(NetworkDiagnosticsTestTags.MirrorSwitch)
+
+        stateRestorationTester.emulateSavedInstanceStateRestore()
+
+        awaitFocus(NetworkDiagnosticsTestTags.MirrorSwitch)
+        composeRule.onNodeWithTag(NetworkDiagnosticsTestTags.MirrorSwitch).assertIsFocused()
     }
 
     /** A skipped step must read as skipped, not as a failure. */

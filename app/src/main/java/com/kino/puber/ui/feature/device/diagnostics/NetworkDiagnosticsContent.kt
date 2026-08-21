@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.R
+import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
+import com.kino.puber.core.ui.uikit.component.modifier.LocalAutoFocusOnLaunchEnabled
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.diagnostics.DiagnosticStep
@@ -41,47 +45,88 @@ import com.kino.puber.ui.feature.device.diagnostics.model.DiagnosticStepUi
 import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsActions
 import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsViewState
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private val ScreenHorizontalPadding = 48.dp
 private val ScreenVerticalPadding = 28.dp
 private const val BITS_PER_MEGABIT = 1_000_000.0
+
+// Comfortably longer than rememberFocusRequesterOnLaunch()'s own 100 ms delay, so the safety net
+// below never preempts that legitimate first request — it only ever acts once that request has had
+// its fair chance and nothing came of it.
+private const val FOCUS_SAFETY_NET_DELAY_MILLIS = 250L
+
+/** The two buttons' requesters, and where to report the action row's own observed focus state. */
+private class DiagnosticsFocusState(
+    val mirrorFocusRequester: FocusRequester,
+    val primaryFocusRequester: FocusRequester,
+    val onRowFocusChanged: (hasFocus: Boolean) -> Unit,
+)
+
+/**
+ * Decides, and keeps deciding, which of the two buttons owns focus — across recomposition,
+ * across the proposal appearing or disappearing, and across an Activity recreation.
+ *
+ * Three mechanisms, layered so exactly one of them ever acts at a time:
+ * - [rememberFocusRequesterOnLaunch] is the first: delayed, drawer-aware, fires at most once per
+ *   screen. [proposalPresentOnLaunch] freezes, at this screen's true first composition, which
+ *   button that single request is wired to, so it always lands on the button that actually matches
+ *   the screen's starting state, whichever that turns out to be.
+ * - The transition effect owns every change *after* that: a proposal appearing later, or
+ *   disappearing once the switch resolves. It skips the value this composition started with —
+ *   that one belongs to the mechanism above — by comparing against [previousProposal].
+ * - The safety net exists because the first mechanism's one-shot guard lives in saved instance
+ *   state, which survives the very same Activity recreation that rebuilds this whole composition —
+ *   a locale, night-mode or font-scale change tears the tree down, and the app's own in-app
+ *   language switch is exactly that. The ViewModel is retained, so it can still report a finished
+ *   run's proposal on the rebuilt tree's first frame while the restored guard reads "already
+ *   requested" — leaving nothing to ever call `requestFocus()`. No remembered flag on this side can
+ *   tell that state apart from an ordinary run; observed focus can, because [rowHasFocus] is read
+ *   back from the real focus tree on every composition, recreation included. It waits out the first
+ *   mechanism's own delay before checking, so it never preempts a legitimate request, and backs off
+ *   the instant focus actually lands anywhere in the row.
+ */
+@Composable
+private fun rememberDiagnosticsFocusState(proposal: String?): DiagnosticsFocusState {
+    val autoFocusRequester = rememberFocusRequesterOnLaunch()
+    val proposalPresentOnLaunch = remember { proposal != null }
+    val secondaryFocusRequester = remember { FocusRequester() }
+    val mirrorFocusRequester = if (proposalPresentOnLaunch) autoFocusRequester else secondaryFocusRequester
+    val primaryFocusRequester = if (proposalPresentOnLaunch) secondaryFocusRequester else autoFocusRequester
+    val target = if (proposal != null) mirrorFocusRequester else primaryFocusRequester
+
+    var rowHasFocus by remember { mutableStateOf(false) }
+    val isDrawerOpen = LocalDrawerState.current?.currentValue == DrawerValue.Open
+    val autoFocusEnabled = LocalAutoFocusOnLaunchEnabled.current
+    val canAutoFocus = !isDrawerOpen && autoFocusEnabled
+
+    var previousProposal by remember { mutableStateOf(proposal) }
+    LaunchedEffect(proposal, canAutoFocus) {
+        val changed = previousProposal != proposal
+        previousProposal = proposal
+        if (changed && canAutoFocus) target.requestFocus()
+    }
+
+    LaunchedEffect(rowHasFocus, target, canAutoFocus) {
+        if (rowHasFocus || !canAutoFocus) return@LaunchedEffect
+        delay(FOCUS_SAFETY_NET_DELAY_MILLIS)
+        if (!rowHasFocus) target.requestFocus()
+    }
+
+    return DiagnosticsFocusState(
+        mirrorFocusRequester = mirrorFocusRequester,
+        primaryFocusRequester = primaryFocusRequester,
+        onRowFocusChanged = { rowHasFocus = it },
+    )
+}
 
 @Composable
 internal fun NetworkDiagnosticsContent(
     state: NetworkDiagnosticsViewState,
     onAction: (UIAction) -> Unit = {},
 ) {
-    val autoFocusRequester = rememberFocusRequesterOnLaunch()
     val proposal = state.advice?.mirrorProposal
-
-    // rememberFocusRequesterOnLaunch() does not focus synchronously — it delays, and respects the
-    // drawer and the auto-focus flag while doing it — so a run that settles before that delay fires
-    // (the whole run can finish in under a second) already has its proposal on screen by the time
-    // it goes looking for something to focus. Frozen once, at first composition, so the choice of
-    // which physical button gets that single delayed request never moves again for this screen.
-    val proposalPresentOnLaunch = remember { proposal != null }
-
-    // The button that lost the coin flip above still needs a requester of its own, because every
-    // focus change *after* first composition — a proposal appearing later, or disappearing once the
-    // switch resolves — is owned entirely by the effect below. rememberFocusRequesterOnLaunch()'s
-    // own request never fires a second time, so the two owners can never race for the same button.
-    val secondaryFocusRequester = remember { FocusRequester() }
-    val mirrorFocusRequester = if (proposalPresentOnLaunch) autoFocusRequester else secondaryFocusRequester
-    val primaryFocusRequester = if (proposalPresentOnLaunch) secondaryFocusRequester else autoFocusRequester
-
-    var previousProposal by remember { mutableStateOf(proposal) }
-    LaunchedEffect(proposal) {
-        val previous = previousProposal
-        previousProposal = proposal
-        // The value this composition started with is the auto-focus effect's to place, not this
-        // effect's — reacting to it here too would be the second owner the race came from.
-        if (previous == proposal) return@LaunchedEffect
-        if (proposal != null) {
-            mirrorFocusRequester.requestFocus()
-        } else {
-            primaryFocusRequester.requestFocus()
-        }
-    }
+    val focus = rememberDiagnosticsFocusState(proposal)
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -149,7 +194,9 @@ internal fun NetworkDiagnosticsContent(
             }
 
             Row(
-                modifier = Modifier.focusGroup(),
+                modifier = Modifier
+                    .onFocusChanged { focus.onRowFocusChanged(it.hasFocus) }
+                    .focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -161,7 +208,7 @@ internal fun NetworkDiagnosticsContent(
                         // ignores a repeat press while applying, so staying enabled is safe — the
                         // button's own label is what tells the user a press landed.
                         modifier = Modifier
-                            .focusRequester(mirrorFocusRequester)
+                            .focusRequester(focus.mirrorFocusRequester)
                             .testTag(NetworkDiagnosticsTestTags.MirrorSwitch),
                     ) {
                         Text(
@@ -184,7 +231,7 @@ internal fun NetworkDiagnosticsContent(
                         )
                     },
                     modifier = Modifier
-                        .focusRequester(primaryFocusRequester)
+                        .focusRequester(focus.primaryFocusRequester)
                         .testTag(NetworkDiagnosticsTestTags.PrimaryAction),
                 ) {
                     Text(
