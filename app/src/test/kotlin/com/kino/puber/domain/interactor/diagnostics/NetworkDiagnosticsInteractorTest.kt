@@ -180,6 +180,38 @@ internal class NetworkDiagnosticsInteractorTest {
         assertTrue(downloadedUrls.isEmpty())
     }
 
+    /**
+     * The sweep asks an [EndpointProbe] the run does not control, and that interface gives no
+     * no-throw guarantee. The other four steps already survive a throw; the sweep must too, or one
+     * misbehaving probe call ends a run that every other failure mode leaves standing.
+     */
+    @Test
+    fun run_survivesAThrowingProbe_duringTheMirrorSweep() = runTest {
+        reachableDomains = emptySet()
+        val interactorWithThrowingProbe = NetworkDiagnosticsInteractor(
+            probe = EndpointProbe { throw IllegalStateException("probe blew up") },
+            resolver = HostResolver { resolvedAddresses },
+            api = object : DiagnosticsApi {
+                override suspend fun loadCataloguePage(): Boolean = cataloguePageArrives
+                override suspend fun findProgressiveMediaUrl(): String? = progressiveUrl
+            },
+            downloader = BoundedDownloader { url, maxBytes ->
+                downloadedUrls += url
+                ThroughputSample(bytes = maxBytes, elapsedMillis = 1_000)
+            },
+            reachability = reachability,
+            clock = { now },
+        )
+
+        val last = interactorWithThrowingProbe.run().toList().last()
+
+        assertTrue(last.finished)
+        assertEquals(
+            StepState.Failure(FailureReason.RequestFailed),
+            last.state(DiagnosticStep.MirrorSweep),
+        )
+    }
+
     private fun endpointFor(domain: String) = ApiEndpointPreset(
         domain = domain,
         apiHost = domain,

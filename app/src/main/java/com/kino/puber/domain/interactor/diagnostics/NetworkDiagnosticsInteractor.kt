@@ -66,7 +66,20 @@ internal class NetworkDiagnosticsInteractor(
         val running = current.with(step, StepState.Running)
         emit(running)
 
-        val state = try {
+        val settled = running.with(step, guarded(step, measure))
+        emit(settled)
+        return settled
+    }
+
+    /**
+     * Runs [measure] and contains anything it throws to [step] alone.
+     *
+     * Every step goes through this, including the mirror sweep: none of the collaborators a step
+     * calls promise not to throw, and a step that throws must not be able to end a run the other
+     * four steps still have answers worth having from.
+     */
+    private suspend fun guarded(step: DiagnosticStep, measure: suspend () -> StepState): StepState {
+        return try {
             measure()
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -76,10 +89,6 @@ internal class NetworkDiagnosticsInteractor(
             log(error, "Network diagnostics step $step failed")
             StepState.Failure(FailureReason.RequestFailed)
         }
-
-        val settled = running.with(step, state)
-        emit(settled)
-        return settled
     }
 
     private suspend fun FlowCollector<NetworkDiagnosticsRun>.sweepMirrors(
@@ -96,16 +105,15 @@ internal class NetworkDiagnosticsInteractor(
         }
 
         emit(current.with(DiagnosticStep.MirrorSweep, StepState.Running))
-        val working = findWorkingMirror()
+
+        var working: String? = null
+        val state = guarded(DiagnosticStep.MirrorSweep) {
+            working = findWorkingMirror()
+            if (working == null) StepState.Failure(FailureReason.Unreachable) else StepState.Success()
+        }
+
         val settled = current
-            .with(
-                DiagnosticStep.MirrorSweep,
-                if (working == null) {
-                    StepState.Failure(FailureReason.Unreachable)
-                } else {
-                    StepState.Success()
-                },
-            )
+            .with(DiagnosticStep.MirrorSweep, state)
             .copy(workingMirrorDomain = working)
         emit(settled)
         return settled
