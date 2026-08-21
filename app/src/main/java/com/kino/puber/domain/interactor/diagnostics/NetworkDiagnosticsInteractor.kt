@@ -50,12 +50,23 @@ internal class NetworkDiagnosticsInteractor(
         current = runStep(current, DiagnosticStep.ApiReachability) { measureApiReachability() }
         val apiReachable = current.state(DiagnosticStep.ApiReachability) is StepState.Success
 
+        // A step settles the moment its outcome is known, not when the run reaches it. "Did the
+        // mirror in use answer" is the whole of the sweep's question, and step 1 has just answered
+        // it — so the row can read "not needed" while the video step is still downloading.
+        if (apiReachable) {
+            current = current.with(
+                DiagnosticStep.MirrorSweep,
+                StepState.Skipped(SkipReason.CurrentMirrorAnswers),
+            )
+            emit(current)
+        }
+
         current = runStep(current, DiagnosticStep.NameResolution) { resolveApiHost() }
         current = runStep(current, DiagnosticStep.ApiResponsiveness) {
             if (apiReachable) measureApiResponsiveness() else StepState.Skipped(SkipReason.NoNetwork)
         }
         current = runStep(current, DiagnosticStep.MediaThroughput) { measureMediaThroughput() }
-        current = sweepMirrors(current, apiReachable)
+        if (!apiReachable) current = sweepMirrors(current)
 
         current = current.copy(finished = true)
         emit(current)
@@ -96,17 +107,7 @@ internal class NetworkDiagnosticsInteractor(
 
     private suspend fun FlowCollector<NetworkDiagnosticsRun>.sweepMirrors(
         current: NetworkDiagnosticsRun,
-        apiReachable: Boolean,
     ): NetworkDiagnosticsRun {
-        if (apiReachable) {
-            val skipped = current.with(
-                DiagnosticStep.MirrorSweep,
-                StepState.Skipped(SkipReason.CurrentMirrorAnswers),
-            )
-            emit(skipped)
-            return skipped
-        }
-
         emit(current.with(DiagnosticStep.MirrorSweep, StepState.Running))
 
         var working: String? = null

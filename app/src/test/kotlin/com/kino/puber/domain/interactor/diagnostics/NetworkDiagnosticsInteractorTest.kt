@@ -135,6 +135,41 @@ internal class NetworkDiagnosticsInteractorTest {
         assertTrue(downloadedUrls.isEmpty())
     }
 
+    /** A step nobody can answer for is a skip, and it must stay one rather than drift to a failure. */
+    @Test
+    fun run_skipsTheResponsivenessStep_whenTheApiIsUnreachable() = runTest {
+        reachableDomains = emptySet()
+
+        val last = interactor.run().toList().last()
+
+        assertEquals(
+            StepState.Skipped(SkipReason.NoNetwork),
+            last.state(DiagnosticStep.ApiResponsiveness),
+        )
+    }
+
+    /**
+     * The sweep's question is answered by step 1, so its row settles there rather than at the end
+     * of the run — the screen shows "not needed" while the video step is still downloading.
+     */
+    @Test
+    fun run_settlesTheMirrorSweep_asSoonAsTheCurrentMirrorAnswers() = runTest {
+        val emissions = interactor.run().toList()
+
+        val settledAt = emissions.indexOfFirst {
+            it.state(DiagnosticStep.MirrorSweep) == StepState.Skipped(SkipReason.CurrentMirrorAnswers)
+        }
+        val mediaRanAt = emissions.indexOfFirst {
+            it.state(DiagnosticStep.MediaThroughput) == StepState.Running
+        }
+
+        assertTrue(settledAt >= 0, "the sweep must settle")
+        assertTrue(
+            settledAt < mediaRanAt,
+            "the sweep must settle before the media step starts, not after the run ends",
+        )
+    }
+
     /**
      * The lookup is a blocking JVM call, so the ceiling has to bound the wait rather than the call.
      * Without it the row sits at "checking" for as long as the resolver feels like taking.
