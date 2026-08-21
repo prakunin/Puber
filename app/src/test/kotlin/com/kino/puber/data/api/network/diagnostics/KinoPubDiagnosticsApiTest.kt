@@ -13,7 +13,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -23,43 +22,74 @@ internal class KinoPubDiagnosticsApiTest {
     private val api = KinoPubDiagnosticsApi(client)
 
     @Test
-    fun findProgressiveMediaUrl_returnsTheProgressiveUrl_whenTheItemOffersOne() = runTest {
+    fun findMediaProbeTarget_returnsTheProgressiveUrl_whenTheItemOffersOne() = runTest {
         givenCatalogue(itemId = 42)
-        coEvery { client.getItemFiles(42) } returns Result.success(
-            ItemFiles(id = 42, files = listOf(fileWith(VideoUrl(http = "https://cdn.test/a.mp4"))))
+        givenFiles(fileWith(VideoUrl(http = "https://cdn.test/a.mp4")))
+
+        assertEquals(
+            MediaProbeTarget.Progressive("https://cdn.test/a.mp4"),
+            api.findMediaProbeTarget(),
+        )
+    }
+
+    /** The reason `firstNotNullOfOrNull` is there: the first file need not be the one with a URL. */
+    @Test
+    fun findMediaProbeTarget_looksPastAFileWithoutAUrl() = runTest {
+        givenCatalogue(itemId = 42)
+        givenFiles(
+            VideoFile(url = null),
+            fileWith(VideoUrl(hls4 = "https://cdn.test/a.m3u8")),
+            fileWith(VideoUrl(http = "https://cdn.test/b.mp4")),
         )
 
-        assertEquals("https://cdn.test/a.mp4", api.findProgressiveMediaUrl())
+        assertEquals(
+            MediaProbeTarget.Progressive("https://cdn.test/b.mp4"),
+            api.findMediaProbeTarget(),
+        )
     }
 
     /**
-     * An item that only offers HLS is a fact about the item, not about the network — the caller
-     * turns null into a skipped step rather than a failed one.
+     * An account served only HLS is the whole reason this is not [MediaProbeTarget.Unavailable]:
+     * the row it produces names the setting that would make the measurement possible.
      */
     @Test
-    fun findProgressiveMediaUrl_returnsNull_whenOnlyHlsIsOnOffer() = runTest {
+    fun findMediaProbeTarget_saysNoProgressiveStream_whenOnlyHlsIsOnOffer() = runTest {
         givenCatalogue(itemId = 42)
-        coEvery { client.getItemFiles(42) } returns Result.success(
-            ItemFiles(id = 42, files = listOf(fileWith(VideoUrl(hls4 = "https://cdn.test/a.m3u8"))))
-        )
+        givenFiles(fileWith(VideoUrl(hls4 = "https://cdn.test/a.m3u8")))
 
-        assertNull(api.findProgressiveMediaUrl())
+        assertEquals(MediaProbeTarget.NoProgressiveStream, api.findMediaProbeTarget())
     }
 
     @Test
-    fun findProgressiveMediaUrl_returnsNull_whenTheCatalogueIsEmpty() = runTest {
+    fun findMediaProbeTarget_saysNoProgressiveStream_whenEveryFileHasANullUrl() = runTest {
+        givenCatalogue(itemId = 42)
+        givenFiles(VideoFile(url = null))
+
+        assertEquals(MediaProbeTarget.NoProgressiveStream, api.findMediaProbeTarget())
+    }
+
+    @Test
+    fun findMediaProbeTarget_isUnavailable_whenTheCatalogueIsEmpty() = runTest {
         coEvery { client.getItems(type = any(), sort = any(), page = any()) } returns
             Result.success(PaginatedResponse(items = emptyList(), pagination = pagination()))
 
-        assertNull(api.findProgressiveMediaUrl())
+        assertEquals(MediaProbeTarget.Unavailable, api.findMediaProbeTarget())
     }
 
     @Test
-    fun findProgressiveMediaUrl_returnsNull_whenTheCatalogueRequestFails() = runTest {
+    fun findMediaProbeTarget_isUnavailable_whenTheCatalogueRequestFails() = runTest {
         coEvery { client.getItems(type = any(), sort = any(), page = any()) } returns
             Result.failure(IllegalStateException("offline"))
 
-        assertNull(api.findProgressiveMediaUrl())
+        assertEquals(MediaProbeTarget.Unavailable, api.findMediaProbeTarget())
+    }
+
+    @Test
+    fun findMediaProbeTarget_isUnavailable_whenTheFilesRequestFails() = runTest {
+        givenCatalogue(itemId = 42)
+        coEvery { client.getItemFiles(42) } returns Result.failure(IllegalStateException("offline"))
+
+        assertEquals(MediaProbeTarget.Unavailable, api.findMediaProbeTarget())
     }
 
     @Test
@@ -75,6 +105,11 @@ internal class KinoPubDiagnosticsApiTest {
             Result.failure(IllegalStateException("offline"))
 
         assertFalse(api.loadCataloguePage())
+    }
+
+    private fun givenFiles(vararg files: VideoFile) {
+        coEvery { client.getItemFiles(42) } returns
+            Result.success(ItemFiles(id = 42, files = files.toList()))
     }
 
     private fun givenCatalogue(itemId: Int) {

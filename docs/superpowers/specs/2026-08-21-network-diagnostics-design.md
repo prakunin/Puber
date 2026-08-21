@@ -95,14 +95,28 @@ the media rate as the only rate on the screen.
 
 The response goes through the existing call path and is dropped; nothing extra is stored.
 
-**4. Скорость видео.** The step the feature exists for, because it is the only one that travels the
-path video travels. `getItems(type = movie, sort = fresh)` for an id, `getItemFiles(id)` for its
-files, then the first `VideoUrl.http` — the progressive candidate `PlayerInteractor` itself
-prefers — fetched with `Range: bytes=0-4194303`, capped at 4 MB and 10 s.
+**4. Скорость видео.** The step the feature exists for, because it is the only one that fetches
+media bytes from the server the account is actually served by. `getItems(type = movie, sort = fresh)`
+for an id, `getItemFiles(id)` for its files, then the first `VideoUrl.http` — fetched with
+`Range: bytes=0-4194303`, capped at 4 MB and 10 s, with the two catalogue calls in front of it under
+a 12 s ceiling of their own.
 
-If there is no `http` URL to be had, the step is **skipped**, not failed: an item that offers only
-HLS is a fact about the item, not about the network. This is what "when a safe probe is available"
-in the issue means in practice.
+What it measures is the **progressive** transport, and that is not what `PlayerInteractor` reaches
+for first: its candidate lists put `hls4` and `hls` ahead of `http`, so progressive is the player's
+last fallback. The step is still the closest thing to playback that can be measured safely — it is
+real media bytes over the real path — but it is not a measurement of the transport this account's
+playback will use, and it cannot be one without parsing a server-supplied playlist and resolving its
+segment URIs, which "nothing here is derived at runtime from a server response" rules out.
+
+The consequence is that an account whose streaming type is HLS is served no progressive URL at all,
+and the step cannot run for it — every run, not occasionally. So "no URL" is split in two. When the
+catalogue answers with files and none of them carries a progressive URL, the step is **skipped** with
+its own reason, and the row names the setting that would make the measurement possible: the streaming
+type is HLS, switch it to HTTP in this same settings section. Named as something to try, never
+offered as a button, exactly as server location and streaming type are elsewhere on the screen. When
+the catalogue offers no item at all, the step is skipped with nothing to say about it; when the
+lookup runs out of time, it is a failure, because the catalogue not answering is news about the
+network. None of the three is a failure of the link.
 
 The URL carries a token. It is never rendered, never logged, never persisted, and never included in
 evidence. Only the byte count and the elapsed time leave the step.

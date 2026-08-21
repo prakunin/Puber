@@ -7,6 +7,7 @@ import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.api.network.diagnostics.BoundedDownloader
 import com.kino.puber.data.api.network.diagnostics.DiagnosticsApi
 import com.kino.puber.data.api.network.diagnostics.HostResolver
+import com.kino.puber.data.api.network.diagnostics.MediaProbeTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -161,7 +162,16 @@ internal class NetworkDiagnosticsInteractor(
     }
 
     private suspend fun measureMediaThroughput(): StepState {
-        val url = api.findProgressiveMediaUrl() ?: return StepState.Skipped(SkipReason.NoMediaLink)
+        return when (val target = api.findMediaProbeTarget()) {
+            is MediaProbeTarget.Progressive -> downloadPrefix(target.url)
+            // The one skip the user can act on: no progressive URL anywhere in the item's files is
+            // what an account set to an HLS streaming type looks like from here.
+            MediaProbeTarget.NoProgressiveStream -> StepState.Skipped(SkipReason.NoProgressiveStream)
+            MediaProbeTarget.Unavailable -> StepState.Skipped(SkipReason.NoMediaLink)
+        }
+    }
+
+    private suspend fun downloadPrefix(url: String): StepState {
         val sample = downloader.measure(url, MEDIA_PROBE_MAX_BYTES)
 
         return if (sample.bytes > 0) {

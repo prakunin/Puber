@@ -21,6 +21,14 @@ internal enum class DiagnosticStep {
 internal enum class SkipReason {
     NoNetwork,
     NoMediaLink,
+
+    /**
+     * The catalogue answered, and none of the files it offered carries a progressive URL — which
+     * is what an account set to an HLS streaming type looks like from here. Kept apart from
+     * [NoMediaLink] because it is the one skip the user can do something about, and the row says
+     * what.
+     */
+    NoProgressiveStream,
     CurrentMirrorAnswers,
 }
 

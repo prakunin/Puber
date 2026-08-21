@@ -7,6 +7,7 @@ import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.api.network.diagnostics.BoundedDownloader
 import com.kino.puber.data.api.network.diagnostics.DiagnosticsApi
 import com.kino.puber.data.api.network.diagnostics.HostResolver
+import com.kino.puber.data.api.network.diagnostics.MediaProbeTarget
 import com.kino.puber.data.api.network.diagnostics.ThroughputSample
 import io.mockk.every
 import io.mockk.mockkObject
@@ -28,7 +29,7 @@ internal class NetworkDiagnosticsInteractorTest {
     private var reachableDomains = setOf("service-kp.test")
     private var resolvedAddresses = 2
     private var cataloguePageArrives = true
-    private var progressiveUrl: String? = "https://cdn.test/a.mp4"
+    private var mediaTarget: MediaProbeTarget = MediaProbeTarget.Progressive("https://cdn.test/a.mp4")
     private val downloadedUrls = mutableListOf<String>()
     private val now = 1_000L
 
@@ -37,17 +38,21 @@ internal class NetworkDiagnosticsInteractorTest {
     private val interactor = NetworkDiagnosticsInteractor(
         probe = EndpointProbe { endpoint -> endpoint.domain in reachableDomains },
         resolver = HostResolver { resolvedAddresses },
-        api = object : DiagnosticsApi {
-            override suspend fun loadCataloguePage(): Boolean = cataloguePageArrives
-            override suspend fun findProgressiveMediaUrl(): String? = progressiveUrl
-        },
-        downloader = BoundedDownloader { url, maxBytes ->
-            downloadedUrls += url
-            ThroughputSample(bytes = maxBytes, elapsedMillis = 1_000)
-        },
+        api = fakeApi(),
+        downloader = fakeDownloader(),
         reachability = reachability,
         clock = { now },
     )
+
+    private fun fakeApi() = object : DiagnosticsApi {
+        override suspend fun loadCataloguePage(): Boolean = cataloguePageArrives
+        override suspend fun findMediaProbeTarget(): MediaProbeTarget = mediaTarget
+    }
+
+    private fun fakeDownloader() = BoundedDownloader { url, maxBytes ->
+        downloadedUrls += url
+        ThroughputSample(bytes = maxBytes, elapsedMillis = 1_000)
+    }
 
     @BeforeEach
     fun setUp() {
@@ -99,13 +104,30 @@ internal class NetworkDiagnosticsInteractorTest {
     }
 
     @Test
-    fun run_skipsTheMediaStep_whenNoProgressiveUrlIsOnOffer() = runTest {
-        progressiveUrl = null
+    fun run_skipsTheMediaStep_whenTheCatalogueOffersNothing() = runTest {
+        mediaTarget = MediaProbeTarget.Unavailable
 
         val last = interactor.run().toList().last()
 
         assertEquals(
             StepState.Skipped(SkipReason.NoMediaLink),
+            last.state(DiagnosticStep.MediaThroughput),
+        )
+        assertTrue(downloadedUrls.isEmpty())
+    }
+
+    /**
+     * The skip a whole class of accounts gets on every run. It has to be told apart from "nothing
+     * came back at all", because it is the one the user can act on.
+     */
+    @Test
+    fun run_skipsTheMediaStep_withItsOwnReason_whenOnlyHlsIsOnOffer() = runTest {
+        mediaTarget = MediaProbeTarget.NoProgressiveStream
+
+        val last = interactor.run().toList().last()
+
+        assertEquals(
+            StepState.Skipped(SkipReason.NoProgressiveStream),
             last.state(DiagnosticStep.MediaThroughput),
         )
         assertTrue(downloadedUrls.isEmpty())
@@ -157,7 +179,7 @@ internal class NetworkDiagnosticsInteractorTest {
     }
 
     @Test
-    fun run_emitsRunningBeforeSettling_forEveryStep() = runTest {
+    fun run_emitsRunningBeforeSettling_forTheMediaStep() = runTest {
         val emissions = interactor.run().toList()
 
         assertTrue(
@@ -191,14 +213,8 @@ internal class NetworkDiagnosticsInteractorTest {
         val interactorWithThrowingProbe = NetworkDiagnosticsInteractor(
             probe = EndpointProbe { throw IllegalStateException("probe blew up") },
             resolver = HostResolver { resolvedAddresses },
-            api = object : DiagnosticsApi {
-                override suspend fun loadCataloguePage(): Boolean = cataloguePageArrives
-                override suspend fun findProgressiveMediaUrl(): String? = progressiveUrl
-            },
-            downloader = BoundedDownloader { url, maxBytes ->
-                downloadedUrls += url
-                ThroughputSample(bytes = maxBytes, elapsedMillis = 1_000)
-            },
+            api = fakeApi(),
+            downloader = fakeDownloader(),
             reachability = reachability,
             clock = { now },
         )
