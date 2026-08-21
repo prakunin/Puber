@@ -276,6 +276,7 @@ private fun stateText(state: StepState): String = when (state) {
             SkipReason.NoMediaLink -> R.string.diagnostics_skipped_no_media_link
             SkipReason.NoProgressiveStream -> R.string.diagnostics_skipped_no_progressive_stream
             SkipReason.CurrentMirrorAnswers -> R.string.diagnostics_skipped_mirror_ok
+            SkipReason.Cancelled -> R.string.diagnostics_skipped_cancelled
         }
     )
 }

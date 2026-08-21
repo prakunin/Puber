@@ -30,6 +30,12 @@ internal enum class SkipReason {
      */
     NoProgressiveStream,
     CurrentMirrorAnswers,
+
+    /**
+     * The user cancelled while this step was running. Nothing is going to settle it now, and a row
+     * left reading "checking" would be reporting work that stopped.
+     */
+    Cancelled,
 }
 
 internal enum class FailureReason {

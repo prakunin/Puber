@@ -60,6 +60,7 @@
     <string name="diagnostics_skipped_no_network">Пропущено: нет связи</string>
     <string name="diagnostics_skipped_no_media_link">Пропущено: нечего измерить</string>
     <string name="diagnostics_skipped_no_progressive_stream">Пропущено: тип потока HLS — переключи его на HTTP в этом разделе настроек</string>
+    <string name="diagnostics_skipped_cancelled">Пропущено: отменено</string>
     <string name="diagnostics_skipped_mirror_ok">Не нужны: текущее зеркало отвечает</string>
     <string name="diagnostics_summary_api_ok">API отвечает.</string>
     <string name="diagnostics_summary_api_down">API не отвечает.</string>

@@ -373,6 +373,7 @@
     <string name="diagnostics_skipped_no_network">Skipped: no connection</string>
     <string name="diagnostics_skipped_no_media_link">Skipped: nothing to measure</string>
     <string name="diagnostics_skipped_no_progressive_stream">Skipped: the streaming type is HLS — switch it to HTTP in this settings section</string>
+    <string name="diagnostics_skipped_cancelled">Skipped: cancelled</string>
     <string name="diagnostics_skipped_mirror_ok">Not needed: the current mirror answers</string>
     <string name="diagnostics_summary_api_ok">The API answers.</string>
     <string name="diagnostics_summary_api_down">The API does not answer.</string>

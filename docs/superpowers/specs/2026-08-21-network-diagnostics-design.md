@@ -177,6 +177,10 @@ thing to remember to check.
 `measureBoundedDownload` checks `ensureActive()` between chunks and closes its `Response` on every
 path, so cancelling mid-download frees the socket instead of reading to the cap first.
 
+Cancelling also settles the screen. A step caught mid-measurement becomes a skip that says it was
+cancelled, because a row still reading «Проверяю…» would be reporting work that stopped. Steps that
+never started stay pending, which is what they are, and the button reads «Повторить».
+
 A step that throws does not end the run. `CancellationException` is rethrown; anything else turns
 that one step into a failure carrying a user-facing string from `ResourceProvider`, and the run
 continues to the next step. Exception text never reaches the screen.
