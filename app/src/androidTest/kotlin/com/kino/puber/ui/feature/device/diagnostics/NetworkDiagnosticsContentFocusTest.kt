@@ -8,8 +8,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -29,7 +29,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
-private const val FocusTimeoutMillis = 3_000L
+// Generous on purpose: on a real television createComposeRule() launches a fresh Activity per
+// test method, and the screen's own auto-focus (rememberFocusRequesterOnLaunch) waits out a
+// 100ms debounce on top of that cold start. 3s proved too tight running on shared lab hardware.
+private const val FocusTimeoutMillis = 8_000L
 
 /**
  * Proves the diagnostics screen is drivable with nothing but a remote control: starting, cancelling
@@ -186,10 +189,15 @@ internal class NetworkDiagnosticsContentFocusTest {
         }
     }
 
+    // Queries the tagged node directly and reads its own Focused property, rather than scanning
+    // every focused node on screen for one whose tag happens to match. Button and Surface apply
+    // the caller's modifier — testTag, focusRequester and the clickable/focusable behaviour alike
+    // — to the same underlying node (confirmed by inspecting the tv-material 1.1.0 Surface/Button
+    // implementation), so this is not just simpler but exactly what the widget guarantees.
     private fun awaitFocus(tag: String) {
         composeRule.waitUntil(FocusTimeoutMillis) {
-            composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().any { node ->
-                node.config.getOrNull(SemanticsProperties.TestTag) == tag
+            composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().any { node ->
+                node.config.getOrNull(SemanticsProperties.Focused) == true
             }
         }
     }
