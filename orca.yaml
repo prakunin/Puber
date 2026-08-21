@@ -2,8 +2,8 @@
 #
 # scripts.setup runs once in a terminal pane right after the worktree is
 # created, with the worktree root as the working directory. It is a thin
-# wrapper around tools/configure-worktree-sdk, the same entry point
-# .kent/worktrees/setup.sh uses, so every worktree owner shares one setup path.
+# wrapper around tools/configure-worktree-sdk, which writes sdk.dir and nothing
+# else.
 scripts:
   setup: |
     set -euo pipefail
