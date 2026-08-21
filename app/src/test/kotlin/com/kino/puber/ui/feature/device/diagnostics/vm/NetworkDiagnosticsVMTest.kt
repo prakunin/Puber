@@ -89,6 +89,17 @@ internal class NetworkDiagnosticsVMTest {
 
         assertFalse(viewModel.testStateValue.running)
         assertFalse(viewModel.testStateValue.finished)
+
+        // The flag alone proves nothing: it is flipped by the same synchronous call that cancels
+        // the job. What actually matters is that collection stopped, so a value sent afterwards —
+        // even one that reports the run as finished — must never reach the state. (A value sent to
+        // an already-cancelled channel can itself throw; either outcome proves the collector is gone.)
+        runCatching {
+            channel.send(NetworkDiagnosticsRun(apiDomain = "service-kp.test", finished = true))
+        }
+
+        assertFalse(viewModel.testStateValue.finished)
+        assertFalse(viewModel.testStateValue.running)
     }
 
     @Test

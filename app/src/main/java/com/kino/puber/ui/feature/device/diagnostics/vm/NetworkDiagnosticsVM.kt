@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.device.diagnostics.vm
 
 import com.kino.puber.R
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.logger.log
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -14,6 +15,7 @@ import com.kino.puber.domain.interactor.diagnostics.advise
 import com.kino.puber.ui.feature.device.diagnostics.model.DiagnosticStepUi
 import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsActions
 import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsViewState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 
 internal class NetworkDiagnosticsVM(
@@ -83,14 +85,30 @@ internal class NetworkDiagnosticsVM(
 
         updateViewState(stateValue.copy(applyingMirror = true))
         launch {
-            val applied = apiDomainInteractor.switchToBuiltInDomain(proposal)
+            // Caught rather than left to the shared exception handler: that handler runs only after
+            // this coroutine has already unwound, so it cannot clear `applyingMirror` or reach the
+            // statements below it — a throw here would leave the flag stuck for the life of the
+            // screen and block every future confirm attempt.
+            val applied = try {
+                apiDomainInteractor.switchToBuiltInDomain(proposal)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                log(error, "Failed to switch to the proposed mirror $proposal")
+                null
+            }
             updateViewState(
                 stateValue.copy(
                     applyingMirror = false,
                     appliedMirror = applied?.domain,
-                    // The proposal has been acted on; leaving it on screen would invite a second
-                    // press that switches to the mirror already in use.
-                    advice = stateValue.advice?.copy(mirrorProposal = null),
+                    // Only clear the proposal this call actually acted on: a restart in the meantime
+                    // may have produced a fresh proposal that this now-stale coroutine never saw, and
+                    // must not silently erase.
+                    advice = if (stateValue.advice?.mirrorProposal == proposal) {
+                        stateValue.advice?.copy(mirrorProposal = null)
+                    } else {
+                        stateValue.advice
+                    },
                 )
             )
             if (applied == null) {
