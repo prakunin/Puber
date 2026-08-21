@@ -125,10 +125,10 @@ class BoundedDownloadTest {
      */
     @Test
     fun readAtMost_stopsEarly_whenTheCallerIsCancelled() {
-        val source = Buffer().write(ByteArray(100_000))
+        val source = Buffer().write(ByteArray(300_000))
         var chunks = 0
 
-        val read = source.readAtMost(maxBytes = 100_000) { chunks++ < 2 }
+        val read = source.readAtMost(maxBytes = 300_000) { chunks++ < 2 }
 
         assertEquals(2 * DOWNLOAD_CHUNK_BYTES, read)
     }
@@ -1565,7 +1565,7 @@ internal class NetworkDiagnosticsVM(
 }
 ```
 
-> `showMessage` needs `R.string.diagnostics_mirror_switch_failed`, added in Task 7. If Task 7 has not run yet, add that one string to both `strings.xml` files now so this task compiles on its own.
+> `showMessage` needs `R.string.diagnostics_mirror_switch_failed`. **This task owns that one string** — add it to both `app/src/main/res/values/strings.xml` (`Не удалось переключить зеркало.`) and `app/src/main/res/values-en/strings.xml` (`The mirror could not be switched.`) so the task compiles on its own. Task 7 adds the rest and skips this key.
 
 - [ ] **Step 6: Run tests and detekt**
 
@@ -1603,7 +1603,7 @@ git commit -m "Own the diagnostics run and gate the mirror switch behind a confi
 
 - [ ] **Step 1: Add the strings**
 
-Add to `app/src/main/res/values/strings.xml` (Russian, before `</resources>`):
+Add to `app/src/main/res/values/strings.xml` (Russian, before `</resources>`). **Skip any key already present** — Task 6 added `diagnostics_mirror_switch_failed`, and a duplicate resource id fails the build:
 
 ```xml
     <string name="diagnostics_open_action">Диагностика сети</string>
@@ -1689,6 +1689,7 @@ internal object NetworkDiagnosticsTestTags {
     const val Summary = "diagnostics-summary"
     const val PrimaryAction = "diagnostics-primary-action"
     const val MirrorSwitch = "diagnostics-mirror-switch"
+    const val AppliedMirror = "diagnostics-applied-mirror"
 
     fun step(name: String) = "diagnostics-step-$name"
 }
@@ -1713,8 +1714,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -1747,6 +1751,15 @@ internal fun NetworkDiagnosticsContent(
     onAction: (UIAction) -> Unit = {},
 ) {
     val primaryFocusRequester = rememberFocusRequesterOnLaunch()
+    // The proposal is not on screen when the screen opens — it appears when the run ends — so a
+    // requester that fired at first composition has already spent itself on the button below.
+    // The proposal is a change to the user's settings and has to be what their thumb is on, so it
+    // takes focus at the moment it appears instead.
+    val mirrorFocusRequester = remember { FocusRequester() }
+    val proposal = state.advice?.mirrorProposal
+    LaunchedEffect(proposal) {
+        if (proposal != null) mirrorFocusRequester.requestFocus()
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -1786,18 +1799,30 @@ internal fun NetworkDiagnosticsContent(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            // A confirmed settings change earns standing confirmation rather than a message that
+            // disappears: this is a television, and the person who pressed the button may well
+            // have looked away by the time it lands.
+            state.appliedMirror?.let { mirror ->
+                Text(
+                    text = stringResource(R.string.diagnostics_mirror_switched, mirror),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(NetworkDiagnosticsTestTags.AppliedMirror),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Row(
                 modifier = Modifier.focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val proposal = state.advice?.mirrorProposal
                 if (proposal != null) {
                     Button(
                         onClick = { onAction(NetworkDiagnosticsActions.ConfirmMirrorSwitch) },
                         enabled = !state.applyingMirror,
                         modifier = Modifier
-                            .focusRequester(primaryFocusRequester)
+                            .focusRequester(mirrorFocusRequester)
                             .testTag(NetworkDiagnosticsTestTags.MirrorSwitch),
                     ) {
                         Text(stringResource(R.string.diagnostics_mirror_switch, proposal))
@@ -1814,13 +1839,7 @@ internal fun NetworkDiagnosticsContent(
                         )
                     },
                     modifier = Modifier
-                        .then(
-                            if (proposal == null) {
-                                Modifier.focusRequester(primaryFocusRequester)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .focusRequester(primaryFocusRequester)
                         .testTag(NetworkDiagnosticsTestTags.PrimaryAction),
                 ) {
                     Text(
@@ -2099,6 +2118,7 @@ import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.domain.interactor.diagnostics.DiagnosticStep
 import com.kino.puber.domain.interactor.diagnostics.DiagnosticsAdvice
 import com.kino.puber.domain.interactor.diagnostics.QualityCeiling
+import com.kino.puber.domain.interactor.diagnostics.SkipReason
 import com.kino.puber.domain.interactor.diagnostics.StepState
 import com.kino.puber.ui.feature.device.diagnostics.model.DiagnosticStepUi
 import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsActions
@@ -2220,7 +2240,7 @@ internal class NetworkDiagnosticsContentFocusTest {
             DiagnosticStepUi(DiagnosticStep.MediaThroughput, StepState.Running),
             DiagnosticStepUi(
                 DiagnosticStep.MirrorSweep,
-                StepState.Skipped(com.kino.puber.domain.interactor.diagnostics.SkipReason.CurrentMirrorAnswers),
+                StepState.Skipped(SkipReason.CurrentMirrorAnswers),
             ),
         ),
         apiDomain = "api.example.test",
@@ -2256,8 +2276,8 @@ internal class NetworkDiagnosticsContentFocusTest {
 }
 ```
 
-Import `SkipReason` properly rather than leaving the fully-qualified reference above, and add
-`import androidx.compose.ui.test.assertExists` if the compiler asks for it.
+Add `import androidx.compose.ui.test.assertExists` if the compiler asks for it — it is an extension
+on `SemanticsNodeInteraction` and is sometimes already in scope.
 
 - [ ] **Step 2: Acquire a device lease and run it**
 
