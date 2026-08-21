@@ -29,6 +29,16 @@ val LocalAutoFocusOnLaunchEnabled = staticCompositionLocalOf { true }
  */
 val LocalContentFocusActive = staticCompositionLocalOf { true }
 
+/**
+ * How long [rememberFocusRequesterOnLaunch] lets a freshly composed screen settle before it asks
+ * for focus, so the request lands on a node that is already attached, placed and in a window that
+ * has itself finished taking focus.
+ *
+ * Named because screens that manage their own focus need the same settle time for the same reason,
+ * and one of them must be able to say so in code rather than in a comment.
+ */
+internal const val FOCUS_ON_LAUNCH_DELAY_MILLIS = 100L
+
 @Composable
 fun rememberFocusRequesterOnLaunch(): FocusRequester {
     val focusRequester = remember { FocusRequester() }
@@ -42,7 +52,7 @@ fun rememberFocusRequesterOnLaunch(): FocusRequester {
     if (!isFocusRequested && !isDrawerOpen && autoFocusEnabled) {
         SideEffect {
             scope.launch {
-                delay(100)
+                delay(FOCUS_ON_LAUNCH_DELAY_MILLIS)
                 if (isFocusRequested.not()) {
                     isFocusRequested = true
                     focusRequester.requestFocus()

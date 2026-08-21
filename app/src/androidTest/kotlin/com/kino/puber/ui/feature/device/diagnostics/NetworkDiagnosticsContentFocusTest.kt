@@ -31,8 +31,9 @@ import org.junit.Rule
 import org.junit.Test
 
 // Bounds how long a focus request may take to land. The intermittent on-device failures this once
-// looked like it needed to cover for were a production focus race between the auto-focus and
-// proposal-focus effects, since fixed — so this is an ordinary generous bound, not a workaround.
+// looked like it needed to cover for were a production focus race between several mechanisms that
+// each thought they owned focus; the screen now has one owner, so this is an ordinary generous
+// bound, not a workaround.
 private const val FocusTimeoutMillis = 3_000L
 
 /**
@@ -173,13 +174,16 @@ internal class NetworkDiagnosticsContentFocusTest {
      * Reproduces an Activity recreation without a real Activity or ViewModel — a locale, night-mode
      * or font-scale change tears the composition down and rebuilds it, and the app's own in-app
      * language switch is exactly that. `StateRestorationTester` disposes and recomposes the tree the
-     * same way: `rememberFocusRequesterOnLaunch()`'s one-shot guard is `rememberSaveable`, so it
-     * survives and reads "already requested" on the rebuilt tree, while actual system focus and
-     * every plain `remember` in the content — including the proposal/primary-button coin flip — do
-     * not survive and start over. A retained ViewModel would still be reporting the same finished
-     * run's proposal at that point, which this reproduces by simply passing the same state again.
-     * With the auto-focus path already spent and nothing focused, only the safety net can recover
-     * it — so this proves that net, not the ordinary first-launch path the other tests exercise.
+     * same way: actual system focus and every plain `remember` are lost and start over, while
+     * anything held in `rememberSaveable` survives and comes back. A retained ViewModel would still
+     * be reporting the same finished run's proposal at that point, which this reproduces by simply
+     * passing the same state again.
+     *
+     * This is the case that broke when the screen's focus was decided partly by remembered
+     * bookkeeping: a saved "already requested focus" flag came back true across the restore while
+     * everything that would have acted on it was gone, and nothing ever asked for focus. The screen
+     * now saves nothing about focus and derives its target from the state alone, so the rebuilt
+     * composition reaches the same answer it reached the first time.
      */
     @Test
     fun mirrorSwitchRegainsFocusAfterStateRestoration() {

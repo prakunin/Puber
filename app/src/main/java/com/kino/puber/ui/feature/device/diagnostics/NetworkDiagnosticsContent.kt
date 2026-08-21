@@ -13,15 +13,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -32,8 +28,8 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
+import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MILLIS
 import com.kino.puber.core.ui.uikit.component.modifier.LocalAutoFocusOnLaunchEnabled
-import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.diagnostics.DiagnosticStep
 import com.kino.puber.domain.interactor.diagnostics.DiagnosticsAdvice
@@ -51,73 +47,53 @@ private val ScreenHorizontalPadding = 48.dp
 private val ScreenVerticalPadding = 28.dp
 private const val BITS_PER_MEGABIT = 1_000_000.0
 
-// Comfortably longer than rememberFocusRequesterOnLaunch()'s own 100 ms delay, so the safety net
-// below never preempts that legitimate first request — it only ever acts once that request has had
-// its fair chance and nothing came of it.
-private const val FOCUS_SAFETY_NET_DELAY_MILLIS = 250L
-
-/** The two buttons' requesters, and where to report the action row's own observed focus state. */
-private class DiagnosticsFocusState(
+/** The two action-row buttons' requesters. Which one focus belongs on is decided in one place:
+ *  [rememberDiagnosticsFocus]. */
+private class DiagnosticsFocus(
     val mirrorFocusRequester: FocusRequester,
     val primaryFocusRequester: FocusRequester,
-    val onRowFocusChanged: (hasFocus: Boolean) -> Unit,
 )
 
 /**
- * Decides, and keeps deciding, which of the two buttons owns focus — across recomposition,
- * across the proposal appearing or disappearing, and across an Activity recreation.
+ * The whole of this screen's focus handling, and the only place that calls `requestFocus()`:
+ * **the button that matches the current state — the mirror switch while a proposal is standing,
+ * the primary action otherwise — is asked for focus once, each time which button that is changes,
+ * and each time permission to focus at all is withdrawn and restored.**
  *
- * Three mechanisms, layered so exactly one of them ever acts at a time:
- * - [rememberFocusRequesterOnLaunch] is the first: delayed, drawer-aware, fires at most once per
- *   screen. [proposalPresentOnLaunch] freezes, at this screen's true first composition, which
- *   button that single request is wired to, so it always lands on the button that actually matches
- *   the screen's starting state, whichever that turns out to be.
- * - The transition effect owns every change *after* that: a proposal appearing later, or
- *   disappearing once the switch resolves. It skips the value this composition started with —
- *   that one belongs to the mechanism above — by comparing against [previousProposal].
- * - The safety net exists because the first mechanism's one-shot guard lives in saved instance
- *   state, which survives the very same Activity recreation that rebuilds this whole composition —
- *   a locale, night-mode or font-scale change tears the tree down, and the app's own in-app
- *   language switch is exactly that. The ViewModel is retained, so it can still report a finished
- *   run's proposal on the rebuilt tree's first frame while the restored guard reads "already
- *   requested" — leaving nothing to ever call `requestFocus()`. No remembered flag on this side can
- *   tell that state apart from an ordinary run; observed focus can, because [rowHasFocus] is read
- *   back from the real focus tree on every composition, recreation included. It waits out the first
- *   mechanism's own delay before checking, so it never preempts a legitimate request, and backs off
- *   the instant focus actually lands anywhere in the row.
+ * That rule is stateless on purpose. [target] is derived from [proposal] alone, so it is the same
+ * answer on a first composition, a recomposition and a composition rebuilt after an Activity
+ * recreation; the effect's own keys are that answer and [canAutoFocus], so the request fires
+ * exactly when one of them actually changes and at no other time. Nothing is remembered but the
+ * two requesters, nothing is saved, and there is no "already fired" flag that a restore could
+ * carry back in and use to talk the one owner out of doing its job. The earlier design's fire-once
+ * guard, frozen first-composition coin flip and observed-focus safety net were all mechanisms for
+ * agreeing about which of several owners should act; with one owner there is nothing to agree on.
+ *
+ * The one thing it will not do is fight the user: after the request lands, the keys stop changing,
+ * so parking focus anywhere else — including on a focusable this screen may grow later — is left
+ * alone until the state itself says the target moved.
+ *
+ * Focus is not forced while the drawer is open or [LocalAutoFocusOnLaunchEnabled] is false, and
+ * because [canAutoFocus] is an effect key rather than a one-time reading, the request is made as
+ * soon as either of them changes its mind.
  */
 @Composable
-private fun rememberDiagnosticsFocusState(proposal: String?): DiagnosticsFocusState {
-    val autoFocusRequester = rememberFocusRequesterOnLaunch()
-    val proposalPresentOnLaunch = remember { proposal != null }
-    val secondaryFocusRequester = remember { FocusRequester() }
-    val mirrorFocusRequester = if (proposalPresentOnLaunch) autoFocusRequester else secondaryFocusRequester
-    val primaryFocusRequester = if (proposalPresentOnLaunch) secondaryFocusRequester else autoFocusRequester
-    val target = if (proposal != null) mirrorFocusRequester else primaryFocusRequester
-
-    var rowHasFocus by remember { mutableStateOf(false) }
+private fun rememberDiagnosticsFocus(proposal: String?): DiagnosticsFocus {
+    val focus = remember { DiagnosticsFocus(FocusRequester(), FocusRequester()) }
+    val target = if (proposal != null) focus.mirrorFocusRequester else focus.primaryFocusRequester
     val isDrawerOpen = LocalDrawerState.current?.currentValue == DrawerValue.Open
-    val autoFocusEnabled = LocalAutoFocusOnLaunchEnabled.current
-    val canAutoFocus = !isDrawerOpen && autoFocusEnabled
+    val canAutoFocus = !isDrawerOpen && LocalAutoFocusOnLaunchEnabled.current
 
-    var previousProposal by remember { mutableStateOf(proposal) }
-    LaunchedEffect(proposal, canAutoFocus) {
-        val changed = previousProposal != proposal
-        previousProposal = proposal
-        if (changed && canAutoFocus) target.requestFocus()
+    LaunchedEffect(target, canAutoFocus) {
+        if (!canAutoFocus) return@LaunchedEffect
+        // The same settle the shared launch helper takes, for the same reason: the button this
+        // composition just added has to be attached and placed, and the window has to have finished
+        // taking focus, before a request for it can land.
+        delay(FOCUS_ON_LAUNCH_DELAY_MILLIS)
+        target.requestFocus()
     }
 
-    LaunchedEffect(rowHasFocus, target, canAutoFocus) {
-        if (rowHasFocus || !canAutoFocus) return@LaunchedEffect
-        delay(FOCUS_SAFETY_NET_DELAY_MILLIS)
-        if (!rowHasFocus) target.requestFocus()
-    }
-
-    return DiagnosticsFocusState(
-        mirrorFocusRequester = mirrorFocusRequester,
-        primaryFocusRequester = primaryFocusRequester,
-        onRowFocusChanged = { rowHasFocus = it },
-    )
+    return focus
 }
 
 @Composable
@@ -126,7 +102,7 @@ internal fun NetworkDiagnosticsContent(
     onAction: (UIAction) -> Unit = {},
 ) {
     val proposal = state.advice?.mirrorProposal
-    val focus = rememberDiagnosticsFocusState(proposal)
+    val focus = rememberDiagnosticsFocus(proposal)
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -194,9 +170,7 @@ internal fun NetworkDiagnosticsContent(
             }
 
             Row(
-                modifier = Modifier
-                    .onFocusChanged { focus.onRowFocusChanged(it.hasFocus) }
-                    .focusGroup(),
+                modifier = Modifier.focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
