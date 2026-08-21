@@ -354,4 +354,5 @@
     <string name="settings_app_language">Interface language</string>
     <string name="settings_app_language_system">Same as the device</string>
     <string name="player_episodes_title">Episodes</string>
+    <string name="diagnostics_mirror_switch_failed">The mirror could not be switched.</string>
 </resources>

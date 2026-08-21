@@ -41,4 +41,5 @@
     <string name="update_prompt_checksum_failed">Проверка файла обновления не прошла. Попробуй скачать обновление заново.</string>
     <string name="update_prompt_install_failed">Не удалось открыть установщик Android. Попробуй еще раз.</string>
     <string name="update_prompt_storage_unavailable">Нет доступа к папке загрузки обновления. Проверь хранилище устройства и попробуй еще раз.</string>
+    <string name="diagnostics_mirror_switch_failed">Не удалось переключить зеркало.</string>
 </resources>
