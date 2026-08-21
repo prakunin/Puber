@@ -1,0 +1,22 @@
+# Orca (https://www.onorca.dev) reads this file from each new worktree.
+#
+# scripts.setup runs once in a terminal pane right after the worktree is
+# created, with the worktree root as the working directory. It is a thin
+# wrapper around tools/configure-worktree-sdk, the same entry point
+# .kent/worktrees/setup.sh uses, so every worktree owner shares one setup path.
+scripts:
+  setup: |
+    set -euo pipefail
+    ./tools/configure-worktree-sdk
+    mkdir -p "$HOME/.gradle-agents"
+    echo "Gradle here: ./tools/agentw <task>, never ./gradlew."
+    echo "Set AGENT_GRADLE_SERIAL=1 when another worktree may build at the same time."
+    echo "No .env here: CLIENT_SECRET and the TMDB token fall back to the"
+    echo "environment, so a fresh login usually fails. Install this worktree's"
+    echo "own APK and preserve app data instead of building from the main checkout."
+
+# worktree.sharedDirectories would symlink gitignored directories from the main
+# checkout into every worktree. Puber shares none: build/, app/build/, .gradle/
+# and .kotlin/ are per-checkout Gradle state, and sharing them lets parallel
+# builds corrupt each other. The dependency cache is already shared safely
+# through GRADLE_USER_HOME=~/.gradle-agents in tools/agentw.

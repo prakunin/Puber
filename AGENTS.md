@@ -22,15 +22,31 @@ current step or finding.
 - Flavors: `dev` and `prod`.
 - Main compile task: `:app:compileDevDebugKotlin`.
 - Main checkout may use `./gradlew`.
-- Any project-local or Kent-managed worktree uses
-  `./tools/agentw <task>`.
+- Any worktree - Kent-managed, Orca-managed, or project-local - uses
+  `./tools/agentw <task>`, never `./gradlew`.
 - Dependency versions come from `gradle/libs.versions.toml`; do not hardcode
   them.
 - Detekt configuration lives under `config/detekt/`.
-- Project-local worktrees live under `.kent/worktrees/`; do not create sibling
-  worktrees. Kent-managed worktrees remain Kent-owned and must not be moved.
+- Worktrees have three legal owners. Kent-managed worktrees remain Kent-owned
+  and must not be moved. Project-local worktrees live under `.kent/worktrees/`.
+  Orca-managed worktrees are created from the Orca app or
+  `orca worktree create` and live in Orca's managed directory. Do not add a
+  worktree any other way, and do not create sibling worktrees by hand.
 - Worktree SDK setup may write only `sdk.dir` to `local.properties`. Never copy
   KinoPub/TMDB credentials into task worktrees.
+- Orca runs `scripts.setup` from `orca.yaml` on worktree creation; it calls the
+  same `tools/configure-worktree-sdk` entry point Kent uses. `.worktreeinclude`
+  lists the gitignored files Orca copies into a worktree, and credentials never
+  belong there.
+- A worktree has no `.env`, so `CLIENT_SECRET`, the TMDB token, and the API
+  domain fall back to `System.getenv` and are normally empty. Such a build
+  cannot complete a fresh login; it stays usable because smoke installs
+  preserve app data through
+  `.kent/adapters/mobile/android-apk-install-preserve`. Smoke still builds and
+  installs the worktree's own APK - never substitute a main-checkout build for
+  a worktree change.
+- Parallel worktree builds share `GRADLE_USER_HOME=~/.gradle-agents`. Set
+  `AGENT_GRADLE_SERIAL=1` whenever another worktree may build at the same time.
 
 ## Architecture Gotchas
 
@@ -56,6 +72,11 @@ current step or finding.
   `.kent/context/smoke.md`.
 - Acquire a TV emulator lease before install, launch, input, logs, or MCP
   targeting. Use the exact serial for every adb and target-specific MCP call.
+- Devices are shared with every parallel agent on this host, and
+  `connectedAndroidTest` runs on every connected device regardless of the
+  serial it is given. Do not start instrumented tests while another device is
+  attached, and never detach a device whose lease you do not hold; ask for
+  explicit authorization instead.
 - Install the freshly built dev APK; do not use an implicit Gradle install
   target.
 - Use `~/.kent/bin/kent-mcp-call` and

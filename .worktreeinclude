@@ -1,0 +1,13 @@
+# Gitignored files Orca copies (not symlinks) into every new worktree.
+# Literal paths only; blank lines and # comments are ignored.
+#
+# Intentionally empty. Do not add:
+#   .env             - holds PUBER_CLIENT_SECRET, TMDB_READ_ACCESS_TOKEN,
+#                      STOREPASS and RELEASE_KEYSTORE_BASE64. Task worktrees
+#                      must never carry credentials.
+#   local.properties - the README documents it as a second home for the same
+#                      secrets. scripts.setup in orca.yaml writes sdk.dir only.
+#
+# A worktree build therefore ships an empty CLIENT_SECRET and cannot complete a
+# fresh login. Smoke still installs the worktree's own APK, preserving app data
+# through .kent/adapters/mobile/android-apk-install-preserve.
