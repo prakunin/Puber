@@ -29,10 +29,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
-// Generous on purpose: on a real television createComposeRule() launches a fresh Activity per
-// test method, and the screen's own auto-focus (rememberFocusRequesterOnLaunch) waits out a
-// 100ms debounce on top of that cold start. 3s proved too tight running on shared lab hardware.
-private const val FocusTimeoutMillis = 8_000L
+// Bounds how long a focus request may take to land. The intermittent on-device failures this once
+// looked like it needed to cover for were a production focus race between the auto-focus and
+// proposal-focus effects, since fixed — so this is an ordinary generous bound, not a workaround.
+private const val FocusTimeoutMillis = 3_000L
 
 /**
  * Proves the diagnostics screen is drivable with nothing but a remote control: starting, cancelling
