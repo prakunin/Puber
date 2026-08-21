@@ -318,9 +318,8 @@ internal class DeviceSettingsContentFocusTest {
             SettingsTestTags.section(SettingsSection.Network.name)
         )
         network.requestFocus().press(Key.DirectionRight)
-        // Entering the panel from the section list always lands on its top row, which is the
-        // diagnostics row now that it sits above the mirror row.
-        focusedItem(context.getString(R.string.diagnostics_open_action)).assertIsFocused()
+        // Entering the panel from the section list always lands on its top row.
+        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
 
         // The dialog is a sibling of this content, so the test can only play its effect on focus:
         // it takes focus away while open, and on close there is nothing left holding any.
@@ -329,7 +328,28 @@ internal class DeviceSettingsContentFocusTest {
         dialogOpen = false
         composeRule.waitForIdle()
 
-        focusedItem(context.getString(R.string.diagnostics_open_action)).assertIsFocused()
+        focusedItem(context.getString(R.string.api_domain_open_action)).assertIsFocused()
+    }
+
+    @Test
+    fun returningFromSpeedTest_restoresFocusToTheSpeedTestRow() {
+        val actions = mutableListOf<UIAction>()
+        setSuccessContent(
+            state = successState(settings = listOf(serverSetting())),
+            restoreNetworkDiagnosticsFocus = true,
+            onAction = actions::add,
+        )
+        val title = context.getString(R.string.diagnostics_open_action)
+
+        composeRule.waitUntil(FocusTimeoutMillis) {
+            composeRule.onAllNodes(
+                isFocused() and hasAnyDescendant(hasText(title)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        focusedItem(title).assertIsFocused()
+        assertTrue(DeviceSettingsActions.NetworkDiagnosticsFocusRestored in actions)
     }
 
     @Test
@@ -449,6 +469,7 @@ internal class DeviceSettingsContentFocusTest {
     private fun setSuccessContent(
         state: DeviceSettingsState.Success = successState(),
         initialSection: SettingsSection = SettingsSection.General,
+        restoreNetworkDiagnosticsFocus: Boolean = false,
         onAction: (UIAction) -> Unit = {},
     ) {
         composeRule.setContent {
@@ -458,6 +479,7 @@ internal class DeviceSettingsContentFocusTest {
                     apiDomain = apiDomain(),
                     onAction = onAction,
                     initialSection = initialSection,
+                    restoreNetworkDiagnosticsFocus = restoreNetworkDiagnosticsFocus,
                 )
             }
         }

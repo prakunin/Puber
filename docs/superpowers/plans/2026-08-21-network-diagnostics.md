@@ -1,4 +1,6 @@
-# Network Diagnostics Implementation Plan
+# Network Diagnostics Implementation Plan (superseded)
+
+> Superseded on 2026-08-21 by the KinoPub-compatible Amsterdam/Moscow media-server speed test.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

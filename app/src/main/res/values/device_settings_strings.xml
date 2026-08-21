@@ -18,6 +18,9 @@
     <string name="settings_about_device_title">О приложении и устройстве</string>
     <string name="device_settings_title">Настройки устройства</string>
     <string name="device_setting_server_location">Используемый сервер</string>
+    <string name="device_setting_server_netherlands">Нидерланды</string>
+    <string name="device_setting_server_moscow">Москва</string>
+    <string name="device_setting_server_automatic">Автоматически</string>
     <string name="device_setting_streaming_type">Тип потока</string>
     <string name="device_setting_support_ssl">Использовать SSL</string>
     <string name="device_setting_support_hevc">Поддержка HEVC</string>

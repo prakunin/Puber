@@ -32,7 +32,8 @@ sealed interface DeviceSettingUIModel {
 /**
  * The title shown for a device setting. KinoPub sends one with every setting, but always in
  * Russian, so the English build would keep reading Russian. The set of settings is fixed and
- * known here, so the titles are ours; only the option names inside a list stay the service's.
+ * known here, so the titles are ours. Known server-location option names are localized separately;
+ * unknown options retain the service label so a backend addition never becomes blank.
  */
 @get:StringRes
 internal val DeviceSettingType.titleRes: Int
@@ -58,6 +59,17 @@ data class SettingOptionUi(
     val description: String = "",
     val selected: Boolean
 )
+
+@StringRes
+internal fun SettingOptionUi.localizedLabelRes(type: DeviceSettingType): Int? {
+    if (type != DeviceSettingType.SERVER_LOCATION) return null
+    return when (label.trim()) {
+        "Нидерланды" -> R.string.device_setting_server_netherlands
+        "Москва" -> R.string.device_setting_server_moscow
+        "Автоматически" -> R.string.device_setting_server_automatic
+        else -> null
+    }
+}
 
 @Immutable
 internal data class DeviceUi(

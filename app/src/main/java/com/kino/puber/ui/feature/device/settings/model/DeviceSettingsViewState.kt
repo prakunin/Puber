@@ -12,6 +12,7 @@ internal data class DeviceSettingsViewState(
     val state: DeviceSettingsState = DeviceSettingsState.Loading,
     val apiDomain: ApiDomainDialogState,
     val isApiDomainDialogOpen: Boolean = false,
+    val restoreNetworkDiagnosticsFocus: Boolean = false,
 )
 
 @Immutable

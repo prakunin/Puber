@@ -1,32 +1,20 @@
 package com.kino.puber.ui.feature.device.diagnostics.model
 
 import androidx.compose.runtime.Immutable
-import com.kino.puber.domain.interactor.diagnostics.DiagnosticStep
-import com.kino.puber.domain.interactor.diagnostics.DiagnosticsAdvice
-import com.kino.puber.domain.interactor.diagnostics.StepState
+import com.kino.puber.domain.interactor.diagnostics.ServerTestState
+import com.kino.puber.domain.interactor.diagnostics.SpeedTestServer
 
-/** One row: which measurement, and where it got to. */
 @Immutable
-internal data class DiagnosticStepUi(
-    val step: DiagnosticStep,
-    val state: StepState,
+internal data class ServerSpeedUi(
+    val server: SpeedTestServer,
+    val state: ServerTestState = ServerTestState.Pending,
 )
 
-/**
- * The run's `Map` becomes an ordered `List` here rather than being handed to Compose as it is: a
- * map is not a stable key source for a list, and the order the steps are drawn in is a decision the
- * screen owns.
- */
 @Immutable
 internal data class NetworkDiagnosticsViewState(
-    val steps: List<DiagnosticStepUi> = DiagnosticStep.entries.map {
-        DiagnosticStepUi(it, StepState.Pending)
-    },
-    val apiDomain: String = "",
+    val servers: List<ServerSpeedUi> = SpeedTestServer.entries.map(::ServerSpeedUi),
+    val currentServer: SpeedTestServer? = null,
     val running: Boolean = false,
     val finished: Boolean = false,
-    val advice: DiagnosticsAdvice? = null,
-    val applyingMirror: Boolean = false,
-    val appliedMirror: String? = null,
-    val workingMirrorDomain: String? = null,
+    val recommendedServer: SpeedTestServer? = null,
 )

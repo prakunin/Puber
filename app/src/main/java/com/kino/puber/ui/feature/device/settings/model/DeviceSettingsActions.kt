@@ -32,6 +32,7 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object OpenApiDomainDialog : DeviceSettingsActions
     data object CloseApiDomainDialog : DeviceSettingsActions
     data object OpenNetworkDiagnostics : DeviceSettingsActions
+    data object NetworkDiagnosticsFocusRestored : DeviceSettingsActions
     data class SaveApiDomain(val domain: String) : DeviceSettingsActions
     data object DetectApiDomain : DeviceSettingsActions
     data object ResetApiDomain : DeviceSettingsActions

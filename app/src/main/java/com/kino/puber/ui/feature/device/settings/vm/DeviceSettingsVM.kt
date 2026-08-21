@@ -159,8 +159,13 @@ internal class DeviceSettingsVM(
             is DeviceSettingsActions.ChangeAppLanguage -> onChangeAppLanguage(action.language)
             DeviceSettingsActions.OpenApiDomainDialog -> openApiDomainDialog()
             DeviceSettingsActions.CloseApiDomainDialog -> closeApiDomainDialog()
-            DeviceSettingsActions.OpenNetworkDiagnostics ->
+            DeviceSettingsActions.OpenNetworkDiagnostics -> {
+                updateViewState(stateValue.copy(restoreNetworkDiagnosticsFocus = true))
                 router.navigateTo(router.screens.networkDiagnostics())
+            }
+            DeviceSettingsActions.NetworkDiagnosticsFocusRestored -> updateViewState(
+                stateValue.copy(restoreNetworkDiagnosticsFocus = false)
+            )
             is DeviceSettingsActions.SaveApiDomain -> saveApiDomain(action.domain)
             DeviceSettingsActions.DetectApiDomain -> detectApiDomain()
             DeviceSettingsActions.ResetApiDomain -> resetApiDomain()

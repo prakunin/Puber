@@ -1,78 +1,75 @@
 package com.kino.puber.domain.interactor.diagnostics
 
 import com.kino.puber.data.api.network.diagnostics.ThroughputSample
+import com.kino.puber.data.api.network.diagnostics.LatencySample
 
-/** The five things a run measures, in the order it measures them. */
-internal enum class DiagnosticStep {
-    ApiReachability,
-    NameResolution,
-    ApiResponsiveness,
-    MediaThroughput,
-    MirrorSweep,
+/** Media locations measured by the official KinoPub client's speed test. */
+internal enum class SpeedTestServer(
+    val settingOptionId: Int,
+    val endpoint: String,
+) {
+    Amsterdam(
+        settingOptionId = 1,
+        endpoint = "https://speed.ams-static-14.cdntogo.net/speedtest/garbage.php",
+    ),
+    Moscow(
+        settingOptionId = 2,
+        endpoint = "https://speed.msk-static-05.cdntogo.net/speedtest/garbage.php",
+    ),
+    ;
+
+    companion object {
+        fun fromSettingOptionId(id: Int?): SpeedTestServer? = entries.firstOrNull {
+            it.settingOptionId == id
+        }
+    }
 }
 
-/**
- * Why a step had nothing to do.
- *
- * Kept apart from failure on purpose: an item that offers no progressive URL is a fact about the
- * catalogue, and a mirror sweep with a healthy mirror already in hand has no question to ask.
- * Drawn as failures, both would send a user looking for a network problem that is not there.
- */
-internal enum class SkipReason {
-    NoNetwork,
-    NoMediaLink,
-
-    /**
-     * The catalogue answered, and none of the files it offered carries a progressive URL — which
-     * is what an account set to an HLS streaming type looks like from here. Kept apart from
-     * [NoMediaLink] because it is the one skip the user can do something about, and the row says
-     * what.
-     */
-    NoProgressiveStream,
-    CurrentMirrorAnswers,
-
-    /**
-     * The user cancelled while this step was running. Nothing is going to settle it now, and a row
-     * left reading "checking" would be reporting work that stopped.
-     */
-    Cancelled,
-}
-
-internal enum class FailureReason {
-    Unreachable,
-    ResolutionFailed,
-    RequestFailed,
-}
-
-internal sealed interface StepState {
-    data object Pending : StepState
-    data object Running : StepState
-
-    data class Success(
-        val latencyMillis: Long? = null,
+internal sealed interface ServerTestState {
+    data object Pending : ServerTestState
+    data class Running(
         val sample: ThroughputSample? = null,
-    ) : StepState
-
-    data class Failure(val reason: FailureReason) : StepState
-    data class Skipped(val reason: SkipReason) : StepState
+        val latency: LatencySample? = null,
+    ) : ServerTestState
+    data class Success(
+        val sample: ThroughputSample,
+        val latency: LatencySample? = null,
+    ) : ServerTestState
+    data object Failure : ServerTestState
+    data object Cancelled : ServerTestState
 }
 
-/**
- * Everything a run knows so far.
- *
- * The whole snapshot is re-emitted on every transition rather than the step that changed: a screen
- * that draws five rows needs all five states at once, and a partial update would make the view
- * model responsible for reassembling a run it did not perform.
- */
 internal data class NetworkDiagnosticsRun(
-    val apiDomain: String,
-    val steps: Map<DiagnosticStep, StepState> =
-        DiagnosticStep.entries.associateWith { StepState.Pending },
-    val workingMirrorDomain: String? = null,
+    val currentServer: SpeedTestServer? = null,
+    val measurements: Map<SpeedTestServer, ServerTestState> = SpeedTestServer.entries.associateWith {
+        ServerTestState.Pending
+    },
     val finished: Boolean = false,
 ) {
-    fun state(step: DiagnosticStep): StepState = steps.getValue(step)
+    fun state(server: SpeedTestServer): ServerTestState =
+        measurements[server] ?: ServerTestState.Pending
 
-    fun with(step: DiagnosticStep, state: StepState): NetworkDiagnosticsRun =
-        copy(steps = steps + (step to state))
+    fun with(server: SpeedTestServer, state: ServerTestState): NetworkDiagnosticsRun =
+        copy(measurements = measurements + (server to state))
+
+    val recommendedServer: SpeedTestServer?
+        get() {
+            val selected = currentServer ?: return null
+            val results = SpeedTestServer.entries.mapNotNull { server ->
+                val sample = (state(server) as? ServerTestState.Success)?.sample
+                sample?.let { server to it.bitsPerSecond }
+            }
+            val fastest = results.maxByOrNull { it.second } ?: return null
+            if (fastest.first == selected) return null
+
+            val selectedRate = results.firstOrNull { it.first == selected }?.second
+            return fastest.first.takeIf {
+                selectedRate == null || fastest.second >= selectedRate * RECOMMENDATION_MARGIN
+            }
+        }
+
+    private companion object {
+        /** Avoid proposing a settings change for ordinary measurement jitter. */
+        const val RECOMMENDATION_MARGIN = 1.05
+    }
 }

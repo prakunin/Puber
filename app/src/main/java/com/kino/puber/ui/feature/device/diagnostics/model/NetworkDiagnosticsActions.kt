@@ -1,9 +1,8 @@
 package com.kino.puber.ui.feature.device.diagnostics.model
 
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.domain.interactor.diagnostics.SpeedTestServer
 
 internal sealed interface NetworkDiagnosticsActions : UIAction {
-    data object Cancel : NetworkDiagnosticsActions
-    data object Restart : NetworkDiagnosticsActions
-    data object ConfirmMirrorSwitch : NetworkDiagnosticsActions
+    data class Start(val server: SpeedTestServer) : NetworkDiagnosticsActions
 }

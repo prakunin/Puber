@@ -1,6 +1,7 @@
 package com.kino.puber.data.api.network.diagnostics
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -30,7 +31,11 @@ data class ThroughputSample(val bytes: Long, val elapsedMillis: Long) {
 
 /** Downloads a bounded prefix of a URL and reports nothing but its size and its duration. */
 fun interface BoundedDownloader {
-    suspend fun measure(url: String, maxBytes: Long): ThroughputSample
+    suspend fun measure(
+        url: String,
+        maxBytes: Long,
+        onProgress: (ThroughputSample) -> Unit,
+    ): ThroughputSample
 }
 
 /**
@@ -57,7 +62,11 @@ class OkHttpBoundedDownloader(
         .callTimeout(timeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
         .build()
 
-    override suspend fun measure(url: String, maxBytes: Long): ThroughputSample =
+    override suspend fun measure(
+        url: String,
+        maxBytes: Long,
+        onProgress: (ThroughputSample) -> Unit,
+    ): ThroughputSample =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(url)
@@ -70,13 +79,29 @@ class OkHttpBoundedDownloader(
                 if (!response.isSuccessful) throw IOException("Bounded download refused")
                 // A server that ignores Range answers 200 with the whole file; the cap is what
                 // stops us either way, so the status is not treated as a failure.
-                response.body.source().readAtMost(maxBytes) { isActive }
+                var lastProgressAt = startedAt
+                response.body.source().readAtMost(
+                    maxBytes = maxBytes,
+                    isActive = { isActive },
+                    onBytesRead = { downloadedBytes ->
+                        val now = clock()
+                        if (now - lastProgressAt >= PROGRESS_INTERVAL_MILLIS || downloadedBytes == maxBytes) {
+                            onProgress(
+                                ThroughputSample(
+                                    bytes = downloadedBytes,
+                                    elapsedMillis = now - startedAt,
+                                )
+                            )
+                            lastProgressAt = now
+                        }
+                    },
+                )
             }
             ThroughputSample(bytes = bytes, elapsedMillis = clock() - startedAt)
         }
 
     private companion object {
-        val DEFAULT_TIMEOUT: Duration = 10.seconds
+        val DEFAULT_TIMEOUT: Duration = 20.seconds
     }
 }
 
@@ -90,16 +115,33 @@ internal const val DOWNLOAD_CHUNK_BYTES = 64L * 1024L
  * somebody's film. Only the count leaves this function.
  */
 internal fun BufferedSource.readAtMost(maxBytes: Long, isActive: () -> Boolean): Long {
+    return readAtMost(maxBytes, isActive) {}
+}
+
+internal fun BufferedSource.readAtMost(
+    maxBytes: Long,
+    isActive: () -> Boolean,
+    onBytesRead: (Long) -> Unit,
+): Long {
     val sink = Buffer()
     var total = 0L
     while (total < maxBytes && isActive()) {
-        val read = read(sink, minOf(DOWNLOAD_CHUNK_BYTES, maxBytes - total))
+        val read = try {
+            read(sink, minOf(DOWNLOAD_CHUNK_BYTES, maxBytes - total))
+        } catch (error: IOException) {
+            if (!isActive()) throw CancellationException("Speed test cancelled", error)
+            // A speed test is time-bounded, not size-dependent. When the per-call deadline ends a
+            // healthy but slow transfer, the bytes that did arrive still form a valid sample.
+            if (total > 0L) -1L else throw error
+        }
         if (read == -1L) break
         total += read
         sink.clear()
+        onBytesRead(total)
     }
     return total
 }
 
 private const val BITS_PER_BYTE = 8
 private const val MILLIS_PER_SECOND = 1_000
+private const val PROGRESS_INTERVAL_MILLIS = 500L

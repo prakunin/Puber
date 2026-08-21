@@ -55,19 +55,23 @@ import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
+import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MILLIS
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import com.kino.puber.ui.feature.main.model.TabType
+import kotlinx.coroutines.delay
 
 private val ScreenHorizontalPadding = 48.dp
 private val ScreenVerticalPadding = 28.dp
 private val NavigationWidth = 264.dp
+private const val ReturnFocusDelayMillis = FOCUS_ON_LAUNCH_DELAY_MILLIS * 2
 
 private enum class NavigationChoice {
     Mode,
@@ -81,6 +85,7 @@ internal fun DeviceSettingsContent(
     onAction: (UIAction) -> Unit = {},
     initialSection: SettingsSection = SettingsSection.General,
     isApiDomainDialogOpen: Boolean = false,
+    restoreNetworkDiagnosticsFocus: Boolean = false,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (state) {
@@ -96,6 +101,7 @@ internal fun DeviceSettingsContent(
                 onAction = onAction,
                 initialSection = initialSection,
                 isApiDomainDialogOpen = isApiDomainDialogOpen,
+                restoreNetworkDiagnosticsFocus = restoreNetworkDiagnosticsFocus,
             )
         }
     }
@@ -172,6 +178,7 @@ private fun DeviceSettingsPane(
     onAction: (UIAction) -> Unit,
     initialSection: SettingsSection,
     isApiDomainDialogOpen: Boolean,
+    restoreNetworkDiagnosticsFocus: Boolean,
 ) {
     var selectedSection by rememberSaveable { mutableStateOf(initialSection) }
     val sections = remember {
@@ -186,6 +193,14 @@ private fun DeviceSettingsPane(
     // Rebuilt with the panel it points into, which is keyed on the section below: a requester kept
     // across sections would still name a list that has been thrown away.
     val panelFocusRequester = remember(selectedSection) { FocusRequester() }
+    val diagnosticsFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(restoreNetworkDiagnosticsFocus) {
+        if (!restoreNetworkDiagnosticsFocus) return@LaunchedEffect
+        selectedSection = SettingsSection.Network
+        delay(ReturnFocusDelayMillis)
+        diagnosticsFocusRequester.requestFocus()
+        onAction(DeviceSettingsActions.NetworkDiagnosticsFocusRestored)
+    }
     // The dialog takes focus into itself, and closing it leaves nothing holding focus at all: the
     // search that follows starts from the root and settles on the navigation rail, so dismissing
     // the dialog looks like the menu opening by itself. The panel takes its focus back, at the top
@@ -232,6 +247,7 @@ private fun DeviceSettingsPane(
                 onAction = onAction,
                 leftFocusRequester = sectionFocusRequesters.getValue(selectedSection),
                 panelFocusRequester = panelFocusRequester,
+                diagnosticsFocusRequester = diagnosticsFocusRequester,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -325,6 +341,7 @@ private fun SettingsSectionPanel(
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
     panelFocusRequester: FocusRequester,
+    diagnosticsFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -359,6 +376,7 @@ private fun SettingsSectionPanel(
                 onAction = onAction,
                 leftFocusRequester = leftFocusRequester,
                 panelFocusRequester = panelFocusRequester,
+                diagnosticsFocusRequester = diagnosticsFocusRequester,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(SettingsTestTags.Content),
@@ -388,6 +406,7 @@ private fun SettingsSectionContent(
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
     panelFocusRequester: FocusRequester,
+    diagnosticsFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -439,6 +458,7 @@ private fun SettingsSectionContent(
                     apiDomain,
                     onAction,
                     leftFocusRequester,
+                    diagnosticsFocusRequester,
                 )
                 SettingsSection.Data -> watchHistoryItems(state, onAction)
                 SettingsSection.Developer -> developerItems(state, onAction)
@@ -705,15 +725,10 @@ private fun LazyListScope.networkItems(
     apiDomain: ApiDomainDialogState,
     onAction: (UIAction) -> Unit,
     leftFocusRequester: FocusRequester,
+    diagnosticsFocusRequester: FocusRequester,
 ) {
-    item(key = "network-diagnostics") {
-        SettingsListItem(
-            headline = stringResource(R.string.diagnostics_open_action),
-            supportingText = stringResource(R.string.diagnostics_settings_subtitle),
-            role = Role.Button,
-            onClick = { onAction(DeviceSettingsActions.OpenNetworkDiagnostics) },
-        )
-    }
+    val listSettings = state.settings.settingsList.filterIsInstance<DeviceSettingUIModel.TypeList>()
+    val serverLocation = listSettings.firstOrNull { it.type == DeviceSettingType.SERVER_LOCATION }
     item(key = "api-domain") {
         SettingsListItem(
             headline = stringResource(R.string.api_domain_open_action),
@@ -722,11 +737,21 @@ private fun LazyListScope.networkItems(
             onClick = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
         )
     }
-    // Which server and which stream decide what actually plays, so they belong with the mirror at
-    // the top. The switches below only report what this box can decode, and stay under their own
-    // heading.
+    serverLocation?.let {
+        serverLocationItem(it, state, onAction, leftFocusRequester)
+    }
+    item(key = "network-diagnostics") {
+        SettingsListItem(
+            headline = stringResource(R.string.diagnostics_open_action),
+            modifier = Modifier.focusRequester(diagnosticsFocusRequester),
+            supportingText = stringResource(R.string.diagnostics_settings_subtitle),
+            role = Role.Button,
+            onClick = { onAction(DeviceSettingsActions.OpenNetworkDiagnostics) },
+        )
+    }
+    // Stream selection follows the speed test; device capability switches stay under their heading.
     items(
-        items = state.settings.settingsList.filterIsInstance<DeviceSettingUIModel.TypeList>(),
+        items = listSettings.filter { it.type != DeviceSettingType.SERVER_LOCATION },
         key = { setting -> setting.type.name },
     ) { setting ->
         SettingListItem(
@@ -753,4 +778,20 @@ private fun LazyListScope.networkItems(
             },
         )
     }
+}
+
+private fun LazyListScope.serverLocationItem(
+    setting: DeviceSettingUIModel.TypeList,
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+    leftFocusRequester: FocusRequester,
+) = item(key = setting.type.name) {
+    SettingListItem(
+        setting = setting,
+        isExpanded = setting.type == state.expandedType,
+        savingOptionId = if (setting.type == state.expandedType) state.savingOptionId else null,
+        leftFocusRequester = leftFocusRequester,
+        onToggleExpand = { onAction(DeviceSettingsActions.ToggleListExpand(setting)) },
+        onOptionSelect = { onAction(DeviceSettingsActions.SelectOption(setting.type, it)) },
+    )
 }

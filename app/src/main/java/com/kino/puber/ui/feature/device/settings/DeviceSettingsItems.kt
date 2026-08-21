@@ -63,6 +63,7 @@ import com.kino.puber.R
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.titleRes
+import com.kino.puber.ui.feature.device.settings.model.localizedLabelRes
 import kotlin.math.roundToInt
 
 internal val LocalSettingsLeftFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
@@ -304,15 +305,16 @@ internal fun SettingListItem(
     onToggleExpand: () -> Unit,
     onOptionSelect: (Int) -> Unit,
 ) {
-    val options = remember(setting.values) {
-        setting.values.map { option ->
-            SettingsChoiceOption(
-                key = option.id.toString(),
-                label = option.label,
-                description = option.description,
-                selected = option.selected,
-            )
-        }
+    val options = setting.values.map { option ->
+        val localizedLabel = option.localizedLabelRes(setting.type)
+            ?.let { stringResource(it) }
+            ?: option.label
+        SettingsChoiceOption(
+            key = option.id.toString(),
+            label = localizedLabel,
+            description = option.description,
+            selected = option.selected,
+        )
     }
     SettingsChoiceItem(
         label = stringResource(setting.type.titleRes),
