@@ -33,7 +33,7 @@ belong in it.
 │                                                                │
 │ ✓ Доступность API              api.example.org  ·  142 мс      │
 │ ✓ Определение имён (DoH)                        38 мс          │
-│ ✓ Отклик API                                    11 Мбит/с      │
+│ ✓ Отклик API                                    340 мс         │
 │ ◌ Скорость видео                        качаем…                │
 │ ‒ Запасные зеркала                      не нужны               │
 │                                                                │
@@ -45,10 +45,10 @@ belong in it.
 └────────────────────────────────────────────────────────────────┘
 ```
 
-Every rate on the screen is in Mbit/s, the row and the verdict alike, so two numbers a user is
-meant to compare are never in different units. The only host ever rendered is the API mirror's
-domain, which is the user's own setting and already on the settings screen next door; no media URL,
-and no resolved address, appears anywhere.
+Only one number on the screen is a rate — the media one — and everything else is a duration in
+milliseconds, so there are never two figures a user could mistake for each other's units. The only
+host ever rendered is the API mirror's domain, which is the user's own setting and already on the
+settings screen next door; no media URL, and no resolved address, appears anywhere.
 
 The run starts by itself when the screen opens. While it runs, the button says «Отмена»; when it
 ends, «Повторить». When a mirror is proposed, «Переключить» joins «Повторить» and takes focus first.
@@ -79,13 +79,21 @@ step exercises the same DNS-over-HTTPS path every real request takes rather than
 built for the occasion. Timed, 5 s ceiling. The result is «resolved» or «failed» plus the elapsed
 time. The addresses themselves are never shown, logged or persisted.
 
-**3. Отклик API.** `items?type=movie&page=1` through the authenticated client, capped at 512 KB and
-8 s. Called *отклик*, not *скорость*: a catalogue page is a couple of hundred kilobytes, and on a
-fast link the number is dominated by how long the server thinks, not by the link. It is still worth
-having — it separates "the API answers a probe" from "the API serves real payloads at a usable
-rate" — but it is not the throughput figure. Its row is labelled отклик and the verdict quotes only
-the media rate, so the two never compete to be read as "my speed". The body is measured and
-discarded; it is never written anywhere.
+**3. Отклик API.** One `items?type=movie&page=1` through the authenticated client, timed end to end
+under an 8 s ceiling of its own — the client's own request timeout is 120 s, which is a sane figure
+for a screen that is loading content and an absurd one for a step a user is watching. What the step
+reports is milliseconds.
+
+An earlier draft of this design had it report a rate over a 512 KB cap. Counting bytes off an
+authenticated response means reaching past the parsed model into the raw channel, which is new
+surface on a 900-line client for a number that would have been misleading anyway: a catalogue page
+is a couple of hundred kilobytes, so on any link worth having, the figure measures how long the
+server thinks rather than how fast the link is. Round-trip time is what the step actually observes,
+so round-trip time is what it says. It still earns its place — it separates "the API answers an
+unauthenticated probe" from "the API serves this account's real requests promptly" — and it leaves
+the media rate as the only rate on the screen.
+
+The response goes through the existing call path and is dropped; nothing extra is stored.
 
 **4. Скорость видео.** The step the feature exists for, because it is the only one that travels the
 path video travels. `getItems(type = movie, sort = fresh)` for an id, `getItemFiles(id)` for its
