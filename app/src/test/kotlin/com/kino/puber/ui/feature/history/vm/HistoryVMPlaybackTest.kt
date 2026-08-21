@@ -42,10 +42,13 @@ import io.mockk.verify
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import org.junit.jupiter.api.fail
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class HistoryVMPlaybackTest {
 
@@ -260,6 +263,12 @@ class HistoryVMPlaybackTest {
         val player = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
         every { screens.player(10, null, null, 7, PlayerStartMode.ResumeIfAvailable) } returns player
+        val refreshed = CountDownLatch(1)
+        val refreshedPage = Result.success(page(listOf(movie(itemId = 10, videoNumber = 7))))
+        coEvery { api.getHistoryData(1) } coAnswers {
+            refreshed.countDown()
+            refreshedPage
+        }
         clearAllMocks(answers = false)
 
         vm.onAction(HistoryAction.Play(item, PlayerStartMode.ResumeIfAvailable))
@@ -273,6 +282,10 @@ class HistoryVMPlaybackTest {
 
         listener.captured(ContentChangeSet.single(10, ContentChangeType.PlaybackProgress))
 
+        assertTrue(
+            refreshed.await(AWAIT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS),
+            "Timed out waiting for the returned change set to refresh history",
+        )
         coVerify(exactly = 1) { api.getHistoryData(1) }
     }
 
