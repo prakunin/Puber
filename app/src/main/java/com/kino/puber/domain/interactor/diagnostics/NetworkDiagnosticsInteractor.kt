@@ -9,7 +9,9 @@ import com.kino.puber.data.api.network.diagnostics.DiagnosticsApi
 import com.kino.puber.data.api.network.diagnostics.HostResolver
 import com.kino.puber.data.api.network.diagnostics.MediaProbeTarget
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
@@ -137,13 +139,35 @@ internal class NetworkDiagnosticsInteractor(
 
     private suspend fun resolveApiHost(): StepState {
         val startedAt = clock()
-        val addresses = withContext(Dispatchers.IO) { resolver.resolve(KinoPubConfig.CURRENT_API_HOST) }
+        val addresses = resolveWithinDeadline(KinoPubConfig.CURRENT_API_HOST)
         val elapsed = clock() - startedAt
 
-        return if (addresses > 0) {
+        return if (addresses != null && addresses > 0) {
             StepState.Success(latencyMillis = elapsed)
         } else {
             StepState.Failure(FailureReason.ResolutionFailed)
+        }
+    }
+
+    /**
+     * How many addresses came back, or null when [RESOLUTION_TIMEOUT] passed first.
+     *
+     * [HostResolver.resolve] is a blocking JVM call, so `withTimeout` wrapped round it would give
+     * no ceiling at all: the timeout cancels the coroutine, and the enclosing `withContext` then
+     * waits for the blocking body to return anyway. What is bounded here is instead the *wait*.
+     * The lookup runs on a job of its own, deliberately not a child of this scope, so the deadline
+     * can fire while the abandoned lookup finishes on its own thread and has its answer dropped.
+     *
+     * The alternative — a `callTimeout` on the DNS-over-HTTPS client — would bound this and every
+     * other request the app makes, playback included. That is a change with its own testing, not a
+     * detail of a diagnostics step.
+     */
+    private suspend fun resolveWithinDeadline(host: String): Int? {
+        val lookup = CoroutineScope(Dispatchers.IO).async { resolver.resolve(host) }
+        return try {
+            withTimeoutOrNull(RESOLUTION_TIMEOUT) { lookup.await() }
+        } finally {
+            lookup.cancel()
         }
     }
 
@@ -162,7 +186,14 @@ internal class NetworkDiagnosticsInteractor(
     }
 
     private suspend fun measureMediaThroughput(): StepState {
-        return when (val target = api.findMediaProbeTarget()) {
+        // Two sequential authenticated calls, and only the download after them was ever capped.
+        // Both are genuinely suspending, so a timeout does bound them here. A lookup that runs out
+        // of time is a failure rather than a skip: the catalogue not answering is news about the
+        // network, not about what the account is offered.
+        val target = withTimeoutOrNull(MEDIA_LOOKUP_TIMEOUT) { api.findMediaProbeTarget() }
+
+        return when (target) {
+            null -> StepState.Failure(FailureReason.RequestFailed)
             is MediaProbeTarget.Progressive -> downloadPrefix(target.url)
             // The one skip the user can act on: no progressive URL anywhere in the item's files is
             // what an account set to an HLS streaming type looks like from here.
@@ -192,7 +223,11 @@ internal class NetworkDiagnosticsInteractor(
     }
 
     private companion object {
+        val RESOLUTION_TIMEOUT: Duration = 5.seconds
         val RESPONSIVENESS_TIMEOUT: Duration = 8.seconds
+
+        /** Two sequential catalogue calls, and still short enough to watch a spinner through. */
+        val MEDIA_LOOKUP_TIMEOUT: Duration = 12.seconds
         const val MEDIA_PROBE_MAX_BYTES = 4L * 1024L * 1024L
     }
 }

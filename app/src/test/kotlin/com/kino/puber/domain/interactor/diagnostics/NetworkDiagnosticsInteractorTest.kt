@@ -12,6 +12,7 @@ import com.kino.puber.data.api.network.diagnostics.ThroughputSample
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CountDownLatch
 import kotlin.time.Duration.Companion.minutes
 
 internal class NetworkDiagnosticsInteractorTest {
@@ -128,6 +130,67 @@ internal class NetworkDiagnosticsInteractorTest {
 
         assertEquals(
             StepState.Skipped(SkipReason.NoProgressiveStream),
+            last.state(DiagnosticStep.MediaThroughput),
+        )
+        assertTrue(downloadedUrls.isEmpty())
+    }
+
+    /**
+     * The lookup is a blocking JVM call, so the ceiling has to bound the wait rather than the call.
+     * Without it the row sits at "checking" for as long as the resolver feels like taking.
+     */
+    @Test
+    fun run_failsNameResolution_whenTheResolverNeverAnswers() = runTest {
+        val released = CountDownLatch(1)
+        val interactorWithAHangingResolver = NetworkDiagnosticsInteractor(
+            probe = EndpointProbe { endpoint -> endpoint.domain in reachableDomains },
+            resolver = HostResolver {
+                released.await()
+                1
+            },
+            api = fakeApi(),
+            downloader = fakeDownloader(),
+            reachability = reachability,
+            clock = { now },
+        )
+
+        try {
+            val last = interactorWithAHangingResolver.run().toList().last()
+
+            assertTrue(last.finished, "the run must reach its end rather than hang")
+            assertEquals(
+                StepState.Failure(FailureReason.ResolutionFailed),
+                last.state(DiagnosticStep.NameResolution),
+            )
+        } finally {
+            released.countDown()
+        }
+    }
+
+    /**
+     * The two catalogue calls in front of the download inherit the API client's two-minute request
+     * timeout. A catalogue that never answers is a failure, not a skip: nothing was learned about
+     * what the account is offered.
+     */
+    @Test
+    fun run_failsTheMediaStep_whenTheLookupNeverAnswers() = runTest {
+        val interactorWithAHangingLookup = NetworkDiagnosticsInteractor(
+            probe = EndpointProbe { endpoint -> endpoint.domain in reachableDomains },
+            resolver = HostResolver { resolvedAddresses },
+            api = object : DiagnosticsApi {
+                override suspend fun loadCataloguePage(): Boolean = cataloguePageArrives
+                override suspend fun findMediaProbeTarget(): MediaProbeTarget = awaitCancellation()
+            },
+            downloader = fakeDownloader(),
+            reachability = reachability,
+            clock = { now },
+        )
+
+        val last = interactorWithAHangingLookup.run().toList().last()
+
+        assertTrue(last.finished, "the run must reach its end rather than hang")
+        assertEquals(
+            StepState.Failure(FailureReason.RequestFailed),
             last.state(DiagnosticStep.MediaThroughput),
         )
         assertTrue(downloadedUrls.isEmpty())

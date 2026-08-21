@@ -79,6 +79,13 @@ step exercises the same DNS-over-HTTPS path every real request takes rather than
 built for the occasion. Timed, 5 s ceiling. The result is «resolved» or «failed» plus the elapsed
 time. The addresses themselves are never shown, logged or persisted.
 
+The lookup is a blocking call, so the ceiling cannot be a `withTimeout` around it — that would
+cancel the coroutine and then wait for the blocking body anyway. The lookup runs on a job of its
+own instead, one that is not a child of the run, and the deadline bounds the run's *wait* for it; an
+abandoned lookup finishes on its own thread and its answer is dropped. Giving the DNS-over-HTTPS
+client a call timeout would bound it too, and every other request the app makes with it — that is a
+separate change with its own testing, not a detail of a diagnostics step.
+
 **3. Отклик API.** One `items?type=movie&page=1` through the authenticated client, timed end to end
 under an 8 s ceiling of its own — the client's own request timeout is 120 s, which is a sane figure
 for a screen that is loading content and an absurd one for a step a user is watching. What the step
