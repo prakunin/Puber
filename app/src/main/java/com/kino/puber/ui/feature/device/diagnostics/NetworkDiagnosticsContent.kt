@@ -51,23 +51,34 @@ internal fun NetworkDiagnosticsContent(
     state: NetworkDiagnosticsViewState,
     onAction: (UIAction) -> Unit = {},
 ) {
-    val primaryFocusRequester = rememberFocusRequesterOnLaunch()
-    // The proposal is not on screen when the screen opens — it appears when the run ends — so a
-    // requester that fired at first composition has already spent itself on the button below.
-    // The proposal is a change to the user's settings and has to be what their thumb is on, so it
-    // takes focus at the moment it appears instead.
-    val mirrorFocusRequester = remember { FocusRequester() }
+    val autoFocusRequester = rememberFocusRequesterOnLaunch()
     val proposal = state.advice?.mirrorProposal
-    // Whether the proposal was on screen the last time this ran, so its disappearance — the switch
-    // resolved and the button left composition — can be told apart from a screen that never had a
-    // proposal to begin with. Only the former has to hand focus back to the primary action.
-    var proposalWasShown by remember { mutableStateOf(false) }
+
+    // rememberFocusRequesterOnLaunch() does not focus synchronously — it delays, and respects the
+    // drawer and the auto-focus flag while doing it — so a run that settles before that delay fires
+    // (the whole run can finish in under a second) already has its proposal on screen by the time
+    // it goes looking for something to focus. Frozen once, at first composition, so the choice of
+    // which physical button gets that single delayed request never moves again for this screen.
+    val proposalPresentOnLaunch = remember { proposal != null }
+
+    // The button that lost the coin flip above still needs a requester of its own, because every
+    // focus change *after* first composition — a proposal appearing later, or disappearing once the
+    // switch resolves — is owned entirely by the effect below. rememberFocusRequesterOnLaunch()'s
+    // own request never fires a second time, so the two owners can never race for the same button.
+    val secondaryFocusRequester = remember { FocusRequester() }
+    val mirrorFocusRequester = if (proposalPresentOnLaunch) autoFocusRequester else secondaryFocusRequester
+    val primaryFocusRequester = if (proposalPresentOnLaunch) secondaryFocusRequester else autoFocusRequester
+
+    var previousProposal by remember { mutableStateOf(proposal) }
     LaunchedEffect(proposal) {
+        val previous = previousProposal
+        previousProposal = proposal
+        // The value this composition started with is the auto-focus effect's to place, not this
+        // effect's — reacting to it here too would be the second owner the race came from.
+        if (previous == proposal) return@LaunchedEffect
         if (proposal != null) {
-            proposalWasShown = true
             mirrorFocusRequester.requestFocus()
-        } else if (proposalWasShown) {
-            proposalWasShown = false
+        } else {
             primaryFocusRequester.requestFocus()
         }
     }
