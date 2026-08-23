@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.device.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -506,6 +509,26 @@ private fun LazyListScope.generalItems(
     }
     item(key = "device") {
         DeviceInfoCard(device = state.device)
+    }
+    item(key = "tmdb-attribution-heading") {
+        SectionHeading(stringResource(R.string.device_settings_tmdb_attribution_title))
+    }
+    item(key = "tmdb-attribution") {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.tmdb_logo_primary_short_blue),
+                contentDescription = stringResource(R.string.device_settings_tmdb_logo_description),
+                modifier = Modifier.size(width = 96.dp, height = 40.dp),
+            )
+            Text(
+                text = stringResource(R.string.device_settings_tmdb_attribution_notice),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

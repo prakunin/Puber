@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -61,6 +62,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
+import coil3.compose.AsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
@@ -436,6 +438,32 @@ private fun HeroColumn(
             Spacer(modifier = Modifier.height(HERO_SPACING_SM))
             HeroLine(text = state.info.factsLine)
             HeroLine(text = state.info.creditsLine)
+        }
+        if (state.info.castCards.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(HERO_SPACING_XS))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
+                itemsIndexed(
+                    items = state.info.castCards,
+                    key = { _, card -> card.actorQuery },
+                ) { _, card ->
+                    Button(onClick = { onAction(DetailsAction.CastMemberSelected(card.actorQuery)) }) {
+                        card.photoUrl?.let { photoUrl ->
+                            AsyncImage(
+                                model = photoUrl,
+                                contentDescription = card.displayName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(CAST_PHOTO_SIZE),
+                            )
+                            Spacer(modifier = Modifier.width(HERO_SPACING_XS))
+                        }
+                        Text(
+                            text = card.displayName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
         }
         Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XS else HERO_SPACING_MD))
         ActionButtonsRow(
@@ -881,6 +909,7 @@ private const val TITLE_MAX_LINES = 3
 /** Gaps between the hero's own lines: title-to-ratings, the ratings row itself, ratings-to-meta. */
 private val HERO_SPACING_XXS = 4.dp
 private val HERO_SPACING_XS = 8.dp
+private val CAST_PHOTO_SIZE = 32.dp
 
 /** Gaps either side of the description: meta-to-description, description-to-facts. */
 private val HERO_SPACING_SM = 12.dp

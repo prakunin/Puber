@@ -28,6 +28,7 @@ internal sealed interface DetailsScreenState {
          * still. Distinct from [trailerUrl], which is the full-screen trailer the user asked for.
          */
         val previewTrailerUrl: String? = null,
+        val seriesStatus: String? = null,
     ) : DetailsScreenState
 }
 
@@ -64,6 +65,14 @@ internal data class DetailsInfoUIState(
     val factsLine: String,
     /** `Режиссёр: …` and `В ролях: …`, joined by " · ". */
     val creditsLine: String,
+    val castCards: List<DetailsCastMemberUIState> = emptyList(),
+)
+
+@Immutable
+internal data class DetailsCastMemberUIState(
+    val actorQuery: String,
+    val displayName: String,
+    val photoUrl: String? = null,
 )
 
 
@@ -78,6 +87,7 @@ internal sealed interface DetailsAction : UIAction {
     data class EpisodeWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
+    data class CastMemberSelected(val actorQuery: String) : DetailsAction
     data object CloseTrailer : DetailsAction
     data object TrailerPreviewFinished : DetailsAction
     data object TrailerPreviewStopped : DetailsAction

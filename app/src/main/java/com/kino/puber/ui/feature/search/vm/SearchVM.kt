@@ -13,6 +13,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.search.SearchInteractor
 import com.kino.puber.ui.feature.search.model.SearchAction
+import com.kino.puber.ui.feature.search.model.SearchScreenParams
 import com.kino.puber.ui.feature.search.model.SearchViewState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,16 +24,18 @@ internal class SearchVM(
     private val interactor: SearchInteractor,
     private val savedItemInteractor: SavedItemInteractor,
     private val mapper: VideoItemUIMapper,
+    private val params: SearchScreenParams = SearchScreenParams(),
 ) : PuberVM<SearchViewState>(router) {
 
     override val initialViewState = SearchViewState.Idle
 
     private var query: String = ""
     private var searchJob: Job? = null
+    private val actorQuery = (params.mode as? SearchScreenParams.SearchMode.Actor)?.actorQuery
 
     override fun onAction(action: UIAction) {
         when (action) {
-            is CommonAction.TextChanged -> onQueryChanged(action.text)
+            is CommonAction.TextChanged -> if (actorQuery == null) onQueryChanged(action.text)
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
             is CommonAction.ItemPlayed<*> -> onItemPlayed(action.item as VideoItemUIState)
             is CommonAction.ItemSavedChanged<*> -> {
@@ -40,7 +43,7 @@ internal class SearchVM(
                 setItemSaved(item, action.isSaved)
             }
             is CommonAction.RetryClicked -> restartSearch()
-            SearchAction.ScreenEntered -> resetSearch()
+            SearchAction.ScreenEntered -> if (actorQuery == null) resetSearch() else restartSearch()
             else -> super.onAction(action)
         }
     }
@@ -74,6 +77,11 @@ internal class SearchVM(
      * would keep going and publish over the newer answer whenever it landed second.
      */
     private fun restartSearch() {
+        actorQuery?.let { actor ->
+            searchJob?.cancel()
+            searchJob = launch { executeActorSearch(actor) }
+            return
+        }
         if (query.length < MIN_QUERY_LENGTH) return
         searchJob?.cancel()
         searchJob = launch { executeSearch() }
@@ -87,6 +95,18 @@ internal class SearchVM(
         } else {
             updateViewState(SearchViewState.Content(mapper.mapShortItemList(items)))
         }
+    }
+
+    private suspend fun executeActorSearch(actor: String) {
+        updateViewState(SearchViewState.Loading)
+        val items = interactor.searchByActor(actor)
+        updateViewState(
+            if (items.isEmpty()) {
+                SearchViewState.Empty
+            } else {
+                SearchViewState.Content(mapper.mapShortItemList(items))
+            }
+        )
     }
 
     private fun onItemSelected(item: VideoItemUIState) {

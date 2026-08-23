@@ -3,10 +3,12 @@ package com.kino.puber.domain.interactor.details
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.BookmarkFolder
 import com.kino.puber.data.api.models.Item
+import com.kino.puber.data.api.models.TmdbCastMember
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.TmdbCastRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.domain.interactor.bookmarks.WatchLaterBookmarkInteractor
 import kotlinx.coroutines.CancellationException
@@ -17,6 +19,7 @@ internal class DetailsInteractor(
     private val itemDetailsRepository: ItemDetailsRepository,
     private val watchLaterBookmarkInteractor: WatchLaterBookmarkInteractor,
     private val watchStateRepository: WatchStateRepository,
+    private val tmdbCastRepository: TmdbCastRepository,
 ) {
 
     fun observeItemDetails(id: Int, force: Boolean = false): Flow<Cached<Item>> {
@@ -49,6 +52,10 @@ internal class DetailsInteractor(
     fun seededWatchlistFlag(item: Item): Boolean {
         if (item.type.isSeriesLike()) return item.inWatchlist ?: false
         return item.bookmarks.orEmpty().isNotEmpty()
+    }
+
+    suspend fun getTmdbCast(imdbId: String): List<TmdbCastMember> {
+        return tmdbCastRepository.getCast(imdbId)
     }
 
     suspend fun isInWatchLaterFolder(item: Item): Boolean {

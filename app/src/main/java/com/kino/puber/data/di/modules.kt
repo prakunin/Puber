@@ -29,6 +29,7 @@ import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.data.repository.RoomPersistentPayloadStore
 import com.kino.puber.data.repository.SkipSegmentRepository
 import com.kino.puber.data.repository.SkipSegmentService
+import com.kino.puber.data.repository.TmdbCastRepository
 import com.kino.puber.data.repository.TmdbIdRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.preferences.AppLanguageRepository
@@ -89,6 +90,7 @@ val repositoryModule = module {
     single { ItemDetailsRepository(api = get(), watchStateRepository = get(), contentCache = get()) }
     singleOf(::PlayerPreferencesRepository)
     singleOf(::TmdbIdRepository)
+    singleOf(::TmdbCastRepository)
     singleOf(::SkipSegmentRepository)
     singleOf(::SkipSegmentService)
     singleOf(::NavigationPreferencesRepository)

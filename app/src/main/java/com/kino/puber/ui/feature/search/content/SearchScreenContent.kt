@@ -67,6 +67,7 @@ private const val SEARCH_TAG = "search_query"
 internal fun SearchScreenContent(
     state: SearchViewState,
     onAction: (UIAction) -> Unit,
+    actorQuery: String? = null,
 ) {
     var query by remember { mutableStateOf("") }
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -76,9 +77,20 @@ internal fun SearchScreenContent(
     }
 
     // Every new visit starts as a new search, so its first focus target is always the input.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(actorQuery) {
         delay(100)
-        textFieldFocusRequester.requestFocus()
+        if (actorQuery == null) {
+            textFieldFocusRequester.requestFocus()
+        } else if (state is SearchViewState.Content) {
+            gridFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(actorQuery, state) {
+        if (actorQuery != null && state is SearchViewState.Content) {
+            delay(100)
+            gridFocusRequester.requestFocus()
+        }
     }
 
     // Move focus to grid when IME dismisses via Back
@@ -94,16 +106,24 @@ internal fun SearchScreenContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SearchInputField(
-            query = query,
-            textFieldFocusRequester = textFieldFocusRequester,
-            hasResults = state is SearchViewState.Content,
-            onFocusResults = focusResults,
-            onQueryChanged = { text ->
-                query = text
-                onAction(CommonAction.TextChanged(text, SEARCH_TAG))
-            },
-        )
+        if (actorQuery == null) {
+            SearchInputField(
+                query = query,
+                textFieldFocusRequester = textFieldFocusRequester,
+                hasResults = state is SearchViewState.Content,
+                onFocusResults = focusResults,
+                onQueryChanged = { text ->
+                    query = text
+                    onAction(CommonAction.TextChanged(text, SEARCH_TAG))
+                },
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.search_actor_title, actorQuery),
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+        }
         SearchResultsArea(
             state = state,
             queryLength = query.length,
