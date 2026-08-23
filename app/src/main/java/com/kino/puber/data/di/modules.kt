@@ -89,7 +89,11 @@ val repositoryModule = module {
     singleOf(::DeviceSettingsRepository) { bind<IDeviceSettingsRepository>() }
     single { ContentCacheRepository(store = get()) }
     single { ItemDetailsRepository(api = get(), watchStateRepository = get(), contentCache = get()) }
-    singleOf(::EpisodeScheduleRepository)
+    single {
+        EpisodeScheduleRepository(
+            tmdbApiClient = get(),
+        )
+    }
     singleOf(::PlayerPreferencesRepository)
     singleOf(::TmdbIdRepository)
     singleOf(::TmdbCastRepository)
