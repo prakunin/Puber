@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.details.model
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.FilmSlate
+import com.adamglin.phosphoricons.duotone.CalendarBlank
 import com.adamglin.phosphoricons.duotone.Play
 import com.adamglin.phosphoricons.duotone.ShareNetwork
 import com.adamglin.phosphoricons.duotone.VideoCamera
@@ -176,6 +177,15 @@ internal class DetailsScreenUIMapper(
                 textOverride = continueText,
             )
         )
+        if (item.imdb?.isNotBlank() == true) {
+            add(
+                DetailsButtonUIState.TextButton(
+                    textRes = R.string.video_details_button_schedule,
+                    icon = PhosphorIcons.Duotone.CalendarBlank,
+                    action = DetailsAction.ScheduleClicked,
+                )
+            )
+        }
         if (item.trailer != null) {
             add(
                 DetailsButtonUIState.IconOnly(

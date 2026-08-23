@@ -17,6 +17,8 @@ import com.kino.puber.ui.feature.details.model.DetailsScreenParams
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
 import com.kino.puber.ui.feature.device.diagnostics.NetworkDiagnosticsScreen
 import com.kino.puber.ui.feature.device.settings.flow.DeviceSettingsFlowScreen
+import com.kino.puber.ui.feature.episodeschedule.component.EpisodeScheduleScreen
+import com.kino.puber.ui.feature.episodeschedule.model.EpisodeScheduleScreenParams
 import com.kino.puber.ui.feature.player.component.PlayerScreen
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
@@ -89,6 +91,10 @@ internal object ScreensImpl : Screens {
                 initialEpisode = initialEpisode,
             ),
         )
+    }
+
+    override fun episodeSchedule(params: EpisodeScheduleScreenParams): PuberScreen {
+        return EpisodeScheduleScreen(params)
     }
 
     override fun player(

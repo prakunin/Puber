@@ -32,6 +32,7 @@ import com.kino.puber.ui.feature.details.model.DetailsCastMemberUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenParams
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 import com.kino.puber.ui.feature.details.model.DetailsScreenUIMapper
+import com.kino.puber.ui.feature.episodeschedule.model.EpisodeScheduleScreenParams
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -178,6 +179,7 @@ internal class DetailsVM(
             is DetailsAction.SeasonWatchedChanged -> onSeasonWatchedChanged(action.item, action.watched)
             is DetailsAction.SimilarSelected -> openDetails(action.item.id)
             is DetailsAction.CastMemberSelected -> openActorItems(action.actorQuery)
+            is DetailsAction.ScheduleClicked -> openEpisodeSchedule()
             is CommonAction.ItemSelected<*> -> {
                 val item = action.item as VideoItemUIState
                 openDetails(item.id)
@@ -338,6 +340,20 @@ internal class DetailsVM(
 
     private fun openActorItems(actorQuery: String) {
         router.navigateTo(router.screens.actorItems(actorQuery))
+    }
+
+    private fun openEpisodeSchedule() {
+        val item = currentItem?.takeIf { it.type.isSeriesLike() } ?: return
+        val imdbId = item.imdb?.trim()?.takeIf(String::isNotEmpty) ?: return
+        router.navigateTo(
+            router.screens.episodeSchedule(
+                EpisodeScheduleScreenParams(
+                    itemId = item.id,
+                    title = item.title,
+                    imdbId = imdbId,
+                ),
+            ),
+        )
     }
 
     private fun showTrailer() {

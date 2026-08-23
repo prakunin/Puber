@@ -16,6 +16,7 @@ import com.kino.puber.data.db.transactions
 import com.kino.puber.data.repository.CryptoPreferenceRepository
 import com.kino.puber.data.repository.DeviceInfoRepository
 import com.kino.puber.data.repository.DeviceSettingsRepository
+import com.kino.puber.data.repository.EpisodeScheduleRepository
 import com.kino.puber.data.repository.IAppUpdateRepository
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.data.repository.IDeviceInfoRepository
@@ -88,6 +89,7 @@ val repositoryModule = module {
     singleOf(::DeviceSettingsRepository) { bind<IDeviceSettingsRepository>() }
     single { ContentCacheRepository(store = get()) }
     single { ItemDetailsRepository(api = get(), watchStateRepository = get(), contentCache = get()) }
+    singleOf(::EpisodeScheduleRepository)
     singleOf(::PlayerPreferencesRepository)
     singleOf(::TmdbIdRepository)
     singleOf(::TmdbCastRepository)

@@ -88,6 +88,7 @@ internal sealed interface DetailsAction : UIAction {
     data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
     data class CastMemberSelected(val actorQuery: String) : DetailsAction
+    data object ScheduleClicked : DetailsAction
     data object CloseTrailer : DetailsAction
     data object TrailerPreviewFinished : DetailsAction
     data object TrailerPreviewStopped : DetailsAction
