@@ -8,12 +8,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performClick
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
-import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
-import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.ui.feature.search.model.SearchPresentation
 import com.kino.puber.ui.feature.search.model.SearchViewState
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +35,6 @@ internal class SearchScreenContentTest {
                                 bigImageUrl = "",
                             ),
                         ),
-                        presentation = titlePresentation(),
                     ),
                     onAction = {},
                 )
@@ -76,9 +71,9 @@ internal class SearchScreenContentTest {
                                 bigImageUrl = "",
                             ),
                         ),
-                        presentation = actorPresentation(),
                     ),
                     onAction = {},
+                    actorQuery = "Tom Hanks",
                 )
             }
         }
@@ -94,40 +89,21 @@ internal class SearchScreenContentTest {
     }
 
     @Test
-    fun actorMode_errorRetryDispatchesRetryAction() {
-        val actions = mutableListOf<UIAction>()
+    fun actorMode_errorKeepsActorContextVisible() {
         composeRule.setContent {
             PuberTheme {
                 SearchScreenContent(
                     state = SearchViewState.Error(
                         message = "Request failed",
-                        presentation = actorPresentation(),
                     ),
-                    onAction = actions::add,
+                    onAction = {},
+                    actorQuery = "Tom Hanks",
                 )
             }
         }
 
-        composeRule.onNodeWithText("Повторить").performClick()
-
-        assert(actions == listOf(CommonAction.RetryClicked))
+        composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
+        composeRule.onNodeWithText("Tom Hanks", substring = true).assertExists()
+        composeRule.onNodeWithText("Request failed").assertExists()
     }
-
-    private fun titlePresentation() = SearchPresentation(
-        title = null,
-        inputHint = "Введите название…",
-        emptyMessage = "Ничего не найдено",
-        showSearchInput = true,
-        focusResultsOnContent = false,
-        showRetryOnError = false,
-    )
-
-    private fun actorPresentation() = SearchPresentation(
-        title = "Featuring: Tom Hanks",
-        inputHint = "",
-        emptyMessage = "Ничего не найдено по этому актёру",
-        showSearchInput = false,
-        focusResultsOnContent = true,
-        showRetryOnError = true,
-    )
 }

@@ -51,7 +51,7 @@ internal class DeviceSettingsContentTest {
         }
 
         composeRule
-            .onNodeWithTag(DEVICE_SETTINGS_LIST_TEST_TAG)
+            .onNodeWithTag(SettingsTestTags.Content)
             .performScrollToNode(hasText(TMDB_ATTRIBUTION_NOTICE))
         composeRule.onNodeWithText(TMDB_ATTRIBUTION_TITLE).assertIsDisplayed()
         composeRule

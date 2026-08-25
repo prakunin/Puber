@@ -18,6 +18,7 @@ import com.kino.puber.core.ui.navigation.AppRemoteHotkeyHandler
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
+import com.kino.puber.ui.feature.episodeschedule.model.EpisodeScheduleScreenParams
 import com.kino.puber.ui.feature.main.model.TabType
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.parcelize.Parcelize
@@ -129,6 +130,8 @@ private object ProbeScreens : Screens {
         itemId: Int,
         initialEpisode: DetailsEpisodeTarget,
     ): PuberScreen = unsupported()
+
+    override fun episodeSchedule(params: EpisodeScheduleScreenParams): PuberScreen = unsupported()
 
     override fun player(
         itemId: Int,

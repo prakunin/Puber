@@ -128,9 +128,7 @@ private object ProbeScreens : Screens {
 
     override fun home(): PuberScreen = unsupported()
 
-    override fun history(
-        presentation: com.kino.puber.ui.feature.history.model.HistoryPresentation,
-    ): PuberScreen = unsupported()
+    override fun history(): PuberScreen = unsupported()
 
     override fun collections(): PuberScreen = unsupported()
 
@@ -139,6 +137,8 @@ private object ProbeScreens : Screens {
     override fun favorites(): PuberScreen = unsupported()
 
     override fun deviceSettings(): PuberScreen = unsupported()
+
+    override fun networkDiagnostics(): PuberScreen = unsupported()
 
     override fun contentList(
         tabType: com.kino.puber.ui.feature.main.model.TabType,
