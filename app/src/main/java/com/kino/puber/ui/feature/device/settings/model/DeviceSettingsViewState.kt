@@ -33,6 +33,8 @@ internal sealed interface DeviceSettingsState {
         val showMarkWatchedButton: Boolean = false,
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
+        val discardEmbeddedArtworkMetadata: Boolean = true,
+        val hagcPlaybackEnabled: Boolean = false,
         val autoTrailerEnabled: Boolean = true,
         val startupTab: TabType = TabType.Home,
         val startupTabOptions: List<TabType> = listOf(TabType.Home),

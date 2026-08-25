@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
+import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
@@ -123,6 +124,7 @@ internal class PlaybackController(
     private val context: Context,
     private val okHttpClient: OkHttpClient,
     private val mediaCache: androidx.media3.datasource.cache.Cache,
+    private val playerPreferencesRepository: PlayerPreferencesRepository,
 ) : PlaybackControl {
 
     private var exoPlayer: ExoPlayer? = null
@@ -411,11 +413,13 @@ internal class PlaybackController(
     ): DefaultMediaSourceFactory {
         return DefaultMediaSourceFactory(
             dataSourceFactory,
-            DefaultExtractorsFactory().setDisableArtworkMetadata(true),
+            DefaultExtractorsFactory().setDisableArtworkMetadata(
+                playerPreferencesRepository.discardEmbeddedArtworkMetadata,
+            ),
         )
             // Covers the progressive fallback; the HLS source sets the same policy itself.
             .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
-            .setExperimentalEnableHagcPlayback(false)
+            .setExperimentalEnableHagcPlayback(playerPreferencesRepository.hagcPlaybackEnabled)
     }
 
     override fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {

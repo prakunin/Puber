@@ -16,6 +16,8 @@ internal interface DeviceSettingsPreferencesStore {
     fun setOkTogglesPlayPause(enabled: Boolean)
     fun setShowMarkWatchedButton(enabled: Boolean)
     fun setShowWatchedIndicators(enabled: Boolean)
+    fun setDiscardEmbeddedArtworkMetadata(enabled: Boolean)
+    fun setHagcPlaybackEnabled(enabled: Boolean)
     fun setAutoTrailer(enabled: Boolean)
     fun getStartupTabOptions(): List<TabType>
     fun setStartupTab(tab: TabType)
@@ -36,6 +38,8 @@ internal data class DeviceSettingsPreferencesSnapshot(
     val showMarkWatchedButton: Boolean,
     val preferSurroundAudio: Boolean,
     val watchedIndicatorsEnabled: Boolean,
+    val discardEmbeddedArtworkMetadata: Boolean,
+    val hagcPlaybackEnabled: Boolean,
     val autoTrailerEnabled: Boolean,
     val startupTab: TabType,
     val startupTabOptions: List<TabType>,
@@ -68,6 +72,8 @@ internal class DefaultDeviceSettingsPreferencesStore(
             showMarkWatchedButton = playerPreferences.showMarkWatchedButton,
             preferSurroundAudio = playerPreferences.preferSurroundAudio,
             watchedIndicatorsEnabled = content.showWatchedIndicators,
+            discardEmbeddedArtworkMetadata = playerPreferences.discardEmbeddedArtworkMetadata,
+            hagcPlaybackEnabled = playerPreferences.hagcPlaybackEnabled,
             autoTrailerEnabled = navigationPreferences.getAutoTrailerEnabled(),
             startupTab = startupTab,
             startupTabOptions = startupOptions,
@@ -103,6 +109,14 @@ internal class DefaultDeviceSettingsPreferencesStore(
 
     override fun setShowWatchedIndicators(enabled: Boolean) {
         navigationPreferences.setShowWatchedIndicators(enabled)
+    }
+
+    override fun setDiscardEmbeddedArtworkMetadata(enabled: Boolean) {
+        playerPreferences.discardEmbeddedArtworkMetadata = enabled
+    }
+
+    override fun setHagcPlaybackEnabled(enabled: Boolean) {
+        playerPreferences.hagcPlaybackEnabled = enabled
     }
 
     override fun setAutoTrailer(enabled: Boolean) {

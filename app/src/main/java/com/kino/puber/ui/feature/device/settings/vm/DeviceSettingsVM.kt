@@ -111,6 +111,9 @@ internal class DeviceSettingsVM(
                                 showMarkWatchedButton = preferences.showMarkWatchedButton,
                                 preferSurroundAudio = preferences.preferSurroundAudio,
                                 watchedIndicatorsEnabled = preferences.watchedIndicatorsEnabled,
+                                discardEmbeddedArtworkMetadata =
+                                    preferences.discardEmbeddedArtworkMetadata,
+                                hagcPlaybackEnabled = preferences.hagcPlaybackEnabled,
                                 autoTrailerEnabled = preferences.autoTrailerEnabled,
                                 startupTab = preferences.startupTab,
                                 startupTabOptions = preferences.startupTabOptions,
@@ -145,6 +148,9 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
             DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
+            DeviceSettingsActions.ToggleDiscardEmbeddedArtworkMetadata ->
+                toggleDiscardEmbeddedArtworkMetadata()
+            DeviceSettingsActions.ToggleHagcPlayback -> toggleHagcPlayback()
             DeviceSettingsActions.ToggleAutoTrailer -> toggleAutoTrailer()
             is DeviceSettingsActions.ChangeStartupTab -> onChangeStartupTab(action.tab)
             is DeviceSettingsActions.ToggleMenuSection -> onToggleMenuSection(action.tab)
@@ -339,6 +345,18 @@ internal class DeviceSettingsVM(
         value = { !watchedIndicatorsEnabled },
         persist = preferencesStore::setShowWatchedIndicators,
         update = { copy(watchedIndicatorsEnabled = it) },
+    )
+
+    private fun toggleDiscardEmbeddedArtworkMetadata() = updatePreference(
+        value = { !discardEmbeddedArtworkMetadata },
+        persist = preferencesStore::setDiscardEmbeddedArtworkMetadata,
+        update = { copy(discardEmbeddedArtworkMetadata = it) },
+    )
+
+    private fun toggleHagcPlayback() = updatePreference(
+        value = { !hagcPlaybackEnabled },
+        persist = preferencesStore::setHagcPlaybackEnabled,
+        update = { copy(hagcPlaybackEnabled = it) },
     )
 
     private fun toggleAutoTrailer() = updatePreference(

@@ -24,6 +24,13 @@
     <string name="settings_show_mark_watched_button">Кнопка «Просмотрено» в плеере</string>
     <string name="settings_show_mark_watched_button_subtitle">Позволяет вручную отмечать текущий фильм или серию просмотренными.</string>
 
+    <!-- Media3 playback -->
+    <string name="settings_media3_title">Воспроизведение Media3</string>
+    <string name="settings_discard_embedded_artwork">Игнорировать встроенные обложки</string>
+    <string name="settings_discard_embedded_artwork_description">Снижает расход памяти, не загружая обложки из медиафайлов.</string>
+    <string name="settings_hagc_playback">Включить экспериментальный HAGC</string>
+    <string name="settings_hagc_playback_description">Передает совместимому декодеру дополнительные HDR-метаданные яркости.</string>
+
     <!-- Debug -->
     <string name="settings_debug_title">Отладка</string>
     <string name="settings_debug_overlay">Показывать информацию о потоке</string>
