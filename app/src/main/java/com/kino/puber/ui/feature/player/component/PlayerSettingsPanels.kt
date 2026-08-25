@@ -19,42 +19,11 @@ internal fun PlayerSettingsPanels(
 ) {
     var episodeContextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
 
-    AudioSubtitlesPanel(
-        visible = content.activePanel == ActivePanel.AudioSubtitles,
-        soundModes = content.soundModes,
-        selectedSoundModeIndex = content.selectedSoundModeIndex,
-        audioTracks = content.audioTracks,
-        selectedAudioTrackIndex = content.selectedAudioTrackIndex,
-        subtitleTracks = content.subtitleTracks,
-        selectedSubtitleIndex = content.selectedSubtitleIndex,
-        subtitleSize = content.subtitleSize,
-        onSoundModeSelected = rememberIndexedAction(onAction, PlayerAction::SelectSoundMode),
-        onAudioTrackSelected = rememberIndexedAction(onAction, PlayerAction::SelectAudioTrack),
-        onSubtitleSelected = rememberIndexedAction(onAction, PlayerAction::SelectSubtitle),
-        onSubtitleSizeClick = rememberAction(onAction, PlayerAction.CycleSubtitleSize),
-    )
-
-    VideoSettingsPanel(
-        visible = content.activePanel == ActivePanel.VideoSettings,
-        qualities = content.qualities,
-        selectedQualityIndex = content.selectedQualityIndex,
-        speeds = content.speeds,
-        selectedSpeedIndex = content.selectedSpeedIndex,
-        aspectRatios = content.aspectRatios,
-        selectedAspectRatioIndex = content.selectedAspectRatioIndex,
-        bufferPresets = content.bufferPresets,
-        selectedBufferPresetIndex = content.selectedBufferPresetIndex,
-        onQualitySelected = rememberIndexedAction(onAction, PlayerAction::SelectQuality),
-        onSpeedSelected = rememberIndexedAction(onAction, PlayerAction::SelectSpeed),
-        onAspectRatioSelected = rememberIndexedAction(onAction, PlayerAction::SelectAspectRatio),
-        onBufferPresetSelected = rememberIndexedAction(onAction, PlayerAction::SelectBufferPreset),
-        fastDnsEnabled = content.fastDnsEnabled,
-        onToggleFastDns = rememberAction(onAction, PlayerAction.ToggleFastDns),
-    )
-
-    PlayerInfoPanel(
-        visible = content.activePanel == ActivePanel.Info,
-        entries = playerInfoEntries(content),
+    // Audio, video and info are one panel now; which button was pressed only decides
+    // which door the focus lands on.
+    PlayerSettingsPanel(
+        content = content,
+        onAction = onAction,
     )
 
     PlayerEpisodesPanel(
@@ -74,14 +43,4 @@ internal fun PlayerSettingsPanels(
         onMarkEpisodeWatched = { item, watched -> onAction(PlayerAction.EpisodeWatchedChanged(item, watched)) },
         onMarkSeasonWatched = { item, watched -> onAction(PlayerAction.SeasonWatchedChanged(item, watched)) },
     )
-}
-
-@Composable
-private fun rememberIndexedAction(
-    onAction: (UIAction) -> Unit,
-    actionFactory: (Int) -> UIAction,
-): (Int) -> Unit {
-    return remember(onAction, actionFactory) {
-        { index -> onAction(actionFactory(index)) }
-    }
 }

@@ -249,6 +249,14 @@
     <string name="player_panel_aspect_ratio">ASPECT RATIO</string>
     <string name="player_panel_buffer">BUFFER</string>
     <string name="player_video_settings_title">Video settings</string>
+    <string name="player_settings_title">Settings</string>
+    <!-- Doors in the merged panel root; the upper-case player_panel_* stay as section headers. -->
+    <string name="player_door_audio">Audio</string>
+    <string name="player_door_subtitles">Subtitles</string>
+    <string name="player_door_quality">Quality</string>
+    <string name="player_door_speed">Speed</string>
+    <string name="player_door_sound">Sound</string>
+    <string name="player_door_aspect_ratio">Aspect ratio</string>
     <string name="player_panel_advanced">Advanced</string>
     <string name="player_panel_network">NETWORK</string>
     <string name="player_setting_enabled">On</string>

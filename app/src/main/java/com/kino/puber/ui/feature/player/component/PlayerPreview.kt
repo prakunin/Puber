@@ -301,9 +301,9 @@ private fun SeekBackwardPreview() = PuberTheme {
     )
 }
 
-@Preview(name = "Audio & Subtitles panel", device = TV_1080p)
+@Preview(name = "Settings panel · root", device = TV_1080p)
 @Composable
-private fun AudioSubtitlesPanelPreview() = PuberTheme {
+private fun SettingsPanelPreview() = PuberTheme {
     PlayerScreenContent(
         state = PlayerViewState.Content(
             previewSeriesContent(
@@ -316,14 +316,14 @@ private fun AudioSubtitlesPanelPreview() = PuberTheme {
     )
 }
 
-@Preview(name = "Video Settings panel", device = TV_1080p)
+@Preview(name = "Settings panel · stream info", device = TV_1080p)
 @Composable
-private fun VideoSettingsPanelPreview() = PuberTheme {
+private fun SettingsPanelInfoPreview() = PuberTheme {
     PlayerScreenContent(
         state = PlayerViewState.Content(
             previewSeriesContent(
                 controlsVisible = false,
-                activePanel = ActivePanel.VideoSettings,
+                activePanel = ActivePanel.Info,
             )
         ),
         onAction = {},

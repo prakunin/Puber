@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -10,18 +11,19 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,15 +49,25 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
-private const val PANEL_WIDTH_FRACTION = 0.34f
 private const val PANEL_GRADIENT_START = 0.52f
 private const val PANEL_GRADIENT_ALPHA = 0.42f
 private const val PANEL_ENTER_DURATION_MS = 210
 private const val PANEL_EXIT_DURATION_MS = 160
 private const val PANEL_SLIDE_DIVISOR = 7
 
+/**
+ * The panel is measured by what is in it, not by the screen: [IntrinsicSize.Max] takes the width
+ * of its longest row and the height wraps the content, clamped so a long title cannot make it
+ * absurdly narrow or wide. The old 34 % of the screen was both too wide for the settings pages
+ * and too short for the diagnostics, and it left the frame covered top to bottom regardless.
+ */
+private val PanelMinWidth = 240.dp
 private val PanelMaxWidth = 420.dp
 private val PanelCornerRadius = 20.dp
+private val PanelPaddingStart = 20.dp
+private val PanelPaddingTop = 20.dp
+private val PanelPaddingEnd = 20.dp
+private val PanelPaddingBottom = 16.dp
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -64,16 +77,14 @@ internal fun PlayerSidePanel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val panelWidth = minOf(maxWidth * PANEL_WIDTH_FRACTION, PanelMaxWidth)
-
+    Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
             visible = visible,
             modifier = Modifier.fillMaxSize(),
             enter = fadeIn(tween(PANEL_ENTER_DURATION_MS)),
             exit = fadeOut(tween(PANEL_EXIT_DURATION_MS)),
         ) {
-            androidx.compose.foundation.layout.Box(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(playerSidePanelScrim()),
@@ -82,10 +93,7 @@ internal fun PlayerSidePanel(
 
         AnimatedVisibility(
             visible = visible,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(panelWidth)
-                .fillMaxHeight(),
+            modifier = Modifier.align(Alignment.CenterEnd),
             enter = fadeIn(tween(PANEL_ENTER_DURATION_MS)) + slideInHorizontally(
                 animationSpec = tween(PANEL_ENTER_DURATION_MS, easing = FastOutSlowInEasing),
                 initialOffsetX = { it / PANEL_SLIDE_DIVISOR },
@@ -97,7 +105,16 @@ internal fun PlayerSidePanel(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .widthIn(min = PanelMinWidth, max = PanelMaxWidth)
+                    .width(IntrinsicSize.Max)
+                    // Pages differ in height, and without this the panel snaps on every step in
+                    // and out of a page.
+                    .animateContentSize(
+                        animationSpec = tween(
+                            durationMillis = PANEL_ENTER_DURATION_MS,
+                            easing = FastOutSlowInEasing,
+                        ),
+                    )
                     .playerGlass(
                         shape = RoundedCornerShape(
                             topStart = PanelCornerRadius,
@@ -108,17 +125,22 @@ internal fun PlayerSidePanel(
                     )
                     .focusProperties { onExit = { cancelFocusChange() } }
                     .focusGroup()
-                    .padding(start = 28.dp, top = 32.dp, end = 32.dp, bottom = 28.dp),
+                    .padding(
+                        start = PanelPaddingStart,
+                        top = PanelPaddingTop,
+                        end = PanelPaddingEnd,
+                        bottom = PanelPaddingBottom,
+                    ),
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 19.sp,
-                        lineHeight = 24.sp,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 18.dp),
+                    modifier = Modifier.padding(bottom = 12.dp),
                 )
                 content()
             }
@@ -130,7 +152,7 @@ internal fun PlayerSidePanel(
 internal fun PlayerPanelSectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        modifier = modifier.padding(start = 12.dp, top = 12.dp, bottom = 6.dp),
+        modifier = modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
         style = MaterialTheme.typography.labelMedium.copy(
             fontSize = 11.sp,
             lineHeight = 14.sp,
@@ -173,8 +195,8 @@ internal fun PlayerPanelItem(
     ) {
         Row(
             modifier = Modifier
-                .heightIn(min = 48.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .heightIn(min = 40.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -234,11 +256,14 @@ internal fun PlayerPanelReadOnlyRow(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalAlignment = Alignment.Top,
     ) {
+        // The value takes the slack, not the label: labels are short and fixed, values are the
+        // long and variable half, and squeezing the label wrapped it mid-word.
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = value,
@@ -249,6 +274,8 @@ internal fun PlayerPanelReadOnlyRow(
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f),
         )
     }
 }

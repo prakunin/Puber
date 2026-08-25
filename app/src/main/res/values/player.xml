@@ -53,6 +53,14 @@
     <string name="player_panel_aspect_ratio">СООТНОШЕНИЕ</string>
     <string name="player_panel_buffer">БУФЕР</string>
     <string name="player_video_settings_title">Настройки видео</string>
+    <string name="player_settings_title">Настройки</string>
+    <!-- Двери в корне объединённой панели: заглавные player_panel_* остаются заголовками секций. -->
+    <string name="player_door_audio">Аудио</string>
+    <string name="player_door_subtitles">Субтитры</string>
+    <string name="player_door_quality">Качество</string>
+    <string name="player_door_speed">Скорость</string>
+    <string name="player_door_sound">Звук</string>
+    <string name="player_door_aspect_ratio">Соотношение</string>
     <string name="player_panel_advanced">Дополнительно</string>
     <string name="player_panel_network">СЕТЬ</string>
     <string name="player_setting_enabled">Вкл.</string>

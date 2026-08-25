@@ -15,7 +15,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -31,72 +30,66 @@ import com.kino.puber.R
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import kotlinx.coroutines.launch
 
-/** Read-only stream diagnostics shown without interrupting playback. */
+/**
+ * Read-only stream diagnostics, a page inside [PlayerSettingsPanel].
+ *
+ * Nothing here is selectable, so the whole column takes the focus and the arrows scroll it —
+ * focusing a row that does not act would promise something that is not there.
+ */
 @Composable
-internal fun PlayerInfoPanel(
-    visible: Boolean,
+internal fun PlayerInfoPage(
     entries: List<PlayerInfoEntry>,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(visible) {
-        if (visible) runCatching { focusRequester.requestFocus() }
-    }
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val scrollStepPx = with(LocalDensity.current) { 88.dp.toPx() }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusShape = RoundedCornerShape(12.dp)
 
-    PlayerSidePanel(
-        visible = visible,
-        title = stringResource(R.string.player_info_title),
-        modifier = modifier,
-    ) {
-        val scrollState = rememberScrollState()
-        val scope = rememberCoroutineScope()
-        val scrollStepPx = with(LocalDensity.current) { 88.dp.toPx() }
-        val interactionSource = remember { MutableInteractionSource() }
-        val isFocused by interactionSource.collectIsFocusedAsState()
-        val focusShape = RoundedCornerShape(12.dp)
-
-        Column(
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .then(
-                    if (isFocused) {
-                        Modifier.border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
-                            shape = focusShape,
-                        )
-                    } else {
-                        Modifier
-                    },
-                )
-                .onPreviewKeyEvent { event ->
-                    if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                    val delta = when (event.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_DOWN -> scrollStepPx
-                        KeyEvent.KEYCODE_DPAD_UP -> -scrollStepPx
-                        else -> return@onPreviewKeyEvent false
-                    }
-                    scope.launch { scrollState.animateScrollBy(delta) }
-                    true
+    Column(
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .then(
+                if (isFocused) {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
+                        shape = focusShape,
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                val delta = when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> scrollStepPx
+                    KeyEvent.KEYCODE_DPAD_UP -> -scrollStepPx
+                    else -> return@onPreviewKeyEvent false
                 }
-                .focusable(interactionSource = interactionSource)
-                .verticalScroll(scrollState)
-                .padding(2.dp),
-        ) {
-            InfoSection(
-                title = stringResource(R.string.player_info_section_video),
-                entries = entries.filter { it.section == PlayerInfoSection.Video },
-            )
-            InfoSection(
-                title = stringResource(R.string.player_info_section_playback),
-                entries = entries.filter { it.section == PlayerInfoSection.Playback },
-            )
-            InfoSection(
-                title = stringResource(R.string.player_info_section_audio),
-                entries = entries.filter { it.section == PlayerInfoSection.Audio },
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+                scope.launch { scrollState.animateScrollBy(delta) }
+                true
+            }
+            .focusable(interactionSource = interactionSource)
+            .verticalScroll(scrollState)
+            .padding(2.dp),
+    ) {
+        InfoSection(
+            title = stringResource(R.string.player_info_section_video),
+            entries = entries.filter { it.section == PlayerInfoSection.Video },
+        )
+        InfoSection(
+            title = stringResource(R.string.player_info_section_playback),
+            entries = entries.filter { it.section == PlayerInfoSection.Playback },
+        )
+        InfoSection(
+            title = stringResource(R.string.player_info_section_audio),
+            entries = entries.filter { it.section == PlayerInfoSection.Audio },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -171,18 +164,18 @@ internal fun cleanInfoParts(vararg parts: String?): String? {
         .takeIf(String::isNotEmpty)
 }
 
+/**
+ * No glass of its own: the panel underneath is already [PlayerGlass.Strong], and a second
+ * translucent layer only muddied the edge and cost height. The heading and the gap group
+ * the rows well enough.
+ */
 @Composable
 private fun InfoSection(title: String, entries: List<PlayerInfoEntry>) {
     if (entries.isEmpty()) return
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 10.dp)
-            .playerGlass(
-                shape = RoundedCornerShape(16.dp),
-                level = PlayerGlass.Soft,
-            )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(bottom = 8.dp),
     ) {
         PlayerPanelSectionHeader(text = title)
         entries.forEach { entry ->

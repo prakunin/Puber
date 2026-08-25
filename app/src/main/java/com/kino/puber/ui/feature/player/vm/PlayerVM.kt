@@ -626,9 +626,16 @@ internal class PlayerVM(
         }
     }
 
-    private fun readDebugInfo(infoPanelOpen: Boolean): PlaybackControl.DebugInfo? {
-        val wanted = behaviourPreferences.debugOverlayEnabled || infoPanelOpen
+    private fun readDebugInfo(settingsPanelOpen: Boolean): PlaybackControl.DebugInfo? {
+        val wanted = behaviourPreferences.debugOverlayEnabled || settingsPanelOpen
         return if (wanted) playbackController.getDebugInfo() else null
+    }
+
+    /** Audio, video and stream info are one panel; any of the three shows live readings. */
+    private fun isSettingsPanel(panel: ActivePanel?): Boolean {
+        return panel == ActivePanel.AudioSubtitles ||
+            panel == ActivePanel.VideoSettings ||
+            panel == ActivePanel.Info
     }
 
     private fun onOkPressed() {
@@ -671,8 +678,10 @@ internal class PlayerVM(
     private fun openPanel(panel: ActivePanel) {
         val effects = controlsStateMachine.openPanel(panel)
         applyControlsState()
-        if (panel == ActivePanel.Info) {
-            // Fill the panel right away instead of waiting for the next position tick.
+        if (isSettingsPanel(panel)) {
+            // Fill the readings right away instead of waiting for the next position tick: the
+            // stream info page sits one press from the settings root, and the root itself shows
+            // the resolution next to its door.
             updateContent { copy(debugInfo = playbackController.getDebugInfo()) }
         }
         processEffects(effects)
@@ -1293,16 +1302,17 @@ internal class PlayerVM(
                 val isPlaying = playbackController.isPlaying
                 val content = (stateValue as? PlayerViewState.Content)?.content
                 val isBuffering = content?.isBuffering == true
-                // The info panel keeps its readings live even while playback is paused.
-                val infoPanelOpen = content?.activePanel == ActivePanel.Info
-                if (isPlaying || isBuffering || infoPanelOpen) {
-                    if (isAnythingShowingPosition(content, infoPanelOpen, isBuffering)) {
+                // The settings panel keeps its readings live even while playback is paused: the
+                // stream info page lives inside it.
+                val settingsPanelOpen = isSettingsPanel(content?.activePanel)
+                if (isPlaying || isBuffering || settingsPanelOpen) {
+                    if (isAnythingShowingPosition(content, settingsPanelOpen, isBuffering)) {
                         updateContent {
                             copy(
                                 currentPosition = playbackController.currentPosition,
                                 duration = playbackController.duration,
                                 bufferedPosition = playbackController.bufferedPosition,
-                                debugInfo = readDebugInfo(infoPanelOpen),
+                                debugInfo = readDebugInfo(settingsPanelOpen),
                             )
                         }
                     }
@@ -1340,9 +1350,9 @@ internal class PlayerVM(
      */
     private fun isAnythingShowingPosition(
         content: PlayerContentState?,
-        infoPanelOpen: Boolean,
+        settingsPanelOpen: Boolean,
         isBuffering: Boolean,
-    ): Boolean = content?.controlsVisible == true || infoPanelOpen || isBuffering
+    ): Boolean = content?.controlsVisible == true || settingsPanelOpen || isBuffering
 
     private fun checkEarlyNextEpisode() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
