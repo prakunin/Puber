@@ -4,14 +4,12 @@ import android.os.Parcelable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.kino.puber.R
-import com.kino.puber.core.model.NavigationMode
 import kotlinx.parcelize.Parcelize
 
 @Immutable
 internal data class MainViewState(
     val tabs: List<MainTab> = emptyList(),
     val selectedTab: TabType = TabType.Home,
-    val navigationMode: NavigationMode = NavigationMode.SideDrawer,
 )
 
 
@@ -19,7 +17,6 @@ internal data class MainViewState(
 internal data class MainTab(
     val type: TabType,
     val icon: ImageVector,
-    val badge: Int = 0,
     val isSelected: Boolean = false,
     val isVisible: Boolean = false,
 )

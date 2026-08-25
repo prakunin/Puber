@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
@@ -18,11 +17,10 @@ internal interface DeviceSettingsPreferencesStore {
     fun setShowMarkWatchedButton(enabled: Boolean)
     fun setShowWatchedIndicators(enabled: Boolean)
     fun setAutoTrailer(enabled: Boolean)
-    fun setNavigationMode(mode: NavigationMode)
-    fun getStartupTabOptions(mode: NavigationMode): List<TabType>
+    fun getStartupTabOptions(): List<TabType>
     fun setStartupTab(tab: TabType)
-    fun getVisibleTabs(mode: NavigationMode): List<TabType>
-    fun setTabVisible(mode: NavigationMode, tab: TabType, visible: Boolean)
+    fun getVisibleTabs(): List<TabType>
+    fun setTabVisible(tab: TabType, visible: Boolean)
     fun setShowAnime(enabled: Boolean)
     fun setHideWatched(enabled: Boolean)
     fun setAutoUpdateCheck(enabled: Boolean)
@@ -39,7 +37,6 @@ internal data class DeviceSettingsPreferencesSnapshot(
     val preferSurroundAudio: Boolean,
     val watchedIndicatorsEnabled: Boolean,
     val autoTrailerEnabled: Boolean,
-    val navigationMode: NavigationMode,
     val startupTab: TabType,
     val startupTabOptions: List<TabType>,
     val visibleTabs: List<TabType>,
@@ -58,8 +55,7 @@ internal class DefaultDeviceSettingsPreferencesStore(
 
     override fun read(): DeviceSettingsPreferencesSnapshot {
         val content = navigationPreferences.contentPreferences.value
-        val mode = navigationPreferences.getNavigationMode()
-        val startupOptions = navigationPreferences.getStartupTabOptions(mode)
+        val startupOptions = navigationPreferences.getStartupTabOptions()
         val startupTab = navigationPreferences.getStartupTab()
             .takeIf(startupOptions::contains)
             ?: TabType.Home
@@ -73,10 +69,9 @@ internal class DefaultDeviceSettingsPreferencesStore(
             preferSurroundAudio = playerPreferences.preferSurroundAudio,
             watchedIndicatorsEnabled = content.showWatchedIndicators,
             autoTrailerEnabled = navigationPreferences.getAutoTrailerEnabled(),
-            navigationMode = mode,
             startupTab = startupTab,
             startupTabOptions = startupOptions,
-            visibleTabs = navigationPreferences.getVisibleTabs(mode),
+            visibleTabs = navigationPreferences.getVisibleTabs(),
             showAnime = content.showAnime,
             hideWatched = content.hideWatched,
             autoUpdateCheckEnabled = appUpdatePreferences.isAutoCheckEnabled(),
@@ -114,22 +109,18 @@ internal class DefaultDeviceSettingsPreferencesStore(
         navigationPreferences.setAutoTrailerEnabled(enabled)
     }
 
-    override fun setNavigationMode(mode: NavigationMode) {
-        navigationPreferences.setNavigationMode(mode)
-    }
-
-    override fun getStartupTabOptions(mode: NavigationMode): List<TabType> =
-        navigationPreferences.getStartupTabOptions(mode)
+    override fun getStartupTabOptions(): List<TabType> =
+        navigationPreferences.getStartupTabOptions()
 
     override fun setStartupTab(tab: TabType) {
         navigationPreferences.setStartupTab(tab)
     }
 
-    override fun getVisibleTabs(mode: NavigationMode): List<TabType> =
-        navigationPreferences.getVisibleTabs(mode)
+    override fun getVisibleTabs(): List<TabType> =
+        navigationPreferences.getVisibleTabs()
 
-    override fun setTabVisible(mode: NavigationMode, tab: TabType, visible: Boolean) {
-        navigationPreferences.setTabVisible(mode, tab, visible)
+    override fun setTabVisible(tab: TabType, visible: Boolean) {
+        navigationPreferences.setTabVisible(tab, visible)
     }
 
     override fun setShowAnime(enabled: Boolean) {

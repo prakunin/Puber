@@ -18,6 +18,7 @@ class FakeSharedPreferences {
     val sharedPreferences: SharedPreferences = mockk()
 
     private val pending: MutableMap<String, Any?> = linkedMapOf()
+    private val removals: MutableSet<String> = linkedSetOf()
     private val editor: SharedPreferences.Editor = mockk()
 
     init {
@@ -44,11 +45,17 @@ class FakeSharedPreferences {
             pending[firstArg()] = secondArg<Boolean>()
             editor
         }
+        every { editor.remove(any()) } answers {
+            removals += firstArg<String>()
+            editor
+        }
         every { editor.apply() } answers {
             val transaction = pending.toMap()
             values.putAll(transaction)
+            values.keys.removeAll(removals)
             transactions += transaction
             pending.clear()
+            removals.clear()
         }
     }
 }

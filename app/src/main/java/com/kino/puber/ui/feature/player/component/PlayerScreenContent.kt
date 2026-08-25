@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -117,13 +120,16 @@ private fun PlayerContent(
     )
     PlaybackFeedbackLayer(content = content)
     BufferingProgressLayer(content = content)
+    // Measured once the controls bar lays out; the timed-action chips sit above it while it is up.
+    var controlsBarHeight by remember { mutableStateOf(0.dp) }
     PlayerControlsLayer(
         content = content,
         onAction = onAction,
         focusRequesters = focusRequesters,
+        onBottomBarHeightChanged = { controlsBarHeight = it },
     )
     PlayerSettingsPanels(content = content, onAction = onAction)
-    PlayerOverlayLayers(content = content, onAction = onAction)
+    PlayerOverlayLayers(content = content, onAction = onAction, bottomInset = controlsBarHeight)
 }
 
 @Composable

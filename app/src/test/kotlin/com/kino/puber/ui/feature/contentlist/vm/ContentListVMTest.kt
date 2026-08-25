@@ -2,7 +2,6 @@ package com.kino.puber.ui.feature.contentlist.vm
 
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -413,30 +412,6 @@ class ContentListVMTest {
     }
 
     @Test
-    fun withoutTheDetailPanel_noTrailerIsEverPublished() {
-        coEvery { interactor.getItemDetails(42) } returns
-            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
-        val vm = ContentListVM(
-            router = router,
-            interactor = interactor,
-            mapper = mapper,
-            genreInteractor = mockk(relaxed = true),
-            trailerLinks = noTrailerLinks(),
-            navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
-                every { getNavigationMode() } returns NavigationMode.TopTabs
-                every { getAutoTrailerEnabled() } returns true
-            },
-            contentListRefreshCoordinator = refreshCoordinator,
-        )
-        vm.testOnStart()
-
-        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
-        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
-
-        assertNull(vm.testStateValue.previewTrailerUrl)
-    }
-
-    @Test
     fun playingAnItemWhileDetailsAreInFlight_stillPublishesDetailsButNotThePreview() {
         val screen = mockk<PuberScreen>()
         val listener = slot<(ContentChangeSet?) -> Unit>()
@@ -610,11 +585,8 @@ class ContentListVMTest {
         router = router,
         interactor = interactor,
         mapper = mapper,
-        genreInteractor = mockk(relaxed = true),
         trailerLinks = noTrailerLinks(),
-        navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
-            every { getNavigationMode() } returns NavigationMode.SideDrawer
-        },
+        navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true),
         contentListRefreshCoordinator = refreshCoordinator,
     )
 
@@ -622,11 +594,8 @@ class ContentListVMTest {
         router = router,
         interactor = interactor,
         mapper = mapper,
-        genreInteractor = mockk(relaxed = true),
         trailerLinks = noTrailerLinks(),
-        navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
-            every { getNavigationMode() } returns NavigationMode.SideDrawer
-        },
+        navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true),
         contentListRefreshCoordinator = refreshCoordinator,
         heroConfigs = heroConfigs,
     )
@@ -638,10 +607,8 @@ class ContentListVMTest {
         router = router,
         interactor = interactor,
         mapper = mapper,
-        genreInteractor = mockk(relaxed = true),
         trailerLinks = trailerLinks,
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true) {
-            every { getNavigationMode() } returns NavigationMode.SideDrawer
             every { getAutoTrailerEnabled() } returns autoTrailerEnabled
         },
         contentListRefreshCoordinator = refreshCoordinator,

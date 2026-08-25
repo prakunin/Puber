@@ -3,14 +3,12 @@ package com.kino.puber.ui.feature.main.model
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.history.component.HistoryScreen
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.util.FakeResourceProvider
 import io.mockk.every
 import io.mockk.mockk
@@ -31,26 +29,23 @@ internal class MainUIMapperTest {
     @Test
     fun historyTab_resolvesToHistoryScreen() {
         val screens = mockk<Screens>()
-        every { screens.history(any()) } answers { HistoryScreen(firstArg()) }
-        val topTabsMapper = createMapper(
+        every { screens.history() } answers { HistoryScreen() }
+        val historyMapper = createMapper(
             navPrefs = mockk(relaxed = true),
             screens = screens,
         )
 
-        val tab = topTabsMapper.buildTabContent(
-            type = TabType.History,
-            navigationMode = NavigationMode.TopTabs,
-        )
+        val tab = historyMapper.buildTabContent(type = TabType.History)
 
-        assertHistoryTab(tab, HistoryPresentation.TopTabs)
+        assertHistoryTab(tab)
         verify(exactly = 1) {
-            screens.history(HistoryPresentation.TopTabs)
+            screens.history()
         }
         assertTrue(TabType.History.enabled)
     }
 
     @Test
-    fun selectingHistory_opensHistoryContentInTopTabsState() {
+    fun selectingHistory_opensHistoryContent() {
         val home = mainTab(TabType.Home, isSelected = true)
         val history = mainTab(TabType.History)
         val selected = mapper.updateSelectedTab(
@@ -63,45 +58,31 @@ internal class MainUIMapperTest {
 
         assertEquals(TabType.History, selected.selectedTab)
         assertEquals(listOf(false, true), selected.tabs.map(MainTab::isSelected))
-        assertHistoryTab(
-            tab = mapper.buildTabContent(
-                type = selected.selectedTab,
-                navigationMode = NavigationMode.TopTabs,
-            ),
-            presentation = HistoryPresentation.TopTabs,
-        )
+        assertHistoryTab(mapper.buildTabContent(type = selected.selectedTab))
     }
 
     @Test
-    fun sideDrawerState_resolvesTheSameHistoryScreen() {
+    fun menuState_resolvesTheHistoryScreen() {
         val navPrefs = mockk<NavigationPreferencesRepository>()
-        every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
         every {
-            navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
+            navPrefs.getVisibleTabs()
         } returns listOf(TabType.Home, TabType.Favourites, TabType.History, TabType.Movies)
         every { navPrefs.getStartupTab() } returns TabType.Home
         val screens = mockk<Screens>()
-        every { screens.history(any()) } answers { HistoryScreen(firstArg()) }
-        val sideDrawerMapper = createMapper(navPrefs, screens)
+        every { screens.history() } answers { HistoryScreen() }
+        val menuMapper = createMapper(navPrefs, screens)
 
-        val state = sideDrawerMapper.buildViewState()
+        val state = menuMapper.buildViewState()
 
-        assertEquals(NavigationMode.SideDrawer, state.navigationMode)
         assertEquals(TabType.Home, state.selectedTab)
         assertEquals(
             listOf(TabType.Home, TabType.Favourites, TabType.History, TabType.Movies),
             state.tabs.map(MainTab::type),
         )
         assertEquals(listOf(true, false, false, false), state.tabs.map(MainTab::isSelected))
-        assertHistoryTab(
-            tab = sideDrawerMapper.buildTabContent(
-                type = TabType.History,
-                navigationMode = state.navigationMode,
-            ),
-            presentation = HistoryPresentation.SideDrawer,
-        )
+        assertHistoryTab(menuMapper.buildTabContent(type = TabType.History))
         verify(exactly = 1) {
-            screens.history(HistoryPresentation.SideDrawer)
+            screens.history()
         }
     }
 
@@ -118,7 +99,6 @@ internal class MainUIMapperTest {
 
         val tab = animeMapper.buildTabContent(
             type = TabType.Anime,
-            navigationMode = NavigationMode.TopTabs,
         )
 
         assertEquals(TabType.Anime, tab.tag)
@@ -129,9 +109,8 @@ internal class MainUIMapperTest {
     @Test
     fun buildViewState_preservesSelectedTabWhenItRemainsVisible() {
         val navPrefs = mockk<NavigationPreferencesRepository>()
-        every { navPrefs.getNavigationMode() } returns NavigationMode.TopTabs
         every {
-            navPrefs.getVisibleTabs(NavigationMode.TopTabs)
+            navPrefs.getVisibleTabs()
         } returns listOf(TabType.Home, TabType.Movies, TabType.Anime)
         val stateMapper = createMapper(navPrefs)
 
@@ -147,9 +126,8 @@ internal class MainUIMapperTest {
     @Test
     fun buildViewState_usesConfiguredStartupTab() {
         val navPrefs = mockk<NavigationPreferencesRepository>()
-        every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
         every {
-            navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
+            navPrefs.getVisibleTabs()
         } returns listOf(TabType.Home, TabType.Favourites, TabType.Movies)
         every { navPrefs.getStartupTab() } returns TabType.Favourites
         val stateMapper = createMapper(navPrefs)
@@ -163,9 +141,8 @@ internal class MainUIMapperTest {
     @Test
     fun buildViewState_fallsBackToHomeWhenSelectedTabDisappears() {
         val navPrefs = mockk<NavigationPreferencesRepository>()
-        every { navPrefs.getNavigationMode() } returns NavigationMode.SideDrawer
         every {
-            navPrefs.getVisibleTabs(NavigationMode.SideDrawer)
+            navPrefs.getVisibleTabs()
         } returns listOf(TabType.Home, TabType.Favourites, TabType.Movies, TabType.Settings)
         every { navPrefs.getStartupTab() } returns TabType.Anime
         val stateMapper = createMapper(navPrefs)
@@ -183,54 +160,31 @@ internal class MainUIMapperTest {
     fun historyRefresh_keepsLogicalTabKeyAndAdvancesScreenScopeGeneration() {
         val initial = mapper.buildTabContent(
             type = TabType.History,
-            navigationMode = NavigationMode.TopTabs,
         )
         val sameInstance = mapper.buildTabContent(
             type = TabType.History,
-            navigationMode = NavigationMode.TopTabs,
         )
         val refreshed = mapper.buildTabContent(
             type = TabType.History,
-            navigationMode = NavigationMode.TopTabs,
             refreshVersion = 2,
         )
 
         assertEquals(initial.key, sameInstance.key)
         assertEquals(
-            "Tab:${HistoryScreen(HistoryPresentation.TopTabs).key}",
+            "Tab:${HistoryScreen().key}",
             initial.key,
         )
         assertEquals(initial.key, refreshed.key)
         assertNotEquals(initial.contentInstanceKey, refreshed.contentInstanceKey)
         assertEquals(
-            "Tab:${HistoryScreen(HistoryPresentation.TopTabs).key}:refresh_2",
+            "Tab:${HistoryScreen().key}:refresh_2",
             refreshed.contentInstanceKey,
         )
         assertEquals(TabType.History, refreshed.tag)
     }
 
-    @Test
-    fun historyPresentationsUseDistinctTabLifecycleKeys() {
-        val topTabs = mapper.buildTabContent(
-            type = TabType.History,
-            navigationMode = NavigationMode.TopTabs,
-        )
-        val sideDrawer = mapper.buildTabContent(
-            type = TabType.History,
-            navigationMode = NavigationMode.SideDrawer,
-        )
-
-        assertEquals("Tab:HistoryScreen_TopTabs", topTabs.key)
-        assertEquals("Tab:HistoryScreen_SideDrawer", sideDrawer.key)
-        assertNotEquals(topTabs.key, sideDrawer.key)
-        assertNotEquals(topTabs.contentInstanceKey, sideDrawer.contentInstanceKey)
-    }
-
-    private fun assertHistoryTab(
-        tab: PuberTab,
-        presentation: HistoryPresentation,
-    ) {
-        assertEquals("Tab:${HistoryScreen(presentation).key}", tab.key)
+    private fun assertHistoryTab(tab: PuberTab) {
+        assertEquals("Tab:${HistoryScreen().key}", tab.key)
         assertEquals(TabType.History, tab.tag)
     }
 

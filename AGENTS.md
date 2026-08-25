@@ -76,9 +76,21 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
   serial for every adb call.
 - Devices are shared with every parallel agent on this host, and
   `connectedAndroidTest` runs on every connected device regardless of the
-  serial it is given. Do not start instrumented tests while another device is
-  attached, and never detach a device whose lease you do not hold; ask for
-  explicit authorization instead.
+  serial it is given. Run instrumented tests through
+  `make DEVICE=<serial> itest` (optionally `TESTS=<fully.qualified.Class>`),
+  which is the only supported way: it drives a private adb server that knows
+  only that serial, and leaves the APKs installed so the device keeps its
+  KinoPub pairing. `adb disconnect` on the other devices is not a substitute -
+  adb reconnects them by itself, well inside the length of a run. Never detach
+  a device whose lease you do not hold; ask for explicit authorization instead.
+- A device with no display cannot be re-paired by the user on their own, so its
+  login is not a renewable resource. `make DEVICE=<serial> auth-save` stores the
+  app's data under `.auth/` (gitignored, holds account tokens) and
+  `make DEVICE=<serial> auth-restore` puts it back. It only helps while the app
+  stays installed: the tokens are encrypted with an AndroidKeyStore key
+  (`CryptoPreferenceRepository`), which an uninstall takes with it, and the
+  restored prefs are then undecryptable. So not uninstalling is the protection;
+  the snapshot only covers damage to app data.
 - Install the freshly built dev APK; do not use an implicit Gradle install
   target. Preserve app data with `tools/android-apk-install-preserve`: a wiped
   app cannot log in again from a worktree build.

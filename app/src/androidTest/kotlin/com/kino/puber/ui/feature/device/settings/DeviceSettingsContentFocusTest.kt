@@ -46,7 +46,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.ui.feature.main.model.TabType
 
 private const val FocusTimeoutMillis = 3_000L
@@ -217,38 +216,21 @@ internal class DeviceSettingsContentFocusTest {
     }
 
     @Test
-    fun navigationStyleOpensAsChoiceListAndBackCollapsesIt() {
-        setSuccessContent(initialSection = SettingsSection.Navigation)
-        val navigation = composeRule.onNodeWithTag(
-            SettingsTestTags.section(SettingsSection.Navigation.name)
-        )
-        val sideMenu = context.getString(R.string.settings_navigation_drawer)
-        val topTabs = context.getString(R.string.settings_navigation_top_tabs)
-
-        navigation.requestFocus().press(Key.DirectionRight)
-        focusedItem(context.getString(R.string.settings_navigation_mode))
-            .assertIsFocused()
-            .press(Key.Enter)
-
-        focusedItem(topTabs).assertIsFocused()
-        composeRule.onNodeWithText(sideMenu).assertExists()
-
-        focusedNode().press(Key.Back)
-
-        composeRule.onNodeWithText(sideMenu).assertDoesNotExist()
-        focusedItem(context.getString(R.string.settings_navigation_mode)).assertIsFocused()
-    }
-
-    @Test
     fun leftFromExpandedNavigationChoiceReturnsToNavigationSection() {
-        setSuccessContent(initialSection = SettingsSection.Navigation)
+        setSuccessContent(
+            state = successState().copy(
+                startupTab = TabType.Home,
+                startupTabOptions = listOf(TabType.Home, TabType.Movies),
+            ),
+            initialSection = SettingsSection.Navigation,
+        )
         val navigation = composeRule.onNodeWithTag(
             SettingsTestTags.section(SettingsSection.Navigation.name)
         )
 
         navigation.requestFocus().press(Key.DirectionRight)
-        focusedItem(context.getString(R.string.settings_navigation_mode)).press(Key.Enter)
-        focusedItem(context.getString(R.string.settings_navigation_top_tabs))
+        focusedItem(context.getString(R.string.settings_startup_tab)).press(Key.Enter)
+        focusedItem(context.getString(TabType.Home.title))
             .assertIsFocused()
             .press(Key.DirectionLeft)
 
@@ -259,7 +241,6 @@ internal class DeviceSettingsContentFocusTest {
     fun startupTabOpensAsChoiceListAndFocusesCurrentValue() {
         setSuccessContent(
             state = successState().copy(
-                navigationMode = NavigationMode.TopTabs,
                 startupTab = TabType.Home,
                 startupTabOptions = listOf(TabType.Home, TabType.Movies),
             ),

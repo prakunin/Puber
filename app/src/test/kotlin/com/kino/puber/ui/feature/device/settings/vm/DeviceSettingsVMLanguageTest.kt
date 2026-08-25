@@ -2,7 +2,6 @@ package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.api.models.DeviceResponse
 import com.kino.puber.data.preferences.AppLanguageRepository
@@ -105,11 +104,10 @@ internal class DeviceSettingsVMLanguageTest {
         every { navigationPreferencesRepository.contentPreferences } returns MutableStateFlow(
             ContentPreferences(showAnime = true, hideWatched = false, showWatchedIndicators = true)
         )
-        every { navigationPreferencesRepository.getNavigationMode() } returns NavigationMode.SideDrawer
         every { navigationPreferencesRepository.getStartupTab() } returns TabType.Home
-        every { navigationPreferencesRepository.getVisibleTabs(any()) } returns
+        every { navigationPreferencesRepository.getVisibleTabs() } returns
             listOf(TabType.Home, TabType.Settings)
-        every { navigationPreferencesRepository.getStartupTabOptions(any()) } returns
+        every { navigationPreferencesRepository.getStartupTabOptions() } returns
             listOf(TabType.Home)
 
         val vm = DeviceSettingsVM(

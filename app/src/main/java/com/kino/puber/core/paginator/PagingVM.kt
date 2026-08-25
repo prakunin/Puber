@@ -139,6 +139,24 @@ abstract class PagingVM<T, VS>(
         return pagingScope.launch(context = context, start) { block.invoke(this) }
     }
 
+    /**
+     * Loads page one again without taking the list off the screen: the paginator keeps publishing
+     * what it already holds until the new pages replace it.
+     *
+     * [resetPaging] is the other half of the pair and clears the list first, which is right for a
+     * list whose identity changed — a new filter, a new query. A plain reload of the same list is
+     * not that, and on TV the difference is the focus: an emptied list has no card to hold it.
+     */
+    protected fun refreshPagingKeepingContent() {
+        isFullDataNext = false
+        isFullDataPrev = false
+        // Here rather than only on the side effect the paginator dispatches, which arrives a
+        // coroutine later: a page in flight can settle inside that gap and append itself to the
+        // list the reload is about to replace.
+        cancelLoading()
+        refresh()
+    }
+
     protected open fun resetPaging(key: Any? = null) {
         isFullDataNext = false
         isFullDataPrev = false

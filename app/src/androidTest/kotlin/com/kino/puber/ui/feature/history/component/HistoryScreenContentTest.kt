@@ -34,7 +34,6 @@ import com.kino.puber.domain.interactor.history.HistorySemanticKey
 import com.kino.puber.ui.feature.history.model.HistoryAction
 import com.kino.puber.ui.feature.history.model.HistoryItemUIState
 import com.kino.puber.ui.feature.history.model.HistoryPlaybackTarget
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.ui.feature.history.model.HistoryViewState
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import org.junit.Assert.assertEquals
@@ -73,7 +72,6 @@ internal class HistoryScreenContentTest {
                 CompositionLocalProvider(LocalAutoFocusOnLaunchEnabled provides false) {
                     HistoryScreenContent(
                         state = state.value,
-                        presentation = HistoryPresentation.TopTabs,
                         onAction = {},
                     )
                 }
@@ -235,28 +233,13 @@ internal class HistoryScreenContentTest {
     }
 
     @Test
-    fun topTabsNonEmptyHistoryDoesNotRenderContentTitle() {
+    fun nonEmptyHistoryRendersContentTitle() {
         setHistoryContent(
             state = HistoryViewState.Content(
                 items = listOf(historyItem()),
                 isRefreshing = true,
                 hasMorePages = true,
             ),
-            presentation = HistoryPresentation.TopTabs,
-        )
-
-        composeRule.onNodeWithText(REDUNDANT_CONTENT_TITLE).assertDoesNotExist()
-    }
-
-    @Test
-    fun sideDrawerNonEmptyHistoryRetainsContentTitle() {
-        setHistoryContent(
-            state = HistoryViewState.Content(
-                items = listOf(historyItem()),
-                isRefreshing = true,
-                hasMorePages = true,
-            ),
-            presentation = HistoryPresentation.SideDrawer,
         )
 
         composeRule.onNodeWithText(REDUNDANT_CONTENT_TITLE).assertExists()
@@ -642,7 +625,6 @@ internal class HistoryScreenContentTest {
 
     private fun setHistoryContent(
         state: HistoryViewState,
-        presentation: HistoryPresentation = HistoryPresentation.TopTabs,
         contentFocusActive: Boolean = true,
         onAction: (UIAction) -> Unit = {},
     ) {
@@ -654,7 +636,6 @@ internal class HistoryScreenContentTest {
                 ) {
                     HistoryScreenContent(
                         state = state,
-                        presentation = presentation,
                         onAction = onAction,
                     )
                 }
@@ -664,7 +645,6 @@ internal class HistoryScreenContentTest {
 
     private fun setHistoryContent(
         state: MutableState<HistoryViewState>,
-        presentation: HistoryPresentation = HistoryPresentation.TopTabs,
         contentFocusActive: Boolean = true,
         onAction: (UIAction) -> Unit,
     ) {
@@ -676,7 +656,6 @@ internal class HistoryScreenContentTest {
                 ) {
                     HistoryScreenContent(
                         state = state.value,
-                        presentation = presentation,
                         onAction = onAction,
                     )
                 }

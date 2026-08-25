@@ -11,7 +11,7 @@
     <string name="settings_general_description">Приложение, обновления и информация об устройстве</string>
     <string name="settings_playback_description">Звук, управление плеером и пропуск сегментов</string>
     <string name="settings_content_description">Что показывать в списках и на карточках</string>
-    <string name="settings_navigation_description">Вид меню, его секции и стартовая вкладка</string>
+    <string name="settings_navigation_description">Секции меню и стартовая вкладка</string>
     <string name="settings_network_description">Подключение к KinoPub и возможности устройства</string>
     <string name="settings_data_description">Локальные данные истории просмотров</string>
     <string name="settings_developer_description">Диагностическая информация для отладки</string>

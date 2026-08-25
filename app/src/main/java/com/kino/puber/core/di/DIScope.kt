@@ -7,6 +7,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.ViewModel
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.module.Module
+import org.koin.core.qualifier.Qualifier
 import org.koin.core.scope.Scope
 import org.koin.core.scope.ScopeID
 import org.koin.dsl.module
@@ -16,8 +17,10 @@ val LocalPuberScopePrefix: ProvidableCompositionLocal<String?> = staticCompositi
 
 @Composable
 inline fun <reified VM : ViewModel> puberViewModel(
+    qualifier: Qualifier? = null,
     key: String? = null,
 ): VM = koinViewModel<VM>(
+    qualifier = qualifier,
     key = key,
     scope = checkNotNull(LocalPuberKoinScope.current) {
         "puberViewModel() must be called inside a DIScope"

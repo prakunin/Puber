@@ -87,6 +87,11 @@ internal data class SkipSegmentUIState(
     val targetPositionMs: Long,
     val type: SkipSegmentType,
     val countdown: Int,
+    /**
+     * What [countdown] started at. The bar divides by it, and it is not the same for every prompt:
+     * a segment with little left gets a shorter countdown so the skip still runs before it ends.
+     */
+    val totalSeconds: Int = countdown,
 )
 
 @Immutable

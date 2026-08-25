@@ -34,7 +34,6 @@ import kotlinx.coroutines.delay
 private const val ACTION_WATCH = "watch"
 private const val ACTION_ADD_TO_SAVED = "add_to_saved"
 private const val ACTION_REMOVE_FROM_SAVED = "remove_from_saved"
-private const val ACTION_REFRESH_TAB = "refresh_tab"
 private const val ACTION_MARK_EPISODE_WATCHED = "mark_episode_watched"
 private const val ACTION_MARK_EPISODE_UNWATCHED = "mark_episode_unwatched"
 private const val ACTION_MARK_SEASON_WATCHED = "mark_season_watched"
@@ -263,30 +262,6 @@ internal fun EpisodeContextMenuDialog(
                 ACTION_MARK_EPISODE_UNWATCHED -> onMarkEpisodeWatched(episode, false)
                 ACTION_MARK_SEASON_WATCHED -> onMarkSeasonWatched(episode, true)
                 ACTION_MARK_SEASON_UNWATCHED -> onMarkSeasonWatched(episode, false)
-            }
-        },
-        onDismiss = onDismiss,
-    )
-}
-
-@Composable
-internal fun TopTabContextMenuDialog(
-    title: String?,
-    onRefresh: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    if (title == null) return
-    TvContextMenuDialog(
-        title = title,
-        actions = listOf(
-            TvContextMenuAction(
-                id = ACTION_REFRESH_TAB,
-                title = stringResource(R.string.context_menu_refresh_tab),
-            ),
-        ),
-        onAction = { action ->
-            when (action.id) {
-                ACTION_REFRESH_TAB -> onRefresh()
             }
         },
         onDismiss = onDismiss,

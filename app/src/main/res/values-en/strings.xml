@@ -83,7 +83,7 @@
     <string name="settings_general_description">App, updates, and device information</string>
     <string name="settings_playback_description">Audio, player controls, and segment skipping</string>
     <string name="settings_content_description">What the lists and the cards show</string>
-    <string name="settings_navigation_description">Menu style, its sections, and the startup tab</string>
+    <string name="settings_navigation_description">The menu sections and the startup tab</string>
     <string name="settings_network_description">KinoPub connection and device capabilities</string>
     <string name="settings_data_description">Local watch history data</string>
     <string name="settings_developer_description">Diagnostic information for troubleshooting</string>
@@ -158,10 +158,6 @@
     <string name="content_section_popular">Popular</string>
     <string name="content_section_hot">Trending</string>
     <string name="content_section_all">All</string>
-    <string name="settings_navigation_mode">Navigation style</string>
-    <string name="settings_navigation_drawer">Side menu</string>
-    <string name="settings_navigation_top_tabs">Top tabs</string>
-    <string name="settings_navigation_restart_hint">The change takes effect after restarting the app</string>
     <string name="settings_startup_tab">Startup tab</string>
     <string name="main_press_back_again_to_exit">Press Back again to exit</string>
     <string name="settings_tab_config">Configure tabs</string>
@@ -269,7 +265,12 @@
     <string name="player_sound_stereo">Stereo 2.0</string>
     <string name="player_aspect_stretch">Stretch</string>
     <string name="player_aspect_crop">Crop</string>
-    <string name="player_next_episode_countdown">Next episode %d</string>
+    <string name="player_next_episode">Next episode</string>
+    <!-- For the screen reader: the fill bar carries the time left, and a drawn bar reads as nothing. -->
+    <plurals name="player_timed_action_seconds_left">
+        <item quantity="one">%d second left</item>
+        <item quantity="other">%d seconds left</item>
+    </plurals>
     <string name="player_next_episode_cancel">Cancel</string>
     <string name="player_series_completed">Series completed</string>
     <string name="player_resume_title">Resume from %s?</string>

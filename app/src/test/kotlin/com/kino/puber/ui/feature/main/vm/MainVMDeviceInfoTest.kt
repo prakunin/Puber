@@ -3,7 +3,6 @@ package com.kino.puber.ui.feature.main.vm
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -83,10 +82,9 @@ internal class MainVMDeviceInfoTest {
                 )
             ),
             selectedTab = TabType.Home,
-            navigationMode = NavigationMode.TopTabs,
         )
         every { mapper.buildViewState(any()) } returns state
-        every { mapper.buildTabContent(any(), any(), any()) } answers {
+        every { mapper.buildTabContent(any(), any()) } answers {
             val screen = mockk<PuberScreen>()
             every { screen.key } returns "HomeScreen"
             PuberTab(screen = screen, tag = firstArg(), instanceKey = "")

@@ -19,10 +19,18 @@ class SkipSegmentInteractor(
         return service.getSegments(imdbId, season, episode)
     }
 
-    fun findActiveSegment(segments: List<SkipSegment>, positionMs: Long): SkipSegment? {
+    /**
+     * @param leadInMs how long before a segment starts it already counts as active, so the prompt
+     * can be up and counting by the time the segment itself is on screen.
+     */
+    fun findActiveSegment(
+        segments: List<SkipSegment>,
+        positionMs: Long,
+        leadInMs: Long = 0L,
+    ): SkipSegment? {
         return segments.firstOrNull { segment ->
             isSegmentTypeEnabled(segment.type) &&
-                positionMs >= segment.startMs &&
+                positionMs >= segment.startMs - leadInMs &&
                 positionMs <= (segment.endMs ?: Long.MAX_VALUE)
         }
     }

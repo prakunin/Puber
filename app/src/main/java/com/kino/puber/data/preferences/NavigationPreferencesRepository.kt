@@ -1,7 +1,6 @@
 package com.kino.puber.data.preferences
 
 import android.content.Context
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.ui.feature.main.model.TabType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,9 +33,8 @@ class NavigationPreferencesRepository(context: Context) {
 
     /**
      * Emits whenever the set of menu sections changes, so the main screen can rebuild its menu
-     * without a restart. A revision counter rather than the list itself: the list is per
-     * navigation mode, and the only thing a listener needs to know is that its own mode may have
-     * moved.
+     * without a restart. A revision counter rather than the list itself: the only thing a listener
+     * needs to know is that the menu has moved.
      */
     val menuTabsChanges: Flow<Unit> = menuTabsRevision.drop(1).map { }
 
@@ -51,15 +49,6 @@ class NavigationPreferencesRepository(context: Context) {
         .distinctUntilChanged()
         .drop(1)
         .map { }
-
-    fun getNavigationMode(): NavigationMode {
-        val name = prefs.getString(KEY_NAVIGATION_MODE, NavigationMode.SideDrawer.name)
-        return NavigationMode.entries.find { it.name == name } ?: NavigationMode.SideDrawer
-    }
-
-    fun setNavigationMode(mode: NavigationMode) {
-        prefs.edit().putString(KEY_NAVIGATION_MODE, mode.name).apply()
-    }
 
     /**
      * Whether a card that keeps focus swaps its still for the trailer. Defaults to on; the key is
@@ -80,57 +69,45 @@ class NavigationPreferencesRepository(context: Context) {
         prefs.edit().putString(KEY_STARTUP_TAB, tab.name).apply()
     }
 
-    fun getStartupTabOptions(mode: NavigationMode): List<TabType> {
-        return getVisibleTabs(mode).filterNot { tab ->
+    fun getStartupTabOptions(): List<TabType> {
+        return getVisibleTabs().filterNot { tab ->
             tab == TabType.Search || tab == TabType.Settings
         }
     }
 
-    fun getVisibleTabs(mode: NavigationMode): List<TabType> {
-        if (mode == NavigationMode.TopTabs) {
-            migrateTopTabsIfNeeded()
-        }
-        val key = tabsKeyForMode(mode)
-        val stored = prefs.getString(key, null)
-        val baseTabs = ensureRequiredTabs(mode, stored?.let(::deserializeTabs) ?: defaultTabsForMode(mode))
+    fun getVisibleTabs(): List<TabType> {
+        adoptTopTabsMenuIfNeeded()
+        val stored = prefs.getString(KEY_DRAWER_TABS, null)
+        val baseTabs = ensureRequiredTabs(stored?.let(::deserializeTabs) ?: defaultTabs())
         // Reading stays free of side effects, so the two legacy toggles keep shaping the menu
         // until the user first edits it. The edit writes the whole list, toggles included, and
         // that written list is what governs from then on.
-        return if (menuOwnsTabs(mode)) baseTabs else insertLegacyOptionalTabs(baseTabs)
+        return if (menuOwnsTabs()) baseTabs else insertLegacyOptionalTabs(baseTabs)
     }
 
-    private fun migrateTopTabsIfNeeded() {
-        val currentVersion = prefs.getInt(KEY_TOP_TABS_SCHEMA_VERSION, 0)
-        if (currentVersion >= TOP_TABS_SCHEMA_VERSION_HISTORY) return
-
-        val stored = prefs.getString(KEY_TOP_TABS, null)
-        val currentTabs = stored
-            ?.let(::deserializeTabs)
-            ?: resolveTabNames(TOP_TABS_DEFAULT_TAB_NAMES)
-        val normalizedTabs = normalizeTopTabsForHistory(currentTabs)
+    /**
+     * Carries the menu of an install that was left on the top-tabs mode into the one menu there is
+     * now. That list is what the user last saw and arranged; the drawer's own list, if they ever
+     * had one, is older than it. Runs once — the legacy keys are dropped with the same edit, so a
+     * later change to the menu cannot be undone by this.
+     */
+    private fun adoptTopTabsMenuIfNeeded() {
+        val legacyMode = prefs.getString(KEY_LEGACY_NAVIGATION_MODE, null) ?: return
+        val legacyTabs = prefs.getString(KEY_LEGACY_TOP_TABS, null)
         val editor = prefs.edit()
-        editor.putString(KEY_TOP_TABS, serializeTabs(normalizedTabs))
-        editor.putInt(KEY_TOP_TABS_SCHEMA_VERSION, TOP_TABS_SCHEMA_VERSION_HISTORY)
+        if (legacyMode == LEGACY_TOP_TABS_MODE && legacyTabs != null) {
+            editor.putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(deserializeTabs(legacyTabs))))
+            editor.putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
+        }
+        editor.remove(KEY_LEGACY_NAVIGATION_MODE)
+        editor.remove(KEY_LEGACY_TOP_TABS)
         editor.apply()
     }
 
-    private fun normalizeTopTabsForHistory(tabs: List<TabType>): List<TabType> {
-        val normalized = tabs
-            .filterNot { it == TabType.Search || it == TabType.Settings || it == TabType.History }
-            .toMutableList()
-        if (TabType.Home !in normalized) {
-            normalized.add(index = 0, element = TabType.Home)
-        }
-        val collectionsIndex = normalized.indexOf(TabType.Collections)
-        val historyIndex = if (collectionsIndex >= 0) collectionsIndex + 1 else normalized.size
-        normalized.add(index = historyIndex, element = TabType.History)
-        return normalized
-    }
-
-    fun setVisibleTabs(mode: NavigationMode, tabs: List<TabType>) {
+    fun setVisibleTabs(tabs: List<TabType>) {
         prefs.edit()
-            .putString(tabsKeyForMode(mode), serializeTabs(ensureRequiredTabs(mode, tabs)))
-            .putInt(menuSchemaKeyForMode(mode), MENU_SCHEMA_VERSION)
+            .putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(tabs)))
+            .putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
             .apply()
         menuTabsRevision.update { it + 1 }
     }
@@ -139,11 +116,11 @@ class NavigationPreferencesRepository(context: Context) {
      * Shows or hides one section. Hiding a tab the menu cannot do without is a no-op rather than
      * an error — [ensureRequiredTabs] would put it straight back anyway.
      */
-    fun setTabVisible(mode: NavigationMode, tab: TabType, visible: Boolean) {
-        val current = getVisibleTabs(mode)
+    fun setTabVisible(tab: TabType, visible: Boolean) {
+        val current = getVisibleTabs()
         if ((tab in current) == visible) return
         val updated = if (visible) insertInDeclarationOrder(current, tab) else current - tab
-        setVisibleTabs(mode, updated)
+        setVisibleTabs(updated)
     }
 
     fun setShowAnime(show: Boolean) {
@@ -178,27 +155,12 @@ class NavigationPreferencesRepository(context: Context) {
             .getBoolean(LEGACY_KEY_WATCHED_INDICATORS, true)
     }
 
-    private fun defaultTabsForMode(mode: NavigationMode): List<TabType> {
-        return when (mode) {
-            NavigationMode.SideDrawer -> TabType.entries.filter(TabType::enabled)
-            NavigationMode.TopTabs -> resolveTabNames(TOP_TABS_DEFAULT_TAB_NAMES)
-        }
-    }
+    private fun defaultTabs(): List<TabType> = TabType.entries.filter(TabType::enabled)
 
-    private fun resolveTabNames(names: List<String>): List<TabType> {
-        return names.mapNotNull { name ->
-            TabType.entries.find { it.name == name }
-        }
-    }
-
-    private fun ensureRequiredTabs(mode: NavigationMode, tabs: List<TabType>): List<TabType> {
+    private fun ensureRequiredTabs(tabs: List<TabType>): List<TabType> {
         val result = tabs.toMutableList()
-        if (mode == NavigationMode.TopTabs) {
-            result.removeAll { it == TabType.Search || it == TabType.Settings }
-        } else {
-            if (TabType.Settings !in result) {
-                result.add(TabType.Settings)
-            }
+        if (TabType.Settings !in result) {
+            result.add(TabType.Settings)
         }
         if (TabType.Home !in result) {
             result.add(0, TabType.Home)
@@ -206,8 +168,8 @@ class NavigationPreferencesRepository(context: Context) {
         return result
     }
 
-    private fun menuOwnsTabs(mode: NavigationMode): Boolean {
-        return prefs.getInt(menuSchemaKeyForMode(mode), 0) >= MENU_SCHEMA_VERSION
+    private fun menuOwnsTabs(): Boolean {
+        return prefs.getInt(KEY_MENU_SCHEMA_VERSION, 0) >= MENU_SCHEMA_VERSION
     }
 
     /** Places [tab] where the menu order — [TabType]'s own declaration order — expects it. */
@@ -242,17 +204,6 @@ class NavigationPreferencesRepository(context: Context) {
         return this == TabType.Cartoons || this == TabType.Anime
     }
 
-    private fun menuSchemaKeyForMode(mode: NavigationMode): String {
-        return KEY_MENU_SCHEMA_VERSION_PREFIX + mode.name
-    }
-
-    private fun tabsKeyForMode(mode: NavigationMode): String {
-        return when (mode) {
-            NavigationMode.SideDrawer -> KEY_DRAWER_TABS
-            NavigationMode.TopTabs -> KEY_TOP_TABS
-        }
-    }
-
     private fun serializeTabs(tabs: List<TabType>): String {
         return tabs.joinToString(SEPARATOR) { it.name }
     }
@@ -266,12 +217,20 @@ class NavigationPreferencesRepository(context: Context) {
 
     private companion object {
         const val PREFS_NAME = "navigation_preferences"
-        const val KEY_NAVIGATION_MODE = "navigation_mode"
         const val KEY_STARTUP_TAB = "startup_tab"
         const val KEY_DRAWER_TABS = "drawer_tabs_visible"
-        const val KEY_TOP_TABS = "toptabs_tabs_visible"
-        const val KEY_TOP_TABS_SCHEMA_VERSION = "toptabs_schema_version"
-        const val KEY_MENU_SCHEMA_VERSION_PREFIX = "menu_tabs_schema_version_"
+
+        /**
+         * What the navigation mode and the top-tabs menu were stored under while the app had two
+         * menus. Read once by [adoptTopTabsMenuIfNeeded] and then removed.
+         */
+        const val KEY_LEGACY_NAVIGATION_MODE = "navigation_mode"
+        const val KEY_LEGACY_TOP_TABS = "toptabs_tabs_visible"
+        const val LEGACY_TOP_TABS_MODE = "TopTabs"
+        // The suffix is what the drawer's menu was stored under while there was a second
+        // navigation mode to tell it apart from. Kept verbatim so an existing install keeps the
+        // menu it has.
+        const val KEY_MENU_SCHEMA_VERSION = "menu_tabs_schema_version_SideDrawer"
         const val KEY_SHOW_CARTOONS_TAB = "show_cartoons_tab"
         const val KEY_SHOW_ANIME_TAB = "show_anime_tab"
         const val KEY_SHOW_ANIME = "show_anime"
@@ -280,16 +239,7 @@ class NavigationPreferencesRepository(context: Context) {
         const val KEY_AUTO_TRAILER = "auto_trailer_enabled"
         const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
         const val LEGACY_KEY_WATCHED_INDICATORS = "watched_indicators_enabled"
-        const val TOP_TABS_SCHEMA_VERSION_HISTORY = 1
         const val MENU_SCHEMA_VERSION = 1
         const val SEPARATOR = ","
-
-        val TOP_TABS_DEFAULT_TAB_NAMES = listOf(
-            "Home",
-            "Movies",
-            "Series",
-            "Collections",
-            "History",
-        )
     }
 }

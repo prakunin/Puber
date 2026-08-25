@@ -31,7 +31,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
-import com.kino.puber.core.ui.uikit.component.GenreChipBar
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
@@ -50,7 +49,7 @@ import com.kino.puber.ui.feature.contentlist.model.ContentListViewState
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
 import com.kino.puber.ui.feature.contentlist.vm.SectionVM
-import com.kino.puber.core.di.LocalPuberKoinScope
+import com.kino.puber.core.di.puberViewModel
 import com.kino.puber.core.ui.navigation.component.PreserveLazyListAnchorOnRootReturn
 import org.koin.core.qualifier.named
 
@@ -77,9 +76,11 @@ internal fun ContentListScreenContent(
         onDispose { currentOnAction(ContentListAction.TrailerPreviewStopped) }
     }
 
-    val scope = LocalPuberKoinScope.current ?: return
-    val sectionVms = remember {
-        sections.map { config -> scope.get<SectionVM>(named(config.id)) }
+    // Resolved through the ViewModelStore, so a section keeps the pages it has loaded while the
+    // user is away on a card. Not remembered: the store is what holds them, and asking it again on
+    // a recomposition hands back the same instances.
+    val sectionVms = sections.map { config ->
+        puberViewModel<SectionVM>(qualifier = named(config.id), key = config.id)
     }
     val sectionStates = sectionVms.mapIndexed { index, vm ->
         key(sections[index].id) {
@@ -140,15 +141,10 @@ private fun ContentListLayout(
     val isHeroItemPresent = state.isHeroLoading || state.heroItems.isNotEmpty()
     val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
 
-    // One list item per screen is a rule about the space the detail panel leaves over, not about
-    // catalogue tabs in general. With the panel present the list viewport is a hair taller than a
-    // single section, so making each one a page removes the half-row of the next section that
-    // would otherwise peek in. `NavigationMode.TopTabs` has no panel (`ContentListVM.onStart`
-    // clears `showDetailPanel`), and its viewport is roughly twice as tall: pages there would
-    // leave better than half of every screen blank and cost a full screen of scrolling per
-    // section, where the same tab used to show two sections at once. So the page rule follows the
-    // panel, and without it the hero and the sections keep their own heights.
-    val itemsFillViewport = state.showDetailPanel
+    // One list item per screen is a rule about the space the detail panel leaves over. With the
+    // panel present the list viewport is a hair taller than a single section, so making each one a
+    // page removes the half-row of the next section that would otherwise peek in.
+    val itemsFillViewport = true
 
     // Declared here rather than from inside the rows, because a `DetailsPrefetchRow` inside the
     // `LazyColumn` only exists while the `LazyColumn` has composed it. `FocusNeighbourhood`
@@ -167,33 +163,23 @@ private fun ContentListLayout(
     }
 
     Column(modifier = modifier) {
-        if (state.showDetailPanel) {
-            VideoItemGridDetails(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(PuberTheme.Defaults.DetailsWeight),
-                state = state.selectedItem,
-                trailerUrl = state.previewTrailerUrl,
-                onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
-                fullBleedMedia = true,
-                expandMediaIntoContent = true,
-            )
-        }
-
-        if (state.showGenreChips && state.genres.isNotEmpty()) {
-            GenreChipBar(
-                genres = state.genres,
-                selectedGenreId = state.selectedGenreId,
-                onGenreSelected = { genreId -> onAction(ContentListAction.GenreSelected(genreId)) },
-            )
-        }
+        VideoItemGridDetails(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(PuberTheme.Defaults.DetailsWeight),
+            state = state.selectedItem,
+            trailerUrl = state.previewTrailerUrl,
+            onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
+            fullBleedMedia = true,
+            expandMediaIntoContent = true,
+        )
 
         PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(if (state.showDetailPanel) PuberTheme.Defaults.ContentWeight else 1f)
+                    .weight(PuberTheme.Defaults.ContentWeight)
                     // Focus leaving the rows entirely — into the side rail, most often by pressing
                     // LEFT from the first card of a row — is not seen by `ItemFocused`, which only
                     // ever reports a card gaining focus. Without this the trailer keeps playing,

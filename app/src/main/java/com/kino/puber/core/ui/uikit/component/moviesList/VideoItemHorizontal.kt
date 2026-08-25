@@ -48,6 +48,9 @@ fun VideoItemHorizontal(
     state: VideoItemUIState,
     onClick: () -> Unit,
     itemHeight: Dp = PuberTheme.Defaults.HorizontalVideoItemHeight,
+    // A second line lifts the whole text block, so neighbouring cards in a row would read from two
+    // different heights. Rows that care about that ask for one line and an ellipsis instead.
+    titleMaxLines: Int = 2,
     onContextMenu: (() -> Unit)? = null,
 ) {
     Card(
@@ -155,7 +158,7 @@ fun VideoItemHorizontal(
                     text = state.title,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
 

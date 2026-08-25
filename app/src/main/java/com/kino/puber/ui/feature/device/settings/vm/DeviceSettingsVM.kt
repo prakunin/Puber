@@ -4,7 +4,6 @@ import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -113,7 +112,6 @@ internal class DeviceSettingsVM(
                                 preferSurroundAudio = preferences.preferSurroundAudio,
                                 watchedIndicatorsEnabled = preferences.watchedIndicatorsEnabled,
                                 autoTrailerEnabled = preferences.autoTrailerEnabled,
-                                navigationMode = preferences.navigationMode,
                                 startupTab = preferences.startupTab,
                                 startupTabOptions = preferences.startupTabOptions,
                                 menuSections = buildMenuSections(preferences.visibleTabs),
@@ -148,7 +146,6 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
             DeviceSettingsActions.ToggleWatchedIndicators -> toggleWatchedIndicators()
             DeviceSettingsActions.ToggleAutoTrailer -> toggleAutoTrailer()
-            is DeviceSettingsActions.ChangeNavigationMode -> onChangeNavigationMode(action.mode)
             is DeviceSettingsActions.ChangeStartupTab -> onChangeStartupTab(action.tab)
             is DeviceSettingsActions.ToggleMenuSection -> onToggleMenuSection(action.tab)
             DeviceSettingsActions.ToggleShowAnime -> toggleShowAnime()
@@ -358,31 +355,6 @@ internal class DeviceSettingsVM(
         updateViewState(stateValue.copy(state = currentState.copy(appLanguage = language)))
     }
 
-    private fun onChangeNavigationMode(mode: NavigationMode) {
-        val currentState = stateValue.state
-        if (currentState !is DeviceSettingsState.Success) return
-        if (currentState.navigationMode == mode) return
-        preferencesStore.setNavigationMode(mode)
-        val startupTabOptions = preferencesStore.getStartupTabOptions(mode)
-        val startupTab = currentState.startupTab
-            .takeIf(startupTabOptions::contains)
-            ?: TabType.Home
-        if (startupTab != currentState.startupTab) {
-            preferencesStore.setStartupTab(startupTab)
-        }
-        updateViewState(
-            stateValue.copy(
-                state = currentState.copy(
-                    navigationMode = mode,
-                    startupTab = startupTab,
-                    startupTabOptions = startupTabOptions,
-                    menuSections = buildMenuSections(preferencesStore.getVisibleTabs(mode)),
-                )
-            )
-        )
-        showMessage(resources.getString(R.string.device_settings_restart_required))
-    }
-
     private fun onChangeStartupTab(tab: TabType) {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) return
@@ -401,13 +373,12 @@ internal class DeviceSettingsVM(
         if (tab == currentState.startupTab) return
         val section = currentState.menuSections.firstOrNull { it.tab == tab } ?: return
 
-        val mode = currentState.navigationMode
-        preferencesStore.setTabVisible(mode, tab, visible = !section.visible)
+        preferencesStore.setTabVisible(tab, visible = !section.visible)
         updateViewState(
             stateValue.copy(
                 state = currentState.copy(
-                    menuSections = buildMenuSections(preferencesStore.getVisibleTabs(mode)),
-                    startupTabOptions = preferencesStore.getStartupTabOptions(mode),
+                    menuSections = buildMenuSections(preferencesStore.getVisibleTabs()),
+                    startupTabOptions = preferencesStore.getStartupTabOptions(),
                 )
             )
         )

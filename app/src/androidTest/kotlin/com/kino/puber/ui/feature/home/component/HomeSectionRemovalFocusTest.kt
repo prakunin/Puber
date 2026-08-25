@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.home.component
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,8 @@ import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import androidx.tv.material3.Button
+import androidx.tv.material3.Text
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
@@ -34,7 +37,6 @@ import com.kino.puber.ui.feature.home.model.HomeViewState
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.main.model.TabType
-import com.kino.puber.ui.feature.main.toptabs.TopTabMainContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,13 +61,13 @@ internal class HomeSectionRemovalFocusTest {
         coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         tabRouter = TabRouter(coroutineScope)
         tabAppRouterHolder = TabAppRouterHolder(ScreensImpl)
-        TopTabHomeRemovalProbeHost.reset()
+        HomeRemovalProbeHost.reset()
     }
 
     @After
     fun tearDown() {
         composeRule.runOnIdle { tabAppRouterHolder.dispose() }
-        TopTabHomeRemovalProbeHost.reset()
+        HomeRemovalProbeHost.reset()
         coroutineScope.cancel()
     }
 
@@ -94,44 +96,6 @@ internal class HomeSectionRemovalFocusTest {
             removedId = 3,
             expectedId = 2,
         )
-    }
-
-    @Test
-    fun removingCardWhileSearchIsFocusedDoesNotStealTopChromeFocus() {
-        val previousIds = listOf(1, 2, 3)
-        setTopTabHomeContent(
-            homeState(
-                sections = listOf(
-                    section(
-                        type = HomeSectionType.ContinueWatching,
-                        title = "Retained",
-                        itemIds = previousIds,
-                    ),
-                ),
-            )
-        )
-
-        focusCard(previousIds = previousIds, targetId = 2)
-        val productionSearch = productionSearchControl()
-        productionSearch
-            .performSemanticsAction(SemanticsActions.RequestFocus)
-            .assertIsFocused()
-        composeRule.waitForIdle()
-
-        composeRule.runOnIdle {
-            TopTabHomeRemovalProbeHost.state = homeState(
-                sections = listOf(
-                    section(
-                        type = HomeSectionType.ContinueWatching,
-                        title = "Retained",
-                        itemIds = previousIds.filterNot { it == 2 },
-                    ),
-                ),
-            )
-        }
-
-        productionSearch.assertIsFocused()
-        composeRule.onNodeWithText(cardTitle(3)).assertIsNotFocused()
     }
 
     @Test
@@ -176,7 +140,7 @@ internal class HomeSectionRemovalFocusTest {
         removedId: Int,
         expectedId: Int,
     ) {
-        setTopTabHomeContent(
+        setHomeContentBesideChrome(
             homeState(
                 sections = listOf(
                     section(
@@ -188,18 +152,18 @@ internal class HomeSectionRemovalFocusTest {
             )
         )
 
-        val productionSearch = productionSearchControl()
-        productionSearch
+        val chrome = chromeControl()
+        chrome
             .assertExists()
             .performSemanticsAction(SemanticsActions.RequestFocus)
             .assertIsFocused()
         composeRule.waitForIdle()
 
         focusCard(previousIds = previousIds, targetId = removedId)
-        productionSearch.assertIsNotFocused()
+        chrome.assertIsNotFocused()
 
         composeRule.runOnIdle {
-            TopTabHomeRemovalProbeHost.state = homeState(
+            HomeRemovalProbeHost.state = homeState(
                 sections = listOf(
                     section(
                         type = HomeSectionType.ContinueWatching,
@@ -211,7 +175,7 @@ internal class HomeSectionRemovalFocusTest {
         }
 
         composeRule.onNodeWithText(cardTitle(expectedId)).assertIsFocused()
-        productionSearch.assertIsNotFocused()
+        chrome.assertIsNotFocused()
     }
 
     private fun focusCard(
@@ -238,29 +202,27 @@ internal class HomeSectionRemovalFocusTest {
         }
     }
 
-    private fun setTopTabHomeContent(state: HomeViewState) {
-        TopTabHomeRemovalProbeHost.state = state
+    /**
+     * Home beside a focusable control that does not belong to it. The control stands for whatever
+     * chrome surrounds the screen — the side rail, in the app — and the point of it is that a row
+     * losing a card must not pull focus away from something outside the rows.
+     */
+    private fun setHomeContentBesideChrome(state: HomeViewState) {
+        HomeRemovalProbeHost.state = state
         composeRule.setContent {
             PuberTheme {
-                DIScope(scopeName = "HomeSectionRemovalFocusTest") {
-                    TopTabMainContent(
-                        state = homeMainState(),
+                Column {
+                    Button(onClick = {}) {
+                        Text(text = CHROME_LABEL)
+                    }
+                    HomeScreenContent(
+                        state = HomeRemovalProbeHost.state,
                         onAction = {},
-                        tabRouter = tabRouter,
-                        tabAppRouterHolder = tabAppRouterHolder,
-                        onSearchClick = {},
-                        onSettingsClick = {},
+                        onHeroClick = {},
+                        onCollectionClick = { _, _ -> },
                     )
                 }
             }
-        }
-        composeRule.runOnIdle {
-            tabRouter.openTab(
-                PuberTab(
-                    screen = TopTabHomeRemovalProbeScreen,
-                    tag = TabType.Home,
-                ),
-            )
         }
         composeRule.waitUntil {
             composeRule
@@ -268,45 +230,9 @@ internal class HomeSectionRemovalFocusTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        composeRule.waitUntil {
-            composeRule
-                .onAllNodes(
-                    matcher = isFocused() and hasAnyDescendant(hasText("Home")),
-                    useUnmergedTree = true,
-                )
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
     }
 
-    private fun productionSearchControl() = composeRule.onNode(
-        matcher = hasClickAction() and hasAnyDescendant(hasContentDescription("Search")),
-        useUnmergedTree = true,
-    )
-
-    private fun homeMainState() = MainViewState(
-        tabs = listOf(
-            MainTab(
-                type = TabType.Home,
-                icon = PhosphorIcons.Duotone.House,
-                isSelected = true,
-            ),
-        ),
-        selectedTab = TabType.Home,
-    )
-
-    @Parcelize
-    private data object TopTabHomeRemovalProbeScreen : PuberScreen {
-        @Composable
-        override fun Content() {
-            HomeScreenContent(
-                state = TopTabHomeRemovalProbeHost.state,
-                onAction = {},
-                onHeroClick = {},
-                onCollectionClick = { _, _ -> },
-            )
-        }
-    }
+    private fun chromeControl() = composeRule.onNodeWithText(CHROME_LABEL)
 
     private fun homeState(
         sections: List<HomeSectionState>,
@@ -334,11 +260,13 @@ internal class HomeSectionRemovalFocusTest {
     )
 
     private companion object {
+        const val CHROME_LABEL = "Chrome"
+
         fun cardTitle(id: Int) = "Retained card $id"
     }
 }
 
-private object TopTabHomeRemovalProbeHost {
+private object HomeRemovalProbeHost {
     var state by mutableStateOf<HomeViewState>(HomeViewState.Content())
 
     fun reset() {

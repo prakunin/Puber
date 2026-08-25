@@ -3,7 +3,6 @@ package com.kino.puber.ui.feature.main.vm
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -58,11 +57,10 @@ internal class MainVMRefreshLifecycleTest {
         every {
             mapper.buildTabContent(
                 type = TabType.History,
-                navigationMode = any(),
                 refreshVersion = any(),
             )
         } answers {
-            val version = thirdArg<Int>()
+            val version = secondArg<Int>()
             PuberTab(
                 screen = historyScreen,
                 tag = TabType.History,
@@ -125,7 +123,7 @@ internal class MainVMRefreshLifecycleTest {
         val mapper = mockk<MainUIMapper>()
         every { mapper.buildViewState(null) } returns mainState(TabType.Anime)
         every { mapper.buildViewState(TabType.Anime) } returns mainState(TabType.Home)
-        every { mapper.buildTabContent(any(), any(), any()) } answers {
+        every { mapper.buildTabContent(any(), any()) } answers {
             puberTab(firstArg())
         }
         val tabRouter = mockk<TabRouter>(relaxed = true)
@@ -167,8 +165,8 @@ internal class MainVMRefreshLifecycleTest {
             val tab = secondArg<MainTab>()
             state.copy(selectedTab = tab.type)
         }
-        every { mapper.buildTabContent(any(), any(), any()) } answers {
-            puberTab(firstArg(), thirdArg())
+        every { mapper.buildTabContent(any(), any()) } answers {
+            puberTab(firstArg(), secondArg())
         }
         val tabRouter = mockk<TabRouter>(relaxed = true)
         val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
@@ -185,7 +183,6 @@ internal class MainVMRefreshLifecycleTest {
             verify(exactly = 1) {
                 mapper.buildTabContent(
                     type = type,
-                    navigationMode = NavigationMode.TopTabs,
                     refreshVersion = 1,
                 )
             }
@@ -193,7 +190,6 @@ internal class MainVMRefreshLifecycleTest {
         verify(exactly = 0) {
             mapper.buildTabContent(
                 type = TabType.Anime,
-                navigationMode = any(),
                 refreshVersion = 1,
             )
         }
@@ -210,7 +206,6 @@ internal class MainVMRefreshLifecycleTest {
         return MainViewState(
             tabs = listOf(mainTab(selectedTab, isSelected = true)),
             selectedTab = selectedTab,
-            navigationMode = NavigationMode.TopTabs,
         )
     }
 

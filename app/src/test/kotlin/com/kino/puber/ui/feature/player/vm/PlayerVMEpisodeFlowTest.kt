@@ -5,6 +5,7 @@ import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.PlayerAction
+import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.util.MainDispatcherExtension
@@ -51,7 +52,7 @@ internal class PlayerVMEpisodeFlowTest : PlayerVMTestFixture() {
     fun playbackEnded_startsCountdown_forSeries() {
         val vm = startedVM()
         callbackSlot.captured.onPlaybackEnded()
-        assertEquals(15, contentState(vm).nextEpisodeCountdown)
+        assertEquals(PlayerCountdowns.NEXT_EPISODE_SEC, contentState(vm).nextEpisodeCountdown)
     }
 
     @Test
@@ -74,7 +75,7 @@ internal class PlayerVMEpisodeFlowTest : PlayerVMTestFixture() {
 
         vm.onAction(PlayerAction.ClosePanel)
 
-        assertEquals(15, contentState(vm).nextEpisodeCountdown)
+        assertEquals(PlayerCountdowns.NEXT_EPISODE_SEC, contentState(vm).nextEpisodeCountdown)
     }
 
     // endregion

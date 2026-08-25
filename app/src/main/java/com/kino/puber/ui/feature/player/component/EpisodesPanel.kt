@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -42,28 +41,42 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.DpadScrollAxis
+import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInsideContentPadding
 import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoGrid
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.ui.feature.player.model.EpisodeSeasonUIState
 import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState
 
-private const val PANEL_HEIGHT_FRACTION = 0.64f
 private const val PANEL_ENTER_DURATION_MS = 240
 private const val PANEL_EXIT_DURATION_MS = 180
 private const val SCRIM_START = 0.55f
 
-private val PanelMinHeight = 300.dp
-private val PanelMaxHeight = 400.dp
+/** Whole cards the row shows at once. The card is measured from the screen, never fixed. */
+private const val EPISODES_IN_ROW = 5
+private const val EPISODE_ASPECT_WIDTH = 16f
+private const val EPISODE_ASPECT_HEIGHT = 9f
+
+/**
+ * The padding at the ends of the row has to equal the spacing between cards. While it is wider,
+ * no scroll of the list lands on a whole card and the neighbouring one keeps showing an edge.
+ */
+private val RowSpacing = 18.dp
+private val RowEdgePadding = RowSpacing
+private val HeaderGap = 12.dp
+private val RowBottomPadding = 24.dp
+private val HeaderFontSize = 14.sp
+private val HeaderLineHeight = 18.sp
 private val EpisodeCornerRadius = 12.dp
 private val FullScreenPanelColor = Color(0xFF090B0F)
 
@@ -109,7 +122,13 @@ internal fun EpisodesPanel(
     }
 }
 
-/** Bottom sheet used inside the player while playback remains active behind it. */
+/**
+ * Row of episodes that hangs over the picture while playback continues behind it.
+ *
+ * There is no sheet under the cards: the row is only as tall as it needs to be, and everything the
+ * player used to draw behind it - the glass, its rim, the height taken from the screen rather than
+ * from the content - is gone. What separates the cards from the picture is the scrim alone.
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun PlayerEpisodesPanel(
@@ -127,11 +146,10 @@ internal fun PlayerEpisodesPanel(
         ?: episodes?.seasons?.firstOrNull()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val preferredPanelHeight = maxHeight * PANEL_HEIGHT_FRACTION
-        val panelHeight = minOf(
-            maxHeight,
-            preferredPanelHeight.coerceIn(PanelMinHeight, PanelMaxHeight),
-        )
+        // The card is measured from the width that is left, so the row always holds whole cards.
+        val episodeWidth =
+            (maxWidth - RowEdgePadding * 2 - RowSpacing * (EPISODES_IN_ROW - 1)) / EPISODES_IN_ROW
+        val episodeHeight = episodeWidth * (EPISODE_ASPECT_HEIGHT / EPISODE_ASPECT_WIDTH)
 
         AnimatedVisibility(
             visible = visible,
@@ -150,8 +168,7 @@ internal fun PlayerEpisodesPanel(
             visible = visible,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(panelHeight),
+                .fillMaxWidth(),
             enter = fadeIn(tween(PANEL_ENTER_DURATION_MS)) + slideInVertically(
                 animationSpec = tween(PANEL_ENTER_DURATION_MS, easing = FastOutSlowInEasing),
                 initialOffsetY = { it },
@@ -163,20 +180,15 @@ internal fun PlayerEpisodesPanel(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .playerGlass(
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                        level = PlayerGlass.Strong,
-                        elevation = 20.dp,
-                    )
+                    .fillMaxWidth()
                     .focusProperties {
                         onExit = {
                             if (!allowFocusExit) cancelFocusChange()
                         }
                     }
                     .focusGroup()
-                    .padding(top = 46.dp, bottom = 26.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                    .padding(bottom = RowBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(HeaderGap),
             ) {
                 EpisodesHeader(season = currentSeason)
 
@@ -184,6 +196,7 @@ internal fun PlayerEpisodesPanel(
                     EpisodeRow(
                         visible = visible,
                         season = season,
+                        episodeHeight = episodeHeight,
                         currentEpisodeId = initialFocusedItemId,
                         onUp = onDismiss,
                         onEpisodeSelected = onEpisodeSelected,
@@ -205,11 +218,11 @@ private fun EpisodesHeader(
             androidx.compose.ui.res.stringResource(R.string.player_episodes_season_title, episodesTitle, it)
         } ?: episodesTitle,
         modifier = Modifier
-            .padding(horizontal = 36.dp),
-        style = MaterialTheme.typography.titleLarge.copy(
-            fontSize = 20.sp,
-            lineHeight = 24.sp,
-            fontWeight = FontWeight.SemiBold,
+            // Follows the row padding: a heading off the card grid reads as a mistake.
+            .padding(horizontal = RowEdgePadding),
+        style = SectionTitleStyle.copy(
+            fontSize = HeaderFontSize,
+            lineHeight = HeaderLineHeight,
         ),
         color = MaterialTheme.colorScheme.onSurface,
     )
@@ -219,6 +232,7 @@ private fun EpisodesHeader(
 private fun EpisodeRow(
     visible: Boolean,
     season: EpisodeSeasonUIState,
+    episodeHeight: Dp,
     currentEpisodeId: Int?,
     onUp: () -> Unit,
     onEpisodeSelected: (VideoItemUIState) -> Unit,
@@ -239,51 +253,55 @@ private fun EpisodeRow(
         }
     }
 
-    LazyRow(
-        state = listState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .dpadScrollOptimization(axis = DpadScrollAxis.Horizontal),
-        contentPadding = PaddingValues(horizontal = 36.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        itemsIndexed(season.episodes, key = { _, item -> item.id }) { index, item ->
-            val isCurrentEpisode = item.id == currentEpisodeId
-            VideoItemHorizontal(
-                state = item,
-                onClick = { onEpisodeSelected(item) },
-                onContextMenu = onEpisodeContextMenu?.let { callback -> { callback(item) } },
-                modifier = Modifier
-                    .onPreviewKeyEvent { event ->
-                        if (event.key != Key.DirectionUp) {
-                            false
-                        } else {
-                            if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
-                                onUp()
+    PositionFocusedItemInsideContentPadding(padding = RowEdgePadding) {
+        LazyRow(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .dpadScrollOptimization(axis = DpadScrollAxis.Horizontal),
+            contentPadding = PaddingValues(horizontal = RowEdgePadding),
+            horizontalArrangement = Arrangement.spacedBy(RowSpacing),
+        ) {
+            itemsIndexed(season.episodes, key = { _, item -> item.id }) { index, item ->
+                val isCurrentEpisode = item.id == currentEpisodeId
+                VideoItemHorizontal(
+                    state = item,
+                    itemHeight = episodeHeight,
+                    titleMaxLines = 1,
+                    onClick = { onEpisodeSelected(item) },
+                    onContextMenu = onEpisodeContextMenu?.let { callback -> { callback(item) } },
+                    modifier = Modifier
+                        .onPreviewKeyEvent { event ->
+                            if (event.key != Key.DirectionUp) {
+                                false
+                            } else {
+                                if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                                    onUp()
+                                }
+                                true
                             }
-                            true
                         }
-                    }
-                    .then(
-                        if (index == targetIndex) {
-                            Modifier.focusRequester(targetFocusRequester)
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .semantics { selected = isCurrentEpisode }
-                    .then(
-                        if (isCurrentEpisode) {
-                            Modifier.border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = RoundedCornerShape(EpisodeCornerRadius),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    ),
-            )
+                        .then(
+                            if (index == targetIndex) {
+                                Modifier.focusRequester(targetFocusRequester)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .semantics { selected = isCurrentEpisode }
+                        .then(
+                            if (isCurrentEpisode) {
+                                Modifier.border(
+                                    width = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = RoundedCornerShape(EpisodeCornerRadius),
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            }
         }
     }
 }

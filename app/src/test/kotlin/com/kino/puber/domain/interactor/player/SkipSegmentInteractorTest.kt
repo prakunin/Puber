@@ -37,6 +37,17 @@ class SkipSegmentInteractorTest {
     }
 
     @Test
+    fun findActiveSegment_isActiveWithinTheLeadIn_beforeTheSegmentStarts() {
+        val segment = SkipSegment(SkipSegmentType.INTRO, startMs = 6_000, endMs = 37_000)
+
+        // The prompt has to be up and counting before the intro itself is on screen.
+        assertNotNull(interactor.findActiveSegment(listOf(segment), positionMs = 4_500, leadInMs = 2_000))
+        assertNull(interactor.findActiveSegment(listOf(segment), positionMs = 3_500, leadInMs = 2_000))
+        // Without a lead-in the segment still only starts where it says it does.
+        assertNull(interactor.findActiveSegment(listOf(segment), positionMs = 5_999))
+    }
+
+    @Test
     fun findActiveSegment_returnsNull_whenPositionOutsideRange() {
         val segment = SkipSegment(SkipSegmentType.INTRO, startMs = 1000, endMs = 5000)
         assertNull(interactor.findActiveSegment(listOf(segment), positionMs = 6000))

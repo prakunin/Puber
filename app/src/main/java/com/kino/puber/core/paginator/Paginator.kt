@@ -181,21 +181,30 @@ object Paginator {
     }
 
 
+    /**
+     * Reloads page one over whatever the list is already holding.
+     *
+     * Every state that carries a list keeps drawing it, not only [State.Data]: a refresh landing
+     * while a next page was in flight, or over a page error, used to fall through to
+     * [State.Loading] and take the list off the screen for the length of the reload. On a remote
+     * that empties the screen the user was looking at and drops the focus with it.
+     */
     private fun <T> executeRefreshAction(
         sideEffectListener: (SideEffect) -> Unit,
         state: State
     ): State {
         sideEffectListener(SideEffect.LoadFirstPage)
-        return when (state) {
-            is State.Data<*> -> {
-                val data = state.data as List<T>
-                if (data.isEmpty()) {
-                    State.Loading
-                } else State.Refreshing(data)
-            }
-
-            else -> State.Loading
+        val data: List<T> = when (state) {
+            is State.Data<*> -> state.data as List<T>
+            is State.Refreshing<*> -> state.data as List<T>
+            is State.LoadingNext<*> -> state.data as List<T>
+            is State.LoadingPrev<*> -> state.data as List<T>
+            is State.PageErrorNext<*> -> state.data as List<T>
+            is State.PageErrorPrev<*> -> state.data as List<T>
+            is State.Error<*> -> state.data as List<T>
+            else -> emptyList()
         }
+        return if (data.isEmpty()) State.Loading else State.Refreshing(data)
     }
 
     private fun executeRestartAction(sideEffectListener: (SideEffect) -> Unit): State {

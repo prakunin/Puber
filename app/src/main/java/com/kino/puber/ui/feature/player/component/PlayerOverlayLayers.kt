@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -62,6 +63,7 @@ internal fun PlayerControlsLayer(
     content: PlayerContentState,
     onAction: (UIAction) -> Unit,
     focusRequesters: PlayerFocusRequesters,
+    onBottomBarHeightChanged: (Dp) -> Unit = {},
 ) {
     PlayerControlsOverlay(
         visible = content.controlsVisible,
@@ -96,6 +98,7 @@ internal fun PlayerControlsLayer(
         videoSettingsButtonFocusRequester = focusRequesters.videoSettingsButton,
         infoButtonFocusRequester = focusRequesters.infoButton,
         seekBarFocusRequester = focusRequesters.seekBar,
+        onBottomBarHeightChanged = onBottomBarHeightChanged,
     )
 }
 
@@ -103,12 +106,16 @@ internal fun PlayerControlsLayer(
 internal fun PlayerOverlayLayers(
     content: PlayerContentState,
     onAction: (UIAction) -> Unit,
+    bottomInset: Dp = 0.dp,
 ) {
+    // The controls bar owns the bottom strip while it is up, so the timed actions step above it.
+    val timedActionInset = if (content.controlsVisible) bottomInset else 0.dp
     if (content.nextEpisodeCountdown == null && content.resumeDialog == null) {
         SkipSegmentOverlay(
             state = content.activeSkipSegment,
             onSkip = rememberAction(onAction, PlayerAction.SkipSegmentClicked),
             onCancel = rememberAction(onAction, PlayerAction.CancelSkipSegment),
+            bottomInset = timedActionInset,
         )
     }
 
@@ -122,6 +129,7 @@ internal fun PlayerOverlayLayers(
         countdown = content.nextEpisodeCountdown,
         onNextEpisode = rememberAction(onAction, PlayerAction.NextEpisode),
         onCancel = rememberAction(onAction, PlayerAction.CancelNextEpisodeCountdown),
+        bottomInset = timedActionInset,
     )
 }
 

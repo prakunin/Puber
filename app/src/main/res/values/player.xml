@@ -71,7 +71,14 @@
     <string name="player_aspect_crop">Заполнить</string>
 
     <!-- Next Episode -->
-    <string name="player_next_episode_countdown">Следующая серия %d</string>
+    <string name="player_next_episode">Следующая серия</string>
+    <!-- Экранному диктору: полоса заливки показывает остаток времени, но она нарисована и не читается. -->
+    <plurals name="player_timed_action_seconds_left">
+        <item quantity="one">осталась %d секунда</item>
+        <item quantity="few">осталось %d секунды</item>
+        <item quantity="many">осталось %d секунд</item>
+        <item quantity="other">осталось %d секунды</item>
+    </plurals>
     <string name="player_next_episode_cancel">Отмена</string>
     <string name="player_series_completed">Сериал завершён</string>
 

@@ -19,5 +19,8 @@
 .serena/
 .env
 
+# Device login snapshots taken by `make auth-save` — account tokens, never commit.
+.auth/
+
 # Subagent-driven development scratch (ledger, briefs, review packages)
 .superpowers/

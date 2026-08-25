@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.error.ErrorHandler
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.preferences.AppLanguageRepository
@@ -81,7 +80,6 @@ internal class DeviceSettingsVMMenuSectionsTest {
 
         verify {
             navigationPreferencesRepository.setTabVisible(
-                mode = NavigationMode.SideDrawer,
                 tab = TabType.Concerts,
                 visible = false,
             )
@@ -97,7 +95,7 @@ internal class DeviceSettingsVMMenuSectionsTest {
         vm.onAction(DeviceSettingsActions.ToggleMenuSection(TabType.Movies))
 
         verify(exactly = 0) {
-            navigationPreferencesRepository.setTabVisible(any(), any(), any())
+            navigationPreferencesRepository.setTabVisible(any(), any())
         }
         assertTrue(vm.successState().menuSections.single { it.tab == TabType.Movies }.visible)
     }
@@ -118,17 +116,16 @@ internal class DeviceSettingsVMMenuSectionsTest {
         every { navigationPreferencesRepository.contentPreferences } returns MutableStateFlow(
             ContentPreferences(showAnime = true, hideWatched = false, showWatchedIndicators = true)
         )
-        every { navigationPreferencesRepository.getNavigationMode() } returns NavigationMode.SideDrawer
         every { navigationPreferencesRepository.getStartupTab() } returns startupTab
-        every { navigationPreferencesRepository.getVisibleTabs(any()) } answers { visibleTabs }
-        every { navigationPreferencesRepository.getStartupTabOptions(any()) } answers {
+        every { navigationPreferencesRepository.getVisibleTabs() } answers { visibleTabs }
+        every { navigationPreferencesRepository.getStartupTabOptions() } answers {
             visibleTabs.filterNot { it == TabType.Search || it == TabType.Settings }
         }
         every {
-            navigationPreferencesRepository.setTabVisible(any(), any(), any())
+            navigationPreferencesRepository.setTabVisible(any(), any())
         } answers {
-            val tab = secondArg<TabType>()
-            visibleTabs = if (thirdArg<Boolean>()) visibleTabs + tab else visibleTabs - tab
+            val tab = firstArg<TabType>()
+            visibleTabs = if (secondArg<Boolean>()) visibleTabs + tab else visibleTabs - tab
         }
 
         val vm = DeviceSettingsVM(

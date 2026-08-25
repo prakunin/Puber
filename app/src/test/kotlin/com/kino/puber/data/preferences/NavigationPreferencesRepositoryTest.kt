@@ -1,7 +1,6 @@
 package com.kino.puber.data.preferences
 
 import android.content.Context
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.util.FakeSharedPreferences
 import com.kino.puber.ui.feature.main.model.TabType
 import io.mockk.every
@@ -18,11 +17,10 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-private const val TOP_TABS_KEY = "toptabs_tabs_visible"
 private const val SIDE_DRAWER_KEY = "drawer_tabs_visible"
+private const val LEGACY_TOP_TABS_KEY = "toptabs_tabs_visible"
+private const val LEGACY_NAVIGATION_MODE_KEY = "navigation_mode"
 private const val STARTUP_TAB_KEY = "startup_tab"
-private const val NAVIGATION_MODE_KEY = "navigation_mode"
-private const val TOP_TABS_SCHEMA_VERSION_KEY = "toptabs_schema_version"
 private const val SHOW_CARTOONS_TAB_KEY = "show_cartoons_tab"
 private const val SHOW_ANIME_TAB_KEY = "show_anime_tab"
 private const val SHOW_ANIME_KEY = "show_anime"
@@ -31,7 +29,6 @@ private const val SHOW_WATCHED_INDICATORS_KEY = "show_watched_indicators"
 private const val AUTO_TRAILER_KEY = "auto_trailer_enabled"
 private const val LEGACY_PLAYER_PREFS_NAME = "player_preferences"
 private const val LEGACY_WATCHED_INDICATORS_KEY = "watched_indicators_enabled"
-private const val HISTORY_SCHEMA_VERSION = 1
 
 internal class NavigationPreferencesRepositoryTest {
 
@@ -61,31 +58,6 @@ internal class NavigationPreferencesRepositoryTest {
     }
 
     @Test
-    fun navigationMode_defaultsToTheSideDrawerWithoutWritingPreferences() {
-        val fixture = fixture()
-
-        assertEquals(NavigationMode.SideDrawer, fixture.repository.getNavigationMode())
-        assertTrue(fixture.preferences.transactions.isEmpty())
-    }
-
-    @Test
-    fun navigationMode_keepsAnExplicitlyChosenTopTabs() {
-        val fixture = fixture()
-
-        fixture.repository.setNavigationMode(NavigationMode.TopTabs)
-
-        assertEquals(NavigationMode.TopTabs, fixture.repository.getNavigationMode())
-    }
-
-    @Test
-    fun navigationMode_fallsBackToTheSideDrawerForAnUnknownStoredValue() {
-        val fixture = fixture()
-        fixture.preferences.values[NAVIGATION_MODE_KEY] = "RemovedMode"
-
-        assertEquals(NavigationMode.SideDrawer, fixture.repository.getNavigationMode())
-    }
-
-    @Test
     fun autoTrailer_defaultsToOnWithoutWritingPreferences() {
         val fixture = fixture()
 
@@ -107,7 +79,7 @@ internal class NavigationPreferencesRepositoryTest {
     fun startupTabOptions_excludeUtilityDestinations() {
         val fixture = fixture()
 
-        val options = fixture.repository.getStartupTabOptions(NavigationMode.SideDrawer)
+        val options = fixture.repository.getStartupTabOptions()
 
         assertFalse(TabType.Search in options)
         assertFalse(TabType.Settings in options)
@@ -119,7 +91,7 @@ internal class NavigationPreferencesRepositoryTest {
     fun defaultSideDrawer_includesHomeInEnabledDeclarationOrder() {
         val fixture = fixture()
 
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        val tabs = fixture.repository.getVisibleTabs()
 
         assertEquals(
             listOf(
@@ -148,7 +120,7 @@ internal class NavigationPreferencesRepositoryTest {
             storedDrawerTabs = "Movies,Favourites,Settings",
         )
 
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        val tabs = fixture.repository.getVisibleTabs()
 
         assertEquals(
             listOf(TabType.Home, TabType.Movies, TabType.Favourites, TabType.Settings),
@@ -156,109 +128,6 @@ internal class NavigationPreferencesRepositoryTest {
         )
         assertFalse(TabType.History in tabs)
         assertTrue(fixture.preferences.transactions.isEmpty())
-    }
-
-    @Test
-    fun defaultTopTabs_placeHistoryAfterCollectionsAndPersistSchema() {
-        val fixture = fixture()
-
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(
-            listOf(
-                TabType.Home,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Collections,
-                TabType.History,
-            ),
-            tabs,
-        )
-        assertEquals(1, fixture.preferences.transactions.size)
-        assertEquals(
-            setOf(TOP_TABS_KEY, TOP_TABS_SCHEMA_VERSION_KEY),
-            fixture.preferences.transactions.single().keys,
-        )
-        assertEquals(HISTORY_SCHEMA_VERSION, fixture.preferences.values[TOP_TABS_SCHEMA_VERSION_KEY])
-    }
-
-    @Test
-    fun migrationNormalizesRequiredTabsAndDuplicateHistory() {
-        val fixture = fixture(
-            storedTabs = "Movies,Search,History,Series,History,Settings,Collections",
-        )
-
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(
-            listOf(
-                TabType.Home,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Collections,
-                TabType.History,
-            ),
-            tabs,
-        )
-    }
-
-    @Test
-    fun migrationAppendsHistoryWhenCollectionsAreMissing() {
-        val fixture = fixture(storedTabs = "History,Series,Movies")
-
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(
-            listOf(TabType.Home, TabType.Series, TabType.Movies, TabType.History),
-            tabs,
-        )
-    }
-
-    @Test
-    fun migrationIgnoresUnknownAndMalformedTabNames() {
-        val fixture = fixture(storedTabs = "Unknown,Movies,, Series ,DocMovies,broken")
-
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(
-            listOf(TabType.Home, TabType.Movies, TabType.DocMovies, TabType.History),
-            tabs,
-        )
-    }
-
-    @Test
-    fun migrationRunsOnlyOnceAcrossRepeatedReads() {
-        val fixture = fixture(storedTabs = "Movies,Collections")
-
-        val first = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-        val transactionsAfterFirstRead = fixture.preferences.transactions.size
-        val second = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(first, second)
-        assertEquals(1, transactionsAfterFirstRead)
-        assertEquals(transactionsAfterFirstRead, fixture.preferences.transactions.size)
-    }
-
-    @Test
-    fun userCanRemoveHistoryAfterVersionOneWhileSearchAndSettingsStayOutside() {
-        val fixture = fixture()
-        fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        fixture.repository.setVisibleTabs(
-            mode = NavigationMode.TopTabs,
-            tabs = listOf(
-                TabType.Search,
-                TabType.Home,
-                TabType.Movies,
-                TabType.Settings,
-            ),
-        )
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
-
-        assertEquals(listOf(TabType.Home, TabType.Movies), tabs)
-        assertFalse(TabType.History in tabs)
-        assertFalse(TabType.Search in tabs)
-        assertFalse(TabType.Settings in tabs)
     }
 
     @Test
@@ -341,26 +210,13 @@ internal class NavigationPreferencesRepositoryTest {
     }
 
     @Test
-    fun optionalTabs_areInsertedCanonicallyInBothNavigationModes() {
+    fun optionalTabs_areInsertedCanonically() {
         val fixture = fixture(
-            storedTabs = "Home,Movies,Series,Collections,History",
             storedDrawerTabs = "Favourites,Movies,Series,History,Settings",
             showCartoonsTab = true,
             showAnimeTab = true,
         )
 
-        assertEquals(
-            listOf(
-                TabType.Home,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Cartoons,
-                TabType.Anime,
-                TabType.Collections,
-                TabType.History,
-            ),
-            fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
-        )
         assertEquals(
             listOf(
                 TabType.Home,
@@ -372,53 +228,40 @@ internal class NavigationPreferencesRepositoryTest {
                 TabType.History,
                 TabType.Settings,
             ),
-            fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+            fixture.repository.getVisibleTabs(),
         )
     }
 
     @Test
     fun optionalTabs_canBeEnabledIndependently() {
-        val cartoonsFixture = fixture(showCartoonsTab = true)
-        val animeFixture = fixture(showAnimeTab = true)
+        val cartoonsFixture = fixture(
+            storedDrawerTabs = "Home,Movies,Series,Settings",
+            showCartoonsTab = true,
+        )
+        val animeFixture = fixture(
+            storedDrawerTabs = "Home,Movies,Series,Settings",
+            showAnimeTab = true,
+        )
 
         assertEquals(
-            listOf(
-                TabType.Home,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Cartoons,
-                TabType.Collections,
-                TabType.History,
-            ),
-            cartoonsFixture.repository.getVisibleTabs(NavigationMode.TopTabs),
+            listOf(TabType.Home, TabType.Movies, TabType.Series, TabType.Cartoons, TabType.Settings),
+            cartoonsFixture.repository.getVisibleTabs(),
         )
         assertEquals(
-            listOf(
-                TabType.Home,
-                TabType.Movies,
-                TabType.Series,
-                TabType.Anime,
-                TabType.Collections,
-                TabType.History,
-            ),
-            animeFixture.repository.getVisibleTabs(NavigationMode.TopTabs),
+            listOf(TabType.Home, TabType.Movies, TabType.Series, TabType.Anime, TabType.Settings),
+            animeFixture.repository.getVisibleTabs(),
         )
     }
 
     @Test
     fun disabledOptionalTabs_overrideLegacyStoredSelections() {
         val fixture = fixture(
-            storedTabs = "Home,Movies,Cartoons,Anime,Series,Collections",
             storedDrawerTabs = "Favourites,Cartoons,Movies,Anime,Settings",
         )
 
         assertEquals(
-            listOf(TabType.Home, TabType.Movies, TabType.Series, TabType.Collections, TabType.History),
-            fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
-        )
-        assertEquals(
             listOf(TabType.Home, TabType.Favourites, TabType.Movies, TabType.Settings),
-            fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+            fixture.repository.getVisibleTabs(),
         )
     }
 
@@ -442,7 +285,7 @@ internal class NavigationPreferencesRepositoryTest {
                 TabType.Collections,
                 TabType.Settings,
             ),
-            moviesFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+            moviesFixture.repository.getVisibleTabs(),
         )
         assertEquals(
             listOf(
@@ -452,7 +295,7 @@ internal class NavigationPreferencesRepositoryTest {
                 TabType.History,
                 TabType.Settings,
             ),
-            boundaryFixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+            boundaryFixture.repository.getVisibleTabs(),
         )
     }
 
@@ -460,22 +303,21 @@ internal class NavigationPreferencesRepositoryTest {
     fun hidingATab_dropsItFromTheMenuAndFromTheStartupOptions() {
         val fixture = fixture()
 
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+        fixture.repository.setTabVisible(TabType.Concerts, visible = false)
 
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        val tabs = fixture.repository.getVisibleTabs()
         assertFalse(TabType.Concerts in tabs)
         assertFalse(
-            TabType.Concerts in fixture.repository.getStartupTabOptions(NavigationMode.SideDrawer),
+            TabType.Concerts in fixture.repository.getStartupTabOptions(),
         )
         assertTrue(TabType.For4k in tabs)
     }
 
     @Test
     fun showingATab_putsItBackInDeclarationOrder() {
-        val fixture = fixture(storedTabs = "Home,Movies,Series,Collections,History")
-        fixture.repository.getVisibleTabs(NavigationMode.TopTabs)
+        val fixture = fixture(storedDrawerTabs = "Home,Movies,Series,Collections,History,Settings")
 
-        fixture.repository.setTabVisible(NavigationMode.TopTabs, TabType.For4k, visible = true)
+        fixture.repository.setTabVisible(TabType.For4k, visible = true)
 
         assertEquals(
             listOf(
@@ -485,8 +327,9 @@ internal class NavigationPreferencesRepositoryTest {
                 TabType.For4k,
                 TabType.Collections,
                 TabType.History,
+                TabType.Settings,
             ),
-            fixture.repository.getVisibleTabs(NavigationMode.TopTabs),
+            fixture.repository.getVisibleTabs(),
         )
     }
 
@@ -494,11 +337,11 @@ internal class NavigationPreferencesRepositoryTest {
     fun showingATabAlreadyInTheMenu_leavesTheOrderAlone() {
         val fixture = fixture(storedDrawerTabs = "Home,Movies,Favourites,Settings")
 
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Favourites, visible = true)
+        fixture.repository.setTabVisible(TabType.Favourites, visible = true)
 
         assertEquals(
             listOf(TabType.Home, TabType.Movies, TabType.Favourites, TabType.Settings),
-            fixture.repository.getVisibleTabs(NavigationMode.SideDrawer),
+            fixture.repository.getVisibleTabs(),
         )
     }
 
@@ -506,10 +349,10 @@ internal class NavigationPreferencesRepositoryTest {
     fun hidingARequiredTab_isRefused() {
         val fixture = fixture()
 
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Home, visible = false)
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Settings, visible = false)
+        fixture.repository.setTabVisible(TabType.Home, visible = false)
+        fixture.repository.setTabVisible(TabType.Settings, visible = false)
 
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        val tabs = fixture.repository.getVisibleTabs()
         assertTrue(TabType.Home in tabs)
         assertTrue(TabType.Settings in tabs)
     }
@@ -520,22 +363,12 @@ internal class NavigationPreferencesRepositoryTest {
         // from then on the toggles no longer have a say.
         val fixture = fixture(showAnimeTab = true)
 
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+        fixture.repository.setTabVisible(TabType.Concerts, visible = false)
         fixture.preferences.values[SHOW_ANIME_TAB_KEY] = false
 
-        val tabs = fixture.repository.getVisibleTabs(NavigationMode.SideDrawer)
+        val tabs = fixture.repository.getVisibleTabs()
         assertTrue(TabType.Anime in tabs)
         assertFalse(TabType.Concerts in tabs)
-    }
-
-    @Test
-    fun writingOneMode_leavesTheOtherOnTheLegacyToggles() {
-        val fixture = fixture(showAnimeTab = true)
-
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Anime, visible = false)
-
-        assertFalse(TabType.Anime in fixture.repository.getVisibleTabs(NavigationMode.SideDrawer))
-        assertTrue(TabType.Anime in fixture.repository.getVisibleTabs(NavigationMode.TopTabs))
     }
 
     @Test
@@ -546,7 +379,7 @@ internal class NavigationPreferencesRepositoryTest {
             fixture.repository.menuTabsChanges.collect(emissions::add)
         }
 
-        fixture.repository.setTabVisible(NavigationMode.SideDrawer, TabType.Concerts, visible = false)
+        fixture.repository.setTabVisible(TabType.Concerts, visible = false)
         runCurrent()
         fixture.repository.setStartupTab(TabType.Movies)
         runCurrent()
@@ -577,9 +410,58 @@ internal class NavigationPreferencesRepositoryTest {
         collector.cancel()
     }
 
+    /**
+     * The menu a user last saw is the one they configured under the navigation mode they were in.
+     * Dropping the top-tabs mode must not drop their sections with it: an install that was on top
+     * tabs comes back with that list in the one menu that is left.
+     */
+    @Test
+    fun anInstallLeftOnTopTabs_keepsThatMenuInTheDrawer() {
+        val fixture = fixture(
+            storedDrawerTabs = "Home,Favourites,Settings",
+            storedTopTabs = "Home,Movies,Collections,History",
+            activeNavigationMode = "TopTabs",
+        )
+
+        val tabs = fixture.repository.getVisibleTabs()
+
+        assertEquals(
+            listOf(TabType.Home, TabType.Movies, TabType.Collections, TabType.History, TabType.Settings),
+            tabs,
+        )
+    }
+
+    @Test
+    fun anInstallLeftOnTheDrawer_keepsItsOwnMenu() {
+        val fixture = fixture(
+            storedDrawerTabs = "Home,Favourites,Settings",
+            storedTopTabs = "Home,Movies,Collections,History",
+            activeNavigationMode = "SideDrawer",
+        )
+
+        val tabs = fixture.repository.getVisibleTabs()
+
+        assertEquals(listOf(TabType.Home, TabType.Favourites, TabType.Settings), tabs)
+    }
+
+    @Test
+    fun theTopTabsMenuIsCarriedOverOnlyOnce() {
+        val fixture = fixture(
+            storedTopTabs = "Home,Movies,History",
+            activeNavigationMode = "TopTabs",
+        )
+        fixture.repository.getVisibleTabs()
+
+        fixture.repository.setTabVisible(TabType.Movies, visible = false)
+        val tabs = fixture.repository.getVisibleTabs()
+
+        assertEquals(listOf(TabType.Home, TabType.History, TabType.Settings), tabs)
+    }
+
     private fun fixture(
-        storedTabs: String? = null,
         storedDrawerTabs: String? = null,
+        storedTopTabs: String? = null,
+        activeNavigationMode: String? = null,
         startupTab: String? = null,
         showCartoonsTab: Boolean? = null,
         showAnimeTab: Boolean? = null,
@@ -589,8 +471,9 @@ internal class NavigationPreferencesRepositoryTest {
         legacyWatchedIndicators: Boolean? = null,
     ): Fixture {
         val preferences = FakeSharedPreferences()
-        storedTabs?.let { preferences.values[TOP_TABS_KEY] = it }
         storedDrawerTabs?.let { preferences.values[SIDE_DRAWER_KEY] = it }
+        storedTopTabs?.let { preferences.values[LEGACY_TOP_TABS_KEY] = it }
+        activeNavigationMode?.let { preferences.values[LEGACY_NAVIGATION_MODE_KEY] = it }
         startupTab?.let { preferences.values[STARTUP_TAB_KEY] = it }
         showCartoonsTab?.let { preferences.values[SHOW_CARTOONS_TAB_KEY] = it }
         showAnimeTab?.let { preferences.values[SHOW_ANIME_TAB_KEY] = it }

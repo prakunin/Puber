@@ -18,7 +18,6 @@ import com.kino.puber.core.ui.navigation.AppRemoteHotkeyHandler
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.ui.feature.main.model.TabType
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.parcelize.Parcelize
@@ -106,7 +105,7 @@ private object ProbeScreens : Screens {
 
     override fun home(): PuberScreen = unsupported()
 
-    override fun history(presentation: HistoryPresentation): PuberScreen = unsupported()
+    override fun history(): PuberScreen = unsupported()
 
     override fun collections(): PuberScreen = unsupported()
 

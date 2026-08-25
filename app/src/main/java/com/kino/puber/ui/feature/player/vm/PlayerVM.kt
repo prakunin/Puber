@@ -7,6 +7,7 @@ import com.kino.puber.R
 import com.kino.puber.core.content.ContentChange
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.system.ResourceProvider
@@ -32,6 +33,7 @@ import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayPauseIndicatorState
 import com.kino.puber.ui.feature.player.model.PlayerContentState
+import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import com.kino.puber.ui.feature.player.model.BufferPreset
@@ -141,6 +143,9 @@ internal class PlayerVM(
     private var skipSegmentsJob: Job? = null
     private var skipCountdownJob: Job? = null
     private var bufferingDebounceJob: Job? = null
+    private var dismissedSegmentJob: Job? = null
+    private var prefetchJob: Job? = null
+    private var prefetchedEpisode: Pair<Int, Int>? = null
 
     private var segments: List<SkipSegment> = emptyList()
     private var creditsSegment: SkipSegment? = null
@@ -260,6 +265,10 @@ internal class PlayerVM(
         videoNumber: Int? = null,
     ) {
         val generation = ++mediaGeneration
+        // prepare() drops the warm-up player itself; this only clears what was aimed at.
+        prefetchJob?.cancel()
+        prefetchJob = null
+        prefetchedEpisode = null
         streamCandidates = emptyList()
         streamCandidateIndex = -1
         streamLinksRefreshAttempted = false
@@ -813,6 +822,7 @@ internal class PlayerVM(
         playbackController.release()
         countdownJob?.cancel()
         skipCountdownJob?.cancel()
+        dismissedSegmentJob?.cancel()
         seekIndicatorHideJob?.cancel()
         positionUpdateJob?.cancel()
         skipSegmentsJob?.cancel()
@@ -1152,7 +1162,10 @@ internal class PlayerVM(
             !content.isMovie &&
                 content.hasNextEpisode &&
                 content.activePanel == ActivePanel.None &&
-                content.nextEpisodeCountdown == null -> startNextEpisodeCountdown()
+                content.nextEpisodeCountdown == null &&
+                // Cancelling on the credits means cancelled, not postponed: only a seek since then
+                // puts the question back on the table.
+                !countdownDismissed -> startNextEpisodeCountdown()
             // An open panel owns the screen; revealing the controls under it would also expose
             // the debug overlay the user may have switched off.
             !content.isMovie && content.activePanel == ActivePanel.None ->
@@ -1161,19 +1174,19 @@ internal class PlayerVM(
     }
 
     private fun startNextEpisodeCountdown() {
+        prefetchNextEpisode()
         updateContent {
-            copy(nextEpisodeCountdown = NEXT_EPISODE_COUNTDOWN_SEC)
+            copy(nextEpisodeCountdown = PlayerCountdowns.NEXT_EPISODE_SEC)
         }
         countdownJob?.cancel()
         countdownJob = launch {
-            for (i in NEXT_EPISODE_COUNTDOWN_SEC downTo 0) {
+            // Zero is a number the viewer gets to see: the switch happens on the tick after it, not
+            // on the same frame it appears, which is what made the last second feel clipped.
+            for (i in PlayerCountdowns.NEXT_EPISODE_SEC downTo 0) {
                 updateContent { copy(nextEpisodeCountdown = i) }
-                if (i == 0) {
-                    playNextEpisode()
-                    return@launch
-                }
-                delay(1000)
+                delay(PlayerCountdowns.TICK_MS)
             }
+            playNextEpisode()
         }
     }
 
@@ -1294,9 +1307,15 @@ internal class PlayerVM(
                         }
                     }
                     if (isPlaying) {
+                        // Ahead of the rest: a countdown that is already up used to hide the jump
+                        // check behind itself and keep running through a seek.
+                        val jumped = handlePositionJump(playbackController.currentPosition)
                         checkAutoMarkWatched()
-                        checkEarlyNextEpisode()
-                        checkSkipSegment()
+                        checkNextEpisodePrefetch()
+                        if (!jumped) {
+                            checkEarlyNextEpisode()
+                            checkSkipSegment()
+                        }
                     }
                 }
             }
@@ -1346,10 +1365,57 @@ internal class PlayerVM(
         val currentPosition = playbackController.currentPosition
         val creditsStart = creditsSegment?.startMs
         return if (creditsStart != null) {
-            currentPosition >= creditsStart
+            currentPosition >= creditsStart - PlayerCountdowns.PROMPT_LEAD_IN_MS
         } else {
-            duration > EARLY_NEXT_EPISODE_OFFSET_MS &&
-                duration - currentPosition <= EARLY_NEXT_EPISODE_OFFSET_MS
+            duration > PlayerCountdowns.NEXT_EPISODE_FALLBACK_OFFSET_MS &&
+                duration - currentPosition <= PlayerCountdowns.NEXT_EPISODE_FALLBACK_OFFSET_MS
+        }
+    }
+
+    /**
+     * Whichever comes first — credits detected, or the tail of the episode — starts pulling the next
+     * one in. Both entry points funnel into [prefetchNextEpisode], which does nothing the second
+     * time it is asked for the same episode.
+     */
+    private fun checkNextEpisodePrefetch() {
+        val state = (stateValue as? PlayerViewState.Content)?.content ?: return
+        if (isNextEpisodePrefetchPosition(state)) {
+            prefetchNextEpisode()
+        }
+    }
+
+    private fun isNextEpisodePrefetchPosition(state: PlayerContentState): Boolean {
+        if (state.isMovie || !state.hasNextEpisode) return false
+        val duration = playbackController.duration
+        return duration > NEXT_EPISODE_PREFETCH_LEAD_MS &&
+            duration - playbackController.currentPosition <= NEXT_EPISODE_PREFETCH_LEAD_MS
+    }
+
+    private fun prefetchNextEpisode() {
+        val episode = currentEpisode() ?: return
+        val next = interactor.findNextEpisode(
+            item = episode.media.item,
+            currentSeason = episode.seasonNumber,
+            currentEpisode = episode.episodeNumber,
+        ) ?: return
+        if (prefetchedEpisode == next) return
+        prefetchedEpisode = next
+        prefetchJob?.cancel()
+        prefetchJob = launch {
+            // A prefetch that fails is a prefetch that did not happen: the real switch will hit the
+            // network and report for itself, so nothing here reaches the error handler.
+            runCatchingCancellable {
+                val item = interactor.getItemDetails(params.itemId)
+                if (closing || prefetchedEpisode != next) return@runCatchingCancellable
+                val resolved = interactor.resolveMedia(item, next.first, next.second)
+                // Not the current episode's quality: a switch rebuilds the state through
+                // ContentStateFactory, which always starts the next episode at Auto. Warming any
+                // other index would cache a URL the switch never asks for.
+                val candidate = interactor
+                    .selectStreamCandidates(resolved.files, SWITCHED_EPISODE_QUALITY_INDEX)
+                    .firstOrNull() ?: return@runCatchingCancellable
+                playbackController.warmUpNext(candidate, resolved.subtitles)
+            }
         }
     }
 
@@ -1379,7 +1445,7 @@ internal class PlayerVM(
             state.hasNextEpisode &&
             state.activePanel == ActivePanel.None &&
             state.nextEpisodeCountdown == null &&
-            playbackController.currentPosition >= segment.startMs
+            playbackController.currentPosition >= segment.startMs - PlayerCountdowns.PROMPT_LEAD_IN_MS
     }
 
     private fun checkSkipSegment() {
@@ -1389,23 +1455,26 @@ internal class PlayerVM(
             state.nextEpisodeCountdown == null &&
             state.resumeDialog == null
         ) {
-            val currentPos = playbackController.currentPosition
-            if (!handlePositionJump(currentPos)) {
-                handleActiveSkipSegment(state, currentPos)
-            }
+            handleActiveSkipSegment(state, playbackController.currentPosition)
         }
     }
 
+    /**
+     * Seeking is the viewer taking the wheel. Whatever prompt is up comes down, and an earlier "not
+     * this time" on the next episode is forgotten — by the time they reach the credits again the
+     * answer may well be different. A cancelled skip segment is left alone: that one runs on its own
+     * timer, so a rewind inside the segment does not undo it.
+     */
     private fun handlePositionJump(currentPos: Long): Boolean {
-        // Detect seek: if position jumped more than 2s in one 500ms tick, skip detection
         val positionDelta = kotlin.math.abs(currentPos - lastPositionMs)
         lastPositionMs = currentPos
         return if (positionDelta > SEEK_JUMP_THRESHOLD_MS) {
-            // Position jumped — clear dismissed state, don't show overlay this tick
-            dismissedSegmentType = null
-            updateContent { copy(activeSkipSegment = null) }
+            updateContent { copy(activeSkipSegment = null, nextEpisodeCountdown = null) }
             skipCountdownJob?.cancel()
             skipCountdownJob = null
+            countdownJob?.cancel()
+            countdownJob = null
+            countdownDismissed = false
             true
         } else {
             false
@@ -1413,7 +1482,11 @@ internal class PlayerVM(
     }
 
     private fun handleActiveSkipSegment(state: PlayerContentState, currentPos: Long) {
-        val activeSegment = skipSegmentInteractor.findActiveSegment(segments, currentPos)
+        val activeSegment = skipSegmentInteractor.findActiveSegment(
+            segments = segments,
+            positionMs = currentPos,
+            leadInMs = PlayerCountdowns.PROMPT_LEAD_IN_MS,
+        )
         when {
             activeSegment == null -> clearInactiveSkipSegment(state)
             shouldStartSkipSegmentCountdown(state, activeSegment) -> startSkipSegmentCountdown(activeSegment)
@@ -1421,13 +1494,13 @@ internal class PlayerVM(
     }
 
     private fun clearInactiveSkipSegment(state: PlayerContentState) {
-        // Left segment zone — clear dismissed state
+        // Left the segment. The dismissal is not cleared here: it runs on its own timer so that
+        // stepping out and back in does not reopen a question the viewer already answered.
         if (state.activeSkipSegment != null) {
             updateContent { copy(activeSkipSegment = null) }
             skipCountdownJob?.cancel()
             skipCountdownJob = null
         }
-        dismissedSegmentType = null
     }
 
     private fun shouldStartSkipSegmentCountdown(
@@ -1443,21 +1516,51 @@ internal class PlayerVM(
     }
 
     private fun startSkipSegmentCountdown(segment: SkipSegment) {
+        // Worked out before anything is cancelled: a segment with too little left gets no prompt,
+        // and the one already up — if any — is none of this call's business.
+        val seconds = skipCountdownSeconds(segment) ?: return
         skipCountdownJob?.cancel()
         val uiState = SkipSegmentUIState(
             label = mapper.mapSkipSegmentLabel(segment.type),
             targetPositionMs = segment.endMs ?: playbackController.duration,
             type = segment.type,
-            countdown = SKIP_COUNTDOWN_SEC,
+            countdown = seconds,
+            totalSeconds = seconds,
         )
         updateContent { copy(activeSkipSegment = uiState) }
         skipCountdownJob = launch {
-            for (i in SKIP_COUNTDOWN_SEC - 1 downTo 0) {
-                delay(1000)
+            // Same as the next-episode countdown: zero gets its own second before the skip runs.
+            for (i in seconds - 1 downTo 0) {
+                delay(PlayerCountdowns.TICK_MS)
                 updateContent { copy(activeSkipSegment = activeSkipSegment?.copy(countdown = i)) }
             }
+            delay(PlayerCountdowns.TICK_MS)
             performSkipSegment()
         }
+    }
+
+    /**
+     * How long this prompt may honestly count for, or null when it should not go up at all.
+     *
+     * The playhead leaving the segment takes the prompt down and the skip never runs, so a
+     * countdown longer than the segment has left is a promise the player cannot keep: the bar
+     * stops part-way and the plate vanishes as the segment ends by itself. What is left has to
+     * cover the countdown, the second zero gets, and enough of a jump to be worth offering.
+     */
+    private fun skipCountdownSeconds(segment: SkipSegment): Int? {
+        val endMs = segment.endMs ?: return PlayerCountdowns.SKIP_SEGMENT_SEC
+        // Media time, not wall clock: at 1.5x the segment runs out sooner than the countdown ticks.
+        val leftSeconds = (endMs - playbackController.currentPosition) /
+            currentPlaybackSpeed() / PlayerCountdowns.TICK_MS
+        val fits = leftSeconds.toInt() -
+            PlayerCountdowns.ZERO_TICK_SEC -
+            PlayerCountdowns.SKIP_MIN_SAVING_SEC
+        return fits.coerceAtMost(PlayerCountdowns.SKIP_SEGMENT_SEC)
+            .takeIf { it >= PlayerCountdowns.SKIP_MIN_COUNTDOWN_SEC }
+    }
+
+    private fun currentPlaybackSpeed(): Float {
+        return playbackController.playbackSpeed.takeIf { it > 0f } ?: DEFAULT_SPEED
     }
 
     private fun performSkipSegment() {
@@ -1467,19 +1570,32 @@ internal class PlayerVM(
         if (skipState.type == SkipSegmentType.CREDITS && !state.isMovie && state.hasNextEpisode) {
             autoMarkCurrentAsWatched()
             playNextEpisode()
-        } else {
+        } else if (skipState.targetPositionMs > playbackController.currentPosition) {
             playbackController.seekTo(skipState.targetPositionMs)
         }
+        // Nothing to skip when playback has already carried past the target — an open panel holds
+        // the segment checks off, and faster playback can outrun a countdown that fitted when it
+        // started. A skip that rewinds is worse than one that does not happen.
         updateContent { copy(activeSkipSegment = null) }
         skipCountdownJob = null
     }
 
+    /**
+     * A "no" is remembered rather than forgotten the moment the playhead moves: rewinding inside the
+     * segment used to clear it and put the prompt straight back up, overriding the answer. It does
+     * expire, so returning to the same segment much later asks again.
+     */
     private fun cancelSkipSegment() {
         val currentType = (stateValue as? PlayerViewState.Content)?.content?.activeSkipSegment?.type
         dismissedSegmentType = currentType
         skipCountdownJob?.cancel()
         skipCountdownJob = null
         updateContent { copy(activeSkipSegment = null) }
+        dismissedSegmentJob?.cancel()
+        dismissedSegmentJob = launch {
+            delay(PlayerCountdowns.SKIP_DISMISS_TTL_MS)
+            dismissedSegmentType = null
+        }
     }
 
     private fun saveCurrentPosition() {
@@ -1618,12 +1734,12 @@ internal class PlayerVM(
         const val SEEK_INDICATOR_HIDE_DELAY_MS = 1500L
         const val PROGRESS_SYNC_INTERVAL_MS = 30_000L
         const val POSITION_UPDATE_INTERVAL_MS = 500L
-        const val NEXT_EPISODE_COUNTDOWN_SEC = 15
         const val AUTO_MARK_WATCHED_THRESHOLD = 0.10
         const val PLAY_PAUSE_INDICATOR_HIDE_DELAY_MS = 1500L
         const val BUFFERING_DEBOUNCE_MS = 800L
-        const val EARLY_NEXT_EPISODE_OFFSET_MS = 30_000L
         const val SEEK_JUMP_THRESHOLD_MS = 2_000L
-        const val SKIP_COUNTDOWN_SEC = 7
+        const val NEXT_EPISODE_PREFETCH_LEAD_MS = 60_000L
+        const val SWITCHED_EPISODE_QUALITY_INDEX = 0
+        const val DEFAULT_SPEED = 1.0f
     }
 }

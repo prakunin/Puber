@@ -57,7 +57,6 @@ import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.ListItemError
-import com.kino.puber.core.ui.uikit.component.modifier.LocalAutoFocusOnLaunchEnabled
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 import com.kino.puber.core.ui.uikit.model.CommonAction
@@ -67,11 +66,7 @@ import com.kino.puber.domain.interactor.history.HistoryRowKey
 import com.kino.puber.ui.feature.history.component.preview.HistoryScreenPreviewProvider
 import com.kino.puber.ui.feature.history.model.HistoryAction
 import com.kino.puber.ui.feature.history.model.HistoryItemUIState
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.ui.feature.history.model.HistoryViewState
-import com.kino.puber.ui.feature.main.model.MainTab
-import com.kino.puber.ui.feature.main.model.TabType
-import com.kino.puber.ui.feature.main.toptabs.TopTabBar
 
 internal const val HISTORY_REFRESH_TEST_TAG = "history_refresh_action"
 internal const val HISTORY_FINAL_PAGE_TEST_TAG = "history_final_page"
@@ -90,7 +85,6 @@ private val REFRESH_INDICATOR_HEIGHT = 4.dp
 @Composable
 internal fun HistoryScreenContent(
     state: HistoryViewState,
-    presentation: HistoryPresentation,
     onAction: (UIAction) -> Unit,
 ) {
     var previousStateWasContent by remember { mutableStateOf(state is HistoryViewState.Content) }
@@ -117,7 +111,6 @@ internal fun HistoryScreenContent(
             is HistoryViewState.Content -> when {
                 state.items.isNotEmpty() -> HistoryContent(
                     state = state,
-                    presentation = presentation,
                     onAction = onAction,
                 )
                 state.reloadErrorMessage != null -> FullScreenError(
@@ -133,7 +126,6 @@ internal fun HistoryScreenContent(
 @Composable
 private fun HistoryContent(
     state: HistoryViewState.Content,
-    presentation: HistoryPresentation,
     onAction: (UIAction) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
@@ -166,10 +158,7 @@ private fun HistoryContent(
             .then(finalPageMarkerModifier),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            when (presentation) {
-                HistoryPresentation.TopTabs -> Unit
-                HistoryPresentation.SideDrawer -> HistoryHeader()
-            }
+            HistoryHeader()
             HistoryRefreshIndicator(isRefreshing = state.isRefreshing)
             HistoryGrid(
                 state = state,
@@ -445,65 +434,15 @@ private fun HistoryEmptyState(
 }
 
 @Preview(
-    name = "History — TopTabs states",
+    name = "History states",
     device = TV_1080p,
 )
 @Composable
 private fun HistoryScreenContentPreview(
     @PreviewParameter(HistoryScreenPreviewProvider::class) state: HistoryViewState,
 ) = PuberTheme {
-    HistoryTopTabsPreviewHost(state)
-}
-
-@Composable
-private fun HistoryTopTabsPreviewHost(state: HistoryViewState) {
-    val tabs = listOf(
-        MainTab(
-            type = TabType.Home,
-            icon = PhosphorIcons.Duotone.House,
-        ),
-        MainTab(
-            type = TabType.Movies,
-            icon = PhosphorIcons.Duotone.FilmSlate,
-        ),
-        MainTab(
-            type = TabType.Series,
-            icon = PhosphorIcons.Duotone.TelevisionSimple,
-        ),
-        MainTab(
-            type = TabType.Collections,
-            icon = PhosphorIcons.Duotone.Playlist,
-        ),
-        MainTab(
-            type = TabType.History,
-            icon = PhosphorIcons.Duotone.ClockCounterClockwise,
-            isSelected = true,
-        ),
+    HistoryScreenContent(
+        state = state,
+        onAction = {},
     )
-    val tabFocusRequesters = remember {
-        tabs.associate { it.type to FocusRequester() }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopTabBar(
-            tabs = tabs,
-            selectedIndex = tabs.lastIndex,
-            tabFocusRequesters = tabFocusRequesters,
-            onContentFocusRequested = {},
-            onTabFocused = {},
-            onTabClick = {},
-            onTabContextMenu = {},
-            onSearchClick = {},
-            onSettingsClick = {},
-        )
-        Box(modifier = Modifier.weight(1f)) {
-            CompositionLocalProvider(LocalAutoFocusOnLaunchEnabled provides false) {
-                HistoryScreenContent(
-                    state = state,
-                    presentation = HistoryPresentation.TopTabs,
-                    onAction = {},
-                )
-            }
-        }
-    }
 }

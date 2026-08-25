@@ -2,7 +2,6 @@ package com.kino.puber.ui.feature.main.vm
 
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.TabRouter
@@ -49,7 +48,7 @@ internal class MainVM(
         val state = mainUIMapper.buildViewState()
         observedContentPreferences = navigationPreferencesRepository.contentPreferences.value
         updateViewState(state)
-        tabRouter.openTab(buildTabContent(state.selectedTab, state.navigationMode))
+        tabRouter.openTab(buildTabContent(state.selectedTab))
         reportDeviceInformation()
         syncWatchState()
         tvHomeSyncCoordinator?.requestRefresh(immediate = true)
@@ -114,24 +113,20 @@ internal class MainVM(
         updateViewState<MainViewState> {
             mainUIMapper.updateSelectedTab(state = this, item)
         }
-        tabRouter.openTab(buildTabContent(item.type, stateValue.navigationMode))
+        tabRouter.openTab(buildTabContent(item.type))
     }
 
     private fun onTabRefresh(item: MainTab) {
         tabRefreshVersions[item.type] = (tabRefreshVersions[item.type] ?: 0) + 1
-        val refreshedTab = buildTabContent(item.type, stateValue.navigationMode)
+        val refreshedTab = buildTabContent(item.type)
         updateViewState<MainViewState> {
             mainUIMapper.updateSelectedTab(state = this, item)
         }
         tabRouter.openTab(refreshedTab)
     }
 
-    private fun buildTabContent(
-        type: TabType,
-        navigationMode: NavigationMode,
-    ) = mainUIMapper.buildTabContent(
+    private fun buildTabContent(type: TabType) = mainUIMapper.buildTabContent(
         type = type,
-        navigationMode = navigationMode,
         refreshVersion = tabRefreshVersions[type] ?: 0,
     )
 
@@ -153,7 +148,7 @@ internal class MainVM(
         val selectedTabChanged = updatedState.selectedTab != previousState.selectedTab
         val selectedTabNeedsRefresh = showAnimeChanged && updatedState.selectedTab in ANIME_FILTERED_TABS
         if (selectedTabChanged || selectedTabNeedsRefresh) {
-            tabRouter.openTab(buildTabContent(updatedState.selectedTab, updatedState.navigationMode))
+            tabRouter.openTab(buildTabContent(updatedState.selectedTab))
         }
     }
 
@@ -167,7 +162,7 @@ internal class MainVM(
         val updatedState = mainUIMapper.buildViewState(previousState.selectedTab)
         updateViewState(updatedState)
         if (updatedState.selectedTab != previousState.selectedTab) {
-            tabRouter.openTab(buildTabContent(updatedState.selectedTab, updatedState.navigationMode))
+            tabRouter.openTab(buildTabContent(updatedState.selectedTab))
         }
     }
 

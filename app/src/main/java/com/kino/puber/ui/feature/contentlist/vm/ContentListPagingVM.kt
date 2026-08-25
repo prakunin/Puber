@@ -12,6 +12,7 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicInteger
@@ -70,20 +71,46 @@ internal abstract class ContentListPagingVM<VS>(
      */
     private val walkGeneration = AtomicInteger(0)
 
+    /**
+     * Whether the last thing asked of this list was a reload rather than a reset, which is what
+     * decides if a first-page publication has to come back at the depth the row already has.
+     *
+     * An intent rather than a page count, and not consumed by the publication that acts on it. Two
+     * reloads can overlap — a return from a title and a watch-state change arrive together — and a
+     * count read by one load would be cleared for the other, which then published page one alone:
+     * exactly the shrink this exists to prevent. The depth itself is read at publication time from
+     * [currentPage], which no cancelled load ever changed.
+     */
+    private var reloadKeepsDepth = false
+
     /** How this list names itself in the log — "Section", "Show all". */
     protected abstract val logName: String
 
     /**
-     * Restarts paging and guarantees that the first page is asked of the server rather than only of
+     * Reloads the list and guarantees that the first page is asked of the server rather than only of
      * the cache.
      *
      * This is what every signal that knows the server's answer has changed goes through — a retry, a
      * return from details or the player with a content change, a display-setting flip. The stored
      * page is still drawn first; what the demand adds is the request behind it.
+     *
+     * It reloads rather than restarts, and comes back with every page the row had. A restart cost
+     * the user both halves of their position: the list was emptied to a shimmer while page one was
+     * in flight, and then stood at page one alone. The card they had scrolled to was in neither, and
+     * a card that is not in the list is a card focus cannot be restored to — which is how a return
+     * from a title ended up two or three cards to the left of where it started, or out of the row
+     * altogether.
      */
     fun refreshFirstPage() {
         forcedReadsDemanded.incrementAndGet()
-        resetPaging()
+        reloadKeepsDepth = true
+        refreshPagingKeepingContent()
+    }
+
+    /** A reset is the other intent: it clears the list on purpose, so there is no depth to keep. */
+    final override fun resetPaging(key: Any?) {
+        reloadKeepsDepth = false
+        super.resetPaging(key)
     }
 
     final override fun onLoadFirstPage() {
@@ -92,7 +119,16 @@ internal abstract class ContentListPagingVM<VS>(
         pagingLaunch(errorHandlerGeneral) {
             interactor.observeFirstPage(config, force = force).collect { cached ->
                 when (cached) {
-                    is Cached.Value -> publish(cached.value, isFirstPage = true)
+                    is Cached.Value -> {
+                        // The stored page is page one on its own. Drawing it while a deeper row is
+                        // waiting for its pages back would cut that row down to page one for as
+                        // long as the reload takes — and the row already shows at least this much.
+                        // The publication behind this one is what carries the depth.
+                        val deferToTheReloadBehindIt = cached.isStale && depthToRestore() > 1
+                        if (!deferToTheReloadBehindIt) {
+                            publishFirstPage(cached.value)
+                        }
+                    }
                     // Nobody asked for this refresh and there is already content on screen, so a
                     // failure is not the user's problem: the stored page stands.
                     is Cached.RefreshFailed -> log(
@@ -113,6 +149,78 @@ internal abstract class ContentListPagingVM<VS>(
 
     final override fun onLoadNextPage(key: Item?) {
         walkStep(page = currentPage + 1)
+    }
+
+    /** How deep the row stands right now, when a reload is what asked for this publication. */
+    private fun depthToRestore(): Int = if (reloadKeepsDepth) currentPage else 0
+
+    /**
+     * Publishes page one — on its own for a row that had no more than that, or together with the
+     * pages a reload owes back to a row the user had scrolled through.
+     *
+     * A reload that could not read its way back publishes nothing at all: the paginator is holding
+     * the previous list as [Paginator.State.Refreshing] and goes on drawing it, which is a better
+     * answer than replacing a row the user is looking at with the part of it that did arrive.
+     */
+    private suspend fun publishFirstPage(firstPage: PaginatedResponse<Item>) {
+        val depth = depthToRestore()
+        val response = if (depth > 1) restoreLoadedDepth(firstPage, depth) else firstPage
+        if (response != null) {
+            publish(response, isFirstPage = true)
+        }
+    }
+
+    /**
+     * Reads pages two and up until the row is as deep as it was, and answers as a single page-one
+     * publication so the row is handed the whole list at once. Published page by page it would pass
+     * through every length between one page and its own, and the focused card would be missing from
+     * all of them but the last.
+     *
+     * The pagination reported is the deepest page reached, which is what tells [publish] where the
+     * next page starts and whether the server has one.
+     *
+     * Null when a page could not be read. Only the server running out of pages may shorten a row;
+     * a failed request answering with the pages that did arrive would cut the list down by exactly
+     * the amount that failed, which is the shrink this is here to avoid.
+     *
+     * Pages emptied by hidden watched titles end the restoration after [MAX_EMPTY_PAGE_CHAIN] of
+     * them in a row, the same budget the walk spends. Each of those reads can cost the interactor
+     * several server pages, and a reload is not the place to spend the catalogue.
+     */
+    @Suppress("ReturnCount")
+    private suspend fun restoreLoadedDepth(
+        firstPage: PaginatedResponse<Item>,
+        depth: Int,
+    ): PaginatedResponse<Item>? {
+        val restoreTo = depth.coerceAtMost(MAX_RESTORED_PAGES)
+        if (depth > restoreTo) {
+            log("$logName ${config.id}: reload restores $restoreTo of the $depth pages loaded")
+        }
+        val items = firstPage.items.toMutableList()
+        var deepest = firstPage
+        var emptyChain = 0
+        // Counted here rather than read back out of each response: the page a reply says it is
+        // decides where paging continues, but it must not decide how many more requests this makes.
+        var page = firstPage.pagination.current
+        while (page < restoreTo && deepest.pagination.current < deepest.pagination.total) {
+            page += 1
+            val next = try {
+                interactor.loadPage(config, page)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (@Suppress("TooGenericExceptionCaught") error: Throwable) {
+                log(error, "$logName ${config.id}: reload could not read page $page, row kept as it was")
+                return null
+            }
+            items += next.items
+            deepest = next
+            emptyChain = if (next.items.isEmpty()) emptyChain + 1 else 0
+            if (emptyChain > MAX_EMPTY_PAGE_CHAIN) {
+                log("$logName ${config.id}: reload stopped after $emptyChain empty pages at $page")
+                break
+            }
+        }
+        return PaginatedResponse(items = items, pagination = deepest.pagination)
     }
 
     /**
@@ -280,5 +388,14 @@ internal abstract class ContentListPagingVM<VS>(
 
         /** How long the walk waits before spending the next round of that budget. */
         val WALK_RESUME_PAUSE = 500.milliseconds
+
+        /**
+         * How deep a reload will rebuild a row before it publishes. Each page is one request, paid
+         * sequentially, and the row draws its old list until they are all in — so a row paged very
+         * far would otherwise hold a stale list for as long as it takes to read the whole of it
+         * back. A row deeper than this comes back shortened, and says so in the log rather than
+         * quietly.
+         */
+        const val MAX_RESTORED_PAGES = 10
     }
 }

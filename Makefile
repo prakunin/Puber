@@ -51,6 +51,9 @@ help:
 	@echo "  make info        installed version on the device"
 	@echo "  make uninstall   remove the app and its data"
 	@echo "  make check       unit tests and detekt"
+	@echo "  make itest       instrumented tests on \$$DEVICE only, keeping its login"
+	@echo "  make auth-save   save this device's KinoPub pairing"
+	@echo "  make auth-restore  put a saved pairing back"
 
 devices:
 	$(ADB) devices -l
@@ -100,3 +103,56 @@ uninstall: connect
 
 check:
 	$(GRADLE) test$(VARIANT)UnitTest :app:detektAll
+
+# Instrumented tests on one device, keeping its login.
+#
+# Two things go wrong when connected*AndroidTest is run plainly. It picks the
+# devices itself and ignores ANDROID_SERIAL, so every attached television gets
+# the test APKs; and it uninstalls the app when it finishes, taking the KinoPub
+# pairing with it — which on a box with no display attached is not a step the
+# user can simply repeat.
+#
+# So this runs against a private adb server that has been told about $(DEVICE)
+# and nothing else, and asks AGP to leave the APKs installed. Disconnecting the
+# other devices from the ordinary server is not enough: adb reconnects them by
+# itself, and a run three minutes long is long enough for that to happen.
+ITEST_ADB_PORT ?= 5038
+ITEST_ADB = ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(ADB)
+
+.PHONY: itest auth-save auth-restore
+
+itest: require-device build
+	@$(ITEST_ADB) start-server >/dev/null 2>&1
+	@$(ITEST_ADB) disconnect >/dev/null 2>&1 || true
+	@$(ITEST_ADB) connect $(DEVICE) >/dev/null
+	@echo "instrumented run sees:"; $(ITEST_ADB) devices | sed -n '2,$$p'
+	ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(GRADLE) :app:connected$(VARIANT)AndroidTest \
+		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+		$(if $(TESTS),-Pandroid.testInstrumentationRunnerArguments.class=$(TESTS),) \
+		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit $$status
+
+# The pairing itself, saved and put back. `make itest` is meant to keep it, but
+# anything that uninstalls the app still drops it, and re-pairing needs both the
+# account owner and a screen to read the code from.
+AUTH_SNAPSHOT ?= .auth/$(PACKAGE).tar
+
+AUTH_DIRS := shared_prefs files databases datastore no_backup
+
+auth-save: connect
+	@mkdir -p $(dir $(AUTH_SNAPSHOT))
+	@present=$$($(TARGET) shell run-as $(PACKAGE) ls -1 /data/data/$(PACKAGE) \
+		| tr -d '\r' | grep -x $(foreach d,$(AUTH_DIRS),-e $(d)) | tr '\n' ' '); \
+	if [ -z "$$present" ]; then echo "$(PACKAGE) has nothing to save yet — pair it first"; exit 1; fi; \
+	echo "saving: $$present"; \
+	$(TARGET) exec-out run-as $(PACKAGE) tar cf - -C /data/data/$(PACKAGE) $$present > $(AUTH_SNAPSHOT)
+	@echo "saved $$(wc -c < $(AUTH_SNAPSHOT) | tr -d ' ') bytes to $(AUTH_SNAPSHOT)"
+
+# Pushed through the shell rather than piped into `adb shell`, which is free to
+# translate line endings and would corrupt the archive.
+auth-restore: connect
+	@test -s $(AUTH_SNAPSHOT) || { echo "no snapshot at $(AUTH_SNAPSHOT); run 'make auth-save' while paired"; exit 1; }
+	@$(TARGET) shell am force-stop $(PACKAGE)
+	@$(TARGET) push $(AUTH_SNAPSHOT) /data/local/tmp/puber-auth.tar >/dev/null
+	@$(TARGET) shell 'cat /data/local/tmp/puber-auth.tar | run-as $(PACKAGE) tar xf - -C /data/data/$(PACKAGE)'
+	@$(TARGET) shell rm -f /data/local/tmp/puber-auth.tar
+	@echo "restored $(AUTH_SNAPSHOT) to $(PACKAGE) on $(DEVICE)"

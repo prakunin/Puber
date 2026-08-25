@@ -2,7 +2,6 @@ package com.kino.puber.ui.feature.contentlist.vm
 
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.logger.log
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -13,7 +12,6 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
-import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.ContentListViewState
@@ -29,11 +27,9 @@ internal class ContentListVM(
     router: AppRouter,
     private val interactor: ContentListInteractor,
     private val mapper: VideoItemUIMapper,
-    private val genreInteractor: GenreInteractor,
     private val navPrefs: NavigationPreferencesRepository,
     private val trailerLinks: TrailerLinkInteractor,
     private val contentListRefreshCoordinator: ContentListRefreshCoordinator,
-    private val contentType: String? = null,
     private val heroConfigs: List<SectionConfig> = emptyList(),
 ) : PuberVM<ContentListViewState>(router) {
 
@@ -46,16 +42,6 @@ internal class ContentListVM(
     private var trailerPreviewRequestId = 0L
 
     override fun onStart() {
-        val isTopTabs = navPrefs.getNavigationMode() == NavigationMode.TopTabs
-        updateViewState<ContentListViewState> {
-            copy(
-                showDetailPanel = !isTopTabs,
-                showGenreChips = isTopTabs,
-            )
-        }
-        if (isTopTabs) {
-            loadGenres()
-        }
         loadHero()
     }
 
@@ -65,27 +51,13 @@ internal class ContentListVM(
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
             is CommonAction.ItemPlayed<*> -> onItemPlayed(action.item as VideoItemUIState)
             is ContentListAction.ShowAll -> openShowAll(action.config)
-            is ContentListAction.GenreSelected -> onGenreSelected(action.genreId)
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
             is ContentListAction.TrailerPreviewFinished -> stopTrailerPreview()
             is ContentListAction.TrailerPreviewStopped -> stopTrailerPreview()
         }
     }
 
-    private fun loadGenres() {
-        launch {
-            genreInteractor.getGenres(type = contentType).onSuccess { genres ->
-                updateViewState<ContentListViewState> { copy(genres = genres) }
-            }
-        }
-    }
-
-    private fun onGenreSelected(genreId: Int?) {
-        updateViewState<ContentListViewState> { copy(selectedGenreId = genreId) }
-    }
-
     private fun onItemFocused(item: VideoItemUIState) {
-        if (!stateValue.showDetailPanel) return
         focusedItemJob?.cancel()
         val requestId = ++trailerPreviewRequestId
         updateViewState<ContentListViewState> { copy(previewTrailerUrl = null) }

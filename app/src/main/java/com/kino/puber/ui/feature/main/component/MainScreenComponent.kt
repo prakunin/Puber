@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -42,7 +41,6 @@ import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
 import com.kino.puber.R
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
 import com.kino.puber.core.ui.navigation.component.PuberCurrentTab
@@ -63,7 +61,6 @@ import com.kino.puber.core.ui.uikit.component.LifecycleAction
 import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
-import com.kino.puber.ui.feature.main.toptabs.TopTabMainContent
 import com.kino.puber.ui.feature.main.vm.MainVM
 import com.kino.puber.core.di.puberViewModel
 
@@ -79,22 +76,12 @@ internal fun MainScreenComponent() {
         onAction = onAction,
         action = MainAction.Resumed,
     )
-    when (state.navigationMode) {
-        NavigationMode.SideDrawer -> DrawerMainContent(
-            state = state,
-            onAction = onAction,
-            tabRouter = vm.tabRouter,
-            tabAppRouterHolder = vm.tabAppRouterHolder,
-        )
-        NavigationMode.TopTabs -> TopTabMainContent(
-            state = state,
-            onAction = onAction,
-            tabRouter = vm.tabRouter,
-            tabAppRouterHolder = vm.tabAppRouterHolder,
-            onSearchClick = vm::onSearchClick,
-            onSettingsClick = vm::onSettingsClick,
-        )
-    }
+    DrawerMainContent(
+        state = state,
+        onAction = onAction,
+        tabRouter = vm.tabRouter,
+        tabAppRouterHolder = vm.tabAppRouterHolder,
+    )
 }
 
 @Composable
@@ -290,25 +277,8 @@ private fun NavigationDrawerScope.MainSideMenuItem(
                 contentDescription = null,
             )
         },
-        trailingContent = mainSideMenuItemBadge(tab),
     ) {
         Text(text = stringResource(tab.type.title))
-    }
-}
-
-@Composable
-private fun mainSideMenuItemBadge(tab: MainTab): @Composable (() -> Unit)? {
-    return if (tab.badge > 0) {
-        {
-            Badge {
-                Text(
-                    text = tab.badge.toString(),
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-            }
-        }
-    } else {
-        null
     }
 }
 

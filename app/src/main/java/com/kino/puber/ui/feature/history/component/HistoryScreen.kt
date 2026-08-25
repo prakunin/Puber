@@ -17,7 +17,6 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.History
 import com.kino.puber.domain.interactor.history.HistoryInteractor
 import com.kino.puber.ui.feature.history.model.HistoryUIMapper
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.ui.feature.history.vm.HistoryRowComparator
 import com.kino.puber.ui.feature.history.vm.HistoryVM
 import kotlinx.parcelize.IgnoredOnParcel
@@ -30,15 +29,10 @@ import org.koin.core.scope.ScopeID
 import org.koin.dsl.module
 
 @Parcelize
-internal class HistoryScreen(
-    internal val presentation: HistoryPresentation,
-) : PuberScreen {
+internal class HistoryScreen : PuberScreen {
 
     @IgnoredOnParcel
-    override val key: ScreenKey = when (presentation) {
-        HistoryPresentation.TopTabs -> "HistoryScreen_TopTabs"
-        HistoryPresentation.SideDrawer -> "HistoryScreen_SideDrawer"
-    }
+    override val key: ScreenKey = "HistoryScreen"
 
     @Suppress("unused")
     private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
@@ -65,7 +59,6 @@ internal class HistoryScreen(
 
         HistoryScreenContent(
             state = state,
-            presentation = presentation,
             onAction = onAction,
         )
 

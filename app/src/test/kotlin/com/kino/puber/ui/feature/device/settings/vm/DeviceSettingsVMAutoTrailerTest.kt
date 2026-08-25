@@ -1,7 +1,6 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.core.error.ErrorHandler
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.api.models.DeviceResponse
 import com.kino.puber.data.preferences.AppLanguageRepository
@@ -73,11 +72,10 @@ internal class DeviceSettingsVMAutoTrailerTest {
         every { navigationPreferences.contentPreferences } returns MutableStateFlow(
             ContentPreferences(showAnime = true, hideWatched = false, showWatchedIndicators = true)
         )
-        every { navigationPreferences.getNavigationMode() } returns NavigationMode.SideDrawer
         every { navigationPreferences.getStartupTab() } returns TabType.Home
-        every { navigationPreferences.getVisibleTabs(any()) } returns
+        every { navigationPreferences.getVisibleTabs() } returns
             listOf(TabType.Home, TabType.Settings)
-        every { navigationPreferences.getStartupTabOptions(any()) } returns listOf(TabType.Home)
+        every { navigationPreferences.getStartupTabOptions() } returns listOf(TabType.Home)
 
         val deviceSettingInteractor = mockk<IDeviceSettingInteractor>(relaxed = true)
         every { deviceSettingInteractor.getCurrentDeviceSettings() } returns

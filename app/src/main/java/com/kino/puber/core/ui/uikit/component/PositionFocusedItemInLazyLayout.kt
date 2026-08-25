@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 
 internal val LocalRapidScrollActive = staticCompositionLocalOf<MutableState<Boolean>?> { null }
 
@@ -63,6 +65,41 @@ fun PositionFocusedItemInLazyLayout(
         LocalRapidScrollActive provides rapidScrollActive,
         content = content,
     )
+}
+
+/**
+ * Scrolls the focused item to the list's content padding instead of the viewport edge.
+ *
+ * The default spec stops as soon as the item touches the edge of the screen, so the padding is
+ * never taken into account and the scroll lands wherever the item happens to fit. With the padding
+ * equal to the spacing between items, scrolling to the padding instead makes every step exactly one
+ * item wide, which is what keeps a row of whole items whole: no sliver of the neighbour is left on
+ * screen after the list has moved.
+ */
+@Composable
+fun PositionFocusedItemInsideContentPadding(
+    padding: Dp,
+    content: @Composable () -> Unit,
+) {
+    val paddingPx = with(LocalDensity.current) { padding.toPx() }
+    val bringIntoViewSpec = remember(paddingPx) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float,
+            ): Float {
+                val leading = offset - paddingPx
+                val trailing = offset + size - (containerSize - paddingPx)
+                return when {
+                    leading < 0f -> leading
+                    trailing > 0f -> trailing
+                    else -> 0f
+                }
+            }
+        }
+    }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec, content = content)
 }
 
 @Composable

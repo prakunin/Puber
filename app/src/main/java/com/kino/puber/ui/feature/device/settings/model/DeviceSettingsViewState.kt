@@ -2,7 +2,6 @@ package com.kino.puber.ui.feature.device.settings.model
 
 import androidx.compose.runtime.Immutable
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.domain.interactor.device.DeviceSettingType
 import com.kino.puber.ui.feature.main.model.TabType
@@ -35,7 +34,6 @@ internal sealed interface DeviceSettingsState {
         val preferSurroundAudio: Boolean = false,
         val watchedIndicatorsEnabled: Boolean = true,
         val autoTrailerEnabled: Boolean = true,
-        val navigationMode: NavigationMode = NavigationMode.SideDrawer,
         val startupTab: TabType = TabType.Home,
         val startupTabOptions: List<TabType> = listOf(TabType.Home),
         val menuSections: List<MenuSectionUi> = emptyList(),

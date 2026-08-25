@@ -50,17 +50,23 @@ internal class ContentListScreen(
                     router = get(),
                     interactor = get(),
                     mapper = get(),
-                    genreInteractor = get(),
                     navPrefs = get(),
                     trailerLinks = get(),
                     contentListRefreshCoordinator = get(),
-                    contentType = sections.firstOrNull()?.type,
                     heroConfigs = TabTypeConfig.heroConfigsFor(tabType),
                 )
             }
 
+            // A view model rather than a plain scoped object, because the Koin scope dies with the
+            // composition: opening a card destroys it, and a section rebuilt on the way back starts
+            // its paging again at page one. The card the user left then no longer exists in the row
+            // — the pages that held it have not been fetched again yet — and the focus the row
+            // restores lands wherever the shorter list happens to reach. Held in the screen's
+            // ViewModelStore the section outlives the trip with every page it had loaded, which is
+            // what the restore needs, and the tab stops re-fetching all of its sections on every
+            // return.
             sections.forEach { sec ->
-                scoped(named(sec.id)) {
+                viewModel(named(sec.id)) {
                     SectionVM(
                         paginator = Paginator.Store { old, new -> old.id == new.id },
                         config = sec,

@@ -25,7 +25,6 @@ import com.kino.puber.ui.feature.main.component.MainScreen
 import com.kino.puber.ui.feature.search.SearchScreen
 import com.kino.puber.ui.feature.home.component.HomeScreen
 import com.kino.puber.ui.feature.history.component.HistoryScreen
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 import com.kino.puber.ui.feature.collections.component.CollectionsScreen
 import com.kino.puber.ui.feature.bookmarks.component.BookmarksScreen
 import com.kino.puber.ui.feature.main.model.TabType
@@ -46,9 +45,7 @@ internal object ScreensImpl : Screens {
 
     override fun home(): PuberScreen = HomeScreen()
 
-    override fun history(presentation: HistoryPresentation): PuberScreen {
-        return HistoryScreen(presentation)
-    }
+    override fun history(): PuberScreen = HistoryScreen()
 
     override fun collections(): PuberScreen = CollectionsScreen()
 

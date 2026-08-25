@@ -52,7 +52,6 @@ import androidx.tv.material3.Text
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MILLIS
@@ -74,7 +73,6 @@ private val NavigationWidth = 264.dp
 private const val ReturnFocusDelayMillis = FOCUS_ON_LAUNCH_DELAY_MILLIS * 2
 
 private enum class NavigationChoice {
-    Mode,
     StartupTab,
 }
 
@@ -611,24 +609,6 @@ private fun LazyListScope.navigationItems(
     expandedChoice: NavigationChoice?,
     onExpandedChoiceChange: (NavigationChoice?) -> Unit,
 ) {
-    item(key = "navigation-mode") {
-        SettingsChoiceItem(
-            label = stringResource(R.string.settings_navigation_mode),
-            description = stringResource(R.string.settings_navigation_restart_hint),
-            options = navigationModeOptions(state.navigationMode),
-            isExpanded = expandedChoice == NavigationChoice.Mode,
-            leftFocusRequester = leftFocusRequester,
-            onToggleExpand = {
-                onExpandedChoiceChange(
-                    if (expandedChoice == NavigationChoice.Mode) null else NavigationChoice.Mode
-                )
-            },
-            onOptionSelect = { key ->
-                onExpandedChoiceChange(null)
-                onAction(DeviceSettingsActions.ChangeNavigationMode(NavigationMode.valueOf(key)))
-            },
-        )
-    }
     item(key = "startup-tab") {
         SettingsChoiceItem(
             label = stringResource(R.string.settings_startup_tab),
@@ -694,20 +674,6 @@ private fun appLanguageOptions(currentLanguage: AppLanguage) = AppLanguage.entri
             }
         ),
         selected = language == currentLanguage,
-    )
-}
-
-@Composable
-private fun navigationModeOptions(currentMode: NavigationMode) = NavigationMode.entries.map { mode ->
-    SettingsChoiceOption(
-        key = mode.name,
-        label = stringResource(
-            when (mode) {
-                NavigationMode.SideDrawer -> R.string.settings_navigation_drawer
-                NavigationMode.TopTabs -> R.string.settings_navigation_top_tabs
-            }
-        ),
-        selected = mode == currentMode,
     )
 }
 

@@ -89,6 +89,7 @@ internal open class PlayerVMTestFixture {
             every { currentPosition } returns 0L
             every { duration } returns 2_400_000L
             every { bufferedPosition } returns 0L
+            every { playbackSpeed } returns 1f
             every { getDebugInfo() } returns null
         }
 
@@ -116,7 +117,7 @@ internal open class PlayerVMTestFixture {
         every { interactor.findPreviousEpisode(any(), any(), any()) } returns null
         coEvery { skipSegmentInteractor.loadSegments(any(), any(), any()) } returns emptyList()
         every { skipSegmentInteractor.findCreditsSegment(any()) } returns null
-        every { skipSegmentInteractor.findActiveSegment(any(), any()) } returns null
+        every { skipSegmentInteractor.findActiveSegment(any(), any(), any()) } returns null
         every { mapper.formatTime(any()) } returns "00:00"
         every { mapper.formatSeekOffset(any(), any()) } returns "+10s"
         every { mapper.buildTitle(any()) } returns "Title"

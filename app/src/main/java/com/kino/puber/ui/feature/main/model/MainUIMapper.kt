@@ -19,13 +19,11 @@ import com.adamglin.phosphoricons.duotone.TelevisionSimple
 import com.adamglin.phosphoricons.duotone.MagnifyingGlass
 import com.adamglin.phosphoricons.duotone.Trophy
 import com.kino.puber.R
-import com.kino.puber.core.model.NavigationMode
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
-import com.kino.puber.ui.feature.history.model.HistoryPresentation
 
 internal class MainUIMapper(
     private val resources: ResourceProvider,
@@ -34,20 +32,17 @@ internal class MainUIMapper(
 ) {
 
     fun buildViewState(previousSelectedTab: TabType? = null): MainViewState {
-        val mode = navPrefs.getNavigationMode()
-        val tabs = navPrefs.getVisibleTabs(mode)
+        val tabs = navPrefs.getVisibleTabs()
         val selectedTab = previousSelectedTab
             ?.takeIf(tabs::contains)
             ?: navPrefs.getStartupTab().takeIf(tabs::contains)
             ?: TabType.Home
         return MainViewState(
-            navigationMode = mode,
             tabs = tabs.map { type ->
                 MainTab(
                     type = type,
                     icon = type.icon,
                     isSelected = type == selectedTab,
-                    badge = if (type == TabType.Favourites) 20 else 0 // TODO добавить счетчик
                 )
             },
             selectedTab = selectedTab,
@@ -86,17 +81,16 @@ internal class MainUIMapper(
 
     fun buildTabContent(
         type: TabType,
-        navigationMode: NavigationMode,
         refreshVersion: Int = 0,
     ): PuberTab {
         return PuberTab(
-            screen = tabScreen(type, navigationMode),
+            screen = tabScreen(type),
             tag = type,
             instanceKey = refreshVersion.takeIf { it > 0 }?.let { "refresh_$it" }.orEmpty(),
         )
     }
 
-    private fun tabScreen(type: TabType, navigationMode: NavigationMode): PuberScreen {
+    private fun tabScreen(type: TabType): PuberScreen {
         return when (type) {
             TabType.Home -> screens.home()
             TabType.Search -> screens.search()
@@ -111,12 +105,7 @@ internal class MainUIMapper(
             TabType.DocSeries,
             TabType.TvShows -> screens.contentList(type)
             TabType.Bookmarks -> screens.bookmarks()
-            TabType.History -> screens.history(
-                presentation = when (navigationMode) {
-                    NavigationMode.TopTabs -> HistoryPresentation.TopTabs
-                    NavigationMode.SideDrawer -> HistoryPresentation.SideDrawer
-                },
-            )
+            TabType.History -> screens.history()
             TabType.Collections -> screens.collections()
             TabType.SportTV -> screens.underDevelopment()
             TabType.Settings -> screens.deviceSettings()

@@ -15,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.tv.material3.MaterialTheme
 
 @Composable
@@ -51,6 +54,7 @@ internal fun PlayerControlsOverlay(
     videoSettingsButtonFocusRequester: FocusRequester,
     infoButtonFocusRequester: FocusRequester,
     seekBarFocusRequester: FocusRequester,
+    onBottomBarHeightChanged: (Dp) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -98,6 +102,7 @@ internal fun PlayerControlsOverlay(
                     infoButton = infoButtonFocusRequester,
                     seekBar = seekBarFocusRequester,
                 ),
+                onHeightChanged = onBottomBarHeightChanged,
             )
         }
     }
@@ -165,8 +170,15 @@ private fun ControlsBottomBar(
     buttonState: PlayerButtonRowState,
     actions: PlayerControlActions,
     focusRequesters: PlayerControlFocusRequesters,
+    onHeightChanged: (Dp) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val density = LocalDensity.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Reported so the timed-action overlay can sit above the bar instead of on top of it.
+            .onSizeChanged { size -> onHeightChanged(with(density) { size.height.toDp() }) },
+    ) {
         PlayerProgressBar(
             currentPosition = progressState.currentPosition,
             duration = progressState.duration,

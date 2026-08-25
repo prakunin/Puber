@@ -1,6 +1,8 @@
 package com.kino.puber.ui.feature.player.vm
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
@@ -84,6 +86,7 @@ internal interface PlaybackControl {
     val duration: Long
     val isPlaying: Boolean
     val bufferedPosition: Long
+    val playbackSpeed: Float
 
     fun setCallback(callback: Callback)
     fun prepare(
@@ -95,6 +98,16 @@ internal interface PlaybackControl {
     )
 
     fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?)
+
+    /**
+     * Pulls the head of [stream] into the shared media cache ahead of time, so that switching to it
+     * starts from cached bytes instead of a cold connection. Repeat calls for the same URL are
+     * ignored; playback of the current stream is untouched.
+     */
+    fun warmUpNext(stream: StreamCandidate, subtitles: List<SubtitleLink>?)
+
+    /** Drops the warm-up player and forgets what was warmed. */
+    fun cancelWarmUp()
     fun play()
     fun pause()
     fun seekTo(positionMs: Long)
@@ -119,6 +132,22 @@ internal class PlaybackController(
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
     private var currentStreamUrl: String? = null
     private var effectiveStreamSource: String? = null
+    private var warmUpPlayer: ExoPlayer? = null
+    private var warmUpStreamUrl: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val warmUpTimeout = Runnable { releaseWarmUpPlayer() }
+    private val seekStallRecovery = SeekStallRecovery(
+        handler = mainHandler,
+        player = { exoPlayer },
+        streamUrl = { currentStreamUrl },
+        onStalled = { streamUrl ->
+            callback?.onStreamFailure(
+                message = context.getString(R.string.player_error_playback),
+                recovery = PlaybackControl.StreamRecovery.NEXT_URL,
+                streamUrl = streamUrl,
+            )
+        },
+    )
 
     // Owned rather than left to DefaultLoadControl, which keeps its allocator to itself: this is
     // the only way to read how many bytes the buffer actually holds.
@@ -138,6 +167,7 @@ internal class PlaybackController(
             isPlaybackIntended(it.playWhenReady, it.playbackState, it.playbackSuppressionReason)
         } == true
     override val bufferedPosition: Long get() = exoPlayer?.bufferedPosition ?: 0L
+    override val playbackSpeed: Float get() = exoPlayer?.playbackParameters?.speed ?: 1f
     
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -147,6 +177,7 @@ internal class PlaybackController(
         // onIsPlayingChanged stays silent while the player is stalled or suppressed, so these two
         // report the transitions it misses.
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (!playWhenReady) seekStallRecovery.cancel()
             notifyPlaybackState()
         }
 
@@ -157,10 +188,12 @@ internal class PlaybackController(
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_ENDED -> {
+                    seekStallRecovery.cancel()
                     notifyPlaybackState()
                     callback?.onPlaybackEnded()
                 }
                 Player.STATE_READY -> {
+                    seekStallRecovery.cancel()
                     notifyPlaybackState()
                     notifyTracksUpdated()
                     callback?.onStreamReady(currentStreamUrl.orEmpty())
@@ -187,7 +220,10 @@ internal class PlaybackController(
                     recovery = recovery,
                     streamUrl = currentStreamUrl.orEmpty(),
                 )
-                else -> callback?.onError(message)
+                else -> {
+                    seekStallRecovery.cancel()
+                    callback?.onError(message)
+                }
             }
         }
     }
@@ -384,6 +420,7 @@ internal class PlaybackController(
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
         player.playWhenReady = wasPlaying
+        seekStallRecovery.onStreamSwitched(player)
     }
 
     override fun play() {
@@ -401,7 +438,14 @@ internal class PlaybackController(
     }
 
     override fun seekTo(positionMs: Long) {
-        exoPlayer?.seekTo(positionMs)
+        exoPlayer?.let { player ->
+            player.seekTo(positionMs)
+            if (player.playWhenReady) {
+                seekStallRecovery.start(player)
+            } else {
+                seekStallRecovery.cancel()
+            }
+        }
     }
 
     override fun setSpeed(speed: Float) {
@@ -438,6 +482,8 @@ internal class PlaybackController(
     }
 
     override fun release() {
+        seekStallRecovery.cancel()
+        cancelWarmUp()
         exoPlayer?.let { player ->
             player.removeAnalyticsListener(analyticsListener)
             player.removeListener(playerListener)
@@ -551,6 +597,101 @@ internal class PlaybackController(
             hlsSource != null -> player.setMediaSource(hlsSource)
             startPositionMs != null -> player.setMediaItem(mediaItem, startPositionMs)
             else -> player.setMediaItem(mediaItem)
+        }
+    }
+
+    /**
+     * A second, surface-less player whose only job is to make ExoPlayer fetch the next episode's
+     * playlist and first segments through the same [CacheDataSource], so they land in the shared
+     * cache. Nothing of it survives: once it reports ready the bytes are on disk and the player is
+     * released, and the real [prepare] reads them back instead of opening a cold connection.
+     */
+    @OptIn(UnstableApi::class)
+    override fun warmUpNext(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
+        if (warmUpStreamUrl == stream.url) return
+        cancelWarmUp()
+        warmUpStreamUrl = stream.url
+
+        val sourceFactory = dataSourceFactory ?: createDataSourceFactory()
+        val loadControl = DefaultLoadControl.Builder()
+            .setAllocator(DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+            .setBufferDurationsMs(
+                WARM_UP_BUFFER_MS,
+                WARM_UP_BUFFER_MS,
+                WARM_UP_BUFFER_MS,
+                WARM_UP_BUFFER_MS,
+            )
+            .setTargetBufferBytes(WARM_UP_TARGET_BUFFER_BYTES)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
+
+        val player = ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .setBandwidthMeter(bandwidthMeter)
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(sourceFactory)
+                    .setLoadErrorHandlingPolicy(PlaybackErrorPolicy()),
+            )
+            .build()
+        warmUpPlayer = player
+
+        player.addListener(
+            object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
+                        // Releasing from inside a player callback is not allowed; hand it to the loop.
+                        mainHandler.post { releaseWarmUpPlayer(expected = player) }
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    // A failed warm-up is not a playback failure: drop it and let the real prepare
+                    // hit the network and report for itself.
+                    mainHandler.post {
+                        if (warmUpPlayer === player) cancelWarmUp()
+                    }
+                }
+            },
+        )
+
+        setWarmUpMediaSource(player, sourceFactory, buildMediaItem(stream.url, subtitles), stream.type)
+        player.playWhenReady = false
+        player.prepare()
+        mainHandler.postDelayed(warmUpTimeout, WARM_UP_TIMEOUT_MS)
+    }
+
+    override fun cancelWarmUp() {
+        releaseWarmUpPlayer()
+        warmUpStreamUrl = null
+    }
+
+    /**
+     * @param expected the player the caller meant to release, when the call was posted and another
+     * warm-up may have replaced it in the meantime. Null releases whatever is current.
+     */
+    private fun releaseWarmUpPlayer(expected: ExoPlayer? = null) {
+        if (expected != null && warmUpPlayer !== expected) return
+        mainHandler.removeCallbacks(warmUpTimeout)
+        warmUpPlayer?.release()
+        warmUpPlayer = null
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun setWarmUpMediaSource(
+        player: ExoPlayer,
+        sourceFactory: DataSource.Factory,
+        mediaItem: MediaItem,
+        streamType: StreamType,
+    ) {
+        if (streamType == StreamType.HLS) {
+            player.setMediaSource(
+                HlsMediaSource.Factory(sourceFactory)
+                    .setAllowChunklessPreparation(true)
+                    .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
+                    .createMediaSource(mediaItem),
+            )
+        } else {
+            player.setMediaItem(mediaItem)
         }
     }
 
@@ -748,6 +889,9 @@ internal class PlaybackController(
         const val CHANNELS_STEREO = 2
         const val CHANNELS_SURROUND_5_1 = 6
         const val CHANNELS_SURROUND_7_1 = 8
+        const val WARM_UP_BUFFER_MS = 15_000
+        const val WARM_UP_TARGET_BUFFER_BYTES = 8 * 1024 * 1024
+        const val WARM_UP_TIMEOUT_MS = 45_000L
     }
 }
 
