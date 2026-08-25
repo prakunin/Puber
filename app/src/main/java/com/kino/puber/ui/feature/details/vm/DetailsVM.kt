@@ -42,6 +42,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@Suppress("LargeClass")
 internal class DetailsVM(
     router: AppRouter,
     private val params: DetailsScreenParams,

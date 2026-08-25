@@ -559,27 +559,7 @@ private fun LazyListScope.playbackItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleShowMarkWatchedButton) },
         )
     }
-    item(key = "media3-heading") {
-        SectionHeading(stringResource(R.string.settings_media3_title))
-    }
-    item(key = "discard-embedded-artwork") {
-        SettingsToggleItem(
-            label = stringResource(R.string.settings_discard_embedded_artwork),
-            description = stringResource(R.string.settings_discard_embedded_artwork_description),
-            checked = state.discardEmbeddedArtworkMetadata,
-            onToggle = {
-                onAction(DeviceSettingsActions.ToggleDiscardEmbeddedArtworkMetadata)
-            },
-        )
-    }
-    item(key = "hagc-playback") {
-        SettingsToggleItem(
-            label = stringResource(R.string.settings_hagc_playback),
-            description = stringResource(R.string.settings_hagc_playback_description),
-            checked = state.hagcPlaybackEnabled,
-            onToggle = { onAction(DeviceSettingsActions.ToggleHagcPlayback) },
-        )
-    }
+    media3PlaybackItems(state, onAction)
     item(key = "skip-heading") {
         SectionHeading(
             title = stringResource(R.string.settings_skip_segments_title),
@@ -605,6 +585,33 @@ private fun LazyListScope.playbackItems(
             label = stringResource(R.string.settings_skip_credits),
             checked = state.skipCreditsEnabled,
             onToggle = { onAction(DeviceSettingsActions.ToggleSkipCredits) },
+        )
+    }
+}
+
+private fun LazyListScope.media3PlaybackItems(
+    state: DeviceSettingsState.Success,
+    onAction: (UIAction) -> Unit,
+) {
+    item(key = "media3-heading") {
+        SectionHeading(stringResource(R.string.settings_media3_title))
+    }
+    item(key = "discard-embedded-artwork") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_discard_embedded_artwork),
+            description = stringResource(R.string.settings_discard_embedded_artwork_description),
+            checked = state.discardEmbeddedArtworkMetadata,
+            onToggle = {
+                onAction(DeviceSettingsActions.ToggleDiscardEmbeddedArtworkMetadata)
+            },
+        )
+    }
+    item(key = "hagc-playback") {
+        SettingsToggleItem(
+            label = stringResource(R.string.settings_hagc_playback),
+            description = stringResource(R.string.settings_hagc_playback_description),
+            checked = state.hagcPlaybackEnabled,
+            onToggle = { onAction(DeviceSettingsActions.ToggleHagcPlayback) },
         )
     }
 }

@@ -80,7 +80,7 @@ internal class EpisodeScheduleUIMapper(
         return EpisodeScheduleScreenState.Empty(reason)
     }
 
-    fun mapError(error: Throwable): EpisodeScheduleScreenState.Error {
+    fun mapError(@Suppress("UNUSED_PARAMETER") error: Throwable): EpisodeScheduleScreenState.Error {
         return EpisodeScheduleScreenState.Error(
             message = resources.getString(R.string.error_generic),
         )
@@ -174,7 +174,7 @@ internal class EpisodeScheduleUIMapper(
             imageUrl = "",
             bigImageUrl = "",
             showTitle = true,
-            isWatched = null,
+            isWatched = false,
             isSeriesLike = false,
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,

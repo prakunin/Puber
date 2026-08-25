@@ -24,7 +24,7 @@ internal class SearchVM(
     private val interactor: SearchInteractor,
     private val savedItemInteractor: SavedItemInteractor,
     private val mapper: VideoItemUIMapper,
-    private val params: SearchScreenParams = SearchScreenParams(),
+    params: SearchScreenParams = SearchScreenParams(),
 ) : PuberVM<SearchViewState>(router) {
 
     override val initialViewState = SearchViewState.Idle

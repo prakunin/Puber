@@ -8,8 +8,8 @@ import com.kino.puber.domain.model.ScheduleProvider
 import kotlinx.datetime.LocalDate
 
 @Immutable
-internal sealed class EpisodeScheduleScreenState {
-    data object Loading : EpisodeScheduleScreenState()
+internal sealed interface EpisodeScheduleScreenState {
+    data object Loading : EpisodeScheduleScreenState
 
     @Immutable
     data class Content(
@@ -17,7 +17,7 @@ internal sealed class EpisodeScheduleScreenState {
         val provider: ScheduleProvider,
         val seasons: List<Season>,
         val grid: VideoGridUIState,
-    ) : EpisodeScheduleScreenState() {
+    ) : EpisodeScheduleScreenState {
         val initialFocusedItemId: Int? = grid.list
             .filterIsInstance<VideoGridItemUIState.Items>()
             .firstNotNullOfOrNull { row -> row.items.firstOrNull()?.id }
@@ -26,12 +26,12 @@ internal sealed class EpisodeScheduleScreenState {
     @Immutable
     data class Empty(
         val reason: EmptyReason,
-    ) : EpisodeScheduleScreenState()
+    ) : EpisodeScheduleScreenState
 
     @Immutable
     data class Error(
         val message: String,
-    ) : EpisodeScheduleScreenState()
+    ) : EpisodeScheduleScreenState
 
     enum class EmptyReason {
         MissingCredentials,

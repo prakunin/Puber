@@ -34,6 +34,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Duotone
+import com.adamglin.phosphoricons.duotone.CalendarBlank
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.fill.Eye
 import coil3.request.ImageRequest
@@ -64,10 +66,18 @@ data class VideoItemUIState(
     val episodeNumber: Int? = null,
     val isSeasonWatched: Boolean? = null,
     val year: String = "",
+    val presentation: VideoItemPresentation = VideoItemPresentation.Playable,
+    val scheduledReleaseDate: String? = null,
 )
+
+enum class VideoItemPresentation {
+    Playable,
+    Scheduled,
+}
 
 internal const val WATCHED_INDICATOR_TEST_TAG = "watched_indicator"
 internal const val WATCH_PROGRESS_TEST_TAG = "watch_progress"
+internal const val SCHEDULED_VIDEO_ITEM_TEST_TAG = "scheduled_video_item"
 
 @Composable
 fun VideoItem(
@@ -76,36 +86,79 @@ fun VideoItem(
     onClick: () -> Unit,
     onContextMenu: (() -> Unit)? = null,
 ) {
+    val isPlayable = state.presentation == VideoItemPresentation.Playable
     Card(
         modifier = modifier
             .then(
-                if (onContextMenu != null) {
+                if (onContextMenu != null && isPlayable) {
                     Modifier.onTvContextMenuKey(onOpen = onContextMenu)
                 } else {
                     Modifier
                 }
+            )
+            .then(
+                if (state.presentation == VideoItemPresentation.Scheduled) {
+                    Modifier.testTag(SCHEDULED_VIDEO_ITEM_TEST_TAG)
+                } else {
+                    Modifier
+                },
             )
             .size(
                 PuberTheme.Defaults.VideoItemWidth,
                 PuberTheme.Defaults.VideoItemHeight,
             ),
         scale = CardDefaults.scale(pressedScale = 1f, focusedScale = 1f),
-        onClick = onClick,
+        onClick = { if (isPlayable) onClick() },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            CardPoster(state = state, modifier = Modifier.fillMaxSize())
-            TopEndBadge(
-                state = state,
-                modifier = Modifier.align(Alignment.TopEnd),
-            )
-            CardCaption(
-                state = state,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
-            WatchProgressBar(
-                progressPercent = state.progressPercent,
-                isWatched = state.isWatched,
-                modifier = Modifier.align(Alignment.BottomCenter),
+            if (state.presentation == VideoItemPresentation.Scheduled) {
+                ScheduledVideoItemContent(state)
+            } else {
+                CardPoster(state = state, modifier = Modifier.fillMaxSize())
+                TopEndBadge(state = state, modifier = Modifier.align(Alignment.TopEnd))
+                CardCaption(state = state, modifier = Modifier.align(Alignment.BottomCenter))
+                WatchProgressBar(
+                    progressPercent = state.progressPercent,
+                    isWatched = state.isWatched,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduledVideoItemContent(state: VideoItemUIState) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = PhosphorIcons.Duotone.CalendarBlank,
+            contentDescription = null,
+            modifier = Modifier.size(36.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = state.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        state.scheduledReleaseDate?.takeIf(String::isNotBlank)?.let { releaseDate ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = releaseDate,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
