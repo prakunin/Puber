@@ -215,10 +215,11 @@ private fun DetailsHero(
             modifier = Modifier.weight(1F, fill = false),
         )
         Spacer(modifier = Modifier.height(GAP_PLOT_TO_FACTS))
+        Spacer(modifier = Modifier.weight(HERO_FACTS_ABOVE))
         HeroLine(state.info.factsLine)
         HeroLine(state.info.directorLine)
         HeroLine(state.info.castLine)
-        Spacer(modifier = Modifier.weight(1F))
+        Spacer(modifier = Modifier.weight(1F - HERO_FACTS_ABOVE))
         ActionRow(
             state = state,
             onAction = onAction,
@@ -661,6 +662,10 @@ private fun EpisodeRow(
 ) {
     val listState = rememberLazyListState()
     val rowFocusRequester = remember { FocusRequester() }
+    val titleSmall = MaterialTheme.typography.titleSmall
+    val cardTitleStyle = remember(titleSmall) {
+        titleSmall.copy(fontSize = CARD_TITLE_SIZE, lineHeight = CARD_TITLE_LINE)
+    }
     val initialIndex = remember(episodes, initialFocusedItemId) {
         episodes.indexOfFirst { episode -> episode.id == initialFocusedItemId }.takeIf { it >= 0 }
     }
@@ -691,6 +696,7 @@ private fun EpisodeRow(
                 // A second line lifts the text, and captions across the row read from different
                 // heights.
                 titleMaxLines = 1,
+                titleStyle = cardTitleStyle,
                 onContextMenu = onItemContextMenu?.let { handler -> { handler(item) } },
             )
         }
@@ -732,10 +738,13 @@ private fun DetailsContentSkeleton() {
             repeat(SKELETON_PLOT_LINE_COUNT) { SkeletonBar(width = PLOT_WIDTH, height = SKELETON_LINE_HEIGHT) }
         }
         Spacer(modifier = Modifier.height(GAP_PLOT_TO_FACTS))
+        // Split the same way the loaded hero splits, or the bars sit high and the real lines drop
+        // 84 % of the way down the moment the content arrives.
+        Spacer(modifier = Modifier.weight(HERO_FACTS_ABOVE))
         Column(verticalArrangement = Arrangement.spacedBy(SKELETON_LINE_GAP)) {
             SKELETON_FACT_WIDTHS.forEach { width -> SkeletonBar(width = width, height = SKELETON_LINE_HEIGHT) }
         }
-        Spacer(modifier = Modifier.weight(1F))
+        Spacer(modifier = Modifier.weight(1F - HERO_FACTS_ABOVE))
         Row(horizontalArrangement = Arrangement.spacedBy(BUTTON_GAP)) {
             SkeletonBar(width = SKELETON_PLAY_WIDTH, height = BUTTON_HEIGHT, radius = BUTTON_HEIGHT / 2)
             repeat(SKELETON_ICON_BUTTON_COUNT) {
@@ -796,17 +805,26 @@ private val PAGE_EDGE = 0.dp
 private val SIDE_EDGE = 11.dp
 private val HERO_TOP = 0.dp
 private val HERO_BOTTOM = 0.dp
-private val RAIL_HEIGHT = 117.dp
+/**
+ * What the rail holds, with two dp over: the season chip row, [GAP_CHIPS_TO_CARDS] and a
+ * [CARD_HEIGHT] card. The row stands 24 dp rather than [SEASON_CHIP_HEIGHT] -- the summary text
+ * beside the chips inherits `bodyLarge`'s 24 sp line -- so 24 + 4 + 92 = 120.
+ *
+ * The two dp are slack, not spare: the rail is a fixed height and a card's `Modifier.height` is
+ * bounded by what is left of it, so a rail one dp short does not clip the card, it squashes it.
+ * Anything in that sum growing means this grows with it.
+ */
+private val RAIL_HEIGHT = 122.dp
 
 /**
  * 1258 of 1920. Still narrower than the catalogue's 0.75, but the hero's text no longer stands
- * beside the picture: the plot and the fact lines run 270 dp under it, over
+ * beside the picture: the plot runs 270 dp under it and the fact lines cross it entirely, over
  * [MediaScrim.Details] rather than over a margin.
  *
- * The scrim does not cover the whole run. A line ending at 601 dp sits 43 % across the frame,
- * where the ramp is already down to about 0.09 alpha -- the previous 550 dp line ended at 26 %
- * of a narrower frame and still had 0.36 behind it. Long fact lines end on nearly bare
- * picture, which is fine on a dark still and has not been judged on a bright one.
+ * The scrim covers almost none of that run. It fades out by 10 % of the frame, so a fact line
+ * reaching [HERO_LINE_WIDTH] ends at 951 dp -- 98 % across -- on bare picture. That is the trade
+ * the width buys: the whole cast rather than the first four names. It reads on a dark still and
+ * has not been judged on a bright one.
  */
 private const val MEDIA_WIDTH_FRACTION = 0.655F
 private val RAIL_TOP = 0.dp
@@ -829,7 +847,7 @@ private val GAP_RATINGS = 15.dp
 private val GAP_RATINGS_TO_CHIPS = 3.dp
 private val GAP_CHIPS = 5.dp
 private val GAP_CHIPS_TO_PLOT = 3.dp
-private val GAP_PLOT_TO_FACTS = 16.dp
+private val GAP_PLOT_TO_FACTS = 13.dp
 
 private val CHIP_HEIGHT = 16.dp
 private val CHIP_PADDING = 7.dp
@@ -838,28 +856,55 @@ private val CHIP_TEXT_SIZE = 10.sp
 private const val CHIP_BORDER_ALPHA = 0.38F
 
 private val PLOT_WIDTH = 590.dp
-private val PLOT_TEXT_SIZE = 10.sp
-private val PLOT_LINE = 13.sp
-private val PLOT_MIN_HEIGHT = 126.dp
+private val PLOT_TEXT_SIZE = 13.sp
+private val PLOT_LINE = 18.sp
+private val PLOT_MIN_HEIGHT = 110.dp
 private val PLOT_FOCUS_BORDER = 1.dp
 private val PLOT_FOCUS_RADIUS = 4.dp
 
-private val HERO_LINE_SIZE = 8.sp
-private val HERO_LINE_HEIGHT = 15.sp
-private val HERO_LINE_WIDTH = 590.dp
+private val HERO_LINE_SIZE = 9.sp
+private val HERO_LINE_HEIGHT = 13.sp
+
+/**
+ * Nearly the whole screen: 940 of the 949 dp left of [SIDE_EDGE]. Wider than the plot on purpose
+ * -- the plot is a block to read and stays at [PLOT_WIDTH], while these are one line each and
+ * every character they gain is a name that no longer falls off the end.
+ */
+private val HERO_LINE_WIDTH = 940.dp
 private const val HERO_LINE_ALPHA = 0.70F
 
-private val BUTTON_HEIGHT = 23.dp
-private val BUTTON_PADDING = 11.dp
+/**
+ * How the hero's free height splits around the fact lines: 84 % above them, the rest below. Both
+ * shares come out of the spacer's half of the remainder, which does not depend on how long the
+ * description is, so they are the same on every item: the lines hang a fixed gap above the action
+ * row rather than sitting straight under the plot.
+ *
+ * That is a place, not a pin. A short description still lifts the fact lines and the action row
+ * together, because [PlotBlock] takes `weight(1F, fill = false)` and hands back nothing of the
+ * half it did not use. Where the bottom of the hero ends up is the older open question the
+ * stand's «низ героя» switch is for; this only decides where in the tail the lines sit.
+ *
+ * The two spacers still weigh 1F between them, so [PlotBlock] keeps the half it had -- adding a
+ * third weighted child at full weight would have cut the plot to a third of the remainder.
+ */
+private const val HERO_FACTS_ABOVE = 0.95F
+
+private val BUTTON_HEIGHT = 30.dp
+private val BUTTON_PADDING = 15.dp
 private val BUTTON_ICON = 15.dp
 private val BUTTON_ICON_GAP = 5.dp
 private val BUTTON_GAP = 10.dp
-private val BUTTON_TEXT_SIZE = 9.sp
-private val RESUME_TEXT_SIZE = 8.sp
-private val RESUME_GAP = 15.dp
+private val BUTTON_TEXT_SIZE = 11.sp
+private val RESUME_TEXT_SIZE = 10.sp
+private val RESUME_GAP = 5.dp
 
-private val SEASON_CHIP_HEIGHT = 26.dp
-private val SEASON_CHIP_PADDING = 10.dp
+/**
+ * Below the 24 dp the row actually stands: the season summary beside the chips names only a font
+ * size, so it inherits `bodyLarge`'s 24 sp line and floors the row there. Twenty makes the chips
+ * smaller without making the row shorter -- [RAIL_HEIGHT] is sized off the 24, not off this.
+ */
+private val SEASON_CHIP_HEIGHT = 20.dp
+private val SEASON_CHIP_PADDING = 15.dp
 private val SEASON_CHIP_TEXT_SIZE = 10.sp
 private const val SEASON_CHIP_SELECTED_ALPHA = 0.20F
 private val SEASON_SUMMARY_GAP = 12.dp
@@ -869,8 +914,17 @@ private val GAP_CHIPS_TO_CARDS = 4.dp
 
 private val RAIL_LABEL_SIZE = 14.sp
 
-private val CARD_HEIGHT = 80.dp
-private val CARD_GAP = 15.dp
+private val CARD_HEIGHT = 92.dp
+private val CARD_GAP = 5.dp
+
+/**
+ * The episode caption, shrunk for a card this size. Both halves are needed: `titleSmall` names a
+ * 20 sp line, so dropping the font alone would leave the caption in a box two thirds taller than
+ * its letters. Passed to [VideoItemHorizontal] rather than set on `Typography`, which the
+ * catalogue's own cards read.
+ */
+private val CARD_TITLE_SIZE = 8.sp
+private val CARD_TITLE_LINE = 14.sp
 private val CARD_RADIUS = 8.dp
 private const val CARD_ASPECT_RATIO = 16F / 9F
 

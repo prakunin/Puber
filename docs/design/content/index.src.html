@@ -624,7 +624,7 @@ const ITEMS = {
 
 /* Что несёт код сегодня — DetailsScreenContent.kt, region Sizes. */
 const SHIPPED = {
-  pageEdge:0, sideEdge:11, heroTop:0, heroBottom:0, railHeight:117, railTop:0,
+  pageEdge:0, sideEdge:11, heroTop:0, heroBottom:0, railHeight:122, railTop:0,
   mediaFrac:65.5, scrimEdge:10, scrimAlpha:50, scrimEnd:50,
 
   titleSp:28, titleOrigSp:15, titleLine:33, titleOrigBase:4, gapTitleParts:10,
@@ -632,16 +632,17 @@ const SHIPPED = {
 
   chipH:16, chipPad:7, chipSp:10, gapChips:5, gapChipsToPlot:3,
 
-  plotW:590, plotSp:10, plotLine:13, plotMin:126, gapPlotToFacts:16,
+  plotW:590, plotSp:13, plotLine:18, plotMin:110, gapPlotToFacts:13,
 
-  heroLineSp:8, heroLineH:15, heroLineW:590, heroLineAlpha:70,
+  heroLineSp:9, heroLineH:13, heroLineW:940, heroLineAlpha:70,
+  posFacts:95, posDirector:0, posCast:0,
 
-  btnH:23, btnPad:11, btnIcon:15, btnIconGap:5, btnGap:10, btnSp:9,
-  resumeSp:8, resumeGap:15,
+  btnH:30, btnPad:15, btnIcon:15, btnIconGap:5, btnGap:10, btnSp:11,
+  resumeSp:10, resumeGap:5,
 
-  seasonChipH:26, seasonChipPad:10, seasonChipSp:10, gapSeasonChips:5,
+  seasonChipH:20, seasonChipPad:15, seasonChipSp:10, gapSeasonChips:5,
   seasonSummaryGap:12, gapChipsToCards:4,
-  railLabelSp:14, cardH:80, cardGap:15,
+  railLabelSp:14, cardH:92, cardGap:5, cardTitleSp:8, cardTitleLine:14,
 };
 
 /* Что несла первая редакция экрана — до того, как стенд был выкручен. */
@@ -697,8 +698,14 @@ const CONTROLS = [
   {g:"Строки фактов", k:"heroLineSp",   n:"кегль",         min:8,  max:20, step:1, u:"sp"},
   {g:"Строки фактов", k:"heroLineH",    n:"интерлиньяж",   min:10, max:30, step:1, u:"sp"},
   {g:"Строки фактов", k:"heroLineW",    n:"ширина строки", min:240,max:940,step:5, u:"dp",
-   note:"590 dp уводит строку на 270 dp под кадр"},
+   note:"940 dp — почти весь экран: строка кончается на 951 dp, на голом кадре"},
   {g:"Строки фактов", k:"heroLineAlpha",n:"непрозрачность",min:30, max:100,step:1, u:"%"},
+  {g:"Строки фактов", k:"posFacts",    n:"место: дорожки",   min:0, max:100, step:1, u:"% свободного",
+   note:"доля свободного места, уходящая НАД строкой; 100 % здесь прижимает весь блок к кнопкам"},
+  {g:"Строки фактов", k:"posDirector", n:"место: режиссёр",  min:0, max:100, step:1, u:"% свободного",
+   note:"считается от того, что осталось после строки выше"},
+  {g:"Строки фактов", k:"posCast",     n:"место: в ролях",   min:0, max:100, step:1, u:"% свободного",
+   note:"остаток после неё уходит вниз, под строки, к ряду кнопок"},
 
   {g:"Кнопки", k:"btnH",       n:"высота кнопки",     min:14, max:56, step:1, u:"dp"},
   {g:"Кнопки", k:"btnPad",     n:"поле внутри",       min:2,  max:36, step:1, u:"dp"},
@@ -709,14 +716,20 @@ const CONTROLS = [
   {g:"Кнопки", k:"resumeSp",   n:"кегль подписи",     min:7,  max:20, step:1, u:"sp"},
   {g:"Кнопки", k:"resumeGap",  n:"кнопки → подпись",  min:0,  max:40, step:1, u:"dp"},
 
-  {g:"Нижний ряд", k:"seasonChipH",     n:"высота чипа сезона", min:12, max:40, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"seasonChipH",     n:"высота чипа сезона", min:12, max:40, step:1, u:"dp",
+   note:"ниже 24 dp ряд не станет: подпись рядом наследует строку 24 sp у bodyLarge"},
   {g:"Нижний ряд", k:"seasonChipPad",   n:"поле внутри чипа",   min:2,  max:24, step:1, u:"dp"},
   {g:"Нижний ряд", k:"seasonChipSp",    n:"кегль чипа",         min:8,  max:20, step:1, u:"sp"},
   {g:"Нижний ряд", k:"gapSeasonChips",  n:"между чипами",       min:0,  max:24, step:1, u:"dp"},
   {g:"Нижний ряд", k:"seasonSummaryGap",n:"чипы → подпись",     min:0,  max:32, step:1, u:"dp"},
   {g:"Нижний ряд", k:"gapChipsToCards", n:"чипы → карточки",    min:0,  max:32, step:1, u:"dp"},
   {g:"Нижний ряд", k:"railLabelSp",     n:"кегль «Похожее»",    min:9,  max:24, step:1, u:"sp"},
-  {g:"Нижний ряд", k:"cardH",           n:"высота карточки",    min:40, max:180,step:1, u:"dp"},
+  {g:"Нижний ряд", k:"cardH",           n:"высота карточки",    min:40, max:180,step:1, u:"dp",
+   note:"зажата остатком ряда: RAIL_HEIGHT минус шапка и зазор под ней"},
+  {g:"Нижний ряд", k:"cardTitleSp",     n:"кегль названия карточки", min:7, max:20, step:1, u:"sp",
+   note:"titleSmall из tv-material3; VideoItemHorizontal делит его с каталогом"},
+  {g:"Нижний ряд", k:"cardTitleLine",   n:"интерлиньяж в карточке",  min:9, max:28, step:1, u:"sp",
+   note:"кегль сам по себе коробку строки не уменьшит — у titleSmall она 20 sp"},
   {g:"Нижний ряд", k:"cardGap",         n:"между карточками",   min:0,  max:40, step:1, u:"dp"},
 ];
 
@@ -771,7 +784,16 @@ function geom(){
   g.mediaW  = W * g.mediaFrac / 100;
   g.mediaX  = W - g.mediaW;
   g.stillH  = g.mediaW / CARD_AR;
-  g.cardW   = g.cardH * CARD_AR;
+
+  /* Ряд — Column фиксированной высоты RAIL_HEIGHT, и Modifier.height карточки зажимается
+     тем, что осталось от него: выше остатка карточка не станет, она сплющится. Стенд
+     считает так же, иначе показывал бы высоту, которой на экране не бывает. */
+  g.railHeadH = railKind() === "episodes"
+    ? Math.max(g.seasonChipH, INHERITED_LINE)
+    : (railKind() === "similar" ? INHERITED_LINE : 0);
+  g.cardRoom = Math.max(0, g.railHeight - g.railHeadH - g.gapChipsToCards);
+  g.cardH    = Math.min(g.cardH, g.cardRoom);
+  g.cardW    = g.cardH * CARD_AR;
   return g;
 }
 
@@ -870,7 +892,8 @@ function ratingHTML(kind, value, g){
 function heroHTML(g){
   const it = item();
   const lineSp = g.heroLineH;
-  const lines = [it.factsLine, it.directorLine, it.castLine].filter(Boolean);
+  const lines = [["posFacts", it.factsLine], ["posDirector", it.directorLine],
+                 ["posCast", it.castLine]].filter(([, l]) => l);
 
   /* высоты фиксированных детей колонки, в dp */
   const titleH  = Math.max(g.titleLine, g.titleLine + g.titleOrigBase);
@@ -878,7 +901,7 @@ function heroHTML(g){
   const chipsH  = it.chips.length ? g.chipH : 0;
   const factsUnit = S.facts === "one" ? 1 : (S.facts === "two" ? 2 : null);
   let factsH = 0;
-  for (const l of lines){
+  for (const [, l] of lines){
     const n = factsUnit ?? measureLines(l, g.heroLineW, g.heroLineSp, g.heroLineH);
     factsH += n * lineSp;
   }
@@ -937,12 +960,22 @@ function heroHTML(g){
          padding:0 ${px(1)}px;top:${-px(S.plotScroll * g.plotLine)}px">${esc(it.plot)}</div>
   </div>`);
 
-  parts.push(`<div style="height:${px(g.gapPlotToFacts)}px"></div>`);
-  parts.push(`<div class="facts ${S.facts}" style="width:${px(g.heroLineW)}px">${lines.map(l => `
-    <div class="l" style="font-size:${px(g.heroLineSp)}px;line-height:${px(g.heroLineH)}px;font-weight:500;
-      color:rgba(230,224,233,${(g.heroLineAlpha/100).toFixed(2)})">${esc(l)}</div>`).join("")}</div>`);
+  /* Свободное место режется каскадом: каждая строка забирает свою долю того, что не
+     роздано выше неё, остаток уходит под последнюю. Все три на нуле — это сегодняшний
+     экран; 100 % у первой сажает весь блок на ряд кнопок. */
+  let unspent = spacerH;
+  const gaps = lines.map(([k]) => {
+    const take = unspent * g[k] / 100;
+    unspent -= take;
+    return take;
+  });
 
-  parts.push(`<div style="height:${px(spacerH)}px"></div>`);
+  parts.push(`<div style="height:${px(g.gapPlotToFacts)}px"></div>`);
+  parts.push(`<div class="facts ${S.facts}" style="width:${px(g.heroLineW)}px">${lines.map(([, l], i) => `
+    <div class="l" style="font-size:${px(g.heroLineSp)}px;line-height:${px(g.heroLineH)}px;font-weight:500;
+      margin-top:${px(gaps[i])}px;
+      color:rgba(230,224,233,${(g.heroLineAlpha/100).toFixed(2)})">${esc(l)}</div>`).join("")}</div>`);
+  parts.push(`<div style="height:${px(unspent)}px"></div>`);
   parts.push(actionsHTML(g, actionsH));
 
   return `<div class="hero" style="left:${px(g.sideEdge)}px;top:${px(g.pageEdge + g.heroTop)}px;
@@ -1000,7 +1033,7 @@ function railHTML(g){
         ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<div style="position:absolute;inset:0;background:#1A1620"></div>`}
         <div class="grad"></div>
         <div class="txt" style="padding:${px(10)}px ${px(12)}px">
-          <div class="t" style="font-size:${px(14)}px;line-height:${px(20)}px">${esc(c.title)}</div>
+          <div class="t" style="font-size:${px(g.cardTitleSp)}px;line-height:${px(g.cardTitleLine)}px">${esc(c.title)}</div>
         </div>
         ${eye}${bar}
       </div>${ring}</div>`;
@@ -1139,12 +1172,21 @@ function paintSpec(g){
     two:   "строки фактов:  <b>две строки</b> — режиссёр и актёры влезают почти целиком",
     scroll:"строки фактов:  <b>целиком</b> — строки переносятся, ничего не прячется,\n                 но забирают высоту у описания",
   }[S.facts]);
+  const pos = ["posFacts","posDirector","posCast"];
+  notes.push(pos.some(k => g[k] > 0)
+    ? "место строк:    <b>" + pos.map(k => g[k] + " %").join(" · ") + "</b> свободного места над\n" +
+      "                 дорожками, режиссёром, ролями; остаток — под ними"
+    : "место строк:    все три сразу за описанием — как сейчас, уезжают вверх вместе с ним");
   notes.push({
     width: "кадр:           как сейчас — по ширине, по центру; сверху и снизу остаётся чёрное",
     cover: "кадр:           <b>по высоте, с обрезкой</b> — кадр заполняет герой целиком",
     top:   "кадр:           <b>по ширине, сверху</b> — чёрное только снизу, под кнопками",
   }[S.fit]);
-  if (railKind() === "empty") notes.push("нижний ряд:     у фильма похожего нет — 116 dp пустой полосы");
+  if (g.cardH < Number(S.cardH)) notes.push(
+    `<b>карточка не влезает:</b> ${S.cardH} dp просят, ${Math.round(g.cardRoom)} dp осталось от ряда\n` +
+    `                 (${g.railHeight} − ${Math.round(g.railHeadH)} шапка − ${g.gapChipsToCards} зазор). ` +
+    "Либо ряд выше, либо карточка ниже");
+  if (railKind() === "empty") notes.push(`нижний ряд:     у фильма похожего нет — ${g.railHeight} dp пустой полосы`);
 
   const measured = `  описание:       ${plotLines} строк, видно ${plotVisibleLines}` +
     (plotScrollable ? " — прокручивается с пульта" : " — целиком");

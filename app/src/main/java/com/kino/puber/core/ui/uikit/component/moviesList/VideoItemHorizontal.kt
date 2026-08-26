@@ -26,6 +26,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -51,6 +52,10 @@ fun VideoItemHorizontal(
     // A second line lifts the whole text block, so neighbouring cards in a row would read from two
     // different heights. Rows that care about that ask for one line and an ellipsis instead.
     titleMaxLines: Int = 2,
+    // The catalogue's card is the full 150 dp and takes `titleSmall` as it comes. A row that
+    // shrinks the card has to shrink the caption with it, and a font size alone will not do it:
+    // `titleSmall` names a 20 sp line, and the box keeps that height whatever the letters do.
+    titleStyle: TextStyle = MaterialTheme.typography.titleSmall,
     onContextMenu: (() -> Unit)? = null,
 ) {
     Card(
@@ -156,7 +161,7 @@ fun VideoItemHorizontal(
                 }
                 Text(
                     text = state.title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = titleStyle,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis,

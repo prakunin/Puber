@@ -18,7 +18,8 @@ Published copy: <https://claude.ai/code/artifact/cb46056c-9d47-47b9-9c32-c4e217a
   - **Хищник: Убийца убийц** (111985) — a second film, short plot, for the buttons-float case.
 - **Real artwork.** Wide posters and episode stills from `m.staticpop.net`, downscaled to what
   the screen actually shows (1080 px for the hero, 260 px for an 80 dp card).
-- **Every size in `region Sizes` on a slider**, opening on the agreed value. Amber means you have
+- **Every size in `region Sizes` on a slider**, plus the episode card's title type, which lives
+  in the theme rather than the screen. Each opens on the agreed value. Amber means you have
   moved off it; the grey «было» is the first edition of the screen, before this pass.
 - **Arrow keys walk the real focus graph** — plot, buttons, season chips, cards — the one wired
   through `onPreviewKeyEvent` rather than the geometric search, which walks past the chip row.
@@ -35,7 +36,7 @@ than parameterised again.
 | поле слева | 8 | **11** dp |
 | текст героя от поля | 8 | **0** dp |
 | кнопки → низ героя | 16 | **0** dp |
-| высота нижнего ряда | 116 | **117** dp |
+| высота нижнего ряда | 116 | **122** dp |
 | поле над сезонами | 8 | **0** dp |
 | ширина кадра | 56.25 | **65.5** % |
 | край подложки | 15 | **10** % кадра |
@@ -50,37 +51,80 @@ than parameterised again.
 | рейтинги → фишки | 8 | **3** dp |
 | фишки → описание | 10 | **3** dp |
 | ширина описания | 450 | **590** dp |
-| кегль описания | 13 | **10** sp |
-| интерлиньяж описания | 19 | **13** sp |
-| минимум высоты описания | 57 | **126** dp |
-| описание → строки | 9 | **16** dp |
-| кегль строк фактов | 11 | **8** sp |
-| ширина строки фактов | 550 | **590** dp |
+| кегль описания | 13 | **13** sp |
+| интерлиньяж описания | 19 | **18** sp |
+| минимум высоты описания | 57 | **110** dp |
+| описание → строки | 9 | **13** dp |
+| кегль строк фактов | 11 | **9** sp |
+| интерлиньяж строк фактов | — | **13** sp |
+| ширина строки фактов | 550 | **940** dp |
 | непрозрачность строк | 72 | **70** % |
-| высота кнопки | 24 | **23** dp |
-| поле внутри кнопки | 17 | **11** dp |
+| высота кнопки | 24 | **30** dp |
+| поле внутри кнопки | 17 | **15** dp |
 | иконка кнопки | 17 | **15** dp |
-| кегль подписи | 11 | **8** sp |
-| кнопки → подпись | 14 | **15** dp |
-| высота чипа сезона | 22 | **26** dp |
+| кегль кнопки | — | **11** sp |
+| кегль подписи | 11 | **10** sp |
+| кнопки → подпись | 14 | **5** dp |
+| высота чипа сезона | 22 | **20** dp |
+| поле внутри чипа | — | **15** dp |
 | кегль чипа сезона | 12 | **10** sp |
 | между чипами сезонов | 8 | **5** dp |
 | чипы → подпись | 6 | **12** dp |
 | чипы → карточки | 8 | **4** dp |
-| высота карточки | 70 | **80** dp |
-| между карточками | 16 | **15** dp |
+| высота карточки | 70 | **92** dp |
+| между карточками | 16 | **5** dp |
+| кегль названия карточки | 14 | **8** sp |
+| интерлиньяж в карточке | 20 | **14** sp |
+| место строки «Дорожек» | 0 | **95** % свободного |
 
 Zero page edges and 11 dp at the left put the screen nearer the edge than Google's 48 dp TV
 safe zone allows — the same call the player's overlay makes, and deliberate. Not a mistake to be
 quietly reverted.
 
-The measured result, taken off the stand's own DOM in dp: hero 423 tall from y 0, media
-628.8 × 423 at x 331.2, the still 628.8 × 353.7 centred at y 34.65, plot 590 wide and 126 tall,
-facts 590 wide, the rail 117 tall from y 423 to the bottom edge at 540, cards 142.22 × 80.
+The measured result, taken off the stand's own DOM in dp: hero 418 tall from y 0, media
+628.8 × 418 at x 331.2, plot 590 wide and 110 tall, facts 940 wide, the rail 122 tall from y 418
+to the bottom edge at 540, cards 163.56 × 92.
 
-Widening the plot to 590 dp and the facts lines with it puts both 270 dp under the picture; the
-scrim was opened up in the same breath — 10 % of the frame at half alpha, clear by half — so the
-text sits on a gradient rather than on a black panel with a seam.
+Widening the plot to 590 dp puts it 270 dp under the picture; the scrim was opened up in the same
+breath — 10 % of the frame at half alpha, clear by half — so the text sits on a gradient rather
+than on a black panel with a seam. The fact lines then went to 940 dp, which is past the scrim
+entirely: a full line ends at 951 dp, 98 % across the frame, on bare picture. That buys the whole
+cast instead of the first four names, and it is the one place on the screen where legibility
+depends on the still.
+
+**`RAIL_HEIGHT` is sized off what the rail holds, not off a round number.** The card went
+80 → 92 dp, and the row inside the rail then measured 26 (season chip) + 4 (gap) + 92 = 122,
+against the 117 the rail had. That would not have clipped: the rail is a fixed-height `Column`,
+and a card's `Modifier.height` is bounded by the constraints it is handed, so a 92 dp card in an
+87 dp remainder comes out 87 dp — the dial above 87 would simply have done nothing, silently. The
+rail went to 122 and the hero gave up the 5 dp, which it has. The stand models the same clamp, so
+the card slider reports what it can actually reach rather than what was asked for.
+
+The season chip then came down to 20 dp, which does *not* take the rail with it: the summary
+beside the chips names only a font size, inherits `bodyLarge`'s 24 sp line, and floors that row at
+24. The sum is 24 + 4 + 92 = 120 and `RAIL_HEIGHT` keeps 2 dp over. Dialling the chip below 24
+makes the chips smaller and the row no shorter.
+
+**Where the fact lines sit is now a share, not a place in the column.** The single
+`Spacer(weight(1F))` under them became two — `HERO_FACTS_ABOVE` = 0.84 above the lines and the
+remaining 0.16 below. Both shares are cut from the spacer's half of the remainder, which does not
+move with the length of the description, so the lines hang the same fixed gap above the action row
+on every item instead of sitting straight under the plot. The two still weigh 1F between them,
+which is what keeps `PlotBlock`'s half intact: a third weighted child at full weight would have
+cut the plot to a third of the remainder.
+
+It places the lines; it does not pin them. A short description still lifts the lines and the
+action row together, because `weight(1F, fill = false)` hands back nothing of the half the plot
+did not use — the open item below, unchanged by this. The stand
+carries a slider per line (**место: дорожки / режиссёр / в ролях**), each a share of what the
+line above it did not take, so the three can be spread; the code needs only the first, the other
+two being zero.
+
+**The episode caption is passed in, not themed.** `VideoItemHorizontal` gained a `titleStyle`
+parameter the way it already had `titleMaxLines`, and the details rail hands it `titleSmall` at
+8 sp on a 14 sp line. Both halves matter: `titleSmall` names a 20 sp line, so the font size alone
+would have left the caption in a box two thirds taller than its letters. Retuning `Typography`
+was not an option — `CollectionCard` and the vertical card read the same style.
 
 ## Measured on the television
 
@@ -129,30 +173,40 @@ this pass.
 every `Text` here that names only a `fontSize` inherits that line height — the resume caption, the
 season summary, the «Похожее» label, the fact chips. Not the button label or the season chip's
 number: `Button` wraps its content in `ProvideTextStyle(typography.labelLarge)`, so those two take
-`labelLarge`'s line box instead. It costs nothing where the box
-is fixed and taller, but the action row is now `max(BUTTON_HEIGHT 23, 24) = 24 dp`: the resume
-caption, not the button, sets its height. The stand models this. Naming a line height on those
-texts would settle it.
+`labelLarge`'s line box instead. It costs nothing where the box is fixed and taller, and the
+action row is no longer one of those places — at `BUTTON_HEIGHT` 30 dp the button sets the row's
+height again, where at 23 it was the resume caption's inherited 24 that did. The season chip row
+is where it still bites: `max(SEASON_CHIP_HEIGHT 20, 24) = 24`. The stand models both. Naming a
+line height on those texts would settle it.
 
 **The action row is not pinned to the bottom.** `PlotBlock` takes `weight(1F, fill = false)` and
 the spacer under the facts takes `weight(1F)`. Compose splits the remaining height in half and a
 non-filling child does not hand back what it does not use, so the buttons rise by whatever the
 plot left over — up to one text line. With `HERO_BOTTOM` now 0 dp, Укрытие's row still ends 8 dp
 short of the hero's own bottom, and the amount moves with the length of the plot. That is exactly
-what «pinned, not flowed» is meant to prevent. The `PLOT_MIN_HEIGHT` of 126 dp holds most items
-still, which is why it was raised; it is a floor, not a fix. The switch **низ героя → прижать
+what «pinned, not flowed» is meant to prevent. The `PLOT_MIN_HEIGHT` of 110 dp holds most items
+still, which is why it is there at all; it is a floor, not a fix. The switch **низ героя → прижать
 кнопки к низу** shows the alternative.
 
-**The facts, director and cast lines are one line each with an ellipsis.** `HERO_LINE_WIDTH` is
-590 dp and `maxLines = 1`. Укрытие's cast is 15 names; Аполлон 13's facts line carries four dub
-credits before the track and subtitle counts. The API returns all of it. The switch **строки
-фактов** offers two lines, or the whole thing wrapped; both take their height out of the plot's
-share.
+**The facts, director and cast lines are still one line each with an ellipsis.**
+`HERO_LINE_WIDTH` went 590 → 940 dp, which is most of what the screen has left of `SIDE_EDGE`, so
+Укрытие's 17-name cast and Аполлон 13's four dub credits fit where they did not. But `maxLines`
+is still 1, and a longer list still ends in an ellipsis with nowhere left to widen to. The switch
+**строки фактов** offers two lines, or the whole thing wrapped; both take their height out of the
+plot's share.
 
-**A film's rail is 117 dp of nothing.** `similarItems` was empty for every film in the device's
+**The player's episodes panel now carries a visibly bigger caption than the details rail.**
+`EpisodesPanel` measures its card off the width it has — (960 − 18 × 2 − 18 × 4) / 5 × 9/16 =
+95.85 dp — so it is within 4 dp of the details rail's 92 dp card, and it takes `titleStyle` as it
+comes: 14 sp on a 20 sp line against the rail's 8 on 14. Nothing here changed it; the two simply
+never agreed, and shrinking one of them made the disagreement visible. The panel was never dialled
+on a stand, so it was left alone.
+
+**A film's rail is 122 dp of nothing.** `similarItems` was empty for every film in the device's
 cache — the API returned none — so `DetailsRail` falls to its `else -> Box(modifier)` branch and
-the screen ends in an empty band. The **похожее** option fills the rail with real cards from the
-same cache so the row can be judged; the **пусто** option is what the television shows today.
+the screen ends in an empty band, five dp wider than before. The **похожее** option fills the
+rail with real cards from the same cache so the row can be judged; the **пусто** option is what
+the television shows today.
 
 Also open:
 
