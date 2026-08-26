@@ -1,0 +1,561 @@
+<title>Пульт плеера</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#0B0A0E;
+  --panel:#141118;
+  --panel2:#1B1722;
+  --line:#2B2534;
+  --line-soft:#211C29;
+  --text:#E7E3EC;
+  --dim:#948CA3;
+  --dimmer:#6A637A;
+  --accent:#D0BCFF;
+  --warm:#FFC178;
+
+  /* PuberTheme, verbatim */
+  --p-primary:#D0BCFF;
+  --p-onsurface:#E6E0E9;
+  --p-surfacevariant:#49454F;
+  --p-onsurfacevariant:#CAC4D0;
+
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --roboto:"Roboto","Helvetica Neue",Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── chrome ───────────────────────────────────────────────── */
+.top{
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+  padding:18px 24px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#17131F 0%,var(--panel) 100%);
+}
+.top h1{
+  margin:0;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+}
+.top .sub{color:var(--dim);font-size:12.5px;max-width:62ch}
+.readout{
+  margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim);
+  white-space:nowrap;
+}
+.readout b{color:var(--accent);font-weight:500}
+
+.switches{
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+  padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.seg{display:flex;align-items:center;gap:8px}
+.seg > span{
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dimmer);
+}
+.seg .opts{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:5px 11px;cursor:pointer;
+  border-right:1px solid var(--line);
+}
+.seg .opts button:last-child{border-right:0}
+.seg button:hover{color:var(--text);background:var(--panel2)}
+.seg button[aria-pressed="true"]{background:#2C2338;color:var(--accent)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* ── stage ────────────────────────────────────────────────── */
+.scope{
+  padding:22px 24px;
+  background:
+    linear-gradient(180deg,#0E0C12 0%,var(--ground) 100%);
+  border-bottom:1px solid var(--line);
+}
+.stagewrap{position:relative;margin:0 auto;overflow:hidden;border:1px solid var(--line);}
+.stage{
+  position:absolute;top:0;left:0;width:1920px;height:1080px;
+  transform-origin:top left;background:#000;overflow:hidden;
+  font-family:var(--roboto);
+}
+.stage .backdrop{position:absolute;inset:0;width:1920px;height:1080px;object-fit:cover;display:block}
+.stage .void{position:absolute;inset:0;background:#000}
+.scrim{position:absolute;inset:0;pointer-events:none}
+
+.ptitle{position:absolute;left:0;right:0;top:0;color:var(--p-onsurface)}
+.ptitle .t{font-weight:400;line-height:1.2}
+.ptitle .s{color:rgba(230,224,233,.7);line-height:1.3}
+
+.pbottom{position:absolute;left:0;right:0;bottom:0}
+.prow{display:flex;align-items:center}
+.ptime{font-variant-numeric:tabular-nums;white-space:nowrap}
+.ptime.cur{color:var(--p-primary)}
+.ptime.rem{color:var(--p-onsurface)}
+.ptrack{position:relative;flex:1;display:flex;align-items:center}
+.ptrack .bg,.ptrack .buf,.ptrack .played{position:absolute;left:0}
+.pthumb{position:absolute;border-radius:50%;background:var(--p-primary)}
+
+.brow{display:flex;align-items:center}
+.bsec{display:flex;align-items:center}
+.pill{
+  appearance:none;border:0;padding:0;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  flex:none;transition:background-color .12s linear;
+}
+.pill svg{display:block}
+.pill:focus-visible{outline:none}
+
+.guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono)}
+.guides .v{position:absolute;top:0;bottom:0;width:2px}
+.guides .h{position:absolute;left:0;right:0;height:2px}
+.guides .lab{
+  position:absolute;font-size:19px;padding:3px 7px;border-radius:3px;
+  background:rgba(11,10,14,.82);white-space:nowrap;letter-spacing:.04em;
+}
+
+/* ── console ──────────────────────────────────────────────── */
+.console{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));
+  gap:0;border-top:1px solid var(--line);
+}
+.group{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 20px 18px}
+.group > h2{
+  margin:0 0 12px;font-size:10.5px;font-weight:600;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dimmer);
+}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin-bottom:11px;align-items:center}
+.ctl .name{font-size:12.5px;color:var(--dim)}
+.ctl .val{
+  font-family:var(--mono);font-size:12.5px;color:var(--text);
+  font-variant-numeric:tabular-nums;text-align:right;
+}
+.ctl .val.changed{color:var(--warm)}
+.ctl .val .was{color:var(--dimmer);font-size:11px}
+.ctl input[type=range]{grid-column:1 / -1;width:100%;margin:2px 0 0}
+.ctl .note{grid-column:1 / -1;font-size:11px;color:var(--dimmer);margin-top:-1px}
+
+input[type=range]{
+  appearance:none;height:18px;background:transparent;cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{
+  appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);
+  margin-top:-5px;border:0;
+}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.foot{padding:18px 24px 40px;display:grid;gap:14px}
+.foot h2{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.spec{
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--dim);
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:14px 16px;overflow-x:auto;white-space:pre;
+}
+.spec b{color:var(--warm);font-weight:500}
+.hint{font-size:12px;color:var(--dimmer);max-width:78ch}
+.hint kbd{
+  font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:3px;padding:1px 5px;color:var(--dim);
+}
+.reset{
+  appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:6px 14px;border-radius:3px;cursor:pointer;
+  justify-self:start;
+}
+.reset:hover{color:var(--text);border-color:var(--accent)}
+.reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="top">
+  <h1>Пульт плеера</h1>
+  <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 с кадрами, снятыми с KM6. Открывается на зафиксированных значениях — они уже перенесены в PlayerControlsMetrics.kt; серым рядом — что было до правки.</div>
+  <div class="readout" id="scaleOut"></div>
+</div>
+
+<div class="switches" id="switches"></div>
+
+<div class="scope">
+  <div class="stagewrap" id="stagewrap"><div class="stage" id="stage"></div></div>
+</div>
+
+<div class="console" id="console"></div>
+
+<div class="foot">
+  <h2>Что уехало в Compose</h2>
+  <div class="spec" id="spec"></div>
+  <div class="hint">
+    <kbd>←</kbd> <kbd>→</kbd> — фокус по кнопкам, <kbd>↑</kbd> <kbd>↓</kbd> — между полосой и рядом кнопок.
+    Так видно путь пульта до того, как он написан в коде. Кликните по стенду, чтобы он начал ловить стрелки.
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="reset" id="reset">Вернуть зафиксированные</button>
+    <button class="reset" id="asShipped">Показать, как было до правки</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const BACKDROPS = {
+  fill:   "__ASSET:fill.jpg__",
+  letterbox: "__ASSET:letterbox.jpg__",
+  black:  null,
+};
+
+/* What the build carried before this pass, measured off the television on 2026-08-26. */
+const BEFORE = {
+  side:48, bottom:16, gapAbove:24,
+  btnH:44, btnW:58, btnGap:12, icon:20, playIcon:24, radius:50,
+  container:4, focus:32,
+  trackH:4, thumb:12, trackHFoc:4, thumbFoc:12, labelGap:12, timeSp:14,
+  titleSp:28, subSp:16, titleTop:28,
+  scrimTop:55, scrimBottom:60,
+};
+
+/* Dialled and agreed on 2026-08-26. This is what PlayerControlsMetrics.kt now carries. */
+const AGREED = {
+  side:20, bottom:10, gapAbove:20,
+  btnH:25, btnW:30, btnGap:5, icon:15, playIcon:20, radius:50,
+  container:3, focus:20,
+  trackH:3, thumb:10, trackHFoc:4, thumbFoc:12, labelGap:5, timeSp:10,
+  titleSp:20, subSp:10, titleTop:10,
+  scrimTop:55, scrimBottom:60,
+};
+
+const CONTROLS = [
+  {g:"Кнопки", k:"btnH",     n:"высота пилюли",        min:20, max:56, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnW",     n:"ширина пилюли",        min:20, max:80, step:1, u:"dp"},
+  {g:"Кнопки", k:"radius",   n:"скругление",           min:4,  max:50, step:1, u:"%"},
+  {g:"Кнопки", k:"btnGap",   n:"зазор между кнопками", min:0,  max:28, step:1, u:"dp"},
+  {g:"Кнопки", k:"icon",     n:"иконка",               min:10, max:32, step:1, u:"dp"},
+  {g:"Кнопки", k:"playIcon", n:"иконка play/pause",    min:10, max:36, step:1, u:"dp"},
+  {g:"Кнопки", k:"container",n:"фон кнопки",           min:0,  max:30, step:1, u:"% alpha"},
+  {g:"Кнопки", k:"focus",    n:"фон в фокусе",         min:8,  max:100,step:1, u:"% alpha"},
+
+  {g:"Полоса", k:"trackH",   n:"высота трека",         min:1,  max:12, step:1, u:"dp"},
+  {g:"Полоса", k:"thumb",    n:"бегунок",              min:4,  max:24, step:1, u:"dp"},
+  {g:"Полоса", k:"trackHFoc",n:"трек в фокусе",        min:1,  max:16, step:1, u:"dp", note:"сейчас фокус на полосе ничем не показан"},
+  {g:"Полоса", k:"thumbFoc", n:"бегунок в фокусе",     min:4,  max:32, step:1, u:"dp"},
+  {g:"Полоса", k:"timeSp",   n:"кегль времени",        min:8,  max:20, step:1, u:"sp"},
+  {g:"Полоса", k:"labelGap", n:"время ↔ трек",         min:0,  max:28, step:1, u:"dp"},
+
+  {g:"Поля",   k:"side",     n:"поле слева и справа",  min:4,  max:72, step:1, u:"dp", note:"48 dp — безопасная зона Google; в этом форке принято ближе к краю"},
+  {g:"Поля",   k:"bottom",   n:"поле снизу",           min:2,  max:48, step:1, u:"dp"},
+  {g:"Поля",   k:"gapAbove", n:"центр трека → кнопки", min:8,  max:64, step:1, u:"dp"},
+
+  {g:"Заголовок и подложка", k:"titleSp",  n:"кегль названия",   min:14, max:40, step:1, u:"sp"},
+  {g:"Заголовок и подложка", k:"subSp",    n:"кегль подзаголовка",min:9, max:24, step:1, u:"sp"},
+  {g:"Заголовок и подложка", k:"titleTop", n:"поле сверху",      min:4,  max:64, step:1, u:"dp"},
+  {g:"Заголовок и подложка", k:"scrimTop", n:"затемнение сверху",min:0,  max:100,step:1, u:"%"},
+  {g:"Заголовок и подложка", k:"scrimBottom",n:"затемнение снизу",min:0, max:100,step:1, u:"%"},
+];
+
+const SWITCHES = [
+  {k:"layout", n:"макет", opts:[["a","как сейчас"],["b","одной группой слева"],["c","одной группой по центру"]]},
+  {k:"bg",     n:"кадр",  opts:[["fill","во весь экран"],["letterbox","с чёрными полями"],["black","без картинки"]]},
+  {k:"right",  n:"правая группа", opts:[["two","настройки + о фильме"],["one","только настройки"],["three","три, как сейчас"]]},
+  {k:"kind",   n:"что играет", opts:[["serial","серия"],["movie","фильм"]]},
+  {k:"eye",    n:"«просмотрено»", opts:[["on","есть"],["off","нет"]]},
+  {k:"guides", n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
+];
+
+const ICONS = {
+  episodes:"M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z",
+  prev:"M6 6h2v12H6zm3.5 6l8.5 6V6z",
+  next:"M6 18l8.5-6L6 6zM16 6v12h2V6z",
+  play:"M8 5v14l11-7z",
+  pause:"M6 19h4V5H6zm8-14v14h4V5z",
+  subs:"M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4zm10 6H4v-2h10zm6 0h-4v-2h4zm0-4H10v-2h10z",
+  video:"M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11z",
+  info:"M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z",
+  gear:"M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+  eye:"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z",
+};
+
+const S = {
+  ...AGREED,
+  layout:"a", bg:"fill", kind:"serial", eye:"on", guides:"off", right:"two",
+  focused:"play",
+  position:0.34,      /* where the playhead sits, for judging the track */
+  buffered:0.52,
+};
+
+/* Every size on the stage goes through here: dp in, device px out, clamped. */
+function geom(){
+  const g = {};
+  for (const c of CONTROLS){
+    g[c.k] = Math.min(c.max, Math.max(c.min, Number(S[c.k])));
+  }
+  g.px = dp => dp * 2;                       /* density 2.0 */
+  g.timeLine = Math.round(g.timeSp * 1.43);  /* bodyMedium line height */
+  g.rowH = Math.max(g.timeLine, g.thumb, g.thumbFoc);
+  g.gapRows = Math.max(0, g.gapAbove - g.rowH / 2);
+  return g;
+}
+
+/* ── the button list, in the order the remote walks it ─────── */
+function buttons(){
+  const serial = S.kind === "serial";
+  const legacy = S.right === "three";
+  const out = [];
+
+  /* Слева — то, что про содержание. */
+  if (serial) out.push({id:"episodes", icon:"episodes", sec:"left", label:"Серии"});
+  if (!legacy && S.right === "two"){
+    out.push({id:"about", icon:"info", sec:"left", label: serial ? "О сериале" : "О фильме"});
+  }
+  if (!legacy && S.eye === "on"){
+    out.push({id:"eye", icon:"eye", sec:"left", label:"Просмотрено"});
+  }
+
+  /* По центру — транспорт. */
+  if (serial) out.push({id:"prev", icon:"prev", sec:"mid", label:"Предыдущая"});
+  out.push({id:"play", icon:"pause", sec:"mid", label:"Пауза", big:true});
+  if (serial) out.push({id:"next", icon:"next", sec:"mid", label:"Следующая"});
+
+  /* Справа — то, что про воспроизведение. */
+  if (legacy){
+    out.push({id:"subs",  icon:"subs",  sec:"right", label:"Звук и субтитры"});
+    out.push({id:"video", icon:"video", sec:"right", label:"Видео"});
+    out.push({id:"info",  icon:"info",  sec:"right", label:"О потоке"});
+    if (S.eye === "on") out.push({id:"eye", icon:"eye", sec:"right", label:"Просмотрено"});
+  } else {
+    out.push({id:"settings", icon:"gear", sec:"right", label:"Настройки"});
+  }
+  return out;
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function pillHTML(b, g){
+  const focused = S.focused === b.id;
+  const bg = focused
+    ? `rgba(230,224,233,${(g.focus/100).toFixed(3)})`
+    : `rgba(230,224,233,${(g.container/100).toFixed(3)})`;
+  const fg = focused ? "#E6E0E9" : "rgba(230,224,233,.90)";
+  const size = g.px(b.big ? g.playIcon : g.icon);
+  return `<button class="pill" data-id="${b.id}" aria-label="${esc(b.label)}"
+    style="width:${g.px(g.btnW)}px;height:${g.px(g.btnH)}px;border-radius:${g.radius}%;
+           background:${bg};color:${fg}">
+    <svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="currentColor" aria-hidden="true"><path d="${ICONS[b.icon]}"/></svg>
+  </button>`;
+}
+
+function rowHTML(g){
+  const bs = buttons();
+  const gap = `gap:${g.px(g.btnGap)}px`;
+  if (S.layout === "a"){
+    const sec = k => bs.filter(b => b.sec === k).map(b => pillHTML(b, g)).join("");
+    return `<div class="brow" style="${gap}">
+      <div class="bsec" style="flex:1;justify-content:flex-start;${gap}">${sec("left")}</div>
+      <div class="bsec" style="flex:1;justify-content:center;${gap}">${sec("mid")}</div>
+      <div class="bsec" style="flex:1;justify-content:flex-end;${gap}">${sec("right")}</div>
+    </div>`;
+  }
+  const justify = S.layout === "b" ? "flex-start" : "center";
+  return `<div class="brow" style="${gap};justify-content:${justify}">${bs.map(b => pillHTML(b, g)).join("")}</div>`;
+}
+
+function progressHTML(g){
+  const focused = S.focused === "seek";
+  const h  = g.px(focused ? g.trackHFoc : g.trackH);
+  const th = g.px(focused ? g.thumbFoc  : g.thumb);
+  const r  = h / 2;
+  return `<div class="prow" style="gap:${g.px(g.labelGap)}px;height:${g.px(g.rowH)}px">
+    <div class="ptime cur" style="font-size:${g.px(g.timeSp)}px">14:52</div>
+    <div class="ptrack" data-id="seek" style="height:${g.px(g.rowH)}px">
+      <div class="bg"    style="width:100%;height:${h}px;border-radius:${r}px;background:rgba(73,69,79,.5)"></div>
+      <div class="buf"   style="width:${(S.buffered*100).toFixed(2)}%;height:${h}px;border-radius:${r}px;background:rgba(202,196,208,.5)"></div>
+      <div class="played" style="width:${(S.position*100).toFixed(2)}%;height:${h}px;border-radius:${r}px;background:var(--p-primary)"></div>
+      <div class="pthumb" style="left:calc(${(S.position*100).toFixed(2)}% - ${th/2}px);width:${th}px;height:${th}px"></div>
+    </div>
+    <div class="ptime rem" style="font-size:${g.px(g.timeSp)}px">-29:54</div>
+  </div>`;
+}
+
+function guidesHTML(g){
+  if (S.guides !== "on") return "";
+  const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
+  const side = g.px(g.side), bottom = g.px(g.bottom);
+  const btnTop = 1080 - bottom - g.px(g.btnH);
+  const trackY = btnTop - g.px(g.gapAbove);
+  return `<div class="guides">
+    <div class="v" style="left:${side-1}px;background:${A}"></div>
+    <div class="v" style="right:${side-1}px;background:${A}"></div>
+    <div class="v" style="left:96px;background:${C}"></div>
+    <div class="v" style="right:96px;background:${C}"></div>
+    <div class="v" style="left:959px;background:${C}"></div>
+    <div class="h" style="top:${trackY-1}px;background:${B}"></div>
+    <div class="h" style="top:${btnTop-1}px;background:${A}"></div>
+    <div class="h" style="bottom:${bottom-1}px;background:${A}"></div>
+    <div class="lab" style="left:${side+10}px;top:${trackY+12}px;color:${B}">центр трека · ${g.gapAbove} dp до кнопок</div>
+    <div class="lab" style="left:${side+10}px;top:${btnTop+12}px;color:${A}">кнопки ${g.btnW}×${g.btnH} dp</div>
+    <div class="lab" style="left:${side+10}px;bottom:${bottom+10}px;color:${A}">поле ${g.side} / ${g.bottom} dp</div>
+    <div class="lab" style="left:106px;top:220px;color:${C}">безопасная зона 48 dp</div>
+  </div>`;
+}
+
+function render(){
+  const g = geom();
+  const st = document.getElementById("stage");
+  const src = BACKDROPS[S.bg];
+  const scrim = `linear-gradient(180deg,
+      rgba(0,0,0,${(g.scrimTop/100).toFixed(3)}) 0%,
+      rgba(0,0,0,0) 33%, rgba(0,0,0,0) 66%,
+      rgba(0,0,0,${(g.scrimBottom/100).toFixed(3)}) 100%)`;
+
+  st.innerHTML =
+    (src ? `<img class="backdrop" src="${src}" alt="">` : `<div class="void"></div>`) +
+    `<div class="scrim" style="background:${scrim}"></div>` +
+    `<div class="ptitle" style="padding:${g.px(g.titleTop)}px ${g.px(g.side)}px 0">
+       <div class="t" style="font-size:${g.px(g.titleSp)}px">Лаки / Lucky</div>
+       <div class="s" style="font-size:${g.px(g.subSp)}px;margin-top:8px">1 сезон, 3 серия, Оцени обстановку</div>
+     </div>` +
+    `<div class="pbottom" style="padding:0 ${g.px(g.side)}px ${g.px(g.bottom)}px">
+       ${progressHTML(g)}
+       <div style="height:${g.px(g.gapRows)}px"></div>
+       ${rowHTML(g)}
+     </div>` +
+    guidesHTML(g);
+
+  st.querySelectorAll("[data-id]").forEach(el => {
+    el.addEventListener("click", ev => { ev.preventDefault(); S.focused = el.dataset.id; render(); });
+  });
+
+  paintConsole(g);
+  paintSpec(g);
+}
+
+/* ── console ──────────────────────────────────────────────── */
+function paintSwitches(){
+  const host = document.getElementById("switches");
+  host.innerHTML = SWITCHES.map(s => `<div class="seg"><span>${s.n}</span><div class="opts">` +
+    s.opts.map(([v,l]) => `<button data-sw="${s.k}" data-v="${v}" aria-pressed="${S[s.k]===v}">${l}</button>`).join("") +
+    `</div></div>`).join("");
+  host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    S[b.dataset.sw] = b.dataset.v;
+    const ids = buttons().map(x => x.id);
+    if (S.focused !== "seek" && !ids.includes(S.focused)) S.focused = ids[0];
+    paintSwitches(); render();
+  }));
+}
+
+function buildConsole(){
+  const host = document.getElementById("console");
+  const groups = [...new Set(CONTROLS.map(c => c.g))];
+  host.innerHTML = groups.map(gn => `<div class="group"><h2>${gn}</h2>` +
+    CONTROLS.filter(c => c.g === gn).map(c => `
+      <div class="ctl">
+        <div class="name">${c.n}</div>
+        <div class="val" id="val-${c.k}"></div>
+        <input type="range" id="in-${c.k}" min="${c.min}" max="${c.max}" step="${c.step}"
+               value="${S[c.k]}" aria-label="${esc(c.n)}">
+        ${c.note ? `<div class="note">${c.note}</div>` : ""}
+      </div>`).join("") + `</div>`).join("");
+  for (const c of CONTROLS){
+    document.getElementById("in-" + c.k).addEventListener("input", e => {
+      S[c.k] = Number(e.target.value); render();
+    });
+  }
+}
+
+function paintConsole(g){
+  for (const c of CONTROLS){
+    const el = document.getElementById("val-" + c.k);
+    const applied = g[c.k];
+    /* Amber means you have moved off the agreed value, not off the shipped one. */
+    el.className = "val" + (applied !== AGREED[c.k] ? " changed" : "");
+    el.innerHTML = `${applied}&thinsp;${c.u}` +
+      (applied !== BEFORE[c.k] ? ` <span class="was">было ${BEFORE[c.k]}</span>` : "");
+    const inp = document.getElementById("in-" + c.k);
+    if (Number(inp.value) !== applied) inp.value = applied;
+  }
+}
+
+function paintSpec(g){
+  const rows = CONTROLS.filter(c => g[c.k] !== BEFORE[c.k])
+    .map(c => `  ${c.n.padEnd(24," ")} ${String(BEFORE[c.k]).padStart(3)} → <b>${String(g[c.k]).padStart(3)}</b> ${c.u}`);
+  const layoutName = SWITCHES.find(s => s.k === "layout").opts.find(o => o[0] === S.layout)[1];
+  const layoutLine = S.layout === "a"
+    ? "макет: как сейчас — три секции по weight(1f)"
+    : `макет: <b>${layoutName}</b> — один Row, PlayerButtonRow.kt переписывается`;
+  const rightLine = {
+    three: "правая группа: как сейчас — три кнопки на одну и ту же панель, глаз там же",
+    two:   "правая группа: <b>настройки + о фильме</b> — ActivePanel.AudioSubtitles/VideoSettings\n" +
+           "                  схлопываются в одну, Info переопределяется под описание,\n" +
+           "                  диагностика потока остаётся дверью «Поток» внутри настроек\n" +
+           "  группировка:   <b>по смыслу</b> — слева содержание (серии, о фильме, просмотрено),\n" +
+           "                  по центру транспорт, справа одни настройки",
+    one:   "правая группа: <b>только настройки</b> — описание в плеере не показывается,\n" +
+           "                  ActivePanel.Info остаётся дверью «Поток» внутри настроек\n" +
+           "  группировка:   <b>по смыслу</b> — слева содержание (серии, просмотрено),\n" +
+           "                  по центру транспорт, справа одни настройки",
+  }[S.right];
+  document.getElementById("spec").innerHTML =
+    (rows.length ? rows.join("\n") : "  пока ничего не изменено") +
+    "\n\n  " + layoutLine + "\n  " + rightLine;
+}
+
+/* ── remote ───────────────────────────────────────────────── */
+function move(dir){
+  const ids = buttons().map(b => b.id);
+  if (S.focused === "seek"){
+    /* firstButtonFocusRequester в коде висит на play/pause, каким бы ни был макет. */
+    if (dir === "down") S.focused = ids.includes("play") ? "play" : ids[0];
+    return;
+  }
+  const i = ids.indexOf(S.focused);
+  if (dir === "up") S.focused = "seek";
+  if (dir === "left"  && i > 0) S.focused = ids[i-1];
+  if (dir === "right" && i < ids.length-1) S.focused = ids[i+1];
+}
+
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "SELECT")) return;
+  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down"};
+  if (!map[e.key]) return;
+  e.preventDefault();
+  move(map[e.key]);
+  render();
+});
+
+/* ── fit ──────────────────────────────────────────────────── */
+function fit(){
+  const wrap = document.getElementById("stagewrap");
+  const avail = wrap.parentElement.clientWidth - 48;
+  const scale = Math.min(1, avail / 1920);
+  wrap.style.width  = Math.round(1920 * scale) + "px";
+  wrap.style.height = Math.round(1080 * scale) + "px";
+  document.getElementById("stage").style.transform = `scale(${scale})`;
+  document.getElementById("scaleOut").innerHTML =
+    `масштаб <b>${scale.toFixed(3)}×</b> · 1 dp = 2 px на устройстве · KM6 1920×1080 @ 320 dpi`;
+}
+window.addEventListener("resize", fit);
+
+function applyPreset(preset){
+  Object.assign(S, preset);
+  for (const c of CONTROLS) document.getElementById("in-" + c.k).value = preset[c.k];
+  render();
+}
+document.getElementById("reset").addEventListener("click", () => applyPreset(AGREED));
+document.getElementById("asShipped").addEventListener("click", () => applyPreset(BEFORE));
+
+paintSwitches();
+buildConsole();
+fit();
+render();
+</script>
