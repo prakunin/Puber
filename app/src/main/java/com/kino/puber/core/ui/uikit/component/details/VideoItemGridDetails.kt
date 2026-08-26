@@ -96,7 +96,7 @@ data class MediaScrim(
             endFraction = ScrimEndFraction,
         )
 
-        val Details = MediaScrim(edgeFraction = 0.15F, alphaAtEdge = 0.72F, endFraction = 0.36F)
+        val Details = MediaScrim(edgeFraction = 0.10F, alphaAtEdge = 0.50F, endFraction = 0.50F)
     }
 }
 

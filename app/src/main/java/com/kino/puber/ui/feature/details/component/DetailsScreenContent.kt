@@ -783,29 +783,53 @@ private fun SkeletonBar(
 // region Sizes
 // Taken from the 1920 x 1080 screen emulator and divided by two: a 1080p television is density 2.0.
 
-/** How far the page stands off the top and bottom edges of the screen. */
-private val PAGE_EDGE = 16.dp
-private val SIDE_EDGE = 8.dp
-private val HERO_TOP = 8.dp
-private val HERO_BOTTOM = 16.dp
-private val RAIL_HEIGHT = 116.dp
+/**
+ * How far the page stands off the top and bottom edges of the screen. Zero on purpose: the hero
+ * starts at the physical top edge and the rail ends at the physical bottom one.
+ *
+ * That is further out than anything else in the fork -- the player's overlay still keeps
+ * 10 dp top and bottom and 20 dp at the sides -- and well outside Google's 48 dp TV safe zone,
+ * which exists because a television may overscan. It was dialled on the stand and chosen with
+ * that known; it is not a default that leaked in, and not a mistake to be quietly reverted.
+ */
+private val PAGE_EDGE = 0.dp
+private val SIDE_EDGE = 11.dp
+private val HERO_TOP = 0.dp
+private val HERO_BOTTOM = 0.dp
+private val RAIL_HEIGHT = 117.dp
 
-/** 1080 of 1920. Narrower than the catalogue's still, because the text column here is narrower. */
-private const val MEDIA_WIDTH_FRACTION = 0.5625F
-private val RAIL_TOP = 8.dp
+/**
+ * 1258 of 1920. Still narrower than the catalogue's 0.75, but the hero's text no longer stands
+ * beside the picture: the plot and the fact lines run 270 dp under it, over
+ * [MediaScrim.Details] rather than over a margin.
+ *
+ * The scrim does not cover the whole run. A line ending at 601 dp sits 43 % across the frame,
+ * where the ramp is already down to about 0.09 alpha -- the previous 550 dp line ended at 26 %
+ * of a narrower frame and still had 0.36 behind it. Long fact lines end on nearly bare
+ * picture, which is fine on a dark still and has not been judged on a bright one.
+ */
+private const val MEDIA_WIDTH_FRACTION = 0.655F
+private val RAIL_TOP = 0.dp
 
-private val TITLE_SIZE = 24.sp
-private val TITLE_ORIGINAL_SIZE = 14.sp
-private val TITLE_LINE = 28.sp
-private val TITLE_ORIGINAL_BASELINE = 2.dp
+private val TITLE_SIZE = 28.sp
+private val TITLE_ORIGINAL_SIZE = 15.sp
+
+/**
+ * Not below the font's own line. Roboto-Medium on the television reports ascent 1900 and
+ * descent -500 on a 2048 unit em -- 1.1719 em, so 32.8 sp at a 28 sp title. The 25 sp this was
+ * dialled to left the box 7.8 sp short, and a Cyrillic descender (у, р, ф, д) reaches 6.8 sp
+ * below the baseline: it would either be cut or land in the ratings row 4 dp under it.
+ */
+private val TITLE_LINE = 33.sp
+private val TITLE_ORIGINAL_BASELINE = 4.dp
 private val GAP_TITLE_PARTS = 10.dp
 
-private val GAP_TITLE = 7.dp
-private val GAP_RATINGS = 12.dp
-private val GAP_RATINGS_TO_CHIPS = 8.dp
+private val GAP_TITLE = 4.dp
+private val GAP_RATINGS = 15.dp
+private val GAP_RATINGS_TO_CHIPS = 3.dp
 private val GAP_CHIPS = 5.dp
-private val GAP_CHIPS_TO_PLOT = 10.dp
-private val GAP_PLOT_TO_FACTS = 9.dp
+private val GAP_CHIPS_TO_PLOT = 3.dp
+private val GAP_PLOT_TO_FACTS = 16.dp
 
 private val CHIP_HEIGHT = 16.dp
 private val CHIP_PADDING = 7.dp
@@ -813,40 +837,40 @@ private val CHIP_BORDER = 1.dp
 private val CHIP_TEXT_SIZE = 10.sp
 private const val CHIP_BORDER_ALPHA = 0.38F
 
-private val PLOT_WIDTH = 450.dp
-private val PLOT_TEXT_SIZE = 13.sp
-private val PLOT_LINE = 19.sp
-private val PLOT_MIN_HEIGHT = 57.dp
+private val PLOT_WIDTH = 590.dp
+private val PLOT_TEXT_SIZE = 10.sp
+private val PLOT_LINE = 13.sp
+private val PLOT_MIN_HEIGHT = 126.dp
 private val PLOT_FOCUS_BORDER = 1.dp
 private val PLOT_FOCUS_RADIUS = 4.dp
 
-private val HERO_LINE_SIZE = 11.sp
+private val HERO_LINE_SIZE = 8.sp
 private val HERO_LINE_HEIGHT = 15.sp
-private val HERO_LINE_WIDTH = 550.dp
-private const val HERO_LINE_ALPHA = 0.72F
+private val HERO_LINE_WIDTH = 590.dp
+private const val HERO_LINE_ALPHA = 0.70F
 
-private val BUTTON_HEIGHT = 24.dp
-private val BUTTON_PADDING = 17.dp
-private val BUTTON_ICON = 17.dp
+private val BUTTON_HEIGHT = 23.dp
+private val BUTTON_PADDING = 11.dp
+private val BUTTON_ICON = 15.dp
 private val BUTTON_ICON_GAP = 5.dp
 private val BUTTON_GAP = 10.dp
 private val BUTTON_TEXT_SIZE = 9.sp
-private val RESUME_TEXT_SIZE = 11.sp
-private val RESUME_GAP = 14.dp
+private val RESUME_TEXT_SIZE = 8.sp
+private val RESUME_GAP = 15.dp
 
-private val SEASON_CHIP_HEIGHT = 22.dp
+private val SEASON_CHIP_HEIGHT = 26.dp
 private val SEASON_CHIP_PADDING = 10.dp
-private val SEASON_CHIP_TEXT_SIZE = 12.sp
+private val SEASON_CHIP_TEXT_SIZE = 10.sp
 private const val SEASON_CHIP_SELECTED_ALPHA = 0.20F
-private val SEASON_SUMMARY_GAP = 6.dp
+private val SEASON_SUMMARY_GAP = 12.dp
 private const val SEASON_SUMMARY_ALPHA = 0.62F
-private val GAP_SEASON_CHIPS = 8.dp
-private val GAP_CHIPS_TO_CARDS = 8.dp
+private val GAP_SEASON_CHIPS = 5.dp
+private val GAP_CHIPS_TO_CARDS = 4.dp
 
 private val RAIL_LABEL_SIZE = 14.sp
 
-private val CARD_HEIGHT = 70.dp
-private val CARD_GAP = 16.dp
+private val CARD_HEIGHT = 80.dp
+private val CARD_GAP = 15.dp
 private val CARD_RADIUS = 8.dp
 private const val CARD_ASPECT_RATIO = 16F / 9F
 
