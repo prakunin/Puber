@@ -1,33 +1,35 @@
 package com.kino.puber.ui.feature.details.component
 
 import androidx.annotation.OptIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.VerticalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,40 +37,34 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.Button
-import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
-import androidx.tv.material3.Text
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
-import coil3.compose.AsyncImage
+import androidx.tv.material3.Text
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.duotone.BookmarkSimple
-import com.adamglin.phosphoricons.duotone.CaretDown
-import com.adamglin.phosphoricons.duotone.CaretUp
 import com.adamglin.phosphoricons.duotone.Eye
 import com.adamglin.phosphoricons.fill.BookmarkSimple
 import com.adamglin.phosphoricons.fill.Eye
@@ -76,11 +72,9 @@ import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.EpisodeContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.Rating
-import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
+import com.kino.puber.core.ui.uikit.component.details.MediaScrim
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsMedia
-import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGrid
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoItem
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
@@ -88,16 +82,9 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
-import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
-import kotlinx.coroutines.delay
+import com.kino.puber.ui.feature.details.model.DetailsSeasonUIState
 import kotlinx.coroutines.launch
-
-private const val DETAILS_BUTTONS_FOCUS_DELAY_MS = 100L
-private const val DETAILS_PAGE_FOCUS_DELAY_MS = 50L
-private const val CHEVRON_ALPHA = 0.5F
-private val DETAILS_PAGE_PEEK_HEIGHT = 32.dp
-private val PAGE_FOCUS_BRIDGE_HEIGHT = 56.dp
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -140,424 +127,301 @@ internal fun DetailsScreenContent(
     }
 }
 
+/**
+ * Two rails. The thing on top -- still, title, facts, actions -- and what you do next below:
+ * the episodes of the chosen season on a series, the similar items on a film. No hidden pages.
+ */
 @Composable
 private fun DetailsContentBody(
     state: DetailsScreenState.Content,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val pageCount = if (state.similarItems.isNotEmpty()) DETAILS_PAGES_WITH_SIMILAR else DETAILS_PAGES_BASE
-        val pagerState = rememberPagerState(pageCount = { pageCount })
-        val coroutineScope = rememberCoroutineScope()
-        val similarFirstItemFocusRequester = remember { FocusRequester() }
-        val hasSimilarItems = state.similarItems.isNotEmpty()
-        val focusSimilarPage = remember {
-            {
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(SIMILAR_PAGE_INDEX)
-                    delay(DETAILS_PAGE_FOCUS_DELAY_MS)
-                    runCatching { similarFirstItemFocusRequester.requestFocus() }
-                }
-                Unit
-            }
-        }
-        val focusMainPage = remember {
-            {
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(MAIN_PAGE_INDEX)
-                }
-                Unit
-            }
-        }
-        val isMainPageVisible by remember {
-            derivedStateOf {
-                pagerState.currentPage == MAIN_PAGE_INDEX &&
-                    pagerState.currentPageOffsetFraction == 0F
-            }
-        }
-        val currentPage by remember {
-            derivedStateOf { pagerState.currentPage }
-        }
-        // The panel lives on the main page alone, and the pager keeps its neighbour composed. Without
-        // this the trailer would carry on playing, with sound, underneath a page the user scrolled to.
-        LaunchedEffect(currentPage) {
-            if (currentPage != MAIN_PAGE_INDEX) {
-                onAction(DetailsAction.TrailerPreviewStopped)
-            }
-        }
-        LaunchedEffect(pagerState.currentPage, hasSimilarItems) {
-            delay(DETAILS_PAGE_FOCUS_DELAY_MS)
-            if (pagerState.currentPage == SIMILAR_PAGE_INDEX && hasSimilarItems) {
-                runCatching { similarFirstItemFocusRequester.requestFocus() }
-            }
-        }
-        KeepFocusedChildVisibleWithoutRepositioning {
-            VerticalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = DETAILS_PAGE_PEEK_HEIGHT),
-                beyondViewportPageCount = 1,
-            ) { page ->
-                when (page) {
-                    MAIN_PAGE_INDEX -> DetailsMainPage(
-                        modifier = Modifier.fillMaxSize(),
-                        state = state,
-                        onAction = onAction,
-                        onEpisodeContextMenu = onEpisodeContextMenu,
-                        isPageVisible = isMainPageVisible,
-                        // The chevron promises a page below. With the information page gone there
-                        // is one only when the item has similar items, and this account's answers
-                        // are routinely empty.
-                        showPageChevron = currentPage == MAIN_PAGE_INDEX && hasSimilarItems,
-                        hasSimilarItems = hasSimilarItems,
-                        onNextPageRequested = focusSimilarPage,
-                        scrollToMainPage = { pagerState.animateScrollToPage(MAIN_PAGE_INDEX) },
-                    )
-                    SIMILAR_PAGE_INDEX -> DetailsSimilarPage(
-                        items = state.similarItems,
-                        onAction = onAction,
-                        firstItemFocusRequester = similarFirstItemFocusRequester,
-                        onPreviousPageRequested = focusMainPage,
-                        showPageChevron = currentPage == SIMILAR_PAGE_INDEX,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-        }
-    }
-}
+    // The vertical hand-offs are named rather than searched for. Geometric focus search walked
+    // past the season chips -- below the buttons, but far smaller than the cards under them --
+    // and the season could not be chosen from the remote at all.
+    val actionsFocus = remember { FocusRequester() }
+    val seasonsFocus = remember { FocusRequester() }
+    val railFocus = remember { FocusRequester() }
+    val hasSeasons = state.selectedSeason != null
 
-@Composable
-private fun KeepFocusedChildVisibleWithoutRepositioning(
-    content: @Composable () -> Unit,
-) {
-    val bringIntoViewSpec = remember {
-        object : BringIntoViewSpec {
-            override fun calculateScrollDistance(
-                offset: Float,
-                size: Float,
-                containerSize: Float,
-            ): Float {
-                val isAlreadyVisible = offset >= 0F && offset + size <= containerSize
-                if (isAlreadyVisible) {
-                    return 0F
-                }
-
-                val targetOffset = when {
-                    offset < 0F -> 0F
-                    size > containerSize -> 0F
-                    else -> containerSize - size
-                }
-                return offset - targetOffset
-            }
-        }
-    }
-
-    CompositionLocalProvider(
-        LocalBringIntoViewSpec provides bringIntoViewSpec,
-        content = content,
-    )
-}
-
-@Composable
-private fun DetailsMainPage(
-    modifier: Modifier,
-    state: DetailsScreenState.Content,
-    onAction: (UIAction) -> Unit,
-    onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    isPageVisible: Boolean,
-    showPageChevron: Boolean,
-    hasSimilarItems: Boolean,
-    onNextPageRequested: () -> Unit,
-    scrollToMainPage: suspend () -> Unit,
-) {
-    val episodes = state.episodes
-    if (episodes == null) {
-        Box(modifier = modifier) {
-            DetailsHero(
-                state = state,
-                compact = false,
-                onAction = onAction,
-                onEpisodeContextMenu = onEpisodeContextMenu,
-                isPageVisible = isPageVisible,
-                showPageChevron = showPageChevron,
-                hasSimilarItems = hasSimilarItems,
-                onNextPageRequested = onNextPageRequested,
-                scrollToMainPage = scrollToMainPage,
-            )
-        }
-        return
-    }
-
-    Column(modifier = modifier) {
-        Box(modifier = Modifier.fillMaxWidth().weight(1F)) {
-            DetailsHero(
-                state = state,
-                compact = true,
-                onAction = onAction,
-                onEpisodeContextMenu = onEpisodeContextMenu,
-                isPageVisible = isPageVisible,
-                showPageChevron = showPageChevron,
-                hasSimilarItems = hasSimilarItems,
-                onNextPageRequested = onNextPageRequested,
-                scrollToMainPage = scrollToMainPage,
-            )
-        }
-        // Returning from the page below has to put focus back on the season the user left. The
-        // buttons no longer take it (see `recoverActionFocus`), so somebody must: the restorer
-        // remembers the card that had it, and this asks the group to take it back.
-        val seasonsFocusRequester = remember { FocusRequester() }
-        LaunchedEffect(isPageVisible) {
-            if (isPageVisible) {
-                delay(DETAILS_BUTTONS_FOCUS_DELAY_MS)
-                runCatching { seasonsFocusRequester.requestFocus() }
-            }
-        }
-        VideoGrid(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = PAGE_EDGE, bottom = PAGE_EDGE),
+    ) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SEASON_AREA_HEIGHT)
-                .focusRequester(seasonsFocusRequester)
-                .focusRestorer()
-                .focusGroup(),
-            state = episodes,
-            rowsFillViewport = true,
-            initialFocusedItemId = state.initialEpisodeFocusId ?: state.currentEpisode?.id,
-            onItemClick = { episode -> onAction(DetailsAction.EpisodeSelected(episode)) },
-            onItemContextMenu = onEpisodeContextMenu,
-            onDownFromLastRow = onNextPageRequested.takeIf { hasSimilarItems },
+                .weight(1F),
+        ) {
+            DetailsHero(
+                state = state,
+                onAction = onAction,
+                onEpisodeContextMenu = onEpisodeContextMenu,
+                actionsFocus = actionsFocus,
+                belowActions = if (hasSeasons) seasonsFocus else railFocus,
+            )
+        }
+        DetailsRail(
+            state = state,
+            onAction = onAction,
+            onEpisodeContextMenu = onEpisodeContextMenu,
+            actionsFocus = actionsFocus,
+            seasonsFocus = seasonsFocus,
+            railFocus = railFocus,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(RAIL_HEIGHT),
         )
     }
 }
 
-/** The media still (or preview trailer) with the hero text drawn over it. */
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun DetailsHero(
     state: DetailsScreenState.Content,
-    compact: Boolean,
     onAction: (UIAction) -> Unit,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    isPageVisible: Boolean,
-    showPageChevron: Boolean,
-    hasSimilarItems: Boolean,
-    onNextPageRequested: () -> Unit,
-    scrollToMainPage: suspend () -> Unit,
+    actionsFocus: FocusRequester,
+    belowActions: FocusRequester,
 ) {
     VideoDetailsMedia(
         modifier = Modifier.fillMaxSize(),
         state = state.details,
         trailerUrl = state.previewTrailerUrl,
         onTrailerFinished = { onAction(DetailsAction.TrailerPreviewFinished) },
+        widthFraction = MEDIA_WIDTH_FRACTION,
+        scrim = MediaScrim.Details,
     )
 
     // Drawn after the media: the trailer is a SurfaceView and clears whatever the window painted
     // before it, so only what comes later survives over a playing video.
-    HeroColumn(
-        state = state,
-        compact = compact,
-        onAction = onAction,
-        onEpisodeContextMenu = onEpisodeContextMenu,
-        isPageVisible = isPageVisible,
-        showPageChevron = showPageChevron,
-        hasSimilarItems = hasSimilarItems,
-        onNextPageRequested = onNextPageRequested,
-        scrollToMainPage = scrollToMainPage,
-    )
-}
-
-@Composable
-private fun HeroColumn(
-    state: DetailsScreenState.Content,
-    compact: Boolean,
-    onAction: (UIAction) -> Unit,
-    onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    isPageVisible: Boolean,
-    showPageChevron: Boolean,
-    hasSimilarItems: Boolean,
-    onNextPageRequested: () -> Unit,
-    scrollToMainPage: suspend () -> Unit,
-) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // The page below has nothing focusable while it is off screen -- its own focus bridge
-            // only wakes once it is the current page -- so DOWN from a button had nowhere to go and
-            // the similar items became unreachable. The page deleted from between the two used to
-            // catch this key. On a series (`compact`) the hero is no longer the bottom of the page --
-            // the season list sits below it -- so this handler steps aside and lets DOWN reach the
-            // grid; `VideoGrid`'s own `onDownFromLastRow` picks the key back up once the last season
-            // row has focus.
-            .onDirectionKey(Key.DirectionDown, enabled = hasSimilarItems && !compact, onKey = onNextPageRequested)
-            .padding(
-                start = HERO_PADDING_START,
-                // A series shares the page with its season list, so the block's own breathing room
-                // is what gives way -- before the plot, which is the part worth reading.
-                top = if (compact) HERO_COMPACT_PADDING_TOP else HERO_PADDING_TOP,
-                bottom = if (compact) HERO_COMPACT_PADDING_BOTTOM else HERO_PADDING_BOTTOM,
-            ),
+            .padding(start = SIDE_EDGE, top = HERO_TOP),
     ) {
-        // `VideoItemUIMapper.formatTitle` has already split `Русское / Original` onto two lines, so
-        // this one Text carries both. It is left-aligned here, unlike the centred panel it replaces.
-        Text(
-            text = state.details.title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = TITLE_MAX_LINES,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(DESCRIPTION_MEASURE),
-        )
-        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_XS))
-        Row(horizontalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
+        HeroTitle(state)
+        Spacer(modifier = Modifier.height(GAP_TITLE))
+        Row(horizontalArrangement = Arrangement.spacedBy(GAP_RATINGS)) {
             state.info.ratings.forEach { rating -> Rating(rating) }
         }
-        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_XS))
-        HeroLine(text = metaLine(state.details))
-        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XXS else HERO_SPACING_SM))
-        // The plot, the facts and the credits ride together. A series' hero shares its height with
-        // the season list and cannot hold all three as fixed rows -- the plot was left with under a
-        // line and drew nothing at all. Inside here they take what is left, in order, and scroll
-        // when there is not enough of it, so none of them is cut from the screen.
-        SelfScrollingColumn(
-            // The main page stays composed while the similar-items page is on screen, so without
-            // `isPageVisible` the block would keep animating out of sight underneath it.
-            enabled = isPageVisible && state.trailerUrl == null,
-            // `fill = false`: it may take everything that is left, but a short plot takes only what
-            // it needs, so on a film the block still hugs its text instead of floating in a hole.
-            // As wide as the single-line rows, not as wide as the paragraph: the facts and the
-            // credits are meant to run over the artwork rather than wrap, and inside a 460 dp
-            // column they would have been cut instead.
-            modifier = Modifier
-                .fillMaxWidth(SIDE_TEXT_WIDTH_FRACTION)
-                .weight(1F, fill = false),
-        ) {
-            Text(
-                text = state.details.description,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.width(DESCRIPTION_MEASURE),
-            )
-            Spacer(modifier = Modifier.height(HERO_SPACING_SM))
-            HeroLine(text = state.info.factsLine)
-            HeroLine(text = state.info.creditsLine)
-        }
-        if (state.info.castCards.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(HERO_SPACING_XS))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
-                itemsIndexed(
-                    items = state.info.castCards,
-                    key = { _, card -> card.actorQuery },
-                ) { _, card ->
-                    Button(onClick = { onAction(DetailsAction.CastMemberSelected(card.actorQuery)) }) {
-                        card.photoUrl?.let { photoUrl ->
-                            AsyncImage(
-                                model = photoUrl,
-                                contentDescription = card.displayName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(CAST_PHOTO_SIZE),
-                            )
-                            Spacer(modifier = Modifier.width(HERO_SPACING_XS))
-                        }
-                        Text(
-                            text = card.displayName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(if (compact) HERO_SPACING_XS else HERO_SPACING_MD))
-        ActionButtonsRow(
-            buttons = state.buttons,
-            isInWatchlist = state.isInWatchlist,
-            isWatched = state.isWatched,
-            onAction = onAction,
-            currentEpisode = state.currentEpisode,
-            onEpisodeContextMenu = onEpisodeContextMenu,
-            trailerVisible = state.trailerUrl != null,
-            // A film's buttons are the only thing on the page that can hold focus, so taking it
-            // back when the page returns is right there. A series has a season list, and grabbing
-            // focus would drag the user off the season they left to go and look at «Похожее».
-            recoverActionFocus = isPageVisible && !compact,
-            scrollToMainPage = scrollToMainPage,
+        Spacer(modifier = Modifier.height(GAP_RATINGS_TO_CHIPS))
+        ChipRow(state.info.chips)
+        Spacer(modifier = Modifier.height(GAP_CHIPS_TO_PLOT))
+        PlotBlock(
+            text = state.details.description,
+            modifier = Modifier.weight(1F, fill = false),
         )
-        if (showPageChevron) {
-            ChevronIndicator()
+        Spacer(modifier = Modifier.height(GAP_PLOT_TO_FACTS))
+        HeroLine(state.info.factsLine)
+        HeroLine(state.info.directorLine)
+        HeroLine(state.info.castLine)
+        Spacer(modifier = Modifier.weight(1F))
+        ActionRow(
+            state = state,
+            onAction = onAction,
+            onEpisodeContextMenu = onEpisodeContextMenu,
+            actionsFocus = actionsFocus,
+            belowActions = belowActions,
+            modifier = Modifier.padding(bottom = HERO_BOTTOM),
+        )
+    }
+}
+
+@Composable
+private fun HeroTitle(state: DetailsScreenState.Content) {
+    // `VideoItemUIMapper.formatTitle` split `Русское / Original` onto two lines. They come back
+    // onto one here: the original is a caption to the title, not a second heading.
+    val lines = remember(state.details.title) { state.details.title.split("\n") }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(GAP_TITLE_PARTS),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            text = lines.first(),
+            fontSize = TITLE_SIZE,
+            lineHeight = TITLE_LINE,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1F, fill = false),
+        )
+        val original = lines.drop(1).joinToString(" ").trim()
+        if (original.isNotEmpty()) {
+            Text(
+                text = original,
+                fontSize = TITLE_ORIGINAL_SIZE,
+                lineHeight = TITLE_LINE,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = TITLE_ORIGINAL_BASELINE),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChipRow(chips: List<String>) {
+    if (chips.isEmpty()) return
+    Row(horizontalArrangement = Arrangement.spacedBy(GAP_CHIPS)) {
+        chips.forEach { chip ->
+            Box(
+                modifier = Modifier
+                    .height(CHIP_HEIGHT)
+                    .clip(RoundedCornerShape(CHIP_HEIGHT / 2))
+                    .border(
+                        width = CHIP_BORDER,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = CHIP_BORDER_ALPHA),
+                        shape = RoundedCornerShape(CHIP_HEIGHT / 2),
+                    )
+                    .padding(horizontal = CHIP_PADDING),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = chip,
+                    fontSize = CHIP_TEXT_SIZE,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
 
 /**
- * A single line of facts. It runs over the artwork rather than wrapping inside the text column: a
- * list of countries folding onto a second line pushes everything below it down, and the scrim
- * reaches zero at the same fraction this stops at, so no part of it lands on an unmuted frame.
+ * The whole plot. When it does not fit it scrolls from the remote: UP from the buttons hands the
+ * block focus, the arrows move it, and DOWN at the end returns to the buttons. It never moves on
+ * its own, unlike the auto-scrolling column it replaces.
  */
+@Composable
+private fun PlotBlock(
+    text: String,
+    modifier: Modifier,
+) {
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val step = with(LocalDensity.current) { PLOT_LINE.toPx() }
+    val scrollable = scrollState.canScrollForward || scrollState.canScrollBackward
+
+    Box(
+        modifier = modifier
+            .width(PLOT_WIDTH)
+            .heightIn(min = PLOT_MIN_HEIGHT)
+            // The block ends on a line boundary rather than through one: a line cut in half
+            // reads as breakage, not as "there is more below".
+            .layout { measurable, constraints ->
+                val line = PLOT_LINE.roundToPx().coerceAtLeast(1)
+                val snapped = if (constraints.hasBoundedHeight) {
+                    (constraints.maxHeight / line * line).coerceAtLeast(line)
+                } else {
+                    constraints.maxHeight
+                }
+                val placeable = measurable.measure(constraints.copy(maxHeight = snapped))
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionDown -> scrollState.canScrollForward.also { canScroll ->
+                        if (canScroll) scope.launch { scrollState.animateScrollBy(step) }
+                    }
+                    Key.DirectionUp -> scrollState.canScrollBackward.also { canScroll ->
+                        if (canScroll) scope.launch { scrollState.animateScrollBy(-step) }
+                    }
+                    else -> false
+                }
+            }
+            // Only a plot that actually scrolls takes focus. Otherwise UP from the buttons
+            // would land on text that cannot move and look stuck.
+            .focusable(enabled = scrollable, interactionSource = interactionSource)
+            .then(
+                if (isFocused) {
+                    Modifier.border(
+                        width = PLOT_FOCUS_BORDER,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(PLOT_FOCUS_RADIUS),
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .padding(PLOT_FOCUS_BORDER),
+    ) {
+        Column(modifier = Modifier.verticalScroll(scrollState)) {
+            Text(
+                text = text,
+                fontSize = PLOT_TEXT_SIZE,
+                lineHeight = PLOT_LINE,
+            )
+        }
+    }
+}
+
 @Composable
 private fun HeroLine(text: String) {
     if (text.isBlank()) return
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
+        fontSize = HERO_LINE_SIZE,
+        lineHeight = HERO_LINE_HEIGHT,
+        fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = HERO_LINE_ALPHA),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth(SIDE_TEXT_WIDTH_FRACTION),
+        modifier = Modifier.width(HERO_LINE_WIDTH),
     )
 }
 
-private fun metaLine(details: VideoDetailsUIState): String = listOf(
-    details.year,
-    details.genres,
-    details.country,
-    details.duration,
-).filter { it.isNotBlank() }.joinToString(" · ")
-
 @Composable
-private fun ActionButtonsRow(
-    buttons: List<DetailsButtonUIState>,
-    isInWatchlist: Boolean,
-    isWatched: Boolean,
+private fun ActionRow(
+    state: DetailsScreenState.Content,
     onAction: (UIAction) -> Unit,
-    currentEpisode: VideoItemUIState?,
     onEpisodeContextMenu: (VideoItemUIState) -> Unit,
-    trailerVisible: Boolean,
-    recoverActionFocus: Boolean,
-    scrollToMainPage: suspend () -> Unit,
+    actionsFocus: FocusRequester,
+    belowActions: FocusRequester,
+    modifier: Modifier = Modifier,
 ) {
     val firstButtonFocusRequester = remember { FocusRequester() }
-    val coroutineScope = rememberCoroutineScope()
-
-    // Request a concrete child, not the Row container. TV focus can otherwise
-    // stay on the previous card/details area and make OK look unresponsive.
-    LaunchedEffect(trailerVisible, recoverActionFocus, buttons.size) {
-        delay(DETAILS_BUTTONS_FOCUS_DELAY_MS)
-        if (!trailerVisible && recoverActionFocus) {
-            scrollToMainPage()
+    LaunchedEffect(state.trailerUrl, state.buttons.size) {
+        if (state.trailerUrl == null) {
             runCatching { firstButtonFocusRequester.requestFocus() }
         }
     }
-
     Row(
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .onFocusChanged { focusState ->
-                if (!trailerVisible && focusState.hasFocus) {
-                    coroutineScope.launch { scrollToMainPage() }
-                }
-            }
+        modifier = modifier
+            .focusRequester(actionsFocus)
+            .onDirectionKey(Key.DirectionDown, belowActions)
             .focusRestorer(firstButtonFocusRequester)
             .focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(BUTTON_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        buttons.forEachIndexed { index, button ->
+        state.buttons.forEachIndexed { index, button ->
             DetailsActionButton(
                 button = button,
-                isInWatchlist = isInWatchlist,
-                isWatched = isWatched,
+                isInWatchlist = state.isInWatchlist,
+                isWatched = state.isWatched,
                 onAction = onAction,
-                currentEpisode = currentEpisode,
+                currentEpisode = state.currentEpisode,
                 onEpisodeContextMenu = onEpisodeContextMenu,
                 modifier = if (index == 0) Modifier.focusRequester(firstButtonFocusRequester) else Modifier,
+            )
+        }
+        // A caption to the continue button rather than a block of its own, which is why it shares
+        // the button's line.
+        if (state.info.resumeLine.isNotBlank()) {
+            Text(
+                text = state.info.resumeLine,
+                fontSize = RESUME_TEXT_SIZE,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = RESUME_GAP),
             )
         }
     }
@@ -600,14 +464,21 @@ private fun DetailsTextButton(
     } else {
         modifier
     }
-    Button(onClick = { onAction(button.action) }, modifier = buttonModifier) {
+    Button(
+        onClick = { onAction(button.action) },
+        modifier = buttonModifier.height(BUTTON_HEIGHT),
+        contentPadding = PaddingValues(horizontal = BUTTON_PADDING),
+    ) {
         Icon(
             imageVector = button.icon,
             contentDescription = null,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(BUTTON_ICON),
         )
-        Spacer(Modifier.width(8.dp))
-        Text(text = button.textOverride ?: stringResource(button.textRes))
+        Spacer(Modifier.width(BUTTON_ICON_GAP))
+        Text(
+            text = button.textOverride ?: stringResource(button.textRes),
+            fontSize = BUTTON_TEXT_SIZE,
+        )
     }
 }
 
@@ -619,12 +490,12 @@ private fun DetailsIconButton(
 ) {
     IconButton(
         onClick = { onAction(button.action) },
-        modifier = modifier,
+        modifier = modifier.size(BUTTON_HEIGHT),
     ) {
         Icon(
             imageVector = button.icon,
             contentDescription = stringResource(button.contentDescription),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(BUTTON_ICON),
         )
     }
 }
@@ -638,12 +509,12 @@ private fun DetailsWatchlistButton(
 ) {
     IconButton(
         onClick = { onAction(button.action) },
-        modifier = modifier,
+        modifier = modifier.size(BUTTON_HEIGHT),
     ) {
         Icon(
             imageVector = if (checked) PhosphorIcons.Fill.BookmarkSimple else PhosphorIcons.Duotone.BookmarkSimple,
             contentDescription = stringResource(button.contentDescription),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(BUTTON_ICON),
             tint = if (checked) MaterialTheme.colorScheme.primary else LocalContentColor.current,
         )
     }
@@ -658,272 +529,338 @@ private fun DetailsWatchedButton(
 ) {
     IconButton(
         onClick = { onAction(button.action) },
-        modifier = modifier,
+        modifier = modifier.size(BUTTON_HEIGHT),
     ) {
         Icon(
             imageVector = if (checked) PhosphorIcons.Fill.Eye else PhosphorIcons.Duotone.Eye,
             contentDescription = stringResource(button.contentDescription),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(BUTTON_ICON),
             tint = if (checked) MaterialTheme.colorScheme.primary else LocalContentColor.current,
         )
     }
 }
 
+/** The lower rail: the chosen season's episodes on a series, the similar items on a film. */
 @Composable
-private fun DetailsSimilarPage(
-    items: List<VideoItemUIState>,
+private fun DetailsRail(
+    state: DetailsScreenState.Content,
     onAction: (UIAction) -> Unit,
-    firstItemFocusRequester: FocusRequester,
-    onPreviousPageRequested: () -> Unit,
-    showPageChevron: Boolean,
+    onEpisodeContextMenu: (VideoItemUIState) -> Unit,
+    actionsFocus: FocusRequester,
+    seasonsFocus: FocusRequester,
+    railFocus: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
-    var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
-    Box(modifier = modifier.fillMaxWidth()) {
-        PageFocusBridge(
-            enabled = showPageChevron,
-            onFocused = onPreviousPageRequested,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(PAGE_FOCUS_BRIDGE_HEIGHT),
-        )
-        if (showPageChevron) {
-            ChevronIndicator(
-                direction = ChevronDirection.Up,
-                modifier = Modifier.align(Alignment.TopCenter),
+    val season = state.selectedSeason
+    when {
+        season != null -> Column(modifier = modifier) {
+            SeasonChipRow(
+                seasons = state.seasons,
+                selected = season,
+                onAction = onAction,
+                seasonsFocus = seasonsFocus,
+                above = actionsFocus,
+                below = railFocus,
+            )
+            Spacer(modifier = Modifier.height(GAP_CHIPS_TO_CARDS))
+            EpisodeRow(
+                episodes = season.episodes,
+                initialFocusedItemId = state.initialEpisodeFocusId ?: state.currentEpisode?.id,
+                onItemClick = { episode -> onAction(DetailsAction.EpisodeSelected(episode)) },
+                onItemContextMenu = onEpisodeContextMenu,
+                railFocus = railFocus,
+                above = seasonsFocus,
             )
         }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onDirectionKey(Key.DirectionUp, onKey = onPreviousPageRequested)
-                .padding(horizontal = 64.dp, vertical = 96.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
+
+        state.similarItems.isNotEmpty() -> Column(modifier = modifier) {
             Text(
                 text = stringResource(R.string.video_details_similar_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                fontSize = RAIL_LABEL_SIZE,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = SIDE_EDGE, top = RAIL_TOP),
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            LazyRow(
-                modifier = Modifier
-                    .focusRestorer(firstItemFocusRequester)
-                    .focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(end = 64.dp),
-            ) {
-                itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                    VideoItem(
-                        modifier = if (index == 0) {
-                            Modifier.focusRequester(firstItemFocusRequester)
-                        } else {
-                            Modifier
-                        },
-                        state = item,
-                        onClick = { onAction(DetailsAction.SimilarSelected(item)) },
-                        onContextMenu = { contextMenuItem = item },
+            Spacer(modifier = Modifier.height(GAP_CHIPS_TO_CARDS))
+            EpisodeRow(
+                episodes = state.similarItems,
+                initialFocusedItemId = null,
+                onItemClick = { item -> onAction(DetailsAction.SimilarSelected(item)) },
+                onItemContextMenu = null,
+                railFocus = railFocus,
+                above = actionsFocus,
+            )
+        }
+
+        else -> Box(modifier = modifier)
+    }
+}
+
+@Composable
+private fun SeasonChipRow(
+    seasons: List<DetailsSeasonUIState>,
+    selected: DetailsSeasonUIState,
+    onAction: (UIAction) -> Unit,
+    seasonsFocus: FocusRequester,
+    above: FocusRequester,
+    below: FocusRequester,
+) {
+    Row(
+        modifier = Modifier
+            .padding(start = SIDE_EDGE, top = RAIL_TOP)
+            .focusRequester(seasonsFocus)
+            .onDirectionKey(Key.DirectionUp, above)
+            .onDirectionKey(Key.DirectionDown, below)
+            .focusRestorer()
+            .focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(GAP_SEASON_CHIPS),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        seasons.forEach { season ->
+            val isSelected = season.number == selected.number
+            Button(
+                onClick = { onAction(DetailsAction.SeasonSelected(season.number)) },
+                modifier = Modifier.height(SEASON_CHIP_HEIGHT),
+                contentPadding = PaddingValues(horizontal = SEASON_CHIP_PADDING),
+                colors = if (isSelected) {
+                    ButtonDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                            .copy(alpha = SEASON_CHIP_SELECTED_ALPHA),
+                        contentColor = MaterialTheme.colorScheme.primary,
                     )
-                }
+                } else {
+                    ButtonDefaults.colors()
+                },
+            ) {
+                Text(
+                    text = season.number.toString(),
+                    fontSize = SEASON_CHIP_TEXT_SIZE,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
-        VideoItemContextMenuDialog(
-            item = contextMenuItem,
-            onDismiss = { contextMenuItem = null },
-            onAction = onAction,
+        Text(
+            text = selected.summary,
+            fontSize = HERO_LINE_SIZE,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = SEASON_SUMMARY_ALPHA),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = SEASON_SUMMARY_GAP),
         )
     }
 }
 
 @Composable
-private fun PageFocusBridge(
-    enabled: Boolean,
-    onFocused: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun EpisodeRow(
+    episodes: List<VideoItemUIState>,
+    initialFocusedItemId: Int?,
+    onItemClick: (VideoItemUIState) -> Unit,
+    onItemContextMenu: ((VideoItemUIState) -> Unit)?,
+    railFocus: FocusRequester,
+    above: FocusRequester,
 ) {
-    if (!enabled) {
-        Box(modifier = modifier)
-        return
+    val listState = rememberLazyListState()
+    val rowFocusRequester = remember { FocusRequester() }
+    val initialIndex = remember(episodes, initialFocusedItemId) {
+        episodes.indexOfFirst { episode -> episode.id == initialFocusedItemId }.takeIf { it >= 0 }
     }
-
-    // LazyColumn does not compose the next page until it scrolls into view, so
-    // D-pad focus needs an already-composed target to trigger page transitions.
-    Surface(
-        onClick = onFocused,
-        modifier = modifier
-            .onFocusChanged { focusState ->
-                if (focusState.isFocused) {
-                    onFocused()
-                }
-            },
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
-            pressedContainerColor = Color.Transparent,
-            contentColor = Color.Transparent,
-            focusedContentColor = Color.Transparent,
-            pressedContentColor = Color.Transparent,
-        ),
+    LaunchedEffect(initialIndex) {
+        initialIndex?.let { index -> listState.scrollToItem(index) }
+    }
+    LazyRow(
+        state = listState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(railFocus)
+            .onDirectionKey(Key.DirectionUp, above)
+            .focusRestorer(rowFocusRequester)
+            .focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
+        contentPadding = PaddingValues(start = SIDE_EDGE, end = SIDE_EDGE),
     ) {
-        Box(modifier = Modifier.fillMaxSize())
+        itemsIndexed(episodes, key = { _, item -> item.id }) { index, item ->
+            VideoItemHorizontal(
+                modifier = if (index == (initialIndex ?: 0)) {
+                    Modifier.focusRequester(rowFocusRequester)
+                } else {
+                    Modifier
+                },
+                state = item,
+                onClick = { onItemClick(item) },
+                itemHeight = CARD_HEIGHT,
+                // A second line lifts the text, and captions across the row read from different
+                // heights.
+                titleMaxLines = 1,
+                onContextMenu = onItemContextMenu?.let { handler -> { handler(item) } },
+            )
+        }
     }
 }
 
-private fun Modifier.onDirectionKey(
-    key: Key,
-    enabled: Boolean = true,
-    onKey: () -> Unit,
-): Modifier {
-    if (!enabled) {
-        return this
-    }
-    return onPreviewKeyEvent { event ->
-        if (event.key != key) {
-            return@onPreviewKeyEvent false
-        }
+/**
+ * Hands focus to a named row on an arrow. Geometric search misses here: the chip row sits below
+ * the buttons but is far smaller than the cards under it, and the season became unreachable.
+ */
+private fun Modifier.onDirectionKey(key: Key, target: FocusRequester): Modifier =
+    onPreviewKeyEvent { event ->
+        if (event.key != key) return@onPreviewKeyEvent false
         when (event.type) {
-            KeyEventType.KeyDown -> {
-                onKey()
-                true
-            }
+            KeyEventType.KeyDown -> runCatching { target.requestFocus() }.isSuccess
             KeyEventType.KeyUp -> true
             else -> false
         }
     }
-}
-
-private enum class ChevronDirection {
-    Up,
-    Down,
-}
-
-@Composable
-private fun ChevronIndicator(
-    modifier: Modifier = Modifier,
-    direction: ChevronDirection = ChevronDirection.Down,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                top = if (direction == ChevronDirection.Up) 12.dp else 0.dp,
-                bottom = if (direction == ChevronDirection.Down) 16.dp else 0.dp,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = when (direction) {
-                ChevronDirection.Up -> PhosphorIcons.Duotone.CaretUp
-                ChevronDirection.Down -> PhosphorIcons.Duotone.CaretDown
-            },
-            contentDescription = null,
-            modifier = Modifier
-                .size(24.dp)
-                .alpha(CHEVRON_ALPHA),
-        )
-    }
-}
 
 @Composable
 private fun DetailsContentSkeleton() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = HERO_PADDING_START, top = HERO_PADDING_TOP, bottom = HERO_PADDING_BOTTOM),
+            .padding(start = SIDE_EDGE, top = PAGE_EDGE + HERO_TOP, bottom = PAGE_EDGE),
     ) {
-        SkeletonBar(width = SKELETON_TITLE_BAR_WIDTH, height = SKELETON_TITLE_BAR_HEIGHT)
-        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
-        SkeletonBar(width = SKELETON_META_BAR_WIDTH, height = SKELETON_META_BAR_HEIGHT)
-        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
-        Column(verticalArrangement = Arrangement.spacedBy(HERO_SPACING_XS)) {
-            repeat(SKELETON_DESCRIPTION_LINE_COUNT) {
-                SkeletonBar(width = SKELETON_DESCRIPTION_BAR_WIDTH, height = SKELETON_LINE_HEIGHT)
+        SkeletonBar(width = SKELETON_TITLE_WIDTH, height = TITLE_LINE.value.dp)
+        Spacer(modifier = Modifier.height(GAP_TITLE))
+        Row(horizontalArrangement = Arrangement.spacedBy(GAP_RATINGS)) {
+            repeat(SKELETON_RATING_COUNT) { SkeletonBar(width = SKELETON_RATING_WIDTH, height = CHIP_HEIGHT) }
+        }
+        Spacer(modifier = Modifier.height(GAP_RATINGS_TO_CHIPS))
+        Row(horizontalArrangement = Arrangement.spacedBy(GAP_CHIPS)) {
+            SKELETON_CHIP_WIDTHS.forEach { width -> SkeletonBar(width = width, height = CHIP_HEIGHT) }
+        }
+        Spacer(modifier = Modifier.height(GAP_CHIPS_TO_PLOT))
+        Column(verticalArrangement = Arrangement.spacedBy(SKELETON_LINE_GAP)) {
+            repeat(SKELETON_PLOT_LINE_COUNT) { SkeletonBar(width = PLOT_WIDTH, height = SKELETON_LINE_HEIGHT) }
+        }
+        Spacer(modifier = Modifier.height(GAP_PLOT_TO_FACTS))
+        Column(verticalArrangement = Arrangement.spacedBy(SKELETON_LINE_GAP)) {
+            SKELETON_FACT_WIDTHS.forEach { width -> SkeletonBar(width = width, height = SKELETON_LINE_HEIGHT) }
+        }
+        Spacer(modifier = Modifier.weight(1F))
+        Row(horizontalArrangement = Arrangement.spacedBy(BUTTON_GAP)) {
+            SkeletonBar(width = SKELETON_PLAY_WIDTH, height = BUTTON_HEIGHT, radius = BUTTON_HEIGHT / 2)
+            repeat(SKELETON_ICON_BUTTON_COUNT) {
+                SkeletonBar(width = BUTTON_HEIGHT, height = BUTTON_HEIGHT, radius = BUTTON_HEIGHT / 2)
             }
         }
-        Spacer(modifier = Modifier.height(HERO_SPACING_SM))
-        SkeletonBar(width = SKELETON_FACTS_BAR_WIDTH, height = SKELETON_LINE_HEIGHT)
-
-        Spacer(modifier = Modifier.height(HERO_SPACING_XS))
-
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(140.dp)
-                    .height(40.dp)
-                    .placeholder(visible = true, shape = RoundedCornerShape(8.dp)),
-            )
-            Box(
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(40.dp)
-                    .placeholder(visible = true, shape = RoundedCornerShape(8.dp)),
-            )
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .placeholder(visible = true, shape = RoundedCornerShape(8.dp)),
-            )
+        Spacer(modifier = Modifier.height(HERO_BOTTOM + RAIL_TOP))
+        Row(horizontalArrangement = Arrangement.spacedBy(GAP_SEASON_CHIPS)) {
+            repeat(SKELETON_SEASON_CHIP_COUNT) {
+                SkeletonBar(
+                    width = SEASON_CHIP_HEIGHT + SEASON_CHIP_PADDING,
+                    height = SEASON_CHIP_HEIGHT,
+                    radius = SEASON_CHIP_HEIGHT / 2,
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.weight(1F))
-
-        ChevronIndicator()
+        Spacer(modifier = Modifier.height(GAP_CHIPS_TO_CARDS))
+        Row(horizontalArrangement = Arrangement.spacedBy(CARD_GAP)) {
+            repeat(SKELETON_CARD_COUNT) {
+                Box(
+                    modifier = Modifier
+                        .height(CARD_HEIGHT)
+                        .aspectRatio(CARD_ASPECT_RATIO)
+                        .placeholder(visible = true, shape = RoundedCornerShape(CARD_RADIUS)),
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun SkeletonBar(width: Dp, height: Dp) {
+private fun SkeletonBar(
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    radius: androidx.compose.ui.unit.Dp = SKELETON_RADIUS,
+) {
     Box(
         modifier = Modifier
             .width(width)
             .height(height)
-            .placeholder(visible = true, shape = RoundedCornerShape(2.dp)),
+            .placeholder(visible = true, shape = RoundedCornerShape(radius)),
     )
 }
 
-private const val MAIN_PAGE_INDEX = 0
-private const val SIMILAR_PAGE_INDEX = 1
-private const val DETAILS_PAGES_BASE = 1
-private const val DETAILS_PAGES_WITH_SIMILAR = 2
+// region Sizes
+// Taken from the 1920 x 1080 screen emulator and divided by two: a 1080p television is density 2.0.
 
-private val HERO_PADDING_START = 48.dp
-private val HERO_PADDING_TOP = 40.dp
-private val HERO_PADDING_BOTTOM = 24.dp
-private val HERO_COMPACT_PADDING_TOP = 20.dp
-private val HERO_COMPACT_PADDING_BOTTOM = 8.dp
-private val DESCRIPTION_MEASURE = 460.dp
+/** How far the page stands off the top and bottom edges of the screen. */
+private val PAGE_EDGE = 16.dp
+private val SIDE_EDGE = 8.dp
+private val HERO_TOP = 8.dp
+private val HERO_BOTTOM = 16.dp
+private val RAIL_HEIGHT = 116.dp
 
-/** The heading and one card, which is what leaves the hero its 306 dp on a 540 dp screen. */
-// The heading, then the row: 16 dp of padding above and below the card. At a 180 dp portrait card
-// this was 240 dp and the plot above it was left with under a line; a 16:9 still is 150 dp, and the
-// 32 dp that frees is what the plot reads in.
-private val SEASON_AREA_HEIGHT = 210.dp
-private const val SIDE_TEXT_WIDTH_FRACTION = 0.62F
+/** 1080 of 1920. Narrower than the catalogue's still, because the text column here is narrower. */
+private const val MEDIA_WIDTH_FRACTION = 0.5625F
+private val RAIL_TOP = 8.dp
+
+private val TITLE_SIZE = 24.sp
+private val TITLE_ORIGINAL_SIZE = 14.sp
+private val TITLE_LINE = 28.sp
+private val TITLE_ORIGINAL_BASELINE = 2.dp
+private val GAP_TITLE_PARTS = 10.dp
+
+private val GAP_TITLE = 7.dp
+private val GAP_RATINGS = 12.dp
+private val GAP_RATINGS_TO_CHIPS = 8.dp
+private val GAP_CHIPS = 5.dp
+private val GAP_CHIPS_TO_PLOT = 10.dp
+private val GAP_PLOT_TO_FACTS = 9.dp
+
+private val CHIP_HEIGHT = 16.dp
+private val CHIP_PADDING = 7.dp
+private val CHIP_BORDER = 1.dp
+private val CHIP_TEXT_SIZE = 10.sp
+private const val CHIP_BORDER_ALPHA = 0.38F
+
+private val PLOT_WIDTH = 450.dp
+private val PLOT_TEXT_SIZE = 13.sp
+private val PLOT_LINE = 19.sp
+private val PLOT_MIN_HEIGHT = 57.dp
+private val PLOT_FOCUS_BORDER = 1.dp
+private val PLOT_FOCUS_RADIUS = 4.dp
+
+private val HERO_LINE_SIZE = 11.sp
+private val HERO_LINE_HEIGHT = 15.sp
+private val HERO_LINE_WIDTH = 550.dp
 private const val HERO_LINE_ALPHA = 0.72F
-private const val TITLE_MAX_LINES = 3
 
-/** Gaps between the hero's own lines: title-to-ratings, the ratings row itself, ratings-to-meta. */
-private val HERO_SPACING_XXS = 4.dp
-private val HERO_SPACING_XS = 8.dp
-private val CAST_PHOTO_SIZE = 32.dp
+private val BUTTON_HEIGHT = 24.dp
+private val BUTTON_PADDING = 17.dp
+private val BUTTON_ICON = 17.dp
+private val BUTTON_ICON_GAP = 5.dp
+private val BUTTON_GAP = 10.dp
+private val BUTTON_TEXT_SIZE = 9.sp
+private val RESUME_TEXT_SIZE = 11.sp
+private val RESUME_GAP = 14.dp
 
-/** Gaps either side of the description: meta-to-description, description-to-facts. */
-private val HERO_SPACING_SM = 12.dp
+private val SEASON_CHIP_HEIGHT = 22.dp
+private val SEASON_CHIP_PADDING = 10.dp
+private val SEASON_CHIP_TEXT_SIZE = 12.sp
+private const val SEASON_CHIP_SELECTED_ALPHA = 0.20F
+private val SEASON_SUMMARY_GAP = 6.dp
+private const val SEASON_SUMMARY_ALPHA = 0.62F
+private val GAP_SEASON_CHIPS = 8.dp
+private val GAP_CHIPS_TO_CARDS = 8.dp
 
-/** Gap between the last text line and the button row. */
-private val HERO_SPACING_MD = 16.dp
+private val RAIL_LABEL_SIZE = 14.sp
 
-private val SKELETON_TITLE_BAR_WIDTH = 320.dp
-private val SKELETON_TITLE_BAR_HEIGHT = 24.dp
-private val SKELETON_META_BAR_WIDTH = 280.dp
-private val SKELETON_META_BAR_HEIGHT = 16.dp
-private val SKELETON_DESCRIPTION_BAR_WIDTH = 440.dp
+private val CARD_HEIGHT = 70.dp
+private val CARD_GAP = 16.dp
+private val CARD_RADIUS = 8.dp
+private const val CARD_ASPECT_RATIO = 16F / 9F
 
-/** Shared by the description bars and the facts bar; both stand for a `labelSmall`/`bodySmall` line. */
-private val SKELETON_LINE_HEIGHT = 12.dp
-private val SKELETON_FACTS_BAR_WIDTH = 380.dp
-private const val SKELETON_DESCRIPTION_LINE_COUNT = 4
+private val SKELETON_RADIUS = 2.dp
+private val SKELETON_TITLE_WIDTH = 280.dp
+private val SKELETON_RATING_WIDTH = 52.dp
+private val SKELETON_LINE_HEIGHT = 11.dp
+private val SKELETON_LINE_GAP = 4.dp
+private val SKELETON_PLAY_WIDTH = 150.dp
+private const val SKELETON_RATING_COUNT = 3
+private const val SKELETON_PLOT_LINE_COUNT = 3
+private const val SKELETON_ICON_BUTTON_COUNT = 3
+private const val SKELETON_SEASON_CHIP_COUNT = 3
+private const val SKELETON_CARD_COUNT = 4
+private val SKELETON_CHIP_WIDTHS = listOf(75.dp, 95.dp, 80.dp, 60.dp)
+private val SKELETON_FACT_WIDTHS = listOf(350.dp, 420.dp, 380.dp)
+// endregion

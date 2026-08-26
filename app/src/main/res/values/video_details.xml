@@ -57,4 +57,31 @@
     <string name="video_details_series_status_ongoing">Сериал выходит</string>
     <string name="video_details_similar_title">Похожее</string>
     <string name="video_details_trailer_unavailable">Трейлер недоступен</string>
+
+    <!-- Chips under the ratings: one fact per chip instead of a dot-joined run-on. -->
+    <string name="video_details_chip_movie">Фильм</string>
+    <string name="video_details_chip_series">Сериал</string>
+    <plurals name="video_details_chip_seasons">
+        <item quantity="one">%d сезон</item>
+        <item quantity="few">%d сезона</item>
+        <item quantity="many">%d сезонов</item>
+        <item quantity="other">%d сезона</item>
+    </plurals>
+    <plurals name="video_details_episodes">
+        <item quantity="one">%d серия</item>
+        <item quantity="few">%d серии</item>
+        <item quantity="many">%d серий</item>
+        <item quantity="other">%d серии</item>
+    </plurals>
+
+    <!-- The caption beside the season chips. -->
+    <string name="video_details_season_summary">%1$d сезон · %2$s</string>
+    <string name="video_details_season_summary_watched">%1$d сезон · %2$s · просмотрено %3$d</string>
+
+    <!-- The line beside the continue button. -->
+    <string name="video_details_resume_series">Остановились на %1$d сезоне, %2$d серии · осталось %3$s</string>
+    <string name="video_details_resume_series_next">Следующая — %1$d сезон, %2$d серия</string>
+    <string name="video_details_resume_movie">Остановились · осталось %1$s</string>
+    <string name="video_details_resume_not_started">Не начат · %1$s</string>
+    <string name="video_details_resume_finished">Просмотрено</string>
 </resources>

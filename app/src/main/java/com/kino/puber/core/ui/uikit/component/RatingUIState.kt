@@ -23,6 +23,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
+import com.kino.puber.core.ui.uikit.theme.ImdbYellow
+import com.kino.puber.core.ui.uikit.theme.KinopoiskOrange
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 
 @Immutable
@@ -43,6 +45,16 @@ sealed class RatingUIState(open val value: String) {
         override val value: String,
         override val isLoading: Boolean = false,
     ) : RatingUIState(value)
+}
+
+/** The source's own colour. The drawables are filled white; the colour lives here. */
+@Composable
+private fun RatingUIState.brandColor(): Color = when (this) {
+    is RatingUIState.KP -> KinopoiskOrange
+    is RatingUIState.IMDB -> ImdbYellow
+    // The kino.pub mark is a raster: a solid tint fills its whole silhouette and the letter
+    // becomes a disc. It stays the white it always was.
+    is RatingUIState.PUB -> Color.Unspecified
 }
 
 @Suppress("unused")
@@ -67,7 +79,7 @@ fun Rating(
                 .size(14.dp),
             painter = painterResource(iconResource),
             contentDescription = stringResource(R.string.rating_content_description),
-            tint = Color.Unspecified,
+            tint = state.brandColor(),
         )
 
         Box(modifier = Modifier.placeholder(visible = state.isLoading)) {
@@ -105,7 +117,7 @@ fun RatingVertical(
             modifier = Modifier.size(16.dp),
             painter = painterResource(iconResource),
             contentDescription = stringResource(R.string.rating_content_description),
-            tint = Color.Unspecified,
+            tint = state.brandColor(),
         )
 
         Box(modifier = Modifier.placeholder(visible = state.isLoading)) {

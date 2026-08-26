@@ -95,6 +95,9 @@ internal class AppRemoteHotkeyHandlerTest {
         verify(exactly = 0) { screens.deviceSettings() }
     }
 
+    // ACTION_MULTIPLE is deprecated but still the only stock action that is neither down nor up,
+    // which is exactly what this asserts the handler ignores.
+    @Suppress("DEPRECATION")
     @Test
     fun nonDownOrUpAction_isLeftUnhandled() {
         assertFalse(handle(KeyEvent.KEYCODE_SEARCH, action = KeyEvent.ACTION_MULTIPLE))

@@ -51,12 +51,9 @@ Focus is the navigation model on TV, so most screen bugs are focus bugs.
 
 - `rememberFocusRequesterOnLaunch()`
   (`core/ui/uikit/component/modifier/FocusOnLaunchRequester.kt`) - initial focus
-  for a screen. It is keyed to `LocalScreenKey` through `rememberSaveable`, so
-  it fires once per navigation entry rather than on every recomposition.
-- `createInitialFocusRestorerModifiers()`
-  (`core/ui/uikit/component/modifier/FocusRequesterModifiers.kt`) - returns the
-  parent and first-child modifiers for a focus group, so returning to a row
-  lands on the item the user left.
+  for a screen. Its "already asked" flag is a `rememberSaveable` taking
+  `LocalScreenKey` as an input, so it fires once per navigation entry rather
+  than on every recomposition.
 - `Modifier.focusGroup()` and `focusRestorer()` from Compose itself are used
   directly elsewhere.
 

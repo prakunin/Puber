@@ -10,15 +10,12 @@ import com.adamglin.phosphoricons.duotone.VideoCamera
 import com.kino.puber.R
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.model.VideoItemUIMapper
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridItemUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Item
-import com.kino.puber.data.api.models.TmdbCastMember
 import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.data.api.models.isSeriesLike
-import java.text.Normalizer
 
 internal class DetailsScreenUIMapper(
     private val resources: ResourceProvider,
@@ -46,19 +43,22 @@ internal class DetailsScreenUIMapper(
         isInWatchlist: Boolean,
         initialEpisode: DetailsEpisodeTarget? = null,
     ): DetailsScreenState.Content {
-        val episodes = if (item.type.isSeriesLike()) mapEpisodes(item) else null
-        val requestedEpisode = episodes?.findEpisode(initialEpisode)
+        val seasons = if (item.type.isSeriesLike()) mapSeasons(item) else emptyList()
+        val requestedEpisode = seasons.findEpisode(initialEpisode)
+        val currentEpisode = requestedEpisode
+            ?: if (item.type.isSeriesLike()) mapCurrentEpisode(item) else null
         return DetailsScreenState.Content(
             details = itemMapper.mapDetailedItem(item),
             info = buildInfo(item),
             buttons = buildButtons(item),
             isInWatchlist = isInWatchlist,
             isWatched = itemMapper.isItemWatched(item),
-            episodes = episodes,
-            currentEpisode = requestedEpisode
-                ?: if (item.type.isSeriesLike()) mapCurrentEpisode(item) else null,
+            seasons = seasons,
+            // Opens on the season the viewer is returning to rather than the first one: three
+            // seasons in, the first is never the one they want.
+            selectedSeasonNumber = currentEpisode?.seasonNumber ?: seasons.lastOrNull()?.number,
+            currentEpisode = currentEpisode,
             initialEpisodeFocusId = requestedEpisode?.id,
-            seriesStatus = mapSeriesStatus(item),
         )
     }
 
@@ -67,36 +67,35 @@ internal class DetailsScreenUIMapper(
             .map { item -> item.copy(showTitle = true) }
     }
 
-    fun enrichCastCards(
-        castCards: List<DetailsCastMemberUIState>,
-        tmdbCast: List<TmdbCastMember>,
-    ): List<DetailsCastMemberUIState> = castCards.map { card ->
-        val cardKeys = actorNameKeys(card.displayName)
-        val matches = tmdbCast.filter { member ->
-            cardKeys.intersect(actorNameKeys(member.name)).isNotEmpty()
-        }
-        card.copy(photoUrl = matches.singleOrNull()?.profileUrl)
-    }
-
-    private fun mapEpisodes(item: Item): VideoGridUIState? {
-        val seasons = item.seasons ?: return null
-        val gridItems = mutableListOf<VideoGridItemUIState>()
-        for (season in seasons) {
+    private fun mapSeasons(item: Item): List<DetailsSeasonUIState> {
+        val seasons = item.seasons ?: return emptyList()
+        return seasons.map { season ->
             val episodes = season.episodes.orEmpty()
-            gridItems.add(
-                VideoGridItemUIState.Title(
-                    resources.getString(R.string.player_season_episodes_count, season.number, episodes.size)
-                )
+            val watchedCount = episodes.count { episode -> episode.watched == 1 }
+            val episodesLabel = resources.getQuantityString(
+                R.plurals.video_details_episodes,
+                episodes.size,
+                episodes.size,
             )
-            val items = episodes.map { episode -> mapEpisode(season.number, episodes, episode) }
-            gridItems.add(
-                VideoGridItemUIState.Items(
-                    items = items,
-                    rowKey = "season_${season.number}",
-                )
+            DetailsSeasonUIState(
+                number = season.number,
+                episodes = episodes.map { episode -> mapEpisode(season.number, episodes, episode) },
+                summary = if (watchedCount > 0) {
+                    resources.getString(
+                        R.string.video_details_season_summary_watched,
+                        season.number,
+                        episodesLabel,
+                        watchedCount,
+                    )
+                } else {
+                    resources.getString(
+                        R.string.video_details_season_summary,
+                        season.number,
+                        episodesLabel,
+                    )
+                },
             )
         }
-        return VideoGridUIState(list = gridItems)
     }
 
     private fun mapCurrentEpisode(item: Item): VideoItemUIState? {
@@ -104,12 +103,10 @@ internal class DetailsScreenUIMapper(
         return mapEpisode(seasonNumber, episodes, episode)
     }
 
-    private fun VideoGridUIState.findEpisode(target: DetailsEpisodeTarget?): VideoItemUIState? {
+    private fun List<DetailsSeasonUIState>.findEpisode(target: DetailsEpisodeTarget?): VideoItemUIState? {
         if (target == null) return null
-        return list
-            .filterIsInstance<VideoGridItemUIState.Items>()
-            .asSequence()
-            .flatMap { it.items.asSequence() }
+        return asSequence()
+            .flatMap { season -> season.episodes.asSequence() }
             .firstOrNull { item ->
                 item.seasonNumber == target.seasonNumber &&
                     item.episodeNumber == target.episodeNumber
@@ -177,21 +174,23 @@ internal class DetailsScreenUIMapper(
                 textOverride = continueText,
             )
         )
-        if (item.imdb?.isNotBlank() == true) {
-            add(
-                DetailsButtonUIState.TextButton(
-                    textRes = R.string.video_details_button_schedule,
-                    icon = PhosphorIcons.Duotone.CalendarBlank,
-                    action = DetailsAction.ScheduleClicked,
-                )
-            )
-        }
         if (item.trailer != null) {
             add(
                 DetailsButtonUIState.IconOnly(
                     icon = PhosphorIcons.Duotone.VideoCamera,
                     contentDescription = R.string.video_details_button_trailer,
                     action = DetailsAction.TrailerClicked,
+                )
+            )
+        }
+        // This is the only way into the schedule screen. A text button took too much of the row,
+        // so it became an icon rather than disappearing.
+        if (item.imdb?.isNotBlank() == true) {
+            add(
+                DetailsButtonUIState.IconOnly(
+                    icon = PhosphorIcons.Duotone.CalendarBlank,
+                    contentDescription = R.string.video_details_button_schedule,
+                    action = DetailsAction.ScheduleClicked,
                 )
             )
         }
@@ -258,14 +257,13 @@ internal class DetailsScreenUIMapper(
 
     private fun buildInfo(item: Item): DetailsInfoUIState {
         val details = itemMapper.mapDetailedItem(item)
-        val cast = item.castMembers()
         return DetailsInfoUIState(
             ratings = details.ratings,
+            chips = buildChips(item),
             factsLine = buildFactsLine(item),
-            creditsLine = buildCreditsLine(item),
-            castCards = cast.map { actor ->
-                DetailsCastMemberUIState(actorQuery = actor, displayName = actor)
-            },
+            directorLine = buildDirectorLine(item),
+            castLine = buildCastLine(item),
+            resumeLine = buildResumeLine(item),
         )
     }
 
@@ -278,12 +276,35 @@ internal class DetailsScreenUIMapper(
         }
     }
 
-    private fun buildFactsLine(item: Item): String = buildList {
+    /**
+     * What the thing is, not what is inside it: kind, size, quality, sound, age. Tracks and
+     * subtitles stay on the line below -- they are read only once the choice is already made.
+     */
+    private fun buildChips(item: Item): List<String> = buildList {
+        val isSeriesLike = item.type.isSeriesLike()
+        add(
+            resources.getString(
+                if (isSeriesLike) R.string.video_details_chip_series else R.string.video_details_chip_movie
+            )
+        )
+        if (isSeriesLike) {
+            item.seasons?.size?.takeIf { count -> count > 0 }?.let { count ->
+                add(resources.getQuantityString(R.plurals.video_details_chip_seasons, count, count))
+            }
+            mapSeriesStatus(item)?.let(::add)
+        } else {
+            item.duration?.total?.takeIf { total -> total > 0 }?.let { total ->
+                add(with(itemMapper) { total.formatDurationWithResources() })
+            }
+        }
         item.displayQuality()?.let(::add)
         if (item.ac3 == 1 || item.mediaItemsHaveSurroundSound()) {
             add(resources.getString(R.string.video_details_info_sound_surround))
         }
         item.ageRating?.takeIf(String::isNotBlank)?.let(::add)
+    }
+
+    private fun buildFactsLine(item: Item): String = buildList {
         item.voice?.takeIf(String::isNotBlank)?.let(::add)
         item.playbackAudioTrackCount().takeIf { it > 0 }?.let { count ->
             add(resources.getString(R.string.video_details_facts_audio_tracks, count))
@@ -293,14 +314,62 @@ internal class DetailsScreenUIMapper(
         }
     }.joinToString(FACT_SEPARATOR)
 
-    private fun buildCreditsLine(item: Item): String = buildList {
-        item.director?.takeIf(String::isNotBlank)?.let { director ->
-            add(resources.getString(R.string.video_details_facts_director, director))
+    private fun buildDirectorLine(item: Item): String =
+        item.director?.takeIf(String::isNotBlank)
+            ?.let { director -> resources.getString(R.string.video_details_facts_director, director) }
+            .orEmpty()
+
+    private fun buildCastLine(item: Item): String =
+        item.castMembers().takeIf { cast -> cast.isNotEmpty() }
+            ?.let { cast -> resources.getString(R.string.video_details_facts_cast, cast.joinToString(", ")) }
+            .orEmpty()
+
+    private fun buildResumeLine(item: Item): String {
+        return if (item.type.isSeriesLike()) buildSeriesResumeLine(item) else buildMovieResumeLine(item)
+    }
+
+    private fun buildSeriesResumeLine(item: Item): String {
+        val next = findFirstUnwatchedEpisode(item)
+            ?: return resources.getString(R.string.video_details_resume_finished)
+        val left = next.episode.watching.timeLeft()
+        return if (left != null) {
+            resources.getString(
+                R.string.video_details_resume_series,
+                next.seasonNumber,
+                next.episode.number,
+                with(itemMapper) { left.formatDurationWithResources() },
+            )
+        } else {
+            resources.getString(
+                R.string.video_details_resume_series_next,
+                next.seasonNumber,
+                next.episode.number,
+            )
         }
-        item.castMembers().takeIf { it.isNotEmpty() }?.let { cast ->
-            add(resources.getString(R.string.video_details_facts_cast, cast.joinToString(", ")))
+    }
+
+    private fun buildMovieResumeLine(item: Item): String {
+        val left = (item.watching ?: item.videos?.firstOrNull()?.watching).timeLeft()
+        val total = item.duration?.total ?: 0
+        return when {
+            itemMapper.isItemWatched(item) -> resources.getString(R.string.video_details_resume_finished)
+            left != null -> resources.getString(
+                R.string.video_details_resume_movie,
+                with(itemMapper) { left.formatDurationWithResources() },
+            )
+            total > 0 -> resources.getString(
+                R.string.video_details_resume_not_started,
+                with(itemMapper) { total.formatDurationWithResources() },
+            )
+            else -> ""
         }
-    }.joinToString(FACT_SEPARATOR)
+    }
+
+    /** What is left when playback has started. Null when it has not, and the line says so. */
+    private fun WatchingInfo?.timeLeft(): Int? {
+        if (this == null || time <= 0 || duration <= 0) return null
+        return (duration - time).takeIf { left -> left > 0 }
+    }
 
     private fun Item.subtitleCount(): Int {
         return videos.orEmpty().sumOf { video -> video.subtitles.orEmpty().size } +
@@ -351,43 +420,6 @@ internal class DetailsScreenUIMapper(
             .filter { actor -> actor.isNotBlank() }
     }
 
-    private fun actorNameKeys(value: String): Set<String> {
-        val normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
-            .replace(Regex("\\p{M}+"), "")
-            .trim()
-            .lowercase()
-            .replace(Regex("[\\p{Punct}]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-        if (normalized.isEmpty()) return emptySet()
-        val romanized = if (normalized.any { it.isCyrillic() }) {
-            setOf(normalized.transliterateCyrillic(), normalized.transliterateJapaneseCyrillic())
-        } else {
-            emptySet()
-        }
-        return (romanized + normalized)
-            .flatMap { name -> listOf(name, name.sortedNameTokens()) }
-            .filter(String::isNotEmpty)
-            .toSet()
-    }
-
-    private fun String.sortedNameTokens(): String =
-        split(" ").filter(String::isNotEmpty).sorted().joinToString(" ")
-
-    private fun String.transliterateCyrillic(): String = buildString {
-        this@transliterateCyrillic.forEach { character ->
-            append(CYRILLIC_TRANSLITERATION[character] ?: character)
-        }
-    }
-
-    private fun String.transliterateJapaneseCyrillic(): String =
-        JAPANESE_CYRILLIC_SEQUENCES.entries.fold(this) { result, (source, target) ->
-            result.replace(source, target)
-        }.transliterateCyrillic().replace("v", "w")
-
-    private fun Char.isCyrillic(): Boolean =
-        Character.UnicodeBlock.of(this) == Character.UnicodeBlock.CYRILLIC
-
     private fun Video.hasSurroundSound(): Boolean {
         return ac3 == 1 || audios.orEmpty().any { audio -> (audio.channels ?: 0) >= SURROUND_CHANNELS }
     }
@@ -399,19 +431,5 @@ internal class DetailsScreenUIMapper(
     private companion object {
         const val SURROUND_CHANNELS = 6
         const val FACT_SEPARATOR = " · "
-        val CYRILLIC_TRANSLITERATION = mapOf(
-            'а' to "a", 'б' to "b", 'в' to "v", 'г' to "g", 'д' to "d",
-            'е' to "e", 'ё' to "e", 'ж' to "zh", 'з' to "z", 'и' to "i",
-            'й' to "y", 'к' to "k", 'л' to "l", 'м' to "m", 'н' to "n",
-            'о' to "o", 'п' to "p", 'р' to "r", 'с' to "s", 'т' to "t",
-            'у' to "u", 'ф' to "f", 'х' to "h", 'ц' to "ts", 'ч' to "ch",
-            'ш' to "sh", 'щ' to "shch", 'ъ' to "", 'ы' to "y", 'ь' to "",
-            'э' to "e", 'ю' to "yu", 'я' to "ya",
-        )
-        val JAPANESE_CYRILLIC_SEQUENCES = linkedMapOf(
-            "дз" to "z",
-            "си" to "shi",
-            "ти" to "chi",
-        )
     }
 }

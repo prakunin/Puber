@@ -8,7 +8,6 @@ import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Season
-import com.kino.puber.data.api.models.TmdbCastMember
 import com.kino.puber.data.api.models.Trailer
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.VideoFile
@@ -87,14 +86,14 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
-    fun `the facts line carries what the meta line does not`() {
+    fun `chips carry the shape of the thing and the facts line what is inside it`() {
         val item = Item(
             id = 1,
             title = "Фильм / Movie",
             type = ItemType.MOVIE,
-            // The year and the genres belong to the meta line. They are set here so the assertions
-            // that they stay out of the facts line have something to catch: without them the item
-            // could not have produced either string, and the check would pass on emptiness alone.
+            // The year and the genres belong to the meta line. They are set so the assertions
+            // that they stay out have something to catch: without them the item could not have
+            // produced either string, and the check would pass on emptiness alone.
             year = 2026,
             genres = listOf(Genre(id = 1, title = "Комедия")),
             videos = listOf(Video(id = 1, files = listOf(VideoFile(quality = "1080")))),
@@ -104,14 +103,19 @@ class DetailsScreenUIMapperTest {
         )
 
         val mapped = mapper.map(item, isInWatchlist = false)
+        val chips = mapped.info.chips
         val facts = mapped.info.factsLine
 
-        assertTrue(facts.contains("1080")) { facts }
-        assertTrue(facts.contains("16+")) { facts }
+        // What the thing is goes to the chips.
+        assertTrue(chips.contains("1080")) { chips.toString() }
+        assertTrue(chips.contains("16+")) { chips.toString() }
+        // What is inside it goes to the line below, read only once the choice is made.
         assertTrue(facts.contains("Дубляж")) { facts }
+        assertFalse(facts.contains("1080")) { facts }
+        assertFalse(facts.contains("16+")) { facts }
         assertFalse(facts.contains("2026")) { facts }
         assertFalse(facts.contains("Комедия")) { facts }
-        // ...and the meta line is where they did go.
+        // ...and the year and the genres went to the meta line.
         assertTrue(mapped.details.year.contains("2026")) { mapped.details.year }
         assertTrue(mapped.details.genres.contains("Комедия")) { mapped.details.genres }
     }
@@ -124,7 +128,7 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
-    fun `the credits line names the director and the cast`() {
+    fun `the director and the cast get a line each`() {
         val item = Item(
             id = 1,
             title = "Фильм",
@@ -133,20 +137,24 @@ class DetailsScreenUIMapperTest {
             cast = "А Актёр, Б Актёр",
         )
 
-        val credits = mapper.map(item, isInWatchlist = false).info.creditsLine
+        val info = mapper.map(item, isInWatchlist = false).info
 
-        assertTrue(credits.contains("Иван Иванов")) { credits }
-        assertTrue(credits.contains("А Актёр")) { credits }
+        assertTrue(info.directorLine.contains("Иван Иванов")) { info.directorLine }
+        assertTrue(info.castLine.contains("А Актёр")) { info.castLine }
+        assertTrue(info.castLine.contains("Б Актёр")) { info.castLine }
+        // Both used to share one single-line string, which truncated the cast at the first
+        // name -- so it was never actually shown.
+        assertFalse(info.castLine.contains("Иван Иванов")) { info.castLine }
     }
 
     @Test
-    fun `a missing director leaves no dangling separator`() {
+    fun `a missing director leaves the cast line alone`() {
         val item = Item(id = 1, title = "Фильм", type = ItemType.MOVIE, cast = "А Актёр")
 
-        val credits = mapper.map(item, isInWatchlist = false).info.creditsLine
+        val info = mapper.map(item, isInWatchlist = false).info
 
-        assertFalse(credits.startsWith(" · ")) { credits }
-        assertFalse(credits.endsWith(" · ")) { credits }
+        assertEquals("", info.directorLine)
+        assertTrue(info.castLine.contains("А Актёр")) { info.castLine }
     }
 
     @Test
@@ -165,13 +173,14 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
-    fun `an item with no facts and no credits maps to two empty lines`() {
+    fun `an item with no facts and no credits maps to empty lines`() {
         val bare = Item(id = 1, title = "Фильм", type = ItemType.MOVIE)
 
         val info = mapper.map(bare, isInWatchlist = false).info
 
         assertEquals("", info.factsLine)
-        assertEquals("", info.creditsLine)
+        assertEquals("", info.directorLine)
+        assertEquals("", info.castLine)
     }
 
     @Test
@@ -207,115 +216,54 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
-    fun map_seriesStatus_mapsFinishedOngoingAndUnknownOnlyForSeries() {
-        assertEquals(
-            "string_${R.string.video_details_series_status_finished}",
-            mapper.map(series(trailer = null, finished = true)).seriesStatus,
-        )
-        assertEquals(
-            "string_${R.string.video_details_series_status_ongoing}",
-            mapper.map(series(trailer = null, finished = false)).seriesStatus,
-        )
-        assertEquals(null, mapper.map(series(trailer = null, finished = null)).seriesStatus)
-        assertEquals(null, mapper.map(movie(trailer = null, finished = true)).seriesStatus)
+    fun map_chips_carrySeriesStatusOnlyWhenKnownAndOnlyForSeries() {
+        val finished = "string_${R.string.video_details_series_status_finished}"
+        val ongoing = "string_${R.string.video_details_series_status_ongoing}"
+
+        assertTrue(mapper.map(series(trailer = null, finished = true)).info.chips.contains(finished))
+        assertTrue(mapper.map(series(trailer = null, finished = false)).info.chips.contains(ongoing))
+
+        val unknown = mapper.map(series(trailer = null, finished = null)).info.chips
+        assertFalse(unknown.contains(finished)) { unknown.toString() }
+        assertFalse(unknown.contains(ongoing)) { unknown.toString() }
+
+        val film = mapper.map(movie(trailer = null, finished = true)).info.chips
+        assertFalse(film.contains(finished)) { film.toString() }
     }
 
     @Test
-    fun map_seriesStatus_isExposedOnlyWhenKnown() {
-        val state = mapper.map(series(trailer = null, finished = false))
-
+    fun map_chips_openWithTheKindOfThing() {
         assertEquals(
-            "string_${R.string.video_details_series_status_ongoing}",
-            state.seriesStatus,
+            "string_${R.string.video_details_chip_series}",
+            mapper.map(series(trailer = null)).info.chips.first(),
         )
         assertEquals(
-            null,
-            mapper.map(series(trailer = null, finished = null)).seriesStatus,
+            "string_${R.string.video_details_chip_movie}",
+            mapper.map(movie(trailer = null)).info.chips.first(),
         )
     }
 
     @Test
-    fun map_castCards_preservesOrderAndOriginalActorQueries() {
+    fun map_seasons_areSeparateAndOpenOnTheOneTheViewerReturnsTo() {
         val state = mapper.map(
-            movie(
+            series(
                 trailer = null,
-                cast = " Actor One, Actor Two, Actor One ,, ",
-            ),
+                seasons = listOf(
+                    Season(id = 1, number = 1, episodes = listOf(Episode(id = 101, number = 1, watched = 1))),
+                    Season(id = 2, number = 2, episodes = listOf(Episode(id = 201, number = 1))),
+                ),
+            )
         )
 
-        assertEquals(
-            listOf(
-                DetailsCastMemberUIState("Actor One", "Actor One"),
-                DetailsCastMemberUIState("Actor Two", "Actor Two"),
-                DetailsCastMemberUIState("Actor One", "Actor One"),
-            ),
-            state.info.castCards,
-        )
+        assertEquals(listOf(1, 2), state.seasons.map { season -> season.number })
+        assertEquals(listOf(101), state.seasons.first().episodes.map { episode -> episode.id })
+        assertEquals(2, state.selectedSeasonNumber)
+        assertEquals(2, state.selectedSeason?.number)
     }
 
     @Test
-    fun enrichCastCards_attachesOnlyUniqueNormalizedExactMatches() {
-        val cards = listOf(
-            DetailsCastMemberUIState("Anne-Marie O'Neil", "Anne-Marie O'Neil"),
-            DetailsCastMemberUIState("Unknown Actor", "Unknown Actor"),
-            DetailsCastMemberUIState("Duplicate", "Duplicate"),
-            DetailsCastMemberUIState("No Photo", "No Photo"),
-        )
-
-        val enriched = mapper.enrichCastCards(
-            castCards = cards,
-            tmdbCast = listOf(
-                TmdbCastMember(" Anne Marie O Neil ", "https://image/one"),
-                TmdbCastMember("Duplicate", "https://image/a"),
-                TmdbCastMember("duplicate", "https://image/b"),
-                TmdbCastMember("No Photo", null),
-                TmdbCastMember("Unmatched", "https://image/unmatched"),
-            ),
-        )
-
-        assertEquals(
-            listOf("https://image/one", null, null, null),
-            enriched.map { it.photoUrl },
-        )
-        assertEquals(cards.map { it.actorQuery }, enriched.map { it.actorQuery })
-        assertEquals(cards.map { it.displayName }, enriched.map { it.displayName })
-    }
-
-    @Test
-    fun enrichCastCards_matchesLocalizedReorderedNamesAndKeepsUnsupportedFallback() {
-        val cards = listOf(
-            DetailsCastMemberUIState("Сираиси Харука", "Сираиси Харука"),
-            DetailsCastMemberUIState("Тамура Муцуми", "Тамура Муцуми"),
-            DetailsCastMemberUIState("Накамура Юити", "Накамура Юити"),
-            DetailsCastMemberUIState("Айдзава Сая", "Айдзава Сая"),
-            DetailsCastMemberUIState("Юки Аой", "Юки Аой"),
-            DetailsCastMemberUIState("Неизвестный Актёр", "Неизвестный Актёр"),
-        )
-
-        val enriched = mapper.enrichCastCards(
-            castCards = cards,
-            tmdbCast = listOf(
-                TmdbCastMember("Haruka Shiraishi", "https://image/shiraishi"),
-                TmdbCastMember("Mutsumi Tamura", "https://image/tamura"),
-                TmdbCastMember("Yuichi Nakamura", "https://image/nakamura"),
-                TmdbCastMember("Saya Aizawa", "https://image/aizawa"),
-                TmdbCastMember("Aoi Yuki", "https://image/yuki"),
-            ),
-        )
-
-        assertEquals(
-            listOf(
-                "https://image/shiraishi",
-                "https://image/tamura",
-                "https://image/nakamura",
-                "https://image/aizawa",
-                "https://image/yuki",
-                null,
-            ),
-            enriched.map { it.photoUrl },
-        )
-        assertEquals(cards.map { it.actorQuery }, enriched.map { it.actorQuery })
-        assertEquals(cards.map { it.displayName }, enriched.map { it.displayName })
+    fun map_movie_hasNoSeasons() {
+        assertEquals(emptyList<DetailsSeasonUIState>(), mapper.map(movie(trailer = null)).seasons)
     }
 
     private inline fun <reified T : DetailsButtonUIState> List<DetailsButtonUIState>.count(

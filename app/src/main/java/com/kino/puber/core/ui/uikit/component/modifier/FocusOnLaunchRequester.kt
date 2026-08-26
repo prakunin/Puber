@@ -45,7 +45,10 @@ fun rememberFocusRequesterOnLaunch(): FocusRequester {
     val scope = rememberCoroutineScope()
     val isDrawerOpen = LocalDrawerState.current?.currentValue == DrawerValue.Open
     val autoFocusEnabled = LocalAutoFocusOnLaunchEnabled.current
-    var isFocusRequested by rememberSaveable(key = LocalScreenKey.current) {
+    // The screen key is an input, not a `key`: the flag belongs to this call site and is reset
+    // when the site is reused for another navigation entry. A custom `key` is deprecated
+    // because it shares one slot between every call site that names it.
+    var isFocusRequested by rememberSaveable(LocalScreenKey.current) {
         mutableStateOf(false)
     }
 

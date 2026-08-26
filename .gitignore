@@ -24,3 +24,6 @@
 
 # Subagent-driven development scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Foglamp scan publication metadata (contains a secret edit token).
+.foglamp/

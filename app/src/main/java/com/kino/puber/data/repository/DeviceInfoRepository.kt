@@ -60,8 +60,18 @@ internal class DeviceInfoRepository(
 
     private fun isDisplayHdrSupported(): Boolean {
         val display = getPrimaryDisplay(context) ?: return false
-        val hdrTypes = display.hdrCapabilities?.supportedHdrTypes ?: return false
-        return hdrTypes.isNotEmpty()
+        return display.supportedHdrTypes().isNotEmpty()
+    }
+
+    // Display.HdrCapabilities carries what the panel can ever do; from U the per-mode list on
+    // Display.Mode replaces it, and the old accessor is deprecated.
+    private fun Display.supportedHdrTypes(): IntArray {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            mode.supportedHdrTypes
+        } else {
+            @Suppress("DEPRECATION")
+            hdrCapabilities?.supportedHdrTypes ?: IntArray(0)
+        }
     }
 
     private fun isHdrCodecSupported(): Boolean {

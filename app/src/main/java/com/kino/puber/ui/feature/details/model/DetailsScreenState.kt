@@ -4,7 +4,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.UIAction
 
@@ -18,7 +17,9 @@ internal sealed interface DetailsScreenState {
         val buttons: List<DetailsButtonUIState>,
         val isInWatchlist: Boolean,
         val isWatched: Boolean,
-        val episodes: VideoGridUIState? = null,
+        /** Empty on a film. Seasons in order, each carrying its own episodes. */
+        val seasons: List<DetailsSeasonUIState> = emptyList(),
+        val selectedSeasonNumber: Int? = null,
         val currentEpisode: VideoItemUIState? = null,
         val initialEpisodeFocusId: Int? = null,
         val similarItems: List<VideoItemUIState> = emptyList(),
@@ -28,9 +29,22 @@ internal sealed interface DetailsScreenState {
          * still. Distinct from [trailerUrl], which is the full-screen trailer the user asked for.
          */
         val previewTrailerUrl: String? = null,
-        val seriesStatus: String? = null,
-    ) : DetailsScreenState
+    ) : DetailsScreenState {
+
+        /** The season under the chosen chip; the last one before anything has been chosen. */
+        val selectedSeason: DetailsSeasonUIState?
+            get() = seasons.firstOrNull { season -> season.number == selectedSeasonNumber }
+                ?: seasons.lastOrNull()
+    }
 }
+
+@Immutable
+internal data class DetailsSeasonUIState(
+    val number: Int,
+    val episodes: List<VideoItemUIState>,
+    /** `3 сезон · 8 серий · просмотрено 4` -- the caption beside the chips. */
+    val summary: String,
+)
 
 @Immutable
 internal sealed interface DetailsButtonUIState {
@@ -61,20 +75,20 @@ internal sealed interface DetailsButtonUIState {
 @Immutable
 internal data class DetailsInfoUIState(
     val ratings: List<RatingUIState>,
-    /** Quality, sound, age rating, translation, track and subtitle counts, joined by " · ". */
+    /** Kind, season count or duration, status, quality, sound, age -- one chip per fact. */
+    val chips: List<String>,
+    /** Audio tracks and subtitles, joined by " · ". */
     val factsLine: String,
-    /** `Режиссёр: …` and `В ролях: …`, joined by " · ". */
-    val creditsLine: String,
-    val castCards: List<DetailsCastMemberUIState> = emptyList(),
+    /** `Режиссёр: …`. Empty when the payload carries no director. */
+    val directorLine: String,
+    /**
+     * `В ролях: …` on a line of its own. Sharing one line with the director truncated the cast
+     * at the first name, so it was never actually shown.
+     */
+    val castLine: String,
+    /** `Остановились на 3 сезоне, 5 серии · осталось 22 мин`, or the duration when unstarted. */
+    val resumeLine: String,
 )
-
-@Immutable
-internal data class DetailsCastMemberUIState(
-    val actorQuery: String,
-    val displayName: String,
-    val photoUrl: String? = null,
-)
-
 
 @Immutable
 internal sealed interface DetailsAction : UIAction {
@@ -83,11 +97,11 @@ internal sealed interface DetailsAction : UIAction {
     data object WatchlistToggleClicked : DetailsAction
     data object WatchedToggleClicked : DetailsAction
     data object ShareClicked : DetailsAction
+    data class SeasonSelected(val number: Int) : DetailsAction
     data class EpisodeSelected(val item: VideoItemUIState) : DetailsAction
     data class EpisodeWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SeasonWatchedChanged(val item: VideoItemUIState, val watched: Boolean) : DetailsAction
     data class SimilarSelected(val item: VideoItemUIState) : DetailsAction
-    data class CastMemberSelected(val actorQuery: String) : DetailsAction
     data object ScheduleClicked : DetailsAction
     data object CloseTrailer : DetailsAction
     data object TrailerPreviewFinished : DetailsAction

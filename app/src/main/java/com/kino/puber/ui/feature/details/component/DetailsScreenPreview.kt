@@ -15,13 +15,12 @@ import com.adamglin.phosphoricons.duotone.VideoCamera
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridItemUIState
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoGridUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
 import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
+import com.kino.puber.ui.feature.details.model.DetailsSeasonUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 
 // region Preview Data
@@ -110,46 +109,56 @@ private val previewMovieButtons = listOf(
     ),
 )
 
-private fun previewInfo(details: VideoDetailsUIState) = DetailsInfoUIState(
+private fun previewInfo(
+    details: VideoDetailsUIState,
+    chips: List<String>,
+    resumeLine: String,
+) = DetailsInfoUIState(
     ratings = details.ratings,
-    factsLine = "1080p · Объёмный звук · 16+ · Дубляж · Дорожек: 3 · Субтитры: 2",
-    creditsLine = "Режиссёр: Ларри Ян · В ролях: Джеки Чан, Чжан Цзыфэн, Тони Люн Ка-Фай",
+    chips = chips,
+    factsLine = "Дубляж · Дорожек: 3 · Субтитры: 2",
+    directorLine = "Режиссёр: Ларри Ян",
+    castLine = "В ролях: Джеки Чан, Чжан Цзыфэн, Тони Люн Ка-Фай, Юй Жунгуан, Ху Чжэнь",
+    resumeLine = resumeLine,
 )
 
-private val previewEpisodes = VideoGridUIState(
-    list = listOf(
-        VideoGridItemUIState.Title("1 сезон, 8 серий"),
-        VideoGridItemUIState.Items(
-            items = listOf(
-                VideoItemUIState(1, "1. Чужой в деревне", "", "", showTitle = true),
-                VideoItemUIState(2, "2. Молоко с доставкой", "", "", showTitle = true),
-                VideoItemUIState(3, "3. Трактористы", "", "", showTitle = true),
-                VideoItemUIState(4, "4. Большой брат", "", "", showTitle = true),
-            ),
-            rowKey = "season_1",
+private val previewSeasons = listOf(
+    DetailsSeasonUIState(
+        number = 1,
+        episodes = listOf(
+            VideoItemUIState(1, "1. Чужой в деревне", "", "", showTitle = true),
+            VideoItemUIState(2, "2. Молоко с доставкой", "", "", showTitle = true),
+            VideoItemUIState(3, "3. Трактористы", "", "", showTitle = true),
+            VideoItemUIState(4, "4. Большой брат", "", "", showTitle = true),
         ),
-        VideoGridItemUIState.Title("2 сезон, 8 серий"),
-        VideoGridItemUIState.Items(
-            items = listOf(
-                VideoItemUIState(5, "1. Новые горизонты", "", "", showTitle = true),
-                VideoItemUIState(6, "2. Код деревни", "", "", showTitle = true),
-                VideoItemUIState(7, "3. Извинигород", "", "", showTitle = true),
-                VideoItemUIState(8, "4. Дед-Код", "", "", showTitle = true),
-            ),
-            rowKey = "season_2",
+        summary = "1 сезон · 8 серий · просмотрено 4",
+    ),
+    DetailsSeasonUIState(
+        number = 2,
+        episodes = listOf(
+            VideoItemUIState(5, "1. Новые горизонты", "", "", showTitle = true),
+            VideoItemUIState(6, "2. Код деревни", "", "", showTitle = true),
+            VideoItemUIState(7, "3. Извинигород", "", "", showTitle = true),
+            VideoItemUIState(8, "4. Дед-Код", "", "", showTitle = true),
         ),
-    )
+        summary = "2 сезон · 8 серий",
+    ),
 )
 
 private fun previewSeriesContent(
     trailerUrl: String? = null,
 ) = DetailsScreenState.Content(
     details = previewSeriesDetails,
-    info = previewInfo(previewSeriesDetails),
+    info = previewInfo(
+        details = previewSeriesDetails,
+        chips = listOf("Сериал", "2 сезона", "Сериал выходит", "4K", "Объёмный звук", "16+"),
+        resumeLine = "Остановились на 2 сезоне, 6 серии · осталось 22 мин",
+    ),
     buttons = previewSeriesButtons,
     isInWatchlist = true,
     isWatched = false,
-    episodes = previewEpisodes,
+    seasons = previewSeasons,
+    selectedSeasonNumber = 2,
     trailerUrl = trailerUrl,
 )
 
@@ -157,7 +166,11 @@ private fun previewMovieContent(
     trailerUrl: String? = null,
 ) = DetailsScreenState.Content(
     details = previewMovieDetails,
-    info = previewInfo(previewMovieDetails),
+    info = previewInfo(
+        details = previewMovieDetails,
+        chips = listOf("Фильм", "2 ч 58 мин", "1080p", "Объёмный звук", "18+"),
+        resumeLine = "Не начат · 2 ч 58 мин",
+    ),
     buttons = previewMovieButtons,
     isInWatchlist = false,
     isWatched = false,

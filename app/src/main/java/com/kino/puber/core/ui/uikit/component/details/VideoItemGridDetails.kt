@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,28 @@ private const val ScrimAlphaAtTextEdge = 0.80F
 
 /** How far across the picture that scrim has faded out completely. */
 private const val ScrimEndFraction = 0.45F
+
+/**
+ * How the picture is let go towards the right. The catalogue and the content screen share this
+ * component but not a layout: there the text lies over the picture's last third, here the column
+ * is narrower and holding back as much black under it buys nothing.
+ */
+@Immutable
+data class MediaScrim(
+    val edgeFraction: Float,
+    val alphaAtEdge: Float,
+    val endFraction: Float,
+) {
+    companion object {
+        val Catalogue = MediaScrim(
+            edgeFraction = DescriptionEdgeInMedia,
+            alphaAtEdge = ScrimAlphaAtTextEdge,
+            endFraction = ScrimEndFraction,
+        )
+
+        val Details = MediaScrim(edgeFraction = 0.15F, alphaAtEdge = 0.72F, endFraction = 0.36F)
+    }
+}
 
 /** The catalogue artwork and trailers are supplied as landscape 16:9 media. */
 private const val LandscapeMediaAspectRatio = 16F / 9F
@@ -149,6 +172,8 @@ fun VideoDetailsMedia(
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     expandIntoContent: Boolean = false,
+    widthFraction: Float = MediaWidthFraction,
+    scrim: MediaScrim = MediaScrim.Catalogue,
 ) {
     if (expandIntoContent) {
         ExpandedMediaLayout(modifier = modifier) {
@@ -159,6 +184,7 @@ fun VideoDetailsMedia(
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
                 fullBleed = true,
+                scrim = scrim,
                 scaleTrailerToFit = true,
                 alignMediaToTop = true,
             )
@@ -170,13 +196,14 @@ fun VideoDetailsMedia(
         VideoDetailsPoster(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(MediaWidthFraction)
+                .fillMaxWidth(widthFraction)
                 .align(Alignment.CenterEnd),
             imageUrl = state.imageUrl,
             imageFallbackUrls = state.imageFallbackUrls,
             trailerUrl = trailerUrl,
             onTrailerFinished = onTrailerFinished,
             fullBleed = true,
+            scrim = scrim,
         )
     }
 }
@@ -297,6 +324,7 @@ private fun VideoDetailsPoster(
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     fullBleed: Boolean = false,
+    scrim: MediaScrim = MediaScrim.Catalogue,
     scaleTrailerToFit: Boolean = false,
     alignMediaToTop: Boolean = false,
 ) {
@@ -372,8 +400,8 @@ private fun VideoDetailsPoster(
                     .background(
                         brush = Brush.horizontalGradient(
                             0.00F to surface,
-                            DescriptionEdgeInMedia to surface.copy(alpha = ScrimAlphaAtTextEdge),
-                            ScrimEndFraction to surface.copy(alpha = 0.0F),
+                            scrim.edgeFraction to surface.copy(alpha = scrim.alphaAtEdge),
+                            scrim.endFraction to surface.copy(alpha = 0.0F),
                         )
                     )
             )

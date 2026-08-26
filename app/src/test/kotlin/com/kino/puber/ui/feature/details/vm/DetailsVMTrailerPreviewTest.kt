@@ -295,8 +295,11 @@ class DetailsVMTrailerPreviewTest {
         details = VideoDetailsUIState.Loading,
         info = DetailsInfoUIState(
             ratings = emptyList(),
+            chips = emptyList(),
             factsLine = "",
-            creditsLine = "",
+            directorLine = "",
+            castLine = "",
+            resumeLine = "",
         ),
         buttons = emptyList(),
         isInWatchlist = false,

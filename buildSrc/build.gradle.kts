@@ -1,5 +1,8 @@
 plugins {
-    `kotlin-dsl`
+    // `kotlin-dsl-base` rather than `kotlin-dsl`: this source set holds shared constants, not
+    // precompiled script plugins, and the full plugin would warn on every build that it found no
+    // plugin descriptors to publish.
+    `kotlin-dsl-base`
 }
 
 repositories {
@@ -9,6 +12,7 @@ repositories {
 }
 
 dependencies {
-    // Removed gradle plugin dependencies to avoid version conflicts
-    // They should be managed through version catalog in main build.gradle.kts
+    // Versions.kt refers to org.gradle.api types; no third-party plugin dependencies belong here.
+    // Plugin versions are managed through the version catalog in the main build.
+    implementation(gradleApi())
 }

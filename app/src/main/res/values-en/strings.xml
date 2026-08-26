@@ -392,4 +392,22 @@
     <string name="diagnostics_summary_complete">Both servers have been tested.</string>
     <string name="diagnostics_summary_current_fastest">The current server produced the best speed.</string>
     <string name="diagnostics_summary_faster_server">The %1$s server produced the best speed.</string>
+
+    <string name="video_details_chip_movie">Movie</string>
+    <string name="video_details_chip_series">Series</string>
+    <plurals name="video_details_chip_seasons">
+        <item quantity="one">%d season</item>
+        <item quantity="other">%d seasons</item>
+    </plurals>
+    <plurals name="video_details_episodes">
+        <item quantity="one">%d episode</item>
+        <item quantity="other">%d episodes</item>
+    </plurals>
+    <string name="video_details_season_summary">Season %1$d · %2$s</string>
+    <string name="video_details_season_summary_watched">Season %1$d · %2$s · %3$d watched</string>
+    <string name="video_details_resume_series">Stopped at season %1$d, episode %2$d · %3$s left</string>
+    <string name="video_details_resume_series_next">Up next — season %1$d, episode %2$d</string>
+    <string name="video_details_resume_movie">Stopped · %1$s left</string>
+    <string name="video_details_resume_not_started">Not started · %1$s</string>
+    <string name="video_details_resume_finished">Watched</string>
 </resources>

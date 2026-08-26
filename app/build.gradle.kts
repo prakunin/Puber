@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.7.55"
+val currentVersion = "1.8.59"
 
 private fun readProperties(name: String): Properties = Properties().apply {
     rootProject.file(name)
@@ -191,17 +191,15 @@ kotlin {
     jvmToolchain(Versions.ToolchainJavaVersion)
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(Versions.JvmTargetVersion))
-        freeCompilerArgs.add("-Xjvm-default=all")
+        // `-Xjvm-default=all` under its post-2.2 name; `no-compatibility` is the same mode.
+        freeCompilerArgs.add("-jvm-default=no-compatibility")
         optIn.addAll(
             listOf(
                 "androidx.compose.material3.ExperimentalMaterial3Api",
-                "androidx.compose.material.ExperimentalMaterialApi",
                 "androidx.compose.foundation.ExperimentalFoundationApi",
-                "androidx.compose.ui.test.ExperimentalTestApi",
                 "kotlinx.coroutines.ExperimentalCoroutinesApi",
                 "kotlinx.coroutines.FlowPreview",
                 "androidx.tv.material3.ExperimentalTvMaterial3Api",
-                "org.koin.compose.scope.ExperimentalKoinApi",
             )
         )
     }
@@ -221,8 +219,7 @@ tasks {
     // than scanning the source tree directly: those compile the variant first, so detekt runs with
     // type resolution and sees the rules a source-set-only pass silently skips (swallowed
     // cancellation, unsafe !!, unused declarations, ...).
-    @Suppress("unused")
-    val detektAll by registering {
+    register("detektAll") {
         group = "verification"
         description = "Runs detekt with type resolution over the dev debug production and unit-test sources."
         dependsOn("detektDevDebug", "detektDevDebugUnitTest")
