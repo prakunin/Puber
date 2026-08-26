@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
@@ -20,23 +19,35 @@ internal fun PlayerTitle(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 48.dp, top = 28.dp, end = 48.dp),
+            .padding(
+                start = PlayerControlsMetrics.SideMargin,
+                top = PlayerControlsMetrics.TopMargin,
+                end = PlayerControlsMetrics.SideMargin,
+            ),
         horizontalAlignment = Alignment.Start,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = PlayerControlsMetrics.TitleTextSize,
+                lineHeight = PlayerControlsMetrics.TitleLineHeight,
+            ),
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Start,
         )
         if (subtitle != null) {
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = PlayerControlsMetrics.SubtitleTextSize,
+                    lineHeight = PlayerControlsMetrics.SubtitleLineHeight,
+                ),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = SUBTITLE_ALPHA),
                 textAlign = TextAlign.Start,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = PlayerControlsMetrics.TitleToSubtitleGap),
             )
         }
     }
 }
+
+private const val SUBTITLE_ALPHA = 0.7f

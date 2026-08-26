@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -72,7 +73,7 @@ internal fun PlayerProgressBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = PROGRESS_HORIZONTAL_PADDING),
+            .padding(horizontal = PlayerControlsMetrics.SideMargin),
     ) {
         BufferingLabel(isBuffering = isBuffering)
         ProgressBarRow(
@@ -120,8 +121,9 @@ private fun ProgressBarRow(
     onOkPressed: () -> Unit,
 ) {
     Row(
+        modifier = Modifier.heightIn(min = PlayerControlsMetrics.ProgressRowHeight),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(PROGRESS_ROW_SPACING),
+        horizontalArrangement = Arrangement.spacedBy(PlayerControlsMetrics.TimeToTrackGap),
     ) {
         CurrentTimeText(currentTimeText)
         SeekTrack(
@@ -143,7 +145,7 @@ private fun ProgressBarRow(
 private fun CurrentTimeText(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        style = timeTextStyle(),
         color = MaterialTheme.colorScheme.primary,
     )
 }
@@ -152,10 +154,16 @@ private fun CurrentTimeText(text: String) {
 private fun RemainingTimeText(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        style = timeTextStyle(),
         color = MaterialTheme.colorScheme.onSurface,
     )
 }
+
+@Composable
+private fun timeTextStyle() = MaterialTheme.typography.bodyMedium.copy(
+    fontSize = PlayerControlsMetrics.TimeTextSize,
+    lineHeight = PlayerControlsMetrics.TimeLineHeight,
+)
 
 @Composable
 private fun SeekTrack(
@@ -171,7 +179,7 @@ private fun SeekTrack(
 ) {
     Box(
         modifier = modifier
-            .height(TRACK_TOUCH_HEIGHT)
+            .height(PlayerControlsMetrics.ProgressRowHeight)
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { keyEvent ->
@@ -201,8 +209,8 @@ private fun TrackBackground() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(TRACK_HEIGHT)
-            .clip(RoundedCornerShape(TRACK_CORNER_RADIUS))
+            .height(PlayerControlsMetrics.TrackHeight)
+            .clip(RoundedCornerShape(PlayerControlsMetrics.TrackCornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = TRACK_ALPHA)),
     )
 }
@@ -213,8 +221,8 @@ private fun BufferedTrack(bufferedProgress: Float, shimmerProgress: Float, isBuf
     Box(
         modifier = Modifier
             .fillMaxWidth(bufferedProgress)
-            .height(TRACK_HEIGHT)
-            .clip(RoundedCornerShape(TRACK_CORNER_RADIUS))
+            .height(PlayerControlsMetrics.TrackHeight)
+            .clip(RoundedCornerShape(PlayerControlsMetrics.TrackCornerRadius))
             .then(
                 if (isBuffering) {
                     Modifier.drawBehind {
@@ -245,8 +253,8 @@ private fun PlayedTrack(progress: Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth(progress)
-            .height(TRACK_HEIGHT)
-            .clip(RoundedCornerShape(TRACK_CORNER_RADIUS))
+            .height(PlayerControlsMetrics.TrackHeight)
+            .clip(RoundedCornerShape(PlayerControlsMetrics.TrackCornerRadius))
             .background(MaterialTheme.colorScheme.primary),
     )
 }
@@ -259,7 +267,7 @@ private fun ProgressThumb(progress: Float) {
     ) {
         Box(
             modifier = Modifier
-                .size(THUMB_SIZE)
+                .size(PlayerControlsMetrics.ThumbSize)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary),
         )
@@ -334,9 +342,3 @@ private const val SECONDS_PER_MINUTE = 60
 private const val SECONDS_PER_HOUR = 3_600
 
 private val BUFFERING_LABEL_BOTTOM_PADDING = 4.dp
-private val PROGRESS_HORIZONTAL_PADDING = 48.dp
-private val PROGRESS_ROW_SPACING = 12.dp
-private val TRACK_TOUCH_HEIGHT = 12.dp
-private val TRACK_HEIGHT = 4.dp
-private val TRACK_CORNER_RADIUS = 2.dp
-private val THUMB_SIZE = 12.dp

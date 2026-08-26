@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.player.component
 
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -62,7 +63,12 @@ internal fun PlayerButtonRow(
                     true
                 }
             }
-            .padding(horizontal = 48.dp, vertical = 16.dp),
+            .padding(
+                start = PlayerControlsMetrics.SideMargin,
+                end = PlayerControlsMetrics.SideMargin,
+                top = PlayerControlsMetrics.ButtonRowTopPadding,
+                bottom = PlayerControlsMetrics.BottomMargin,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         EpisodeLibraryButton(
@@ -109,7 +115,8 @@ private fun EpisodeLibraryButton(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.Start,
+        horizontalArrangement = Arrangement.spacedBy(PlayerControlsMetrics.ButtonGap, Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!state.isMovie) {
             ControlButton(
@@ -131,7 +138,10 @@ private fun TransportControls(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(
+            PlayerControlsMetrics.ButtonGap,
+            Alignment.CenterHorizontally,
+        ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!state.isMovie && state.hasPreviousEpisode) {
@@ -165,7 +175,7 @@ private fun SecondaryControls(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+        horizontalArrangement = Arrangement.spacedBy(PlayerControlsMetrics.ButtonGap, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ControlButton(
@@ -221,14 +231,16 @@ private fun PlayPauseButton(
     Button(
         onClick = onClick,
         modifier = Modifier
+            .size(width = PlayerControlsMetrics.ButtonWidth, height = PlayerControlsMetrics.ButtonHeight)
             .focusRequester(focusRequester)
             .semantics { contentDescription = description },
         colors = transparentButtonColors(),
+        contentPadding = PaddingValues(0.dp),
     ) {
         Icon(
             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(PlayerControlsMetrics.PlayPauseIcon),
         )
     }
 }
@@ -246,6 +258,7 @@ private fun ControlButton(
     Button(
         onClick = onClick,
         modifier = modifier
+            .size(width = PlayerControlsMetrics.ButtonWidth, height = PlayerControlsMetrics.ButtonHeight)
             .semantics {
                 contentDescription = description
                 selected?.let { this.selected = it }
@@ -253,17 +266,18 @@ private fun ControlButton(
             },
         enabled = !loading,
         colors = if (selected == true) selectedButtonColors() else transparentButtonColors(),
+        contentPadding = PaddingValues(0.dp),
     ) {
         if (loading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
+                modifier = Modifier.size(PlayerControlsMetrics.ButtonIcon),
+                strokeWidth = PlayerControlsMetrics.ButtonProgressStroke,
             )
         } else {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(PlayerControlsMetrics.ButtonIcon),
             )
         }
     }
@@ -271,20 +285,27 @@ private fun ControlButton(
 
 @Composable
 private fun transparentButtonColors() = ButtonDefaults.colors(
-    containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
-    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f),
-    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+    containerColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonContainerAlpha),
+    contentColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonContentAlpha),
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonFocusedContainerAlpha),
     focusedContentColor = MaterialTheme.colorScheme.onSurface,
-    pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+    pressedContainerColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonPressedContainerAlpha),
     pressedContentColor = MaterialTheme.colorScheme.onSurface,
 )
 
 @Composable
 private fun selectedButtonColors() = ButtonDefaults.colors(
-    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+    containerColor = MaterialTheme.colorScheme.primary
+        .copy(alpha = PlayerControlsMetrics.ButtonSelectedContainerAlpha),
     contentColor = MaterialTheme.colorScheme.primary,
-    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f),
+    focusedContainerColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonFocusedContainerAlpha),
     focusedContentColor = MaterialTheme.colorScheme.onSurface,
-    pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+    pressedContainerColor = MaterialTheme.colorScheme.onSurface
+        .copy(alpha = PlayerControlsMetrics.ButtonPressedContainerAlpha),
     pressedContentColor = MaterialTheme.colorScheme.onSurface,
 )
