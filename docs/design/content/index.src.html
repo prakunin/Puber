@@ -1,0 +1,1223 @@
+<title>Экран контента</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#0B0A0E;
+  --panel:#141118;
+  --panel2:#1B1722;
+  --line:#2B2534;
+  --text:#E7E3EC;
+  --dim:#948CA3;
+  --dimmer:#6A637A;
+  --accent:#D0BCFF;
+  --warm:#FFC178;
+
+  /* PuberTheme, verbatim */
+  --p-primary:#D0BCFF;
+  --p-onsurface:#E6E0E9;
+  --p-surfacevariant:#49454F;
+  --p-onsurfacevariant:#CAC4D0;
+  --p-inverseonsurface:#322F35;
+  --p-border:#E6E0E9;
+
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --roboto:"Roboto","Helvetica Neue",Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── chrome ───────────────────────────────────────────────── */
+.top{
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+  padding:18px 24px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#17131F 0%,var(--panel) 100%);
+}
+.top h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.top .sub{color:var(--dim);font-size:12.5px;max-width:64ch}
+.readout{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.readout b{color:var(--accent);font-weight:500}
+
+.switches{
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+  padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.seg{display:flex;align-items:center;gap:8px}
+.seg > span{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dimmer)}
+.seg .opts{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:5px 11px;cursor:pointer;
+  border-right:1px solid var(--line);
+}
+.seg .opts button:last-child{border-right:0}
+.seg button:hover{color:var(--text);background:var(--panel2)}
+.seg button[aria-pressed="true"]{background:#2C2338;color:var(--accent)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* ── stage ────────────────────────────────────────────────── */
+.scope{padding:22px 24px;background:linear-gradient(180deg,#0E0C12 0%,var(--ground) 100%);border-bottom:1px solid var(--line)}
+.stagewrap{position:relative;margin:0 auto;overflow:hidden;border:1px solid var(--line)}
+.stage{
+  position:absolute;top:0;left:0;width:1920px;height:1080px;
+  transform-origin:top left;background:#000;overflow:hidden;
+  font-family:var(--roboto);color:var(--p-onsurface);
+}
+.ruler{position:absolute;left:-9999px;top:0;visibility:hidden;white-space:normal}
+
+.media{position:absolute;overflow:hidden}
+.media img{position:absolute;left:0;display:block}
+.media .void{position:absolute;inset:0;background:#111}
+.media .hscrim,.media .vscrim{position:absolute;inset:0;pointer-events:none}
+.media .playing{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:#000;color:#4B4552;font-family:var(--mono);font-size:22px;letter-spacing:.2em;
+}
+
+.hero{position:absolute;display:flex;flex-direction:column;align-items:flex-start}
+.htitle{display:flex;align-items:flex-end}
+.htitle .main{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htitle .orig{color:var(--p-onsurfacevariant);white-space:nowrap}
+.rat{display:flex;align-items:center}
+.rat .m{display:flex;align-items:center}
+.rat svg,.rat img{display:block}
+.chips{display:flex}
+.chip{display:flex;align-items:center;justify-content:center;white-space:nowrap}
+.plot{overflow:hidden;position:relative}
+.plot .inner{position:absolute;left:0;right:0;top:0}
+.facts{display:flex;flex-direction:column}
+.facts .l{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.facts.two .l{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.facts.scroll .l{white-space:normal;overflow:hidden}
+.actions{display:flex;align-items:center}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  border-radius:999px;font-weight:500;white-space:nowrap;
+}
+.btn svg{display:block;flex:none}
+.resume{color:var(--p-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.rail{position:absolute;left:0;right:0}
+.srow{display:flex;align-items:center}
+.schip{display:flex;align-items:center;justify-content:center;border-radius:999px;font-weight:500;white-space:nowrap}
+.ssum{color:rgba(230,224,233,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cards{display:flex;overflow:hidden}
+.card{position:relative;flex:none;overflow:hidden;border-radius:16px}
+.card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.card .grad{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.2),rgba(0,0,0,.9))}
+.card .txt{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:flex-end}
+.card .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.card .bar{position:absolute;left:0;right:0;bottom:0}
+.card .eye{position:absolute;top:0;right:0;display:flex;align-items:center;justify-content:center;border-radius:12px}
+.ring{position:absolute;border-radius:16px;pointer-events:none;border-style:solid;border-color:var(--p-border)}
+
+.emptyrail{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:#3A3542;font-family:var(--mono);font-size:20px;letter-spacing:.18em;
+}
+
+.guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono)}
+.guides .v{position:absolute;top:0;bottom:0;width:2px}
+.guides .h{position:absolute;left:0;right:0;height:2px}
+.guides .lab{
+  position:absolute;font-size:19px;padding:3px 7px;border-radius:3px;
+  background:rgba(11,10,14,.82);white-space:nowrap;letter-spacing:.04em;
+}
+
+/* ── console ──────────────────────────────────────────────── */
+.console{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0;border-top:1px solid var(--line)}
+.group{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 20px 18px}
+.group > h2{margin:0 0 12px;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin-bottom:11px;align-items:center}
+.ctl .name{font-size:12.5px;color:var(--dim)}
+.ctl .val{font-family:var(--mono);font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums;text-align:right}
+.ctl .val.changed{color:var(--warm)}
+.ctl .val .was{color:var(--dimmer);font-size:11px}
+.ctl input[type=range]{grid-column:1 / -1;width:100%;margin:2px 0 0}
+.ctl .note{grid-column:1 / -1;font-size:11px;color:var(--dimmer);margin-top:-1px}
+
+input[type=range]{appearance:none;height:18px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);margin-top:-5px;border:0}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.foot{padding:18px 24px 40px;display:grid;gap:14px}
+.foot h2{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.spec{
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--dim);
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:14px 16px;overflow-x:auto;white-space:pre;
+}
+.spec b{color:var(--warm);font-weight:500}
+.hint{font-size:12px;color:var(--dimmer);max-width:82ch}
+.hint kbd{font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--dim)}
+.reset{
+  appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:6px 14px;border-radius:3px;cursor:pointer;justify-self:start;
+}
+.reset:hover{color:var(--text);border-color:var(--accent)}
+.reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="top">
+  <h1>Экран контента</h1>
+  <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 на данных, снятых с KM6: четыре карточки из кэша устройства, кадры и превью — оттуда же. Открывается на зафиксированных значениях — они перенесены в <span style="font-family:var(--mono)">DetailsScreenContent.kt</span>; серым рядом — что было до правки.</div>
+  <div class="readout" id="scaleOut"></div>
+</div>
+
+<div class="switches" id="switches"></div>
+
+<div class="scope">
+  <div class="stagewrap" id="stagewrap"><div class="stage" id="stage"></div></div>
+</div>
+
+<div class="console" id="console"></div>
+
+<div class="foot">
+  <h2>Что уедет в Compose</h2>
+  <div class="spec" id="spec"></div>
+  <div class="hint">
+    <kbd>←</kbd> <kbd>→</kbd> — по кнопкам, сезонам и карточкам, <kbd>↑</kbd> <kbd>↓</kbd> — между описанием, кнопками,
+    сезонами и рядом карточек. Это тот же путь, что прошит через <span style="font-family:var(--mono)">onPreviewKeyEvent</span>:
+    геометрический поиск фокуса проскакивает мимо чипов сезонов. Кликните по стенду, чтобы он начал ловить стрелки.
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="reset" id="reset">Вернуть зафиксированные</button>
+    <button class="reset" id="asShipped">Показать, как было до правки</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ── содержимое: выгружено из cached_payload на KM6 ────────── */
+const ITEMS = {
+ "89797": {
+  "id": 89797,
+  "type": "serial",
+  "titleMain": "Укрытие",
+  "titleOriginal": "Silo",
+  "wide": "__ASSET:wide-89797.jpg__",
+  "ratings": [
+   [
+    "KP",
+    "7.8"
+   ],
+   [
+    "IMDB",
+    "8.1"
+   ],
+   [
+    "PUB",
+    "9.4"
+   ]
+  ],
+  "chips": [
+   "Сериал",
+   "3 сезона",
+   "Сериал выходит",
+   "Объёмный звук"
+  ],
+  "factsLine": "Дорожек: 10 · Субтитры: 39",
+  "directorLine": "Режиссёр: Мортен Тильдум, Дэвид Семел, Берт, Берти, Адам Бернштейн",
+  "castLine": "В ролях: Ребекка Фергюсон, Рашида Джонс, Дэвид Ойелоуо, Коммон, Тим Роббинс, Иэн Глен, Харриет Уолтер, Чиназа Уче, Эви Нэш, Фердинанд Кингсли, Шэйн МакРей, Мэтт Гомез Хидака, Рик Гомес, Ли Драдж, Генри Гаррет, Уилл Меррик, Пол Херцберг",
+  "resumeLine": "Следующая — 3 сезон, 5 серия",
+  "plot": "По мотивам серии книг Хью Хауи. В недалёком будущем выжившие 10 тысяч человек живут в огромном бункере глубиной в 144 этажа. Люди верят, что мир мёртв, воздух снаружи отравлен и выходить на поверхность смертельно опасно. Всю информацию они получают с помощью огромных экранов, на которые транслируются изображения с внешних камер. День за днём глядя на безжизненный серый пейзаж, обитатели безропотно подчиняются устоявшимся правилам, главное из которых — никогда не выходить из бункера.",
+  "buttons": [
+   {
+    "kind": "text",
+    "text": "3 сезон, 5 серия",
+    "icon": "play"
+   },
+   {
+    "kind": "icon",
+    "icon": "videocamera",
+    "label": "Трейлер"
+   },
+   {
+    "kind": "icon",
+    "icon": "calendar",
+    "label": "Расписание"
+   },
+   {
+    "kind": "icon",
+    "icon": "share",
+    "label": "Поделиться"
+   },
+   {
+    "kind": "watchlist",
+    "icon": "bookmark",
+    "label": "Буду смотреть"
+   }
+  ],
+  "seasons": [
+   {
+    "number": 1,
+    "summary": "1 сезон · 10 серий · просмотрено 10",
+    "episodes": []
+   },
+   {
+    "number": 2,
+    "summary": "2 сезон · 10 серий · просмотрено 10",
+    "episodes": []
+   },
+   {
+    "number": 3,
+    "summary": "3 сезон · 8 серий · просмотрено 4",
+    "episodes": [
+     {
+      "title": "1. Кто ты?",
+      "thumb": "__ASSET:th-89797-3-1151026.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "2. Всё в порядке",
+      "thumb": "__ASSET:th-89797-3-1151848.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "3. Темная паутина",
+      "thumb": "__ASSET:th-89797-3-1152952.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "4. Делай что угодно, но домой не ходи",
+      "thumb": "__ASSET:th-89797-3-1153558.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "5. Воспоминание",
+      "thumb": "__ASSET:th-89797-3-1154680.jpg__",
+      "watched": false,
+      "progress": null
+     },
+     {
+      "title": "6. Поездка",
+      "thumb": "__ASSET:th-89797-3-1155991.jpg__",
+      "watched": false,
+      "progress": null
+     },
+     {
+      "title": "7. Радиосвязь",
+      "thumb": "__ASSET:th-89797-3-1157524.jpg__",
+      "watched": false,
+      "progress": null
+     },
+     {
+      "title": "8. Серая слизь",
+      "thumb": "__ASSET:th-89797-3-1159279.jpg__",
+      "watched": false,
+      "progress": null
+     }
+    ]
+   }
+  ],
+  "selectedSeason": 3
+ },
+ "13337": {
+  "id": 13337,
+  "type": "serial",
+  "titleMain": "Чужестранка",
+  "titleOriginal": "Outlander",
+  "wide": "__ASSET:wide-13337.jpg__",
+  "ratings": [
+   [
+    "KP",
+    "8"
+   ],
+   [
+    "IMDB",
+    "8.3"
+   ],
+   [
+    "PUB",
+    "9.5"
+   ]
+  ],
+  "chips": [
+   "Сериал",
+   "8 сезонов",
+   "Сериал выходит",
+   "Объёмный звук"
+  ],
+  "factsLine": "NewStudio · Дорожек: 3 · Субтитры: 5",
+  "directorLine": "Режиссёр: Метин Хусейн, Джэми Пэйн, Стивен Вульфенден, Анна Ферстер, Брайан Келли",
+  "castLine": "В ролях: Катрина Балф, Сэм Хьюэн, Софи Скелтон, Ричард Ранкин, Джон Белл, Данкан Лакруа, Сезар Домбой, Кейтлин О’Райан, Лорен Лайл, Тобайас Мензис, Грэм Мактавиш, Дэвид Берри, Грант О’Рурк, Пол Горман, Стивен Уолтерс",
+  "resumeLine": "Просмотрено",
+  "plot": "История Клэр Рэндалл, военной медсестры из 1940-х годов, которая во время прогулки у легендарных шотландских каменных кругов внезапно перемещается в 1743 год. Клэр оказывается в неизвестном мире, где её жизни угрожает опасность. Девушка должна найти возможность вернуться в будущее к мужу, но тут она вынуждена выйти замуж за галантного шотландского воина со сложной судьбой и обезоруживающим чувством юмора.",
+  "buttons": [
+   {
+    "kind": "text",
+    "text": "Смотреть сериал",
+    "icon": "play"
+   },
+   {
+    "kind": "icon",
+    "icon": "videocamera",
+    "label": "Трейлер"
+   },
+   {
+    "kind": "icon",
+    "icon": "calendar",
+    "label": "Расписание"
+   },
+   {
+    "kind": "icon",
+    "icon": "share",
+    "label": "Поделиться"
+   },
+   {
+    "kind": "watchlist",
+    "icon": "bookmark",
+    "label": "Буду смотреть"
+   }
+  ],
+  "seasons": [
+   {
+    "number": 1,
+    "summary": "1 сезон · 16 серий · просмотрено 16",
+    "episodes": []
+   },
+   {
+    "number": 2,
+    "summary": "2 сезон · 13 серий · просмотрено 13",
+    "episodes": []
+   },
+   {
+    "number": 3,
+    "summary": "3 сезон · 13 серий · просмотрено 13",
+    "episodes": []
+   },
+   {
+    "number": 4,
+    "summary": "4 сезон · 13 серий · просмотрено 13",
+    "episodes": []
+   },
+   {
+    "number": 5,
+    "summary": "5 сезон · 12 серий · просмотрено 12",
+    "episodes": []
+   },
+   {
+    "number": 6,
+    "summary": "6 сезон · 8 серий · просмотрено 8",
+    "episodes": []
+   },
+   {
+    "number": 7,
+    "summary": "7 сезон · 16 серий · просмотрено 16",
+    "episodes": []
+   },
+   {
+    "number": 8,
+    "summary": "8 сезон · 10 серий · просмотрено 10",
+    "episodes": [
+     {
+      "title": "1. Душа бунтаря",
+      "thumb": "__ASSET:th-13337-8-1127488.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "2. Пророчества",
+      "thumb": "__ASSET:th-13337-8-1129084.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "3. Abies Fraseri",
+      "thumb": "__ASSET:th-13337-8-1129924.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "4. Muskets, Liberty, and Sauerkraut",
+      "thumb": "__ASSET:th-13337-8-1132759.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "5. Send for the Devil",
+      "thumb": "__ASSET:th-13337-8-1132867.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "6. Blessed are the merciful",
+      "thumb": "__ASSET:th-13337-8-1133677.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "7. Evidence of Things Not Seen",
+      "thumb": "__ASSET:th-13337-8-1136356.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "8. In the Forest",
+      "thumb": "__ASSET:th-13337-8-1138888.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "9. Pharos",
+      "thumb": "__ASSET:th-13337-8-1142209.jpg__",
+      "watched": true,
+      "progress": null
+     },
+     {
+      "title": "10. And the World Was All Around Us",
+      "thumb": "__ASSET:th-13337-8-1143439.jpg__",
+      "watched": true,
+      "progress": null
+     }
+    ]
+   }
+  ],
+  "selectedSeason": 8
+ },
+ "30": {
+  "id": 30,
+  "type": "movie",
+  "titleMain": "Аполлон 13",
+  "titleOriginal": "Apollo 13",
+  "wide": "__ASSET:wide-30.jpg__",
+  "ratings": [
+   [
+    "KP",
+    "7.7"
+   ],
+   [
+    "IMDB",
+    "7.7"
+   ],
+   [
+    "PUB",
+    "10.0"
+   ]
+  ],
+  "chips": [
+   "Фильм",
+   "2 ч 20 мин",
+   "1080p",
+   "Объёмный звук"
+  ],
+  "factsLine": "Дубляж, Профессиональный многоголосый, Авторский одноголосый, Оригинал · Дорожек: 11 · Субтитры: 3",
+  "directorLine": "Режиссёр: Рон Ховард",
+  "castLine": "В ролях: Том Хэнкс, Билл Пэкстон, Кевин Бейкон, Гэри Синиз, Эд Харрис, Кэтлин Куинлен, Мэри Кейт Шеллхардт, Эмили Энн Ллойд, Мико Хьюз, Макс Эллиотт Слэйд, Джин Спигл Ховард, Трейси Рейнер, Дэвид Эндрюс, Мишель Литтл, Крис Эллис",
+  "resumeLine": "Не начат · 2 ч 20 мин",
+  "plot": "Фильм о неудачной лунной миссии «Аполлон-13» - одном из самых драматических моментов освоения космоса. В 1970 «Аполлон-13» должен был стать третьим космическим кораблём, который доставил бы астронавтов на Луну. Однако уже на подлёте к цели на корабле произошла серьёзная авария, которая не только поставила крест на высадке, но и создала угрозу жизни экипажа.",
+  "buttons": [
+   {
+    "kind": "text",
+    "text": "Смотреть фильм",
+    "icon": "play"
+   },
+   {
+    "kind": "text",
+    "text": "Трейлер",
+    "icon": "filmslate"
+   },
+   {
+    "kind": "icon",
+    "icon": "share",
+    "label": "Поделиться"
+   },
+   {
+    "kind": "watchlist",
+    "icon": "bookmark",
+    "label": "В закладки"
+   },
+   {
+    "kind": "watched",
+    "icon": "eye",
+    "label": "Отметить просмотренным"
+   }
+  ],
+  "seasons": [],
+  "selectedSeason": null
+ },
+ "111985": {
+  "id": 111985,
+  "type": "movie",
+  "titleMain": "Хищник: Убийца убийц",
+  "titleOriginal": "Predator: Killer of Killers",
+  "wide": "__ASSET:wide-111985.jpg__",
+  "ratings": [
+   [
+    "KP",
+    "7.1"
+   ],
+   [
+    "IMDB",
+    "7.4"
+   ],
+   [
+    "PUB",
+    "8.9"
+   ]
+  ],
+  "chips": [
+   "Фильм",
+   "2 ч 49 мин",
+   "1080p",
+   "Объёмный звук"
+  ],
+  "factsLine": "Дорожек: 17 · Субтитры: 22",
+  "directorLine": "Режиссёр: Дэн Трахтенберг, Joshua Wassung",
+  "castLine": "В ролях: Майкл Бин, Рик Гонсалес, Луис Одзава, Линдсэй ЛаВанши",
+  "resumeLine": "Не начат · 2 ч 49 мин",
+  "plot": "Обожающие охоту инопланетные хищники прилетают на Землю, чтобы сразиться с лучшими, как они считают, воинами разных эпох — предводительницей викингов в IX веке и ниндзя начала XVII века. Также их целью становится американский авиамеханик во Второй мировой войне, вынужденно севший за штурвал самолёта.",
+  "buttons": [
+   {
+    "kind": "text",
+    "text": "Смотреть фильм",
+    "icon": "play"
+   },
+   {
+    "kind": "text",
+    "text": "Трейлер",
+    "icon": "filmslate"
+   },
+   {
+    "kind": "icon",
+    "icon": "share",
+    "label": "Поделиться"
+   },
+   {
+    "kind": "watchlist",
+    "icon": "bookmark",
+    "label": "В закладки"
+   },
+   {
+    "kind": "watched",
+    "icon": "eye",
+    "label": "Отметить просмотренным"
+   }
+  ],
+  "seasons": [],
+  "selectedSeason": null
+ }
+};
+
+/* Что несёт код сегодня — DetailsScreenContent.kt, region Sizes. */
+const SHIPPED = {
+  pageEdge:0, sideEdge:11, heroTop:0, heroBottom:0, railHeight:117, railTop:0,
+  mediaFrac:65.5, scrimEdge:10, scrimAlpha:50, scrimEnd:50,
+
+  titleSp:28, titleOrigSp:15, titleLine:33, titleOrigBase:4, gapTitleParts:10,
+  gapTitle:4, gapRatings:15, gapRatingsToChips:3,
+
+  chipH:16, chipPad:7, chipSp:10, gapChips:5, gapChipsToPlot:3,
+
+  plotW:590, plotSp:10, plotLine:13, plotMin:126, gapPlotToFacts:16,
+
+  heroLineSp:8, heroLineH:15, heroLineW:590, heroLineAlpha:70,
+
+  btnH:23, btnPad:11, btnIcon:15, btnIconGap:5, btnGap:10, btnSp:9,
+  resumeSp:8, resumeGap:15,
+
+  seasonChipH:26, seasonChipPad:10, seasonChipSp:10, gapSeasonChips:5,
+  seasonSummaryGap:12, gapChipsToCards:4,
+  railLabelSp:14, cardH:80, cardGap:15,
+};
+
+/* Что несла первая редакция экрана — до того, как стенд был выкручен. */
+const BEFORE = {
+  pageEdge:16, sideEdge:8, heroTop:8, heroBottom:16, railHeight:116, railTop:8,
+  mediaFrac:56.25, scrimEdge:15, scrimAlpha:72, scrimEnd:36,
+  titleSp:24, titleOrigSp:14, titleLine:28, titleOrigBase:2, gapTitle:7,
+  gapRatings:12, gapRatingsToChips:8, gapChipsToPlot:10,
+  plotW:450, plotSp:13, plotLine:19, plotMin:57, gapPlotToFacts:9,
+  heroLineSp:11, heroLineW:550, heroLineAlpha:72,
+  btnH:24, btnPad:17, btnIcon:17, resumeSp:11, resumeGap:14,
+  seasonChipH:22, seasonChipSp:12, gapSeasonChips:8, seasonSummaryGap:6,
+  gapChipsToCards:8, cardH:70, cardGap:16,
+};
+
+const CONTROLS = [
+  {g:"Поля страницы", k:"pageEdge",  n:"поле сверху и снизу",   min:0,  max:64, step:1, u:"dp"},
+  {g:"Поля страницы", k:"sideEdge",  n:"поле слева",            min:0,  max:72, step:1, u:"dp",
+   note:"48 dp — безопасная зона Google; в этом форке принято ближе к краю"},
+  {g:"Поля страницы", k:"heroTop",   n:"текст героя от поля",   min:0,  max:48, step:1, u:"dp"},
+  {g:"Поля страницы", k:"heroBottom",n:"кнопки → низ героя",    min:0,  max:48, step:1, u:"dp"},
+  {g:"Поля страницы", k:"railHeight",n:"высота нижнего ряда",   min:60, max:220,step:1, u:"dp"},
+  {g:"Поля страницы", k:"railTop",   n:"поле над сезонами",     min:0,  max:32, step:1, u:"dp"},
+
+  {g:"Кадр", k:"mediaFrac",  n:"ширина кадра",        min:30, max:100, step:0.25, u:"% ширины"},
+  {g:"Кадр", k:"scrimEdge",  n:"край подложки",       min:0,  max:60,  step:1, u:"% кадра"},
+  {g:"Кадр", k:"scrimAlpha", n:"подложка на краю",    min:0,  max:100, step:1, u:"%"},
+  {g:"Кадр", k:"scrimEnd",   n:"подложка растворена", min:5,  max:100, step:1, u:"% кадра"},
+
+  {g:"Название", k:"titleSp",      n:"кегль названия",      min:12, max:44, step:1, u:"sp"},
+  {g:"Название", k:"titleOrigSp",  n:"кегль оригинала",     min:8,  max:28, step:1, u:"sp"},
+  {g:"Название", k:"titleLine",    n:"интерлиньяж",         min:12, max:52, step:1, u:"sp",
+   note:"ниже 33 sp Roboto-Medium не укладывается: у 28 sp собственная строка 32.8 sp"},
+  {g:"Название", k:"gapTitleParts",n:"название ↔ оригинал", min:0,  max:32, step:1, u:"dp"},
+  {g:"Название", k:"titleOrigBase",n:"оригинал от базовой", min:0,  max:12, step:1, u:"dp"},
+  {g:"Название", k:"gapTitle",     n:"название → рейтинги", min:0,  max:32, step:1, u:"dp"},
+
+  {g:"Рейтинги и фишки", k:"gapRatings",       n:"между рейтингами",  min:0, max:32, step:1, u:"dp"},
+  {g:"Рейтинги и фишки", k:"gapRatingsToChips",n:"рейтинги → фишки",  min:0, max:32, step:1, u:"dp"},
+  {g:"Рейтинги и фишки", k:"chipH",            n:"высота фишки",      min:10,max:36, step:1, u:"dp"},
+  {g:"Рейтинги и фишки", k:"chipPad",          n:"поле внутри фишки", min:2, max:20, step:1, u:"dp"},
+  {g:"Рейтинги и фишки", k:"chipSp",           n:"кегль фишки",       min:7, max:20, step:1, u:"sp"},
+  {g:"Рейтинги и фишки", k:"gapChips",         n:"между фишками",     min:0, max:20, step:1, u:"dp"},
+  {g:"Рейтинги и фишки", k:"gapChipsToPlot",   n:"фишки → описание",  min:0, max:36, step:1, u:"dp"},
+
+  {g:"Описание", k:"plotW",         n:"ширина блока",      min:240,max:640,step:5, u:"dp",
+   note:"кадр начинается на 331 dp — описание заходит под него"},
+  {g:"Описание", k:"plotSp",        n:"кегль",             min:9,  max:22, step:1, u:"sp"},
+  {g:"Описание", k:"plotLine",      n:"интерлиньяж",       min:11, max:32, step:1, u:"sp"},
+  {g:"Описание", k:"plotMin",       n:"минимум высоты",    min:0,  max:160,step:1, u:"dp"},
+  {g:"Описание", k:"gapPlotToFacts",n:"описание → строки", min:0,  max:36, step:1, u:"dp"},
+
+  {g:"Строки фактов", k:"heroLineSp",   n:"кегль",         min:8,  max:20, step:1, u:"sp"},
+  {g:"Строки фактов", k:"heroLineH",    n:"интерлиньяж",   min:10, max:30, step:1, u:"sp"},
+  {g:"Строки фактов", k:"heroLineW",    n:"ширина строки", min:240,max:940,step:5, u:"dp",
+   note:"590 dp уводит строку на 270 dp под кадр"},
+  {g:"Строки фактов", k:"heroLineAlpha",n:"непрозрачность",min:30, max:100,step:1, u:"%"},
+
+  {g:"Кнопки", k:"btnH",       n:"высота кнопки",     min:14, max:56, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnPad",     n:"поле внутри",       min:2,  max:36, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnIcon",    n:"иконка",            min:8,  max:32, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnIconGap", n:"иконка → текст",    min:0,  max:20, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnGap",     n:"между кнопками",    min:0,  max:32, step:1, u:"dp"},
+  {g:"Кнопки", k:"btnSp",      n:"кегль",             min:6,  max:20, step:1, u:"sp"},
+  {g:"Кнопки", k:"resumeSp",   n:"кегль подписи",     min:7,  max:20, step:1, u:"sp"},
+  {g:"Кнопки", k:"resumeGap",  n:"кнопки → подпись",  min:0,  max:40, step:1, u:"dp"},
+
+  {g:"Нижний ряд", k:"seasonChipH",     n:"высота чипа сезона", min:12, max:40, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"seasonChipPad",   n:"поле внутри чипа",   min:2,  max:24, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"seasonChipSp",    n:"кегль чипа",         min:8,  max:20, step:1, u:"sp"},
+  {g:"Нижний ряд", k:"gapSeasonChips",  n:"между чипами",       min:0,  max:24, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"seasonSummaryGap",n:"чипы → подпись",     min:0,  max:32, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"gapChipsToCards", n:"чипы → карточки",    min:0,  max:32, step:1, u:"dp"},
+  {g:"Нижний ряд", k:"railLabelSp",     n:"кегль «Похожее»",    min:9,  max:24, step:1, u:"sp"},
+  {g:"Нижний ряд", k:"cardH",           n:"высота карточки",    min:40, max:180,step:1, u:"dp"},
+  {g:"Нижний ряд", k:"cardGap",         n:"между карточками",   min:0,  max:40, step:1, u:"dp"},
+];
+
+const SWITCHES = [
+  {k:"item",  n:"карточка", opts:[["89797","Укрытие"],["13337","Чужестранка"],["30","Аполлон 13"],["111985","Хищник"]]},
+  {k:"media", n:"кадр",     opts:[["still","постер"],["trailer","трейлер"],["none","не пришёл"]]},
+  {k:"fit",   n:"вписать",  opts:[["width","по ширине, по центру"],["cover","по высоте, с обрезкой"],["top","по ширине, сверху"]]},
+  {k:"facts", n:"строки фактов", opts:[["one","одна с многоточием"],["two","две строки"],["scroll","целиком, в несколько строк"]]},
+  {k:"pin",   n:"низ героя", opts:[["flow","как сейчас"],["pin","прижать кнопки к низу"]]},
+  {k:"rail",  n:"нижний ряд", opts:[["auto","как в коде"],["episodes","серии"],["similar","похожее"],["empty","пусто"]]},
+  {k:"guides",n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
+];
+
+/* Иконки Phosphor Duotone заменены силуэтами того же кегля: на стенде решается
+   размер и место, а не рисунок. */
+const ICONS = {
+  play:"M8 5v14l11-7z",
+  videocamera:"M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11z",
+  filmslate:"M4 6h16v12H4zm2-4l3 3H6zm5 0l3 3h-3zm5 0l3 3h-3z",
+  calendar:"M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2m0 16H5V10h14z",
+  share:"M18 16.08a2.9 2.9 0 0 0-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.5.45 1.15.73 1.87.73a2.75 2.75 0 1 0-2.75-2.75c0 .24.04.47.09.7L8.12 9.98A2.75 2.75 0 1 0 6.25 14.8c.72 0 1.37-.28 1.87-.73l7.12 4.16c-.05.21-.08.43-.08.65a2.68 2.68 0 1 0 2.84-2.8",
+  bookmark:"M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2",
+  eye:"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+};
+
+const IMDB = ["M8.4,21.1H5.9V9.9h3.8l0.7,4.7h0.1L11,9.9h3.8v11.2h-2.5v-6.7h-0.1l-0.9,6.7H9.4l-1,-6.7h0L8.4,21.1L8.4,21.1z","M15.8,9.8c0.4,0 3.2,-0.1 4.7,0.1c1.2,0.1 1.8,1.1 1.9,2.3c0.1,2.2 0.1,4.4 0.1,6.6c0,0.2 0,0.5 -0.1,0.8c-0.2,0.9 -0.7,1.4 -1.9,1.5c-1.5,0.1 -3,0.1 -4.4,0.1c0,0 -0.1,0 -0.2,0V9.8zM18.8,11.9v7.2c0.5,0 0.8,-0.2 0.8,-0.7c0,-1.9 0,-3.9 0,-5.9C19.6,12 19.4,11.8 18.8,11.9z","M2,21.1V9.9h2.9v11.2H2z","M29.9,14.1c-0.1,-0.8 -0.6,-1.2 -1.4,-1.4c-0.8,-0.1 -1.6,0 -2.3,0.7V9.9h-2.8v11.2H26c0.1,-0.2 0.1,-0.4 0.2,-0.5c0,0 0,0 0.1,0c0.1,0.1 0.2,0.2 0.3,0.3c0.7,0.5 1.5,0.6 2.3,0.3c0.7,-0.3 1,-0.9 1,-1.6c0,-0.8 0.1,-1.7 0.1,-2.6C30,16 30,15 29.9,14.1L29.9,14.1zM27.1,19.1c0,0.2 -0.2,0.4 -0.4,0.4s-0.4,-0.2 -0.4,-0.4v-4.3c0,-0.2 0.2,-0.4 0.4,-0.4s0.4,0.2 0.4,0.4V19.1z"];
+const KP = "M24,2.5A21.5,21.5 0,1 0,45.5 24,21.51 21.51,0 0,0 24,2.5ZM19.23,8.35a5.32,5.32 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,19.23 8.35ZM34.23,13.87a5.31,5.31 0,1 1,-5.32 5.31A5.31,5.31 0,0 1,34.26 13.87ZM24,21.33A2.67,2.67 0,0 1,26.69 24h0A2.68,2.68 0,0 1,24 26.67h0a2.67,2.67 0,1 1,0 -5.34ZM13.74,23.45a5.32,5.32 0,1 1,-5.32 5.32h0A5.32,5.32 0,0 1,13.74 23.45ZM28.79,29a5.31,5.31 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,28.79 29Z";
+const PUB_MARK = "__ASSET:ic_kinopub.webp__";
+
+/* Похожего в кэше устройства нет — API вернул пустой список. Ряд «Похожее»
+   набран реальными карточками из того же кэша, чтобы было что мерить. */
+const SIMILAR_FROM = ["89797","13337","30","111985"];
+
+const S = {
+  ...SHIPPED,
+  item:"89797", media:"still", fit:"width", facts:"one", pin:"flow", rail:"auto", guides:"off",
+  focus:"btn0", plotScroll:0, cardIndex:0, seasonIndex:null,
+};
+
+const W = 960, H = 540;                 /* экран в dp: 1920 × 1080 при density 2.0 */
+const INHERITED_LINE = 24;              /* bodyLarge из PuberTheme: то, что достаётся Text без lineHeight */
+const CARD_AR = 16 / 9;
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function px(dp){ return dp * 2; }
+
+/* Каждый размер на сцене проходит здесь: dp внутрь, пиксели устройства наружу, с зажимом. */
+function geom(){
+  const g = {};
+  for (const c of CONTROLS) g[c.k] = Math.min(c.max, Math.max(c.min, Number(S[c.k])));
+  g.heroH   = H - 2 * g.pageEdge - g.railHeight;
+  g.mediaW  = W * g.mediaFrac / 100;
+  g.mediaX  = W - g.mediaW;
+  g.stillH  = g.mediaW / CARD_AR;
+  g.cardW   = g.cardH * CARD_AR;
+  return g;
+}
+
+function item(){ return ITEMS[S.item]; }
+function isSeries(){ return item().type === "serial" || item().type === "docuserial"; }
+
+function season(){
+  const it = item();
+  if (!isSeries()) return null;
+  const n = S.seasonIndex ?? it.selectedSeason;
+  return it.seasons.find(s => s.number === n) || it.seasons[it.seasons.length - 1];
+}
+
+function railKind(){
+  if (S.rail !== "auto") return S.rail;
+  if (isSeries()) return "episodes";
+  return "empty";     /* API отдал пустой список похожего — так экран и выглядит */
+}
+
+function railCards(){
+  if (railKind() === "episodes") return (season() || {episodes:[]}).episodes;
+  if (railKind() === "similar"){
+    return SIMILAR_FROM.filter(id => id !== S.item).concat(SIMILAR_FROM).slice(0, 6).map(id => ({
+      title: ITEMS[id].titleMain, thumb: ITEMS[id].wide, watched:false, progress:null,
+    }));
+  }
+  return [];
+}
+
+function buttons(){ return item().buttons; }
+
+/* Порядок, которым по экрану ходит пульт. */
+function focusChain(){
+  const rows = [];
+  if (plotScrollable) rows.push(["plot"]);
+  rows.push(buttons().map((b, i) => "btn" + i));
+  const cards = railCards();
+  if (railKind() === "episodes") rows.push((item().seasons || []).map(s => "sea" + s.number));
+  if (cards.length) rows.push(cards.map((c, i) => "card" + i));
+  return rows;
+}
+
+let plotScrollable = false;
+let plotLines = 1, plotVisibleLines = 1;
+
+/* ── измерение переносов настоящим шрифтом ────────────────── */
+function measureLines(text, widthDp, sizeSp, lineSp){
+  const r = document.getElementById("ruler");
+  r.style.width = px(widthDp) + "px";
+  r.style.fontSize = px(sizeSp) + "px";
+  r.style.lineHeight = px(lineSp) + "px";
+  r.textContent = text;
+  return Math.max(1, Math.round(r.scrollHeight / px(lineSp)));
+}
+
+/* ── сцена ────────────────────────────────────────────────── */
+function mediaHTML(g){
+  const it = item();
+  let inner;
+  if (S.media === "none"){
+    inner = `<div class="void"></div>`;
+  } else if (S.media === "trailer"){
+    inner = `<div class="playing">ТРЕЙЛЕР</div>`;
+  } else if (S.fit === "cover"){
+    inner = `<img src="${it.wide}" alt="" style="top:0;width:${px(g.mediaW)}px;height:${px(g.heroH)}px;object-fit:cover">`;
+  } else {
+    const top = S.fit === "top" ? 0 : (g.heroH - g.stillH) / 2;
+    inner = `<img src="${it.wide}" alt="" style="top:${px(top)}px;width:${px(g.mediaW)}px;height:${px(g.stillH)}px">`;
+  }
+  const hs = `linear-gradient(90deg,
+      rgba(0,0,0,1) 0%,
+      rgba(0,0,0,${(g.scrimAlpha/100).toFixed(3)}) ${g.scrimEdge}%,
+      rgba(0,0,0,0) ${g.scrimEnd}%)`;
+  const vs = `linear-gradient(180deg, rgba(0,0,0,0) calc(100% - ${px(48)}px), rgba(0,0,0,1) 100%)`;
+  return `<div class="media" style="left:${px(g.mediaX)}px;top:${px(g.pageEdge)}px;
+            width:${px(g.mediaW)}px;height:${px(g.heroH)}px">
+    ${inner}
+    <div class="hscrim" style="background:${hs}"></div>
+    <div class="vscrim" style="background:${vs}"></div>
+  </div>`;
+}
+
+function ratingHTML(kind, value, g){
+  const size = px(14), gap = px(4), fs = px(12);
+  let mark;
+  if (kind === "KP"){
+    mark = `<svg viewBox="0 0 48 48" width="${size}" height="${size}" fill="#FF6600" aria-hidden="true"><path d="${KP}"/></svg>`;
+  } else if (kind === "IMDB"){
+    mark = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" fill="#F5C518" aria-hidden="true">${IMDB.map(p=>`<path d="${p}"/>`).join("")}</svg>`;
+  } else {
+    mark = `<img src="${PUB_MARK}" width="${size}" height="${size}" alt="">`;
+  }
+  return `<div class="m">${mark}<span style="padding-left:${gap}px;font-size:${fs}px">${esc(value)}</span></div>`;
+}
+
+function heroHTML(g){
+  const it = item();
+  const lineSp = g.heroLineH;
+  const lines = [it.factsLine, it.directorLine, it.castLine].filter(Boolean);
+
+  /* высоты фиксированных детей колонки, в dp */
+  const titleH  = Math.max(g.titleLine, g.titleLine + g.titleOrigBase);
+  const ratingH = it.ratings.length ? 16 : 0;
+  const chipsH  = it.chips.length ? g.chipH : 0;
+  const factsUnit = S.facts === "one" ? 1 : (S.facts === "two" ? 2 : null);
+  let factsH = 0;
+  for (const l of lines){
+    const n = factsUnit ?? measureLines(l, g.heroLineW, g.heroLineSp, g.heroLineH);
+    factsH += n * lineSp;
+  }
+  // Подпись рядом с кнопкой задаёт только кегль, интерлиньяж ей достаётся от bodyLarge —
+  // 24 sp. Поэтому ряд не ниже 24 dp, какой бы низкой ни была кнопка.
+  const actionsH = Math.max(g.btnH, INHERITED_LINE);
+
+  const fixed = titleH + (ratingH ? g.gapTitle + ratingH : 0)
+    + (chipsH ? g.gapRatingsToChips + chipsH : 0)
+    + g.gapChipsToPlot + g.gapPlotToFacts + factsH
+    + actionsH + g.heroBottom;
+
+  const avail = g.heroH - g.heroTop - fixed;
+  plotLines = measureLines(it.plot, g.plotW - 2, g.plotSp, g.plotLine);
+  const naturalH = plotLines * g.plotLine;
+
+  /* Compose: weight(1f, fill=false) у описания и weight(1f) у распорки делят остаток пополам.
+     Описание берёт не больше своей половины и не отдаёт неиспользованное — оттого кнопки
+     и уезжают вверх на коротком описании. */
+  const share = S.pin === "pin" ? avail : avail / 2;
+  const capLines = Math.max(1, Math.floor(share / g.plotLine));
+  plotVisibleLines = Math.min(plotLines, capLines);
+  let plotH = Math.max(plotVisibleLines * g.plotLine, Math.min(g.plotMin, share));
+  plotScrollable = plotLines > plotVisibleLines;
+  if (!plotScrollable) S.plotScroll = 0;
+  const maxScroll = Math.max(0, plotLines - plotVisibleLines);
+  S.plotScroll = Math.min(S.plotScroll, maxScroll);
+
+  const spacerH = Math.max(0, S.pin === "pin" ? avail - plotH : share);
+
+  const focusedPlot = S.focus === "plot";
+  const parts = [];
+
+  parts.push(`<div class="htitle" style="gap:${px(g.gapTitleParts)}px;max-width:${px(W - g.sideEdge)}px">
+    <div class="main" style="font-size:${px(g.titleSp)}px;line-height:${px(g.titleLine)}px">${esc(it.titleMain)}</div>
+    ${it.titleOriginal ? `<div class="orig" style="font-size:${px(g.titleOrigSp)}px;line-height:${px(g.titleLine)}px;padding-bottom:${px(g.titleOrigBase)}px">${esc(it.titleOriginal)}</div>` : ""}
+  </div>`);
+
+  if (ratingH){
+    parts.push(`<div style="height:${px(g.gapTitle)}px"></div>`);
+    parts.push(`<div class="rat" style="gap:${px(g.gapRatings)}px;height:${px(ratingH)}px">${
+      it.ratings.map(([k,v]) => ratingHTML(k, v, g)).join("")}</div>`);
+  }
+  if (chipsH){
+    parts.push(`<div style="height:${px(g.gapRatingsToChips)}px"></div>`);
+    parts.push(`<div class="chips" style="gap:${px(g.gapChips)}px">${it.chips.map(c => `
+      <div class="chip" style="height:${px(g.chipH)}px;padding:0 ${px(g.chipPad)}px;
+        border:${px(1)}px solid rgba(202,196,208,.38);border-radius:${px(g.chipH/2)}px;
+        font-size:${px(g.chipSp)}px;color:var(--p-onsurfacevariant)">${esc(c)}</div>`).join("")}</div>`);
+  }
+
+  parts.push(`<div style="height:${px(g.gapChipsToPlot)}px"></div>`);
+  parts.push(`<div class="plot" data-id="plot" style="width:${px(g.plotW)}px;height:${px(plotH)}px;
+      ${focusedPlot ? `outline:${px(1)}px solid var(--p-primary);outline-offset:0;border-radius:${px(4)}px` : ""}">
+    <div class="inner" style="font-size:${px(g.plotSp)}px;line-height:${px(g.plotLine)}px;
+         padding:0 ${px(1)}px;top:${-px(S.plotScroll * g.plotLine)}px">${esc(it.plot)}</div>
+  </div>`);
+
+  parts.push(`<div style="height:${px(g.gapPlotToFacts)}px"></div>`);
+  parts.push(`<div class="facts ${S.facts}" style="width:${px(g.heroLineW)}px">${lines.map(l => `
+    <div class="l" style="font-size:${px(g.heroLineSp)}px;line-height:${px(g.heroLineH)}px;font-weight:500;
+      color:rgba(230,224,233,${(g.heroLineAlpha/100).toFixed(2)})">${esc(l)}</div>`).join("")}</div>`);
+
+  parts.push(`<div style="height:${px(spacerH)}px"></div>`);
+  parts.push(actionsHTML(g, actionsH));
+
+  return `<div class="hero" style="left:${px(g.sideEdge)}px;top:${px(g.pageEdge + g.heroTop)}px;
+    width:${px(W - g.sideEdge)}px;height:${px(g.heroH - g.heroTop)}px">${parts.join("")}</div>`;
+}
+
+function actionsHTML(g, rowH){
+  const it = item();
+  const pills = buttons().map((b, i) => {
+    const id = "btn" + i;
+    const on = S.focus === id;
+    const bg = on ? "var(--p-onsurface)" : "var(--p-surfacevariant)";
+    const fg = on ? "var(--p-inverseonsurface)" : "var(--p-onsurface)";
+    const icon = `<svg viewBox="0 0 24 24" width="${px(g.btnIcon)}" height="${px(g.btnIcon)}" fill="currentColor" aria-hidden="true"><path d="${ICONS[b.icon]}"/></svg>`;
+    if (b.kind === "text"){
+      return `<button class="btn" data-id="${id}" style="height:${px(g.btnH)}px;padding:0 ${px(g.btnPad)}px;
+        background:${bg};color:${fg};border:0;font-family:var(--roboto);font-size:${px(g.btnSp)}px;cursor:pointer">
+        ${icon}<span style="padding-left:${px(g.btnIconGap)}px">${esc(b.text)}</span></button>`;
+    }
+    const tint = (b.kind === "watchlist" || b.kind === "watched") && b.on ? "var(--p-primary)" : fg;
+    return `<button class="btn" data-id="${id}" aria-label="${esc(b.label || "")}"
+      style="width:${px(g.btnH)}px;height:${px(g.btnH)}px;background:${on ? bg : "transparent"};
+      color:${tint};border:0;cursor:pointer">${icon}</button>`;
+  }).join("");
+
+  const resume = it.resumeLine
+    ? `<div class="resume" style="padding-left:${px(g.resumeGap)}px;font-size:${px(g.resumeSp)}px">${esc(it.resumeLine)}</div>`
+    : "";
+
+  return `<div class="actions" style="gap:${px(g.btnGap)}px;height:${px(rowH)}px;max-width:${px(W - 2*g.sideEdge)}px">${pills}${resume}</div>`;
+}
+
+function railHTML(g){
+  const kind = railKind();
+  const top = px(H - g.pageEdge - g.railHeight);
+  const box = `left:0;right:0;top:${top}px;height:${px(g.railHeight)}px`;
+  if (kind === "empty"){
+    return `<div class="rail" style="${box}"><div class="emptyrail">ряд пуст</div></div>`;
+  }
+
+  const cards = railCards();
+  const cardsHTML = cards.map((c, i) => {
+    const id = "card" + i;
+    const on = S.focus === id;
+    // tv-material3 centres the 3 dp stroke on the card's outline: 1.5 dp out, 1.5 dp in.
+    const ring = on ? `<div class="ring" style="inset:${-px(1.5)}px;border-width:${px(3)}px"></div>` : "";
+    const bar = c.progress != null && !c.watched
+      ? `<div class="bar" style="height:${px(3)}px;background:rgba(73,69,79,.5)">
+           <div style="width:${c.progress}%;height:100%;background:var(--p-primary)"></div></div>` : "";
+    const eye = c.watched
+      ? `<div class="eye" style="margin:${px(6)}px;padding:${px(4)}px;background:rgba(0,0,0,.48)">
+           <svg viewBox="0 0 24 24" width="${px(16)}" height="${px(16)}" fill="rgba(208,188,255,.9)" aria-hidden="true"><path d="${ICONS.eye}"/></svg></div>` : "";
+    return `<div style="position:relative;flex:none">
+      <div class="card" data-id="${id}" style="width:${px(g.cardW)}px;height:${px(g.cardH)}px;cursor:pointer">
+        ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<div style="position:absolute;inset:0;background:#1A1620"></div>`}
+        <div class="grad"></div>
+        <div class="txt" style="padding:${px(10)}px ${px(12)}px">
+          <div class="t" style="font-size:${px(14)}px;line-height:${px(20)}px">${esc(c.title)}</div>
+        </div>
+        ${eye}${bar}
+      </div>${ring}</div>`;
+  }).join("");
+
+  let head;
+  if (kind === "episodes"){
+    const sel = season();
+    head = `<div class="srow" style="padding-left:${px(g.sideEdge)}px;padding-top:${px(g.railTop)}px;gap:${px(g.gapSeasonChips)}px">${
+      item().seasons.map(s => {
+        const id = "sea" + s.number;
+        const on = S.focus === id;
+        const chosen = s.number === sel.number;
+        const bg = on ? "var(--p-onsurface)" : (chosen ? "rgba(208,188,255,.20)" : "var(--p-surfacevariant)");
+        const fg = on ? "var(--p-inverseonsurface)" : (chosen ? "var(--p-primary)" : "var(--p-onsurface)");
+        return `<button class="schip" data-id="${id}" style="height:${px(g.seasonChipH)}px;padding:0 ${px(g.seasonChipPad)}px;
+          background:${bg};color:${fg};border:0;font-family:var(--roboto);font-size:${px(g.seasonChipSp)}px;cursor:pointer">${s.number}</button>`;
+      }).join("")}<div class="ssum" style="padding-left:${px(g.seasonSummaryGap)}px;font-size:${px(g.heroLineSp)}px">${esc(sel.summary)}</div></div>`;
+  } else {
+    head = `<div style="padding-left:${px(g.sideEdge)}px;padding-top:${px(g.railTop)}px;
+      font-size:${px(g.railLabelSp)}px;font-weight:500;color:var(--p-onsurfacevariant)">Похожее</div>`;
+  }
+
+  return `<div class="rail" style="${box}">
+    ${head}
+    <div style="height:${px(g.gapChipsToCards)}px"></div>
+    <div class="cards" style="gap:${px(g.cardGap)}px;padding:0 ${px(g.sideEdge)}px">${cardsHTML}</div>
+  </div>`;
+}
+
+function guidesHTML(g){
+  if (S.guides !== "on") return "";
+  const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
+  const railTop = px(H - g.pageEdge - g.railHeight);
+  return `<div class="guides">
+    <div class="v" style="left:${px(g.sideEdge)-1}px;background:${A}"></div>
+    <div class="v" style="left:${px(g.mediaX)-1}px;background:${B}"></div>
+    <div class="v" style="left:${px(g.sideEdge + g.plotW)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.sideEdge + g.heroLineW)-1}px;background:${C}"></div>
+    <div class="v" style="left:96px;background:${C}"></div>
+    <div class="h" style="top:${px(g.pageEdge)-1}px;background:${A}"></div>
+    <div class="h" style="top:${railTop-1}px;background:${A}"></div>
+    <div class="h" style="bottom:${px(g.pageEdge)-1}px;background:${A}"></div>
+    <div class="lab" style="left:${px(g.sideEdge)+10}px;top:${px(g.pageEdge)+8}px;color:${A}">поле ${g.pageEdge} / ${g.sideEdge} dp</div>
+    <div class="lab" style="left:${px(g.mediaX)+10}px;top:${px(g.pageEdge)+46}px;color:${B}">кадр ${Math.round(g.mediaW)} dp · ${g.mediaFrac}%</div>
+    <div class="lab" style="left:${px(g.sideEdge + g.plotW)+10}px;top:${px(g.pageEdge)+120}px;color:${C}">описание ${g.plotW} dp</div>
+    <div class="lab" style="left:${px(g.sideEdge + g.heroLineW)+10}px;top:${px(g.pageEdge)+158}px;color:${C}">строки фактов ${g.heroLineW} dp</div>
+    <div class="lab" style="left:106px;top:${railTop-46}px;color:${C}">безопасная зона 48 dp</div>
+    <div class="lab" style="left:${px(g.sideEdge)+10}px;top:${railTop+8}px;color:${A}">нижний ряд ${g.railHeight} dp</div>
+  </div>`;
+}
+
+function render(){
+  const g = geom();
+  const st = document.getElementById("stage");
+  st.innerHTML = `<div class="ruler" id="ruler"></div>`;
+  st.insertAdjacentHTML("beforeend", mediaHTML(g) + heroHTML(g) + railHTML(g) + guidesHTML(g));
+
+  /* Описание меряется настоящим шрифтом, поэтому герой рисуется вторым проходом. */
+  st.innerHTML = `<div class="ruler" id="ruler"></div>`;
+  st.insertAdjacentHTML("beforeend", mediaHTML(g) + heroHTML(g) + railHTML(g) + guidesHTML(g));
+
+  st.querySelectorAll("[data-id]").forEach(el => {
+    el.addEventListener("click", ev => {
+      ev.preventDefault();
+      const id = el.dataset.id;
+      if (id.startsWith("sea")) S.seasonIndex = Number(id.slice(3));
+      S.focus = id;
+      render();
+    });
+  });
+
+  paintConsole(g);
+  paintSpec(g);
+}
+
+/* ── консоль ──────────────────────────────────────────────── */
+function paintSwitches(){
+  const host = document.getElementById("switches");
+  host.innerHTML = SWITCHES.map(s => `<div class="seg"><span>${s.n}</span><div class="opts">` +
+    s.opts.map(([v,l]) => `<button data-sw="${s.k}" data-v="${v}" aria-pressed="${S[s.k]===v}">${l}</button>`).join("") +
+    `</div></div>`).join("");
+  host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    S[b.dataset.sw] = b.dataset.v;
+    if (b.dataset.sw === "item"){ S.seasonIndex = null; S.plotScroll = 0; S.focus = "btn0"; }
+    const flat = focusChain().flat();
+    if (!flat.includes(S.focus)) S.focus = flat[0] || "btn0";
+    paintSwitches(); render();
+  }));
+}
+
+function buildConsole(){
+  const host = document.getElementById("console");
+  const groups = [...new Set(CONTROLS.map(c => c.g))];
+  host.innerHTML = groups.map(gn => `<div class="group"><h2>${gn}</h2>` +
+    CONTROLS.filter(c => c.g === gn).map(c => `
+      <div class="ctl">
+        <div class="name">${c.n}</div>
+        <div class="val" id="val-${c.k}"></div>
+        <input type="range" id="in-${c.k}" min="${c.min}" max="${c.max}" step="${c.step}"
+               value="${S[c.k]}" aria-label="${esc(c.n)}">
+        ${c.note ? `<div class="note">${c.note}</div>` : ""}
+      </div>`).join("") + `</div>`).join("");
+  for (const c of CONTROLS){
+    document.getElementById("in-" + c.k).addEventListener("input", e => {
+      S[c.k] = Number(e.target.value); render();
+    });
+  }
+}
+
+function paintConsole(g){
+  for (const c of CONTROLS){
+    const el = document.getElementById("val-" + c.k);
+    const applied = g[c.k];
+    /* Янтарный — «уехало от того, что в коде», а не от того, что было до правки. */
+    el.className = "val" + (applied !== SHIPPED[c.k] ? " changed" : "");
+    el.innerHTML = `${applied}&thinsp;${c.u}` +
+      (BEFORE[c.k] !== undefined && applied !== BEFORE[c.k] ? ` <span class="was">было ${BEFORE[c.k]}</span>` : "");
+    const inp = document.getElementById("in-" + c.k);
+    if (Number(inp.value) !== applied) inp.value = applied;
+  }
+}
+
+function paintSpec(g){
+  const rows = CONTROLS.filter(c => g[c.k] !== SHIPPED[c.k])
+    .map(c => `  ${c.n.padEnd(24," ")} ${String(SHIPPED[c.k]).padStart(5)} → <b>${String(g[c.k]).padStart(5)}</b> ${c.u}`);
+
+  const notes = [];
+  notes.push(S.pin === "pin"
+    ? "низ героя:      <b>кнопки прижаты к низу</b> — распорка забирает весь остаток,\n" +
+      "                 описание перестаёт двигать ряд кнопок"
+    : "низ героя:      как сейчас — описание и распорка делят остаток пополам,\n" +
+      "                 поэтому на коротком описании кнопки уезжают вверх");
+  notes.push({
+    one:   "строки фактов:  как сейчас — одна строка с многоточием; список актёров обрывается",
+    two:   "строки фактов:  <b>две строки</b> — режиссёр и актёры влезают почти целиком",
+    scroll:"строки фактов:  <b>целиком</b> — строки переносятся, ничего не прячется,\n                 но забирают высоту у описания",
+  }[S.facts]);
+  notes.push({
+    width: "кадр:           как сейчас — по ширине, по центру; сверху и снизу остаётся чёрное",
+    cover: "кадр:           <b>по высоте, с обрезкой</b> — кадр заполняет герой целиком",
+    top:   "кадр:           <b>по ширине, сверху</b> — чёрное только снизу, под кнопками",
+  }[S.fit]);
+  if (railKind() === "empty") notes.push("нижний ряд:     у фильма похожего нет — 116 dp пустой полосы");
+
+  const measured = `  описание:       ${plotLines} строк, видно ${plotVisibleLines}` +
+    (plotScrollable ? " — прокручивается с пульта" : " — целиком");
+
+  document.getElementById("spec").innerHTML =
+    (rows.length ? rows.join("\n") : "  пока ничего не изменено") +
+    "\n\n" + measured + "\n\n  " + notes.join("\n  ");
+}
+
+/* ── пульт ────────────────────────────────────────────────── */
+function move(dir){
+  const rows = focusChain();
+  let r = -1, c = -1;
+  rows.forEach((row, i) => { const j = row.indexOf(S.focus); if (j >= 0){ r = i; c = j; } });
+  if (r < 0){ S.focus = rows[0][0]; return; }
+
+  if (dir === "left" || dir === "right"){
+    if (S.focus === "plot") return;
+    const next = c + (dir === "right" ? 1 : -1);
+    if (next >= 0 && next < rows[r].length){
+      S.focus = rows[r][next];
+      if (S.focus.startsWith("sea")) S.seasonIndex = Number(S.focus.slice(3));
+    }
+    return;
+  }
+
+  /* Внутри описания стрелки сначала листают текст и только потом уходят с блока. */
+  if (S.focus === "plot"){
+    if (dir === "up" && S.plotScroll > 0){ S.plotScroll--; return; }
+    if (dir === "down" && S.plotScroll < plotLines - plotVisibleLines){ S.plotScroll++; return; }
+  }
+  const nr = r + (dir === "down" ? 1 : -1);
+  if (nr < 0 || nr >= rows.length) return;
+  S.focus = rows[nr][Math.min(c, rows[nr].length - 1)];
+  if (S.focus.startsWith("sea")) S.seasonIndex = Number(S.focus.slice(3));
+}
+
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "SELECT")) return;
+  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down"};
+  if (!map[e.key]) return;
+  e.preventDefault();
+  move(map[e.key]);
+  render();
+});
+
+/* ── подгонка ─────────────────────────────────────────────── */
+function fit(){
+  const wrap = document.getElementById("stagewrap");
+  const avail = wrap.parentElement.clientWidth - 48;
+  const scale = Math.min(1, avail / 1920);
+  wrap.style.width  = Math.round(1920 * scale) + "px";
+  wrap.style.height = Math.round(1080 * scale) + "px";
+  document.getElementById("stage").style.transform = `scale(${scale})`;
+  document.getElementById("scaleOut").innerHTML =
+    `масштаб <b>${scale.toFixed(3)}×</b> · 1 dp = 2 px на устройстве · KM6 1920×1080 @ 320 dpi`;
+}
+window.addEventListener("resize", fit);
+
+function applyPreset(preset){
+  for (const c of CONTROLS){
+    if (preset[c.k] === undefined) continue;
+    S[c.k] = preset[c.k];
+    document.getElementById("in-" + c.k).value = preset[c.k];
+  }
+  render();
+}
+document.getElementById("reset").addEventListener("click", () => applyPreset(SHIPPED));
+document.getElementById("asShipped").addEventListener("click", () => applyPreset(BEFORE));
+
+paintSwitches();
+buildConsole();
+fit();
+render();
+</script>
