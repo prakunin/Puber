@@ -1,0 +1,1008 @@
+<title>Экран каталога</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#0B0A0E;
+  --panel:#141118;
+  --panel2:#1B1722;
+  --line:#2B2534;
+  --text:#E7E3EC;
+  --dim:#948CA3;
+  --dimmer:#6A637A;
+  --accent:#D0BCFF;
+  --warm:#FFC178;
+
+  /* PuberTheme поверх tv-material3 darkColorScheme, дословно */
+  --p-primary:#D0BCFF;        /* Purple80 */
+  --p-onsurface:#E6E1E5;      /* Neutral90 */
+  --p-surfacevariant:#49454F; /* NeutralVariant30 */
+  --p-border:#938F99;         /* NeutralVariant60 — рамка фокуса карточки */
+  --p-surface:#000000;        /* OledBackground */
+
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --roboto:"Roboto","Helvetica Neue",Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── chrome ───────────────────────────────────────────────── */
+.top{
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+  padding:18px 24px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#17131F 0%,var(--panel) 100%);
+}
+.top h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.top .sub{color:var(--dim);font-size:12.5px;max-width:70ch}
+.readout{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.readout b{color:var(--accent);font-weight:500}
+
+.switches{
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+  padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.seg{display:flex;align-items:center;gap:8px}
+.seg > span{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dimmer)}
+.seg .opts{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:5px 11px;cursor:pointer;
+  border-right:1px solid var(--line);
+}
+.seg .opts button:last-child{border-right:0}
+.seg button:hover{color:var(--text);background:var(--panel2)}
+.seg button[aria-pressed="true"]{background:#2C2338;color:var(--accent)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* ── stage ────────────────────────────────────────────────── */
+.scope{padding:22px 24px;background:linear-gradient(180deg,#0E0C12 0%,var(--ground) 100%);border-bottom:1px solid var(--line)}
+.stagewrap{position:relative;margin:0 auto;overflow:hidden;border:1px solid var(--line)}
+.stage{
+  position:absolute;top:0;left:0;width:1920px;height:1080px;
+  transform-origin:top left;background:#000;overflow:hidden;
+  font-family:var(--roboto);color:var(--p-onsurface);
+}
+.ruler{position:absolute;left:-9999px;top:0;visibility:hidden;white-space:normal}
+
+/* закрытое боковое меню */
+.rail{position:absolute;left:0;top:0;bottom:0;background:var(--p-surface);z-index:5}
+.rail .ri{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center}
+.rail .ri svg{display:block;opacity:.55}
+.rail .ri.on svg{opacity:1}
+.rail .ri.on::before{
+  content:"";position:absolute;inset:0;border-radius:9999px;background:rgba(208,188,255,.16);
+}
+
+/* панель подробностей */
+.media{position:absolute;overflow:hidden}
+.media img{position:absolute;left:0;top:0;display:block}
+.media .void{position:absolute;inset:0;background:#111}
+.media .hscrim,.media .vscrim{position:absolute;inset:0;pointer-events:none}
+.media .playing{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:#000;color:#4B4552;font-family:var(--mono);letter-spacing:.2em;
+}
+
+.desc{position:absolute;display:flex;flex-direction:column;overflow:visible}
+/* Ни зазоры, ни строки не имеют права сжиматься: Column в Compose их не сжимает, а
+   flex по умолчанию сжимает — и стенд бы врал ровно там, где текст перестаёт помещаться. */
+.desc > *{flex:none}
+.desc .dt{font-weight:400;white-space:pre-line}
+.rat{display:flex}
+/* Одна пара «значок + число» — Row с verticalAlignment = CenterVertically. Правило висит на
+   самом `.m`, а не на его родителе: такие пары стоят и в панели, и в карточке. */
+.m{display:flex;align-items:center}
+.m svg,.m img{display:block;flex:none}
+/* Оба Text в VideoDetailsDescription идут без maxLines — значит переносятся, а не
+   обрезаются, и перенос двигает описание под ними вниз. */
+.desc .fact{overflow:visible}
+.desc .plot{overflow:visible}
+.desc .plot.clamped{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+
+/* ряды */
+.rows{position:absolute;overflow:hidden}
+.page{position:absolute;left:0;right:0}
+.page .head{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.rowbox{position:relative;overflow:hidden}
+.cards{position:absolute;top:0;display:flex}
+/* Слот не обрезает: рамка фокуса рисуется `Stroke` по контуру карточки, то есть половиной
+   наружу, и LazyRow ставит `graphicsLayer { clip = false }` именно ради неё. Обрезает только
+   сама карточка — кадр и скругление. */
+.slot{position:relative;flex:none}
+.card{position:absolute;inset:0;overflow:hidden}
+/* Только собственный кадр карточки, прямым ребёнком: `.card img` цеплял бы и растровый
+   значок kino.pub в строке рейтингов и растягивал его на всю карточку. */
+.card > img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.card .grad{position:absolute;inset:0}
+.card .txt{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column}
+.card .txt > *{flex:none}
+.card .meta{display:flex;align-items:center}
+.card .t{overflow:hidden;font-weight:500;display:-webkit-box;-webkit-box-orient:vertical}
+.card .bar{position:absolute;left:0;right:0;bottom:0;background:rgba(73,69,79,.5)}
+.card .bar i{display:block;height:100%;background:var(--p-primary)}
+.card .eye{position:absolute;display:flex;align-items:center;justify-content:center}
+.card .eye svg{display:block}
+.ring{position:absolute;pointer-events:none;border-style:solid;border-color:var(--p-border)}
+.showall{position:relative;flex:none;display:flex;align-items:center;justify-content:center}
+.showall .pill{
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  border-radius:9999px;background:var(--p-onsurface);color:#1B1722;font-weight:500;white-space:pre-line;
+}
+.fade{position:absolute;pointer-events:none}
+
+.guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono);z-index:9}
+.guides .v{position:absolute;top:0;bottom:0;width:2px}
+.guides .h{position:absolute;left:0;right:0;height:2px}
+.guides .lab{
+  position:absolute;font-size:19px;padding:3px 7px;border-radius:3px;
+  background:rgba(11,10,14,.82);white-space:nowrap;letter-spacing:.04em;
+}
+
+/* ── console ──────────────────────────────────────────────── */
+.console{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0;border-top:1px solid var(--line)}
+.group{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 20px 18px}
+.group > h2{margin:0 0 12px;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin-bottom:11px;align-items:center}
+.ctl .name{font-size:12.5px;color:var(--dim)}
+.ctl .val{font-family:var(--mono);font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums;text-align:right}
+.ctl .val.changed{color:var(--warm)}
+.ctl input[type=range]{grid-column:1 / -1;width:100%;margin:2px 0 0}
+.ctl .note{grid-column:1 / -1;font-size:11px;color:var(--dimmer);margin-top:-1px}
+
+input[type=range]{appearance:none;height:18px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);margin-top:-5px;border:0}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.foot{padding:18px 24px 40px;display:grid;gap:14px}
+.foot h2{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.spec{
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--dim);
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:14px 16px;overflow-x:auto;white-space:pre;
+}
+.spec b{color:var(--warm);font-weight:500}
+.hint{font-size:12px;color:var(--dimmer);max-width:88ch}
+.hint kbd{font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--dim)}
+.reset{
+  appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:6px 14px;border-radius:3px;cursor:pointer;justify-self:start;
+}
+.reset:hover{color:var(--text);border-color:var(--accent)}
+.reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="top">
+  <h1>Экран каталога</h1>
+  <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 на разделе «Фильмы»: пять секций и 57 карточек взяты
+    из кэша KM6 — те самые, что экран показал бы прямо сейчас. Открывается на зафиксированных значениях —
+    они перенесены в код (<span style="font-family:var(--mono)">ContentListScreenContent.kt</span>,
+    <span style="font-family:var(--mono)">SectionRow.kt</span>,
+    <span style="font-family:var(--mono)">VideoItemHorizontal.kt</span>). Кадров с телевизора пока
+    нет: вход на KM6 стёрт, геометрия снята с кода.</div>
+  <div class="readout" id="scaleOut"></div>
+</div>
+
+<div class="switches" id="switches"></div>
+
+<div class="scope">
+  <div class="stagewrap" id="stagewrap"><div class="stage" id="stage"></div></div>
+</div>
+
+<div class="console" id="console"></div>
+
+<div class="foot">
+  <h2>Что уедет в Compose</h2>
+  <div class="spec" id="spec"></div>
+  <div class="hint">
+    <kbd>←</kbd> <kbd>→</kbd> — по карточкам ряда, <kbd>↑</kbd> <kbd>↓</kbd> — на соседнюю секцию.
+    Это и есть путь пульта на экране: секция занимает страницу целиком, поэтому вниз уходит не
+    следующий ряд, а следующая страница. Панель сверху всегда показывает карточку под фокусом —
+    так же, как <span style="font-family:var(--mono)">CommonAction.ItemFocused</span> на устройстве.
+    Кликните по стенду, чтобы он начал ловить стрелки.
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button class="reset" id="reset">Вернуть значения кода</button>
+    <span class="hint" style="max-width:56ch">Выкрученное запоминается в этом браузере и
+      переживает обновление страницы; кнопка возвращает то, что несёт код, и стирает
+      запомненное.</span>
+  </div>
+</div>
+<script>
+"use strict";
+
+/* Содержимое: выгружено из cached_payload на KM6 и прогнано через реплику
+   VideoItemUIMapper, так что каждая строка на стенде — та, что напечатал бы экран. */
+const ITEMS = {
+ "126448": {"title":"Глаза / Nundongja","detailsTitle":"Глаза\nNundongja","year":"2026","ratings":[["IMDB","5.6"]],"progressPercent":null,"isWatched":false,"plot":"Медленно слепнущая из-за наследственного заболевания женщина расследует смерть сестры-близняшки.","genres":"Триллер, Ужасы, Детектив","country":"Южная Корея","duration":"Длительность: 1 ч 45 мин","wide":"__ASSET:w-126448.webp__"},
+ "126436": {"title":"Хочешь стать моей девушкой? / ¿Quieres ser mi... novia?","detailsTitle":"Хочешь стать моей девушкой?\n¿Quieres ser mi... novia?","year":"2026","ratings":[["IMDB","5.5"]],"progressPercent":null,"isWatched":false,"plot":"Отношения Хави и Лу подвергаются испытаниям, когда на их пути возникают искушения: молодая девушка, с которой у Хави есть взаимная симпатия, и зрелый мужчина, ухаживающий за Лу. На фоне юмора и запутанных ситуаций их любовь подвергается испытанию.","genres":"Комедия, Драма, Мелодрама","country":"Мексика","duration":"Длительность: 1 ч 37 мин","wide":"__ASSET:w-126436.webp__"},
+ "126394": {"title":"Суперкопы 80 / Police Flash 80","detailsTitle":"Суперкопы 80\nPolice Flash 80","year":"2026","ratings":[["IMDB","6.2"],["PUB","1.4"]],"progressPercent":null,"isWatched":false,"plot":"Париж, 1980-е годы. После гибели напарника опытного детектива Ивона назначают возглавить новое подразделение по борьбе с наркотрафиком под амбициозным названием «Суперкопы 80». Ему предстоит сработаться с молодой командой, которая поставит под сомнение не только его старые привычки и методы работы, но и его стиль руководства «альфа-самца».","genres":"Комедия","country":"Франция, Бельгия","duration":"Длительность: 1 ч 26 мин","wide":"__ASSET:w-126394.webp__"},
+ "126379": {"title":"Таинства призрачной гармонии: Ключ от замка / Haunted Harmony Mysteries: Key to the Castle","detailsTitle":"Таинства призрачной гармонии: Ключ от замка\nHaunted Harmony Mysteries: Key to the Castle","year":"2026","ratings":[["IMDB","7"],["PUB","2.8"]],"progressPercent":null,"isWatched":false,"plot":"Когда в город заявляется съёмочная группа охотников за привидениями, Гефсимании и Имону предстоит распутать неожиданное убийство ведущего их шоу. Но это не просто расследование — они должны помочь новообретённому духу обрести покой и перейти в мир иной.","genres":"Детектив","country":"Канада","duration":"Длительность: 1 ч 24 мин","wide":"__ASSET:w-126379.webp__"},
+ "126361": {"title":"Всего лишь иллюзия / Juste une illusion","detailsTitle":"Всего лишь иллюзия\nJuste une illusion","year":"2026","ratings":[["IMDB","7.4"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"1985 год, пригород Парижа. 12‑летний Венсан живёт с отстранённым старшим братом и часто ссорящимися родителями. Пока родители с трудом пытаются приспособиться к экономическому кризису, мальчик пытается разобраться в себе и понять окружающий мир.","genres":"Драма","country":"Франция","duration":"Длительность: 1 ч 59 мин","wide":"__ASSET:w-126361.webp__"},
+ "126358": {"title":"Пегас 3 / Fei chi ren sheng 3","detailsTitle":"Пегас 3\nFei chi ren sheng 3","year":"2026","ratings":[["IMDB","6.5"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"Чжан Чи, некогда прозванный «Царём Баянбулака», вновь отправляется на гонки. Его цель — не только победа, но и нечто большее, чем просто спортивное состязание.","genres":"Комедия, Спорт","country":"Китай","duration":"Длительность: 2 ч 5 мин","wide":"__ASSET:w-126358.webp__"},
+ "126355": {"title":"Вечеринка одноклассников 4: Друзья на всю жизнь / Klassefesten 4: Venner for livet","detailsTitle":"Вечеринка одноклассников 4: Друзья на всю жизнь\nKlassefesten 4: Venner for livet","year":"2026","ratings":[["IMDB","5.8"]],"progressPercent":null,"isWatched":false,"plot":"Когда Нильсу исполняется 50 лет, Томас и Андреас решают вернуть другу вкус к жизни. Они организуют для него безумную секретную вечеринку в загородном доме. Впереди друзей ждет поездка, полная кэтфишинга, отрицания возраста и осознания того, что никто из них на самом деле так и не научился быть взрослым.","genres":"Комедия","country":"Дания","duration":"Длительность: 1 ч 38 мин","wide":"__ASSET:w-126355.webp__"},
+ "126352": {"title":"Мятеж / Mutiny","detailsTitle":"Мятеж\nMutiny","year":"2026","ratings":[["KP","5.639"],["IMDB","5.7"],["PUB","5.8"]],"progressPercent":null,"isWatched":false,"plot":"Коул Рид, некогда служивший в спецназе и полиции, ныне трудится в частной охране. Внезапно на его глазах убивают его босса-миллиардера. Рида подставляют, поэтому он становится главным подозреваемым. Ему приходится бежать от закона. Он решает самостоятельно выйти на след убийцы и в ходе расследования раскрывает грандиозный заговор.","genres":"Боевик, Криминал","country":"США, Великобритания","duration":"Длительность: 1 ч 35 мин","wide":"__ASSET:w-126352.webp__"},
+ "126301": {"title":"Падение сэра Дугласа Уитерфорда / The Fall of Sir Douglas Weatherford","detailsTitle":"Падение сэра Дугласа Уитерфорда\nThe Fall of Sir Douglas Weatherford","year":"2026","ratings":[["IMDB","6.1"],["PUB","3.3"]],"progressPercent":null,"isWatched":false,"plot":"Одержимый своим великим предком Дугласом Уитерфордом, Кеннет стремительно погружается в пучину безумия, когда его тихий городок захватывает съемочная группа фэнтези-сериала, ни во что не ставящая местные традиции. Навязчивая идея связаться с исполнителем главной роли лишь подливает масла в огонь, увлекая его в трагическое падение на самое дно - прямо на глазах у собственной дочери Анны.","genres":"Комедия","country":"Великобритания","duration":"Длительность: 1 ч 35 мин","wide":"__ASSET:w-126301.webp__"},
+ "126289": {"title":"Последний курорт / Paradis","detailsTitle":"Последний курорт\nParadis","year":"2026","ratings":[["IMDB","6.5"],["PUB","4.7"]],"progressPercent":null,"isWatched":false,"plot":"Семья наслаждается отдыхом своей мечты. Встретив человека, который нуждается в помощи, они решают выручить его. Но постепенно, по мере того как его просьбы становятся всё настойчивее, а они сами всё глубже втягиваются в эту историю, они начинают опасаться за свою жизнь.","genres":"Драма","country":"Норвегия, Дания","duration":"Длительность: 1 ч 34 мин","wide":"__ASSET:w-126289.webp__"},
+ "126283": {"title":"Тайны Нелли: Искусство убийства / Nelly Knows Mysteries: All Manners of Murder","detailsTitle":"Тайны Нелли: Искусство убийства\nNelly Knows Mysteries: All Manners of Murder","year":"2026","ratings":[["IMDB","6.6"]],"progressPercent":null,"isWatched":false,"plot":"Оказавшись на пышном званом ужине в изолированном имении, Нелли и детектив Майкл сталкиваются с загадочным убийством одного из гостей. Под подозрением оказываются все: от запутавшихся родственников с фальшивыми завещаниями до заново открывающих прошлые обиды членов семьи. Героям предстоит распутать клубок лжи, поддельных писем и темных тайн хозяев дома.","genres":"Детектив","country":"Канада","duration":"Длительность: 1 ч 24 мин","wide":"__ASSET:w-126283.webp__"},
+ "126274": {"title":"Зверь / La fiera","detailsTitle":"Зверь\nLa fiera","year":"2026","ratings":[["IMDB","6.1"],["PUB","4.0"]],"progressPercent":null,"isWatched":false,"plot":"Группа друзей, связанных любовью к экстремальным видам спорта, открывает для себя бейсджампинг в вингсьютах — но ощущение полета сопряжено с огромным риском.","genres":"Приключения, Драма, Спорт","country":"Испания","duration":"Длительность: 1 ч 55 мин","wide":"__ASSET:w-126274.webp__"},
+ "126271": {"title":"Золото нашего дома / Maa Inti Bangaaram","detailsTitle":"Золото нашего дома\nMaa Inti Bangaaram","year":"2026","ratings":[["IMDB","7.4"],["PUB","0.9"]],"progressPercent":null,"isWatched":false,"plot":"История рассказывает о, на первый взгляд, обычной скромной домохозяйке Сварне, живущей в традиционной семье. Однако у неё есть тщательно скрываемое опасное прошлое – она бывший наёмный убийца. Когда старые враги начинают угрожать её новой семье, Сварне приходится снова взяться за оружие. Ей необходимо защитить близких, не раскрыв при этом им свою настоящую личность.","genres":"Боевик, Семейный, Триллер, Криминал","country":"Индия","duration":"Длительность: 2 ч 32 мин","wide":"__ASSET:w-126271.webp__"},
+ "126265": {"title":"Не говори «удачи» / Don't Say Good Luck","detailsTitle":"Не говори «удачи»\nDon't Say Good Luck","year":"2026","ratings":[["IMDB","6.8"],["PUB","7.5"]],"progressPercent":null,"isWatched":true,"plot":"Софи Биренбаум готовится исполнить главную роль в школьном мюзикле. Внезапно девушка обнаруживает, что у нее дома происходят не менее драматические события, чем на сцене.","genres":"Комедия","country":"США","duration":"Длительность: 1 ч 35 мин","wide":"__ASSET:w-126265.webp__"},
+ "125428": {"title":"День разоблачения / Disclosure Day","detailsTitle":"День разоблачения\nDisclosure Day","year":"2026","ratings":[["KP","6.1"],["IMDB","6.4"],["PUB","5.0"]],"progressPercent":null,"isWatched":true,"plot":"Бывший сотрудник секретной правительственной организации Дэниэл Келлнер вместе со своей девушкой бежит от бывших работодателей. Он украл некие секретные материалы и считает, что их содержимое должно быть обнародовано. Тем временем Маргарет Фэйрчайлд, обычная ведущая прогноза погоды на канзасском телеканале, внезапно начинает говорить на нескольких языках, а в прямом эфире издаёт странные цокающие звуки и теряет сознание. Врачи не находят у неё ничего подозрительного, и, сбежав из больницы, Маргарет вдруг понимает, что ей нужно найти Келлнера.","genres":"Фантастика, Триллер","country":"США, Япония, Канада, Новая Зеландия","duration":"Длительность: 2 ч 25 мин","wide":"__ASSET:w-125428.webp__"},
+ "124771": {"title":"Обсессия / Obsession","detailsTitle":"Обсессия\nObsession","year":"2025","ratings":[["KP","7.1"],["IMDB","7.8"],["PUB","7.7"]],"progressPercent":null,"isWatched":false,"plot":"Беар давно влюблён в красавицу Никки, с которой они дружат ещё со школы. Парень опасается, что безнадёжно застрял во френдзоне, и никак не может решиться на признание. Однажды в магазине эзотерики он находит странную безделушку — волшебную палочку, которая может исполнить одно желание. Беар загадывает, чтобы Никки любила его больше всех на свете, и внезапно девушка действительно в него влюбляется. Но счастью парня быстро приходит конец — теперь Никки буквально одержима объектом своего обожания и ведёт себя всё более жутко.","genres":"Ужасы","country":"США","duration":"Длительность: 1 ч 48 мин","wide":"__ASSET:w-124771.webp__"},
+ "126019": {"title":"Приглашение / The Invite","detailsTitle":"Приглашение\nThe Invite","year":"2026","ratings":[["KP","6.9"],["IMDB","7.6"],["PUB","8.0"]],"progressPercent":null,"isWatched":false,"plot":"Джо и Анджела уже давно в браке, и у них 12-летняя дочь. Страсть и понимание в их отношениях давно уступили место ежедневным взаимным колкостям и ссорам. Единственное, что пока ещё сближает супругов — обсуждение Хока и Пины из квартиры этажом выше, ведь почти каждую ночь оттуда доносятся громкие страстные стоны и крики. Однажды Анджела к явному неудовольствию Джо приглашает тех самых соседей на ужин. Постепенно светская беседа переходит в неожиданное русло, когда выясняются различные пикантные подробности.","genres":"Комедия, Драма","country":"США","duration":"Длительность: 1 ч 47 мин","wide":"__ASSET:w-126019.webp__"},
+ "125497": {"title":"Супергёрл / Supergirl","detailsTitle":"Супергёрл\nSupergirl","year":"2026","ratings":[["KP","5.6"],["IMDB","5.9"],["PUB","4.5"]],"progressPercent":null,"isWatched":true,"plot":"Кара Зор-Эл путешествует по галактике со своим псом Крипто. На неё нападает пират и разбойник, который угоняет её корабль и ранит Крипто. Объединив силы с новой подругой и союзницей Рути, семью которой ранее убил пират, Кара отправляется мстить.","genres":"Боевик, Фантастика, Приключения, Драма","country":"США","duration":"Длительность: 1 ч 48 мин","wide":"__ASSET:w-125497.webp__"},
+ "125521": {"title":"Колония / Gunche","detailsTitle":"Колония\nGunche","year":"2026","ratings":[["KP","6.7"],["IMDB","6.5"],["PUB","6.4"]],"progressPercent":null,"isWatched":false,"plot":"Во время конференции по биотехнологиям, проходящей в высотном здании торгового центра, происходит акт биотерроризма — опасный вирус вырывается на свободу и начинает превращать людей в агрессивных тварей. Власти закрывают небоскрёб на карантин, а немногим уцелевшим приходится своими силами противостоять жутким существам, которые обладают коллективным разумом и эволюционируют с ужасающей скоростью.","genres":"Боевик, Ужасы, Эксклюзив","country":"Южная Корея","duration":"Длительность: 2 ч 2 мин","wide":"__ASSET:w-125521.webp__"},
+ "124621": {"title":"Настройщик / Tuner","detailsTitle":"Настройщик\nTuner","year":"2025","ratings":[["KP","7.1"],["IMDB","7.2"],["PUB","9.3"]],"progressPercent":null,"isWatched":false,"plot":"Жизнь Ники — страдающего гиперакузией талантливого настройщика фортепиано из Лондона — переворачивается с ног на голову, когда он обнаруживает, что его навыки и тонкий слух настройки можно применять для взлома сейфов. Когда его наставник и партнёр Гарри попадает в больницу, парень решает присоединиться к банде грабителей, чтобы помочь оплатить счета за лечение.","genres":"Триллер, Драма, Мелодрама, Криминал, Музыкальный","country":"США, Канада","duration":"Длительность: 1 ч 47 мин","wide":"__ASSET:w-124621.webp__"},
+ "124756": {"title":"История игрушек 5 / Toy Story 5","detailsTitle":"История игрушек 5\nToy Story 5","year":"2026","ratings":[["KP","7.5"],["IMDB","7.4"],["PUB","9.2"]],"progressPercent":null,"isWatched":false,"plot":"Джесси и другие игрушки души не чают в своей хозяйке Бонни, которая с ними играет, в отличие от других детей, проводящих время перед экранами мобильных устройств. Однажды девочка получает в подарок планшет Лилипад, забрасывает свои старые игрушки и заводит виртуальных подруг. Когда те приглашают её в гости, Джесси, уверенная, что друзей нужно заводить в реальной жизни, отправляется проверить этих новых знакомых, но из-за нелепой случайности оказывается на ранчо, где когда-то была любимой игрушкой другой девочки. А тем временем отряд Баззов Лайтеров из потерпевшего крушение контейнера следует за Полярной звездой, чтобы найти своего командира.","genres":"Комедия, Фэнтези, Семейный, Приключения, Мультфильм","country":"США","duration":"Длительность: 1 ч 41 мин","wide":"__ASSET:w-124756.webp__"},
+ "125881": {"title":"Зловещие мертвецы: Пекло / Evil Dead Burn","detailsTitle":"Зловещие мертвецы: Пекло\nEvil Dead Burn","year":"2026","ratings":[["KP","6.7"],["IMDB","6.3"],["PUB","5.8"]],"progressPercent":null,"isWatched":false,"plot":"После смерти мужа женщина приезжает в отдалённый дом его семьи, надеясь найти там поддержку и покой. Но постепенно всё превращается в кошмар: родственники один за другим становятся одержимыми демонами. В этот момент она осознаёт, что данные ею клятвы любви и верности не заканчиваются даже со смертью.","genres":"Ужасы","country":"США, Канада, Новая Зеландия","duration":"Длительность: 1 ч 50 мин","wide":"__ASSET:w-125881.webp__"},
+ "125821": {"title":"СОУЛМ8ЙТ / SOULM8TE","detailsTitle":"СОУЛМ8ЙТ\nSOULM8TE","year":"2026","ratings":[["KP","5.8"],["IMDB","5.8"],["PUB","7.3"]],"progressPercent":null,"isWatched":false,"plot":"Мужчина покупает андроида с искусственным интеллектом, чтобы справиться с потерей недавно умершей жены. Пытаясь создать по-настоящему разумного партнера, он случайно превращает безопасного робота-компаньона в смертельно опасную родственную душу.","genres":"Фантастика, Триллер","country":"США","duration":"Длительность: 1 ч 39 мин","wide":"__ASSET:w-125821.webp__"},
+ "126106": {"title":"Миньоны и монстры / Minions & Monsters","detailsTitle":"Миньоны и монстры\nMinions & Monsters","year":"2026","ratings":[["KP","6.6"],["IMDB","6.4"],["PUB","6.9"]],"progressPercent":0.1785,"isWatched":false,"plot":"1920-е годы. Миньоны снимаются в кино и покоряют Голливуд. Чтобы снять свой собственный фильм о монстрах, они отправляются на поиски самых пугающих существ.","genres":"Комедия, Фантастика, Семейный, Приключения, Мультфильм","country":"США","duration":"Длительность: 1 ч 33 мин","wide":"__ASSET:w-126106.webp__"},
+ "124600": {"title":"Гражданин-мститель / Citizen Vigilante","detailsTitle":"Гражданин-мститель\nCitizen Vigilante","year":"2026","ratings":[["KP","6.3"],["IMDB","5.8"],["PUB","6.6"]],"progressPercent":null,"isWatched":false,"plot":"В центре истории — Сандерс, самопровозглашённый мститель. Он разочарован в официальной системе правосудия и решает вершить его сам: охотится на преступников и коррумпированных чиновников. Свои действия он записывает, публикует в соцсетях (при этом лица жертв размывает) и произносит манифесты о несостоятельности институтов. В результате его «подвиги» делают Сандерса звездой интернета — у него появляется публичная поддержка.","genres":"Боевик, Триллер, Эксклюзив","country":"Хорватия","duration":"Длительность: 1 ч 29 мин","wide":"__ASSET:w-124600.webp__"},
+ "125458": {"title":"Смерть Робин Гуда / The Death of Robin Hood","detailsTitle":"Смерть Робин Гуда\nThe Death of Robin Hood","year":"2026","ratings":[["KP","6"],["IMDB","6"],["PUB","5.0"]],"progressPercent":null,"isWatched":false,"plot":"Постаревший Робин Гуд сталкивается с осознанием, что его прошлое полно убийств и преступлений. Однажды он получает серьёзное ранение и получает шанс на спасение, попав в руки таинственной женщины.","genres":"Боевик, Приключения, Драма","country":"США","duration":"Длительность: 2 ч 1 мин","wide":"__ASSET:w-125458.webp__"},
+ "125038": {"title":"Живая ярость / Fo ze ngaan","detailsTitle":"Живая ярость\nFo ze ngaan","year":"2025","ratings":[["KP","6.9"],["IMDB","7.3"],["PUB","7.3"]],"progressPercent":null,"isWatched":false,"plot":"Когда дочь мастера-ремесленника Ван Вэя похищает преступная группировка, тот самостоятельно отправляется на поиски. Его единственным союзником становится Навин — неутомимый журналист, чья жена таинственно исчезла. Мужчинам из разных слоёв общества предстоит научиться доверять друг другу и сотрудничать, используя навыки рукопашного боя, полученные благодаря их тайному прошлому.","genres":"Боевик, Криминал, Эксклюзив","country":"Гонконг","duration":"Длительность: 1 ч 53 мин","wide":"__ASSET:w-125038.webp__"},
+ "126202": {"title":"По-настоящему обнажён / Truly Naked","detailsTitle":"По-настоящему обнажён\nTruly Naked","year":"2026","ratings":[["KP","5.795"],["IMDB","6.4"],["PUB","6.0"]],"progressPercent":null,"isWatched":false,"plot":"Интровертный подросток, который познал близость лишь через объектив, работая в бизнесе для взрослых своего отца, должен выйти из‑за камеры, когда бойкая одноклассница бросает ему вызов и побуждает его к настоящему человеческому контакту.","genres":"Драма","country":"Великобритания, Франция, Нидерланды, Бельгия","duration":"Длительность: 1 ч 42 мин","wide":"__ASSET:w-126202.webp__"},
+ "123238": {"title":"Между небом и землёй / L'Âme Idéale","detailsTitle":"Между небом и землёй\nL'Âme Idéale","year":"2025","ratings":[["KP","6.5"],["IMDB","6.8"],["PUB","8.0"]],"progressPercent":null,"isWatched":false,"plot":"Эльза, 40-летняя одинокая женщина, отказалась от любовных историй. Её необычный дар держит людей на расстоянии: она видит и разговаривает с мёртвыми. Однажды вечером она встречает Оскара, забавного и очаровательного мужчину, который заставляет её снова надеяться, что всё возможно. Но когда она наконец начинает влюбляться, Эльза понимает, что их история не так реальна, как она думала...","genres":"Комедия, Фэнтези, Мелодрама","country":"Франция","duration":"Длительность: 1 ч 38 мин","wide":"__ASSET:w-123238.webp__"},
+ "118528": {"title":"Достать ножи: Воскрешение покойника / Wake Up Dead Man: A Knives Out Mystery","detailsTitle":"Достать ножи: Воскрешение покойника\nWake Up Dead Man: A Knives Out Mystery","year":"2025","ratings":[["KP","7.2"],["IMDB","7.3"],["PUB","9.1"]],"progressPercent":null,"isWatched":true,"plot":"Преподобного Джада переводят в старую церковь в штате Нью-Йорк, где проповедует монсеньор Джефферсон Уикс. Джаду не удаётся найти общий язык с Уиксом и прихожанам. Вскоре, закончив очередную проповедь, монсеньор удаляется в церковные покои, а спустя тридцать секунд его находят мёртвым. Свидетелями произошедшего оказались набожная Марта Делакруа, доктор Нэт Шарп, адвокат Вера Дрейвен и писатель Ли Росс. Расследовать убийство предстоит частному детективу Бенуа Блану.","genres":"Комедия, Триллер, Драма, Детектив, Криминал","country":"США","duration":"Длительность: 4 ч 52 мин","wide":"__ASSET:w-118528.webp__"},
+ "126247": {"title":"Трасса «Море — море»","detailsTitle":"Трасса «Море — море»","year":"2026","ratings":[["KP","6.5"],["IMDB","3.1"],["PUB","0.5"]],"progressPercent":null,"isWatched":false,"plot":"Красный кабриолет мчится из Питера в Сочи, за рулём — наглый фотограф Тёма. С ним его бывшая, но любимая жена Саша, и её новый жених. Тёма пойдет на всё, чтобы помешать новой Сашиной свадьбе. А роковая автостопщица Кира, спасённая ребятами, поможет ему в этом. У Тёмы есть лишь один путь через всю страну, чтобы измениться и вернуть любовь всей жизни — если не откажут тормоза.","genres":"Комедия, Приключения, Мелодрама","country":"Россия","duration":"Длительность: 1 ч 25 мин","wide":"__ASSET:w-126247.webp__"},
+ "123886": {"title":"Ограбить Лондон / Fuze","detailsTitle":"Ограбить Лондон\nFuze","year":"2025","ratings":[["KP","6.2"],["IMDB","6.2"],["PUB","8.0"]],"progressPercent":null,"isWatched":false,"plot":"В центре Лондона находят неразорвавшуюся бомбу времен Второй мировой. Людей из соседних домов эвакуируют, включая работников крупнейшего банка Великобритании. Именно в этот момент там находится крупная партия алмазов. Вооружившись современными гаджетами, команда первоклассных взломщиков готовит невероятно дерзкое ограбление.","genres":"Боевик, Триллер, Детектив, Криминал","country":"Великобритания","duration":"Длительность: 1 ч 36 мин","wide":"__ASSET:w-123886.webp__"},
+ "117283": {"title":"Франкенштейн / Frankenstein","detailsTitle":"Франкенштейн\nFrankenstein","year":"2025","ratings":[["KP","7.4"],["IMDB","7.4"],["PUB","9.0"]],"progressPercent":null,"isWatched":true,"plot":"1857 год. Команда застрявшего в северных льдах датского корабля спасает раненого мужчину от похожего на человека чудовища, которое невозможно убить. Тот рассказывает капитану свою историю: его зовут Виктор Франкенштейн, он сын знаменитого врача, и с самого детства вынашивал идею оживить мёртвую плоть. У него появилась возможность проводить в этой сфере всевозможные эксперименты, когда дядя невесты младшего брата Виктора предложил ему неограниченное финансирование.","genres":"Фантастика, Драма, Эксклюзив","country":"США, Мексика","duration":"Длительность: 5 ч 2 мин","wide":"__ASSET:w-117283.webp__"},
+ "124450": {"title":"Мандалорец и Грогу / The Mandalorian & Grogu","detailsTitle":"Мандалорец и Грогу\nThe Mandalorian & Grogu","year":"2026","ratings":[["KP","7"],["IMDB","6.8"],["PUB","8.0"]],"progressPercent":null,"isWatched":true,"plot":"Империя пала, но её военачальники всё ещё держат под своим контролем части галактики. Зарождающаяся Новая Республика пытается защитить идеалы, за которые сражались повстанцы, и нанимает для задания мандалорца Дина Джарина, известного охотника за головами, и его юного ученика Грогу.","genres":"Боевик, Фантастика, Фэнтези, Семейный, Приключения, Эксклюзив","country":"США","duration":"Длительность: 2 ч 11 мин","wide":"__ASSET:w-124450.webp__"},
+ "122242": {"title":"Проект «Конец света» / Project Hail Mary","detailsTitle":"Проект «Конец света»\nProject Hail Mary","year":"2026","ratings":[["KP","8.4"],["IMDB","8.2"],["PUB","9.4"]],"progressPercent":null,"isWatched":true,"plot":"Микробиолог Райленд Грейс просыпается на космическом корабле, не помня ни себя, ни свою миссию. Мужчина выясняет, что он — единственный выживший из экипажа, отправленного к звезде Тау Кита в поисках спасения от катастрофы на Земле. Чтобы найти решение, Райленду предстоит положиться на свои обширные научные знания и изобретательность, но, возможно, ему не придётся искать в одиночку.","genres":"Комедия, Фантастика, Приключения, Драма","country":"США","duration":"Длительность: 5 ч 12 мин","wide":"__ASSET:w-122242.webp__"},
+ "113773": {"title":"28 лет спустя / 28 Years Later","detailsTitle":"28 лет спустя\n28 Years Later","year":"2025","ratings":[["KP","6.1"],["IMDB","6.6"],["PUB","4.1"]],"progressPercent":null,"isWatched":false,"plot":"28 лет в Великобритании бушует вирус, превращающий заражённых в агрессивных плотоядных тварей. В этом ужасном мире маленький мальчик пытается найти врача для умирающей мамы.","genres":"Боевик, Ужасы","country":"США, Великобритания, Канада","duration":"Длительность: 3 ч 50 мин","wide":"__ASSET:w-113773.webp__"},
+ "120679": {"title":"28 лет спустя: Часть II. Храм костей / 28 Years Later: The Bone Temple","detailsTitle":"28 лет спустя: Часть II. Храм костей\n28 Years Later: The Bone Temple","year":"2026","ratings":[["KP","6.7"],["IMDB","7.2"],["PUB","7.8"]],"progressPercent":null,"isWatched":false,"plot":"Спайк оказывается в банде отморозков Джимми, которые находят выживших и жестоко их убивают. А тем временем доктор Келсон, усмиряющий здоровенного альфу своим седативным коктейлем, замечает, что тот начинает проявлять признаки сознания.","genres":"Ужасы, Эксклюзив","country":"США, Великобритания","duration":"Длительность: 3 ч 38 мин","wide":"__ASSET:w-120679.webp__"},
+ "111985": {"title":"Хищник: Убийца убийц / Predator: Killer of Killers","detailsTitle":"Хищник: Убийца убийц\nPredator: Killer of Killers","year":"2025","ratings":[["KP","7.1"],["IMDB","7.4"],["PUB","8.9"]],"progressPercent":0.0902,"isWatched":false,"plot":"Обожающие охоту инопланетные хищники прилетают на Землю, чтобы сразиться с лучшими, как они считают, воинами разных эпох — предводительницей викингов в IX веке и ниндзя начала XVII века. Также их целью становится американский авиамеханик во Второй мировой войне, вынужденно севший за штурвал самолёта.","genres":"Боевик, Фантастика, Ужасы, Мультфильм","country":"США","duration":"Длительность: 2 ч 49 мин","wide":"__ASSET:w-111985.webp__"},
+ "122275": {"title":"Я иду искать 2 / Ready or Not 2: Here I Come","detailsTitle":"Я иду искать 2\nReady or Not 2: Here I Come","year":"2026","ratings":[["KP","6.5"],["IMDB","6.5"],["PUB","8.4"]],"progressPercent":null,"isWatched":false,"plot":"Едва пережив кровавую атаку семьи Ле Домас, Грейс понимает: кошмарная игра не окончена — она лишь выходит на новый, ещё более опасный уровень. На этот раз рядом с ней оказывается её сестра Фэйт. У Грейс есть всего один шанс выжить, сохранить сестре жизнь и завладеть Высшим креслом Совета, который управляет всем миром. За трон охотятся четыре враждующих семьи, и победитель получит абсолютную власть.","genres":"Комедия, Триллер, Ужасы","country":"США","duration":"Длительность: 3 ч 35 мин","wide":"__ASSET:w-122275.webp__"},
+ "1921": {"title":"Конан-варвар / Conan the Barbarian","detailsTitle":"Конан-варвар\nConan the Barbarian","year":"1982","ratings":[["KP","6.855"],["IMDB","6.9"],["PUB","9.5"]],"progressPercent":null,"isWatched":false,"plot":"В детстве Конан стал свидетелем жестокого убийства своих родителей беспощадным Тулса Думом. Его обезумевшие от запаха крови солдаты разорили и сожгли дотла родную деревню Конана. Мальчик вырастает в рабстве и превращается в обладающего неимоверной силой и мышечной массой непобедимого воина. Поклявшись отомстить за родителей, он отправляется на поиски своего врага. Его путь полон невероятных приключений, отчаянных поединков, неожиданных встреч и опасностей. Конан с достоинством проходит все испытания, но сможет ли он победить в последней и самой опасной битве в его жизни, битве с непобедимым Тулса Думом?","genres":"Фэнтези, Приключения","country":"США, Мексика","duration":"Длительность: 2 ч 10 мин","wide":"__ASSET:w-1921.webp__"},
+ "3733": {"title":"Счастливчик Гилмор / Happy Gilmore","detailsTitle":"Счастливчик Гилмор\nHappy Gilmore","year":"1996","ratings":[["KP","7.3"],["IMDB","7"],["PUB","9.8"]],"progressPercent":null,"isWatched":false,"plot":"Гилмор с детства обожал хоккей, но, кроме пушечного удара, способностей у него к этой игре «настоящих мужчин» не было. Случай дал Гилмору в руки клюшку для гольфа, и удар его был самым мощным за всю историю этого вида спорта, который парень так презирал. Но на одном презрении далеко не уедешь, а призовые в гольфе немаленькие.","genres":"Комедия, Спорт","country":"США","duration":"Длительность: 1 ч 32 мин","wide":"__ASSET:w-3733.webp__"},
+ "15905": {"title":"Начальник Чукотки","detailsTitle":"Начальник Чукотки","year":"1966","ratings":[["KP","8"],["IMDB","7.4"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"1922 год. Комиссара Глазкова посылают на Чукотку устанавливать советскую власть. По пути в Уйгунан Глазков умирает, и к месту назначения добирается только молодой писарь Алеша, который волей случая становится начальником Чукотки.","genres":"Комедия, Приключения, Драма","country":"СССР","duration":"Длительность: 1 ч 26 мин","wide":"__ASSET:w-15905.webp__"},
+ "8329": {"title":"Дурак","detailsTitle":"Дурак","year":"2014","ratings":[["KP","8.1"],["IMDB","7.9"],["PUB","9.3"]],"progressPercent":null,"isWatched":false,"plot":"Жизни 800 человек общежития висят буквально на волоске из-за безразличия местных властей. В любую секунду здание может рухнуть. И кто бы мог подумать, что судьбы людей окажутся в руках простого сантехника. Но удастся ли ему что-то изменить и предотвратить катастрофу?","genres":"Драма","country":"Россия","duration":"Длительность: 2 ч","wide":"__ASSET:w-8329.webp__"},
+ "1106": {"title":"Брат","detailsTitle":"Брат","year":"1997","ratings":[["KP","8.4"],["IMDB","7.8"],["PUB","9.5"]],"progressPercent":null,"isWatched":false,"plot":"Демобилизованный из армии, Данила Багров вернулся в родной городок. Но скучная жизнь российской провинции не устраивала его, и он решился податься в Петербург, где, по слухам, уже несколько лет процветает его старший брат. Данила нашел брата. Но все оказалось не так просто — брат был наемным убийцей…","genres":"Боевик, Драма, Криминал","country":"Россия","duration":"Длительность: 1 ч 35 мин","wide":"__ASSET:w-1106.webp__"},
+ "1609": {"title":"Не валяй дурака...","detailsTitle":"Не валяй дурака...","year":"1997","ratings":[["KP","7.2"],["IMDB","6.5"],["PUB","9.5"]],"progressPercent":null,"isWatched":false,"plot":"Пошел однажды мужик бревна из реки тягать - на зиму топливо запасать и выудил 200-литровую бочку спирта. Загуляла деревня... Этот неожиданный праздник устроили сельчанам американские подводники, выполнявшие в российских водах свою тайную миссию. Встретились за одним столом два великих народа, чтобы узнать друг друга получше. А встреча оказалась удивительной - американский адмирал, заплывавший сюда в годы войны, встретил здесь свою дочь и внука...","genres":"Комедия, Приключения, Драма, Детектив, Криминал","country":"Россия","duration":"Длительность: 1 ч 38 мин","wide":"__ASSET:w-1609.webp__"},
+ "121699": {"title":"Про бизнесмена Фому","detailsTitle":"Про бизнесмена Фому","year":"1993","ratings":[["KP","7.1"],["IMDB","6.2"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"Сельский механизатор Фома, увидев в городе платный туалет, загорелся идеей разбогатеть в своей деревне на таком же бизнесе. Построил роскошное заведение, но деревенским коммунистам и местным рэкетирам эта капиталистическая идея не понравилась...","genres":"Комедия, Драма","country":"Россия","duration":"Длительность: 1 ч 19 мин","wide":"__ASSET:w-121699.webp__"},
+ "126463": {"title":"Маленькая прибыль отца / Father's Little Dividend","detailsTitle":"Маленькая прибыль отца\nFather's Little Dividend","year":"1951","ratings":[["KP","6.911"],["IMDB","6.5"]],"progressPercent":null,"isWatched":false,"plot":"Фильм рассказывает, что же происходит в семье адвоката Стэнли Т. Бэнкса недавно выдавшего замуж дочурку Кей. На этот раз Бэнкс, еще не до конца смирившийся с изменением статуса дочери, узнает новую шокирующую новость - он вот-вот станет дедушкой.\nВ отличие от окружающих, Стэнли не склонен считать это событие радостным, но приходится смириться и находить нечто хорошее в нарушении отлаженного, комфортного образа жизни. Дальнейшие события предсказать нетрудно, но очень уж они трогательно поданы.","genres":"Комедия, Драма, Мелодрама","country":"США","duration":"Длительность: 1 ч 21 мин","wide":"__ASSET:w-126463.webp__"},
+ "126466": {"title":"Одержимая / Possessed","detailsTitle":"Одержимая\nPossessed","year":"1931","ratings":[["KP","7.159"],["IMDB","6.9"]],"progressPercent":null,"isWatched":false,"plot":"Бедная фабричная девушка Мэриан не хочет прозябать в маленьком городишке и выходить замуж за пылкого, но бедного ухажера. Ее манит блестящая жизнь богатых городов. Однажды, на железнодорожном переезде она знакомится с подвыпившим плейбоем Вили, который ради развлечения угощает ее шампанским и приглашает заглянуть к нему на огонек. Он не подозревает, что разбудил в ней настоящую «золотоискательницу», одержимую мечтой о красивой жизни. Мэриан не преминула воспользоваться приглашением и неожиданно нагрянула к нему.\nОбескураженный и с головной болью после похмелья Вили все-таки дает ей несколько советов как обосноваться в городе, прежде, чем выпроводить ее за дверь. Хваткая Мэриан становится любовницей богатого разведенного адвоката Марка Уитни. Через три года, превратившись в светскую львицу, обученная этикету и манерам высшего света, первоклассно одетая и живущая на Парк Авеню, выдавая себя за богатую разведенную мисс Мореланд, Мэриан вдруг обнаруживает, что ей хочется простого женского счастья…","genres":"Драма, Мелодрама","country":"США","duration":"Длительность: 1 ч 16 мин","wide":"__ASSET:w-126466.webp__"},
+ "2939": {"title":"Плезантвиль / Pleasantville","detailsTitle":"Плезантвиль\nPleasantville","year":"1998","ratings":[["KP","7.806"],["IMDB","7.5"],["PUB","9.4"]],"progressPercent":null,"isWatched":false,"plot":"Дэвид Вагнер - дитя девяностых. Но он увлечен телевизионным шоу «Плезантвиль», где действие происходит в 50-е годы в небольшом одноименном городке, где все шикарны, веселы и непорочны, и жизнь удивительно приятна.\nЗаворожённый этим утопическим миром Дэвид воображает себя в «Плезантвиле», где он наконец-то избавился бы от своей взбалмошной и помешанной на парнях сестры Дженнифер. И однажды вечером жизнь совершает причудливый поворот: странный телемастер вручает Дэвиду необычный пульт дистанционного управления, который отправляет его вместе с сестрой прямо в Плезантвиль. Визит пришельцев не прошел для города бесследно, удивительным образом изменив судьбы его обитателей.","genres":"Комедия, Фэнтези, Драма","country":"США","duration":"Длительность: 2 ч 4 мин","wide":"__ASSET:w-2939.webp__"},
+ "126454": {"title":"Кто грохнул Памелу? / Mais qui a tué Pamela Rose?","detailsTitle":"Кто грохнул Памелу?\nMais qui a tué Pamela Rose?","year":"2003","ratings":[["KP","5.726"],["IMDB","6"]],"progressPercent":null,"isWatched":false,"plot":"Лейтенанты Рипер и Буллит - агенты ФБР, которым поручается расследование загадочного убийства юной стриптизерши Памелы Роуз в глухом городишке Борнсвилле.\nОни совсем разные, однако они должны стать командой: Буллит – практик и неразборчив в методах, в то время как Рипер - добросовестный инспектор, готовый отстаивать любой пункт закона.\nПоставленные лицом к лицу с враждебной местной полицией, эти два неловких и странных агента готовы арестовать любого, кто причастен к убийству.","genres":"Комедия","country":"Франция","duration":"Длительность: 1 ч 28 мин","wide":"__ASSET:w-126454.webp__"},
+ "3957": {"title":"Господин оформитель","detailsTitle":"Господин оформитель","year":"1989","ratings":[["KP","7.187"],["IMDB","6.9"],["PUB","8.7"]],"progressPercent":null,"isWatched":false,"plot":"Действие этой таинственной истории, снятой в стиле модерн, происходит в начале прошлого века. Гениальный (или безумный?) художник однажды встречает прекрасную женщину, как две капли воды похожую на одно из его творений.\nХудожественный фильм, снятый по мотивам рассказа «Серый автомобиль» Александра Грина.","genres":"Фэнтези, Драма, Ужасы, Детектив","country":"СССР","duration":"Длительность: 1 ч 43 мин","wide":"__ASSET:w-3957.webp__"},
+ "5033": {"title":"Когда деревья были большими","detailsTitle":"Когда деревья были большими","year":"1961","ratings":[["KP","8.055"],["IMDB","7.6"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"Потерявший во время войны жену, Кузьма Кузьмич Иорданов начал пить и совершенно опустился. Но однажды, случайно узнав о девочке, потерявшей на войне родителей, Иорданов решил стать ей отцом. Оставив Москву, он отправляется на встречу с будущей дочерью","genres":"Драма, Мелодрама","country":"СССР","duration":"Длительность: 1 ч 29 мин","wide":"__ASSET:w-5033.webp__"},
+ "120124": {"title":"Вечер с Кевином Смитом / An Evening with Kevin Smith","detailsTitle":"Вечер с Кевином Смитом\nAn Evening with Kevin Smith","year":"2002","ratings":[["KP","8.3"],["IMDB","8.3"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"Кевин Смит отвечает на вопросы студентов американских колледжей. Режиссер рассказывает о всех своих фильмах, о личной жизни и других интересных вещах.","genres":"Комедия, Биография","country":"США","duration":"Длительность: 3 ч 44 мин","wide":"__ASSET:w-120124.webp__"},
+ "1508": {"title":"Китайскiй сервизъ","detailsTitle":"Китайскiй сервизъ","year":"1999","ratings":[["KP","7.1"],["IMDB","6.3"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"1913 год. Самый комфортабельный и богатый речной пароход «Святитель Николай» идёт по Волге из Царицына в Нижний Новгород на празднование 300-летия Дома Романовых. Известно, что мошенники попытаются обыграть в покер Фрола Сатановского, одного из самых богатых купцов Российской империи. Кто же в честной компании шулер - правительственный инспектор граф Строганов, нефтяной магнат Максуд Хундамов, скотопромышленник Коля Сидихин или... певица Волошина, которая поёт в корабельном казино? А ещё на пароходе инкогнито едет знаменитый сыщик Мышко...","genres":"Комедия","country":"Россия","duration":"Длительность: 1 ч 35 мин","wide":"__ASSET:w-1508.webp__"},
+ "1138": {"title":"Война Харта / Hart's War","detailsTitle":"Война Харта\nHart's War","year":"2002","ratings":[["KP","6.404"],["IMDB","6.4"],["PUB","6.6"]],"progressPercent":null,"isWatched":false,"plot":"Лейтенант Томми Харт — студент-юрист второго года обучения. Во время Второй мировой войны он становится помощником офицера, попадает в плен и оказывается в немецком лагере для военнопленных. Там он знакомится с другим военнопленным — полковником Уильямом МакНамара.\nУзнав о том, что Харт знает закон, МакНамара поручает ему защиту на суде чернокожего заключенного, обвиняющегося в убийстве другого военнопленного. Однако на самом делеМакНамара хочет использовать судебный процесс для того, чтобы совершить попытку спастись из лагеря. А Харту предстоит сделать сложный выбор между своей страной, этикой и собственной жизнью…","genres":"Драма, Военный","country":"США","duration":"Длительность: 4 ч 9 мин","wide":"__ASSET:w-1138.webp__"},
+ "7470": {"title":"Не послать ли нам... гонца?","detailsTitle":"Не послать ли нам... гонца?","year":"1998","ratings":[["KP","7"],["IMDB","6.2"],["PUB","9.2"]],"progressPercent":null,"isWatched":false,"plot":"Разоренный банкирами фермер едет в Москву к президенту в поисках правды. По дороге он спасает бизнесмена, выручает влюбленного солдата, помогает старикам, попадает «под раздачу» в милиции, а потом пытается въехать в Кремль на «Запорожце». Но правды, естественно, не находит.","genres":"Комедия, Семейный, Приключения, Драма, Детектив","country":"Россия","duration":"Длительность: 1 ч 39 мин","wide":"__ASSET:w-7470.webp__"},
+ "945": {"title":"Высота","detailsTitle":"Высота","year":"1957","ratings":[["KP","8.1"],["IMDB","7"],["PUB","10.0"]],"progressPercent":null,"isWatched":false,"plot":"На строительство комбината приезжает бригада монтажников-верхолазов, им предстоит осуществить монтаж домны по новому методу. Кое-кто с перепугу уезжает в командировку, а в целом предложение принято и верхолазы приступают к работе.\n\nФильм о непростых характерах простых советских людей, умеющих трудиться, мечтать, любить – строить большое человеческое счастье.","genres":"Драма, Мелодрама","country":"СССР","duration":"Длительность: 1 ч 28 мин","wide":"__ASSET:w-945.webp__"},
+};
+
+const SECTIONS = [
+  {"id":"fresh_movie","title":"Новинки","itemIds":[126448,126436,126394,126379,126361,126358,126355,126352,126301,126289,126283,126274,126271,126265]},
+  {"id":"popular_movie","title":"Популярные","itemIds":[125428,124771,126019,125497,125521,124621,124756,125881,125821,126352,126106,124600,125458,125038]},
+  {"id":"hot_movie","title":"Горячие","itemIds":[126202,123238,126352,118528,126247,123886,117283,124450,122242,113773,120679,111985,122275,124756]},
+  {"id":"4k_movie","title":"4К","itemIds":[1921,3733,15905,118528,8329,123886,1106,1609,121699,117283,124450,122242,113773,120679]},
+  {"id":"all_movie","title":"Все","itemIds":[126463,126466,1921,2939,126454,126202,123238,3957,5033,120124,1508,1138,7470,945]},
+];
+
+/* Самое длинное описание среди тех, что лежат в кэше устройства — чтобы было видно,
+   что делает панель, когда текст не помещается в отведённые ей 270 dp. */
+const LONGEST_PLOT = Object.values(ITEMS)
+  .reduce((a, b) => (b.plot.length > a.plot.length ? b : a)).plot;
+
+/* ── что несёт код сегодня ─────────────────────────────────────────────────
+   Ссылки на источник каждого числа — в примечаниях к ползункам ниже. */
+const SHIPPED = {
+  railW:60, panelPct:67, pageFrac:100, sideEdge:16,
+
+  mediaFrac:75, scrimEdge:10, scrimAlpha:90, scrimEnd:45, bottomFade:50,
+
+  descFrac:60, descPadH:15, descPadTop:5,
+  titleSp:20, titleLine:18, gapTitleToRat:4, gapRatToFacts:5,
+  factsSp:10, factsLine:15, gapFactLines:4, gapFactsToPlot:8,
+  plotSp:12, plotLine:15, plotMax:0,
+
+  headTop:30, sectionSp:11, sectionLine:20, gapHeadToRow:2,
+
+  rowPad:0, cardH:115, cardGap:10,
+  cardRadius:8, cardPadH:7, cardPadV:10,
+  cardTitleSp:10, cardTitleLine:9, gapMetaToTitle:6, ratingGap:9,
+  cardScrimTop:20, cardScrimBottom:90, progressH:3, focusRing:3,
+
+  fadeW:36, fadeH:180, showAllH:43,
+};
+
+const CONTROLS = [
+  {g:"Каркас", k:"railW", n:"закрытое меню", min:0, max:120, step:1, u:"dp",
+   note:"MainScreenContentBody: closeDrawerWidth = 60 dp — на глаз, а не по замеру ящика"},
+  {g:"Каркас", k:"panelPct", n:"панель по высоте", min:20, max:80, step:1, u:"%",
+   note:"DetailsWeight : ContentWeight = 1 : 1, то есть ровно половина экрана под одну карточку"},
+  {g:"Каркас", k:"pageFrac", n:"страница секции", min:40, max:150, step:1, u:"% области рядов",
+   note:"100 % — это и есть fillParentMaxHeight(): страница всегда ровно с область рядов и едет за «панелью по высоте». Ниже 100 снизу заглядывает следующая секция"},
+  {g:"Каркас", k:"sideEdge", n:"поле у заголовка", min:0, max:64, step:1, u:"dp",
+   note:"48 dp — безопасная зона Google; в этом форке принято ближе к краю"},
+
+  {g:"Кадр", k:"mediaFrac", n:"ширина кадра", min:30, max:100, step:0.25, u:"% ширины"},
+  {g:"Кадр", k:"scrimEdge", n:"край подложки", min:0, max:60, step:0.1, u:"% кадра",
+   note:"DescriptionEdgeInMedia — где правый край описания пересекает кадр"},
+  {g:"Кадр", k:"scrimAlpha", n:"подложка на краю", min:0, max:100, step:1, u:"%"},
+  {g:"Кадр", k:"scrimEnd", n:"подложка растворена", min:5, max:100, step:1, u:"% кадра"},
+  {g:"Кадр", k:"bottomFade", n:"растворение снизу", min:0, max:160, step:1, u:"dp",
+   note:"градиент у нижнего края кадра — при 16:9 он оказывается уже под рядом карточек"},
+
+  {g:"Описание", k:"descFrac", n:"ширина блока", min:20, max:70, step:0.5, u:"% ширины"},
+  {g:"Описание", k:"descPadH", n:"поле по бокам", min:0, max:48, step:1, u:"dp"},
+  {g:"Описание", k:"descPadTop", n:"поле сверху", min:0, max:48, step:1, u:"dp"},
+  {g:"Описание", k:"titleSp", n:"кегль названия", min:10, max:32, step:1, u:"sp"},
+  {g:"Описание", k:"titleLine", n:"интерлиньяж названия", min:12, max:40, step:1, u:"sp"},
+  {g:"Описание", k:"gapTitleToRat", n:"название → рейтинги", min:0, max:32, step:1, u:"dp"},
+  {g:"Описание", k:"gapRatToFacts", n:"рейтинги → факты", min:0, max:32, step:1, u:"dp"},
+  {g:"Описание", k:"factsSp", n:"кегль фактов", min:8, max:20, step:1, u:"sp"},
+  {g:"Описание", k:"factsLine", n:"интерлиньяж фактов", min:10, max:30, step:1, u:"sp"},
+  {g:"Описание", k:"gapFactLines", n:"между строками фактов", min:0, max:24, step:1, u:"dp"},
+  {g:"Описание", k:"gapFactsToPlot", n:"факты → описание", min:0, max:32, step:1, u:"dp"},
+  {g:"Описание", k:"plotSp", n:"кегль описания", min:8, max:20, step:1, u:"sp"},
+  {g:"Описание", k:"plotLine", n:"интерлиньяж описания", min:10, max:30, step:1, u:"sp"},
+  {g:"Описание", k:"plotMax", n:"строк описания", min:0, max:16, step:1, u:"стр.",
+   note:"0 — как в коде: maxLines не задан, и длинный текст вылезает на ряд карточек"},
+
+  {g:"Заголовок секции", k:"headTop", n:"поле над заголовком", min:0, max:80, step:1, u:"dp",
+   note:"сегодня 0: заголовок — первый ребёнок страницы и прижат вплотную к низу панели, между ними в коде ничего нет"},
+  {g:"Заголовок секции", k:"sectionSp", n:"кегль", min:10, max:32, step:1, u:"sp",
+   note:"SectionTitleStyle в Type.kt — отдельный стиль, не titleLarge"},
+  {g:"Заголовок секции", k:"sectionLine", n:"интерлиньяж", min:12, max:40, step:1, u:"sp",
+   note:"он же высота коробки заголовка: кегль сам её не уменьшит"},
+  {g:"Заголовок секции", k:"gapHeadToRow", n:"заголовок → ряд", min:0, max:40, step:1, u:"dp"},
+
+  {g:"Ряд", k:"rowPad", n:"поле ряда", min:0, max:48, step:1, u:"dp",
+   note:"contentPadding у LazyRow — сразу и слева, и сверху, и снизу; сегодня совпадает с полем заголовка"},
+  {g:"Ряд", k:"cardGap", n:"между карточками", min:0, max:48, step:1, u:"dp"},
+  {g:"Ряд", k:"fadeW", n:"растворение справа", min:0, max:120, step:1, u:"dp"},
+  {g:"Ряд", k:"fadeH", n:"высота растворения", min:0, max:280, step:1, u:"dp",
+   note:"FadeGradient берёт VideoItemHeight = 180 dp — не высоту карточки, поэтому край её не закрывает"},
+  {g:"Ряд", k:"showAllH", n:"кнопка «Показать все»", min:32, max:120, step:1, u:"dp",
+   note:"минимум кнопки 40 dp плюс две строки labelLarge"},
+
+  {g:"Карточка", k:"cardH", n:"высота", min:60, max:280, step:1, u:"dp",
+   note:"CatalogueRowItemHeight; ширина — 16:9 от неё"},
+  {g:"Карточка", k:"cardRadius", n:"скругление", min:0, max:32, step:1, u:"dp"},
+  {g:"Карточка", k:"cardPadH", n:"поле по бокам", min:0, max:32, step:1, u:"dp"},
+  {g:"Карточка", k:"cardPadV", n:"поле сверху и снизу", min:0, max:32, step:1, u:"dp"},
+  {g:"Карточка", k:"ratingGap", n:"между год и рейтинги", min:0, max:40, step:1, u:"dp"},
+  {g:"Карточка", k:"gapMetaToTitle", n:"рейтинги → название", min:0, max:24, step:1, u:"dp"},
+  {g:"Карточка", k:"cardTitleSp", n:"кегль названия", min:7, max:22, step:1, u:"sp",
+   note:"titleSmall из tv-material3; карточку делят каталог, поиск, история"},
+  {g:"Карточка", k:"cardTitleLine", n:"интерлиньяж названия", min:9, max:30, step:1, u:"sp"},
+  {g:"Карточка", k:"cardScrimTop", n:"подложка сверху", min:0, max:100, step:1, u:"%"},
+  {g:"Карточка", k:"cardScrimBottom", n:"подложка снизу", min:0, max:100, step:1, u:"%"},
+  {g:"Карточка", k:"progressH", n:"полоса просмотра", min:0, max:12, step:1, u:"dp"},
+  {g:"Карточка", k:"focusRing", n:"рамка фокуса", min:0, max:8, step:1, u:"dp",
+   note:"CardDefaults.border — 3 dp цветом colorScheme.border (#938F99)"},
+];
+
+const SWITCHES = [
+  {k:"expand", n:"кадр", opts:[["on","16:9, заходит на ряд"],["off","по высоте панели"]]},
+  {k:"media",  n:"источник", opts:[["still","постер"],["trailer","трейлер"],["none","не пришёл"]]},
+  {k:"align",  n:"название в панели", opts:[["center","по центру"],["start","по левому краю"]]},
+  {k:"plot",   n:"описание", opts:[["own","своё"],["longest","самое длинное в кэше"]]},
+  {k:"lines",  n:"название карточки", opts:[["2","две строки"],["1","одна строка"]]},
+  {k:"showall",n:"«Показать все»", opts:[["last","только в «Все»"],["every","в каждой секции"],["none","нигде"]]},
+  {k:"marks",  n:"отметки просмотра", opts:[["on","как в коде"],["off","выключены"]]},
+  {k:"guides", n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
+];
+
+/* Значки Phosphor Duotone заменены силуэтами тех же фигур: на стенде решается
+   размер и место, а не рисунок. Соответствие — MainUIMapper.TabType.icon. */
+const ICONS = {
+  eye:"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+  house:"M12 3 3 10.2V21h6v-6h6v6h6V10.2z",
+  glass:"M11 3a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 11 3m0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12",
+  heart:"M12 21C12 21 4 16.1 4 10.8A4.8 4.8 0 0 1 12 7a4.8 4.8 0 0 1 8 3.8C20 16.1 12 21 12 21",
+  clock:"M12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6 5.9 5.9 0 0 1 4.2 1.8L14 10h6V4l-2.4 2.4A7.9 7.9 0 0 0 12 4m-1 4v5l4 2 .8-1.6L13 12V8z",
+  slate:"M3 4h18v3H3zM3 9h18v11H3zm2.6-5.9L4 7h3l1.6-3.9zm5 0L9 7h3l1.6-3.9zm5 0L14 7h3l1.6-3.9z",
+  tv:"M3 4h18v13H3zm6 15h6v2H9z",
+  mic:"M12 3a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M6 11a6 6 0 0 0 5 5.9V19H8l-2 2h12l-2-2h-3v-2.1A6 6 0 0 0 18 11h-2a4 4 0 0 1-8 0z",
+  reel:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 3.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m-5.2 5.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m10.4 0a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m-5.2 5.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2",
+  monitor:"M3 4h18v13H3zm7 3.2v6.6l5.2-3.3zM8 20h8v2H8z",
+  cast:"M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4M8.5 6.5 7 5A9.9 9.9 0 0 0 4 12a9.9 9.9 0 0 0 3 7l1.5-1.5A7.9 7.9 0 0 1 6 12a7.9 7.9 0 0 1 2.5-5.5m7 0A7.9 7.9 0 0 1 18 12a7.9 7.9 0 0 1-2.5 5.5L17 19a9.9 9.9 0 0 0 3-7 9.9 9.9 0 0 0-3-7z",
+  gear:"M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m9 4-2.1 1.4.5 2.5-2.3 1.1-1.7-1.9-2.4.8-.9 2.4h-2.6l-.9-2.4-2.4-.8-1.7 1.9-2.3-1.1.5-2.5L3 12l2.1-1.4-.5-2.5 2.3-1.1L8.6 9l2.4-.8.9-2.4h2.6l.9 2.4 2.4.8 1.7-1.9 2.3 1.1-.5 2.5z",
+};
+
+/* Пункты закрытого меню — те, что TabType отдаёт с enabled = true. Набор видимых
+   вкладок на устройстве настраиваемый (NavigationPreferencesRepository.getVisibleTabs),
+   здесь взят набор по умолчанию. «4К» рисуется буквами: у него своя растровая иконка. */
+const RAIL_TABS = [
+  ["house","Главная"],["glass","Поиск"],["heart","Избранное"],["clock","История"],
+  ["slate","Фильмы"],["tv","Сериалы"],["4k","4К"],["mic","Концерты"],
+  ["reel","Документальные"],["monitor","Док. сериалы"],["cast","ТВ-шоу"],["gear","Настройки"],
+];
+const RAIL_ACTIVE = 4;   /* «Фильмы» */
+
+const IMDB = ["M8.4,21.1H5.9V9.9h3.8l0.7,4.7h0.1L11,9.9h3.8v11.2h-2.5v-6.7h-0.1l-0.9,6.7H9.4l-1,-6.7h0L8.4,21.1L8.4,21.1z","M15.8,9.8c0.4,0 3.2,-0.1 4.7,0.1c1.2,0.1 1.8,1.1 1.9,2.3c0.1,2.2 0.1,4.4 0.1,6.6c0,0.2 0,0.5 -0.1,0.8c-0.2,0.9 -0.7,1.4 -1.9,1.5c-1.5,0.1 -3,0.1 -4.4,0.1c0,0 -0.1,0 -0.2,0V9.8zM18.8,11.9v7.2c0.5,0 0.8,-0.2 0.8,-0.7c0,-1.9 0,-3.9 0,-5.9C19.6,12 19.4,11.8 18.8,11.9z","M2,21.1V9.9h2.9v11.2H2z","M29.9,14.1c-0.1,-0.8 -0.6,-1.2 -1.4,-1.4c-0.8,-0.1 -1.6,0 -2.3,0.7V9.9h-2.8v11.2H26c0.1,-0.2 0.1,-0.4 0.2,-0.5c0,0 0,0 0.1,0c0.1,0.1 0.2,0.2 0.3,0.3c0.7,0.5 1.5,0.6 2.3,0.3c0.7,-0.3 1,-0.9 1,-1.6c0,-0.8 0.1,-1.7 0.1,-2.6C30,16 30,15 29.9,14.1L29.9,14.1zM27.1,19.1c0,0.2 -0.2,0.4 -0.4,0.4s-0.4,-0.2 -0.4,-0.4v-4.3c0,-0.2 0.2,-0.4 0.4,-0.4s0.4,0.2 0.4,0.4V19.1z"];
+const KP = "M24,2.5A21.5,21.5 0,1 0,45.5 24,21.51 21.51,0 0,0 24,2.5ZM19.23,8.35a5.32,5.32 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,19.23 8.35ZM34.23,13.87a5.31,5.31 0,1 1,-5.32 5.31A5.31,5.31 0,0 1,34.26 13.87ZM24,21.33A2.67,2.67 0,0 1,26.69 24h0A2.68,2.68 0,0 1,24 26.67h0a2.67,2.67 0,1 1,0 -5.34ZM13.74,23.45a5.32,5.32 0,1 1,-5.32 5.32h0A5.32,5.32 0,0 1,13.74 23.45ZM28.79,29a5.31,5.31 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,28.79 29Z";
+const PUB_MARK = "__ASSET:ic_kinopub.webp__";
+
+const DEFAULTS = {
+  ...SHIPPED,
+  expand:"on", media:"still", align:"start", plot:"own", lines:"1", showall:"every",
+  marks:"on", guides:"off",
+  section:0,
+};
+
+const S = {...DEFAULTS};
+
+/*
+ * Выкрученное переживает перезагрузку страницы, иначе каждое обновление начинается заново.
+ * Хранилище у артефакта своё, живёт только в этом браузере и не уезжает ни к кому: ни к
+ * другим зрителям, ни на другие устройства. Оно же может оказаться недоступным — приватное
+ * окно, очищенные данные, снятие превью, — поэтому и чтение, и запись обёрнуты, и стенд
+ * обязан открываться на значениях кода, когда не прочиталось ничего.
+ */
+const STORE_KEY = "puber.stand.catalogue.v1";
+
+function restore(){
+  let saved;
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch (e) {
+    return;
+  }
+  if (!saved || typeof saved !== "object") return;
+  /* Всё прочитанное проверяется по тем же границам, что и ползунки: в хранилище может
+     лежать что угодно, в том числе значение от прошлой редакции стенда. */
+  for (const c of CONTROLS){
+    const v = Number(saved[c.k]);
+    if (Number.isFinite(v)) S[c.k] = clamp(v, c.min, c.max);
+  }
+  for (const sw of SWITCHES){
+    if (sw.opts.some(o => o[0] === saved[sw.k])) S[sw.k] = saved[sw.k];
+  }
+  const sec = Number(saved.section);
+  if (Number.isInteger(sec) && sec >= 0 && sec < SECTIONS.length) S.section = sec;
+}
+
+function remember(){
+  try {
+    const out = {section: S.section};
+    for (const c of CONTROLS) out[c.k] = S[c.k];
+    for (const sw of SWITCHES) out[sw.k] = S[sw.k];
+    localStorage.setItem(STORE_KEY, JSON.stringify(out));
+  } catch (e) {
+    /* Хранилище недоступно — стенд работает, просто не помнит между обновлениями. */
+  }
+}
+
+function forget(){
+  try { localStorage.removeItem(STORE_KEY); } catch (e) { /* нечего забывать */ }
+}
+
+/* У каждой секции свой LazyListState и свой запомненный элемент фокуса
+   (rememberReconciledItemFocus), поэтому вверх-вниз возвращает ряд туда, где его оставили. */
+const ROWS = SECTIONS.map(() => ({index:0, scroll:0}));
+
+const W = 960, H = 540;      /* экран в dp: 1920 × 1080 при density 2.0 */
+const CARD_AR = 16 / 9;
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function px(dp){ return dp * 2; }
+
+/*
+ * Трекинг стилей tv-material3, дословно. Без него `measureLines` считает строки по более узкому
+ * тексту, чем печатает экран, и перенос на стенде случается позже, чем на устройстве.
+ */
+const TRACKING = {
+  titleMedium: 0,     /* переопределён в Type.kt */
+  titleSmall: 0.1,
+  bodySmall: 0.2,
+  labelSmall: 0.5,
+  section: 0.15,      /* SectionTitleStyle */
+};
+function tracking(sp){ return `letter-spacing:${px(sp)}px`; }
+function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+function toDeviceDp(devicePx){ return devicePx / 2; }
+
+/* Каждый размер на сцене проходит здесь: dp внутрь, пиксели устройства наружу, с зажимом. */
+function geom(){
+  const g = {};
+  for (const c of CONTROLS) g[c.k] = clamp(Number(S[c.k]), c.min, c.max);
+
+  g.contentX = g.railW;
+  g.contentW = W - g.railW;
+
+  /* Column с двумя weight: панель и ряды делят высоту экрана без остатка. */
+  g.panelH = H * g.panelPct / 100;
+  g.rowsY  = g.panelH;
+  g.rowsH  = H - g.panelH;
+
+  g.descW  = g.contentW * g.descFrac / 100;
+  g.mediaW = g.contentW * g.mediaFrac / 100;
+  g.mediaX = g.contentX + g.contentW - g.mediaW;
+  /*
+   * Compose меряет в целых пикселях устройства, и лишние доли dp здесь копились бы в шаге ряда.
+   * `ExpandedMediaLayout` берёт `(mediaWidth / 16:9).toInt()` пикселей, `aspectRatio` карточки —
+   * тоже целые. Стенд округляет так же: dp → px → обратно.
+   */
+  g.mediaH = S.expand === "on" ? toDeviceDp(Math.trunc(px(g.mediaW) / CARD_AR)) : g.panelH;
+
+  /* Страница секции: заголовок, зазор, коробка ряда. Карточка не зажимается ничем —
+     LazyRow отдаёт ей ровно ту высоту, что попросили, и ряд вылезает, если её много. */
+  g.headH   = g.sectionLine;
+  g.rowBoxH = g.cardH + 2 * g.rowPad;
+  g.pageH = g.rowsH * g.pageFrac / 100;
+  g.pageUsed = g.headTop + g.headH + g.gapHeadToRow + g.rowBoxH;
+  g.cardW   = toDeviceDp(Math.round(px(g.cardH) * CARD_AR));
+  return g;
+}
+
+function sectionAt(i){ return SECTIONS[(i % SECTIONS.length + SECTIONS.length) % SECTIONS.length]; }
+function itemsOf(i){ return sectionAt(i).itemIds.map(id => ITEMS[String(id)]); }
+function currentItems(){ return itemsOf(S.section); }
+function focusedItem(){
+  const list = currentItems();
+  return list[clamp(ROWS[S.section].index, 0, list.length - 1)];
+}
+function showAllIn(i){
+  if (S.showall === "none") return false;
+  if (S.showall === "every") return true;
+  return i === SECTIONS.length - 1;
+}
+function tileCount(i){ return itemsOf(i).length + (showAllIn(i) ? 1 : 0); }
+function plotOf(it){ return S.plot === "longest" ? LONGEST_PLOT : it.plot; }
+
+/* ── измерение переносов настоящим шрифтом ────────────────── */
+function measureLines(text, widthDp, sizeSp, lineSp, weight, trackSp){
+  const r = document.getElementById("ruler");
+  r.style.width = px(widthDp) + "px";
+  r.style.fontSize = px(sizeSp) + "px";
+  r.style.lineHeight = px(lineSp) + "px";
+  r.style.fontWeight = weight || 400;
+  r.style.letterSpacing = px(trackSp || 0) + "px";
+  r.textContent = text;
+  return Math.max(1, Math.round(r.scrollHeight / px(lineSp)));
+}
+
+/* ── сцена ────────────────────────────────────────────────── */
+function railHTML(g){
+  if (g.railW <= 0) return "";
+  const pitch = 40, top = 16, icon = 24;
+  const items = RAIL_TABS.map((t, i) => {
+    const y = top + i * pitch;
+    if (y + pitch > H) return "";
+    const glyph = t[0] === "4k"
+      ? `<svg viewBox="0 0 24 24" width="${px(icon)}" height="${px(icon)}" aria-hidden="true"><text
+           x="12" y="17" text-anchor="middle" font-family="Roboto, sans-serif" font-size="13"
+           font-weight="500" fill="var(--p-onsurface)">4K</text></svg>`
+      : `<svg viewBox="0 0 24 24" width="${px(icon)}" height="${px(icon)}" fill="var(--p-onsurface)"
+           aria-hidden="true"><path d="${ICONS[t[0]]}"/></svg>`;
+    return `<div class="ri${i === RAIL_ACTIVE ? " on" : ""}" title="${esc(t[1])}"
+      style="top:${px(y)}px;height:${px(pitch)}px;margin:0 ${px(4)}px">${glyph}</div>`;
+  }).join("");
+  return `<div class="rail" style="width:${px(g.railW)}px">${items}</div>`;
+}
+
+function mediaHTML(g){
+  const it = focusedItem();
+  let inner;
+  if (S.media === "none"){
+    inner = `<div class="void"></div>`;
+  } else if (S.media === "trailer"){
+    inner = `<div class="playing" style="font-size:${px(11)}px">ТРЕЙЛЕР</div>`;
+  } else {
+    /* ContentScale.FillWidth, выравнивание по верху — кадр всегда во всю ширину. */
+    inner = `<img src="${it.wide}" alt="" style="width:${px(g.mediaW)}px;height:${px(g.mediaW / CARD_AR)}px">`;
+  }
+  const hs = `linear-gradient(90deg,
+      rgba(0,0,0,1) 0%,
+      rgba(0,0,0,${(g.scrimAlpha / 100).toFixed(3)}) ${g.scrimEdge}%,
+      rgba(0,0,0,0) ${g.scrimEnd}%)`;
+  const vs = g.bottomFade > 0
+    ? `linear-gradient(180deg, rgba(0,0,0,0) calc(100% - ${px(g.bottomFade)}px), rgba(0,0,0,1) 100%)`
+    : "none";
+  return `<div class="media" style="left:${px(g.mediaX)}px;top:0;
+            width:${px(g.mediaW)}px;height:${px(g.mediaH)}px">
+    ${inner}
+    <div class="hscrim" style="background:${hs}"></div>
+    <div class="vscrim" style="background:${vs}"></div>
+  </div>`;
+}
+
+function ratingHTML(kind, value, sizeDp, textSp){
+  const size = px(sizeDp), gap = px(4), fs = px(textSp);
+  let mark;
+  if (kind === "KP"){
+    mark = `<svg viewBox="0 0 48 48" width="${size}" height="${size}" fill="#FF6600" aria-hidden="true"><path d="${KP}"/></svg>`;
+  } else if (kind === "IMDB"){
+    mark = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" fill="#F5C518" aria-hidden="true">${IMDB.map(p => `<path d="${p}"/>`).join("")}</svg>`;
+  } else {
+    mark = `<img src="${PUB_MARK}" width="${size}" height="${size}" alt="">`;
+  }
+  return `<div class="m">${mark}<span style="padding-left:${gap}px;font-size:${fs}px;line-height:${px(16)}px;
+           ${tracking(TRACKING.bodySmall)}">${esc(value)}</span></div>`;
+}
+
+let plotLines = 1, plotOverflow = 0;
+
+function descHTML(g){
+  const it = focusedItem();
+  const innerW = g.descW - 2 * g.descPadH;
+  const titleLines = measureLines(it.detailsTitle.replace(/\n/g, " "), innerW, g.titleSp, g.titleLine, 400,
+    TRACKING.titleMedium);
+  /* Название приходит с переносом по «/», так что строк не меньше, чем частей. */
+  const titleRows = Math.max(titleLines, it.detailsTitle.split("\n").length);
+  const ratH = it.ratings.length ? 16 : 0;
+  const factOne = `${it.year}, ${it.genres} ${it.country}`;
+  const factLines = measureLines(factOne, innerW, g.factsSp, g.factsLine, 500, TRACKING.labelSmall);
+
+  const plotText = plotOf(it);
+  plotLines = measureLines(plotText, innerW, g.plotSp, g.plotLine, 400, TRACKING.bodySmall);
+  const durationLines = measureLines(it.duration, innerW, g.factsSp, g.factsLine, 500,
+    TRACKING.labelSmall);
+  const above = g.descPadTop + titleRows * g.titleLine + g.gapTitleToRat + ratH +
+                g.gapRatToFacts + factLines * g.factsLine + g.gapFactLines +
+                durationLines * g.factsLine + g.gapFactsToPlot;
+  const room = Math.max(0, g.panelH - above);
+  const shown = g.plotMax > 0 ? Math.min(g.plotMax, plotLines) : plotLines;
+  plotOverflow = Math.max(0, Math.round(shown * g.plotLine - room));
+
+  const rats = it.ratings.length
+    ? `<div class="rat" style="gap:${px(8)}px;height:${px(16)}px">
+         ${it.ratings.map(r => ratingHTML(r[0], r[1], 14, 12)).join("")}</div>`
+    : "";
+  const clampStyle = g.plotMax > 0
+    ? ` -webkit-line-clamp:${g.plotMax};max-height:${px(g.plotMax * g.plotLine)}px`
+    : "";
+
+  return `<div class="desc" style="left:${px(g.contentX)}px;top:0;
+            width:${px(g.descW)}px;height:${px(g.panelH)}px;
+            padding:${px(g.descPadTop)}px ${px(g.descPadH)}px 0">
+    <div class="dt" style="font-size:${px(g.titleSp)}px;line-height:${px(g.titleLine)}px;
+         ${tracking(TRACKING.titleMedium)};
+         text-align:${S.align === "center" ? "center" : "left"}">${esc(it.detailsTitle)}</div>
+    <div style="height:${px(g.gapTitleToRat)}px"></div>
+    ${rats}
+    <div style="height:${px(g.gapRatToFacts)}px"></div>
+    <div class="fact" style="font-size:${px(g.factsSp)}px;line-height:${px(g.factsLine)}px;
+         font-weight:500;${tracking(TRACKING.labelSmall)}">${esc(factOne)}</div>
+    <div style="height:${px(g.gapFactLines)}px"></div>
+    <div class="fact" style="font-size:${px(g.factsSp)}px;line-height:${px(g.factsLine)}px;
+         font-weight:500;${tracking(TRACKING.labelSmall)}">${esc(it.duration)}</div>
+    <div style="height:${px(g.gapFactsToPlot)}px"></div>
+    <div class="plot${g.plotMax > 0 ? " clamped" : ""}"
+         style="font-size:${px(g.plotSp)}px;line-height:${px(g.plotLine)}px;
+         ${tracking(TRACKING.bodySmall)};${clampStyle}">${esc(plotText)}</div>
+  </div>`;
+}
+
+function cardHTML(it, index, g, focused){
+  const marks = S.marks === "on";
+  const meta = [];
+  if (it.year) meta.push(`<span style="font-size:${px(12)}px;line-height:${px(16)}px;${tracking(TRACKING.bodySmall)}">${esc(it.year)}</span>`);
+  it.ratings.forEach(r => meta.push(ratingHTML(r[0], r[1], 14, 12)));
+  const metaRow = meta.length
+    ? `<div class="meta" style="gap:${px(g.ratingGap)}px">${meta.join("")}</div>
+       <div style="height:${px(g.gapMetaToTitle)}px"></div>`
+    : "";
+  const bar = (marks && it.progressPercent != null && !it.isWatched && g.progressH > 0)
+    ? `<div class="bar" style="height:${px(g.progressH)}px"><i style="width:${(it.progressPercent * 100).toFixed(1)}%"></i></div>`
+    : "";
+  const eye = (marks && it.isWatched)
+    ? `<div class="eye" style="top:${px(6)}px;right:${px(6)}px;padding:${px(4)}px;
+         border-radius:${px(6)}px;background:rgba(0,0,0,.48)">
+         <svg viewBox="0 0 24 24" width="${px(16)}" height="${px(16)}"
+              fill="rgba(208,188,255,.9)" aria-hidden="true"><path d="${ICONS.eye}"/></svg></div>`
+    : "";
+  const ring = focused && g.focusRing > 0
+    ? `<div class="ring" style="inset:${-px(g.focusRing / 2)}px;border-width:${px(g.focusRing)}px;
+         border-radius:${px(g.cardRadius + g.focusRing / 2)}px"></div>`
+    : "";
+  const grad = `linear-gradient(180deg, rgba(0,0,0,${(g.cardScrimTop / 100).toFixed(2)}),
+                                        rgba(0,0,0,${(g.cardScrimBottom / 100).toFixed(2)}))`;
+  return `<div class="slot" data-card="${index}" style="width:${px(g.cardW)}px;height:${px(g.cardH)}px">
+    <div class="card" style="border-radius:${px(g.cardRadius)}px">
+    <img src="${it.wide}" alt="">
+    <div class="grad" style="background:${grad}"></div>
+    <div class="txt" style="padding:${px(g.cardPadV)}px ${px(g.cardPadH)}px">
+      ${metaRow}
+      <div class="t" style="font-size:${px(g.cardTitleSp)}px;line-height:${px(g.cardTitleLine)}px;
+           ${tracking(TRACKING.titleSmall)};
+           -webkit-line-clamp:${S.lines};max-height:${px(Number(S.lines) * g.cardTitleLine)}px">${esc(it.title)}</div>
+    </div>
+    ${eye}${bar}</div>${ring}
+  </div>`;
+}
+
+function showAllHTML(g){
+  return `<div class="showall" style="width:${px(g.cardW)}px;height:${px(g.cardH)}px">
+    <div class="pill" style="min-width:${px(58)}px;height:${px(g.showAllH)}px;
+         padding:0 ${px(16)}px;font-size:${px(14)}px;line-height:${px(20)}px">Показать
+все</div></div>`;
+}
+
+/*
+ * Куда уезжает ряд, когда фокус переходит на карточку за краем экрана.
+ *
+ * Тот же расчёт, что на устройстве: `PositionFocusedItemInLazyLayout` кладёт свой
+ * `BringIntoViewSpec` в `LocalBringIntoViewSpec`, а CompositionLocal достаётся и вложенному
+ * `LazyRow`, не только колонке, ради которой его ставили. Отсюда две вещи, которых не даёт
+ * ни центрирование, ни сдвиг на одну карточку: карточка, видимая целиком, не двигает ряд
+ * вовсе (keepFullyVisibleItemInPlace), а та, что за краем, встаёт левым краем на
+ * parentFraction = 30 % ширины области — не к краю и не по центру.
+ */
+const PARENT_FRACTION = 0.3;
+
+function applyBringIntoView(g, sectionIndex){
+  const r = ROWS[sectionIndex];
+  const step = g.cardW + g.cardGap;
+  const container = g.contentW;
+  const contentLen = 2 * g.rowPad + tileCount(sectionIndex) * step - g.cardGap;
+  const maxScroll = Math.max(0, contentLen - container);
+  const offset = g.rowPad + r.index * step - r.scroll;
+  const fullyVisible = offset >= 0 && offset + g.cardW <= container;
+  if (fullyVisible){
+    r.scroll = clamp(r.scroll, 0, maxScroll);
+    return;
+  }
+  const initial = PARENT_FRACTION * container;
+  const target = (g.cardW <= container && container - initial < g.cardW)
+    ? container - g.cardW
+    : initial;
+  r.scroll = clamp(r.scroll + (offset - target), 0, maxScroll);
+}
+
+function pageHTML(g, sectionIndex, top, isCurrent){
+  const sec = sectionAt(sectionIndex);
+  const r = ROWS[sectionIndex];
+  const items = itemsOf(sectionIndex);
+  const cards = items.map((it, i) =>
+    cardHTML(it, i, g, isCurrent && i === r.index)).join("");
+  const tail = showAllIn(sectionIndex) ? showAllHTML(g) : "";
+  const scroll = r.scroll;
+  const fade = g.fadeW > 0 && g.fadeH > 0
+    ? `<div class="fade" style="right:0;top:${px((g.rowBoxH - g.fadeH) / 2)}px;
+         width:${px(g.fadeW)}px;height:${px(g.fadeH)}px;
+         background:linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,1))"></div>`
+    : "";
+  return `<div class="page" style="top:${px(top)}px;height:${px(g.pageH)}px">
+    <div style="height:${px(g.headTop)}px"></div>
+    <div class="head" style="margin:0 ${px(g.sideEdge)}px;font-size:${px(g.sectionSp)}px;
+         line-height:${px(g.sectionLine)}px;${tracking(TRACKING.section)}">${esc(sec.title)}</div>
+    <div style="height:${px(g.gapHeadToRow)}px"></div>
+    <div class="rowbox" style="height:${px(g.rowBoxH)}px">
+      <div class="cards" style="left:${px(g.rowPad - scroll)}px;top:${px(g.rowPad)}px;gap:${px(g.cardGap)}px">${cards}${tail}</div>
+      ${fade}
+    </div>
+  </div>`;
+}
+
+function rowsHTML(g){
+  /* Страницы идут одна за другой в LazyColumn, и видна ровно та, что под фокусом;
+     если страница ниже области рядов, снизу заглядывает следующая. */
+  let out = "";
+  let top = 0;
+  for (let k = 0; k < 3 && top < g.rowsH; k++){
+    out += pageHTML(g, S.section + k, top, k === 0);
+    top += g.pageH;
+  }
+  return `<div class="rows" style="left:${px(g.contentX)}px;top:${px(g.rowsY)}px;
+            width:${px(g.contentW)}px;height:${px(g.rowsH)}px">${out}</div>`;
+}
+
+function guidesHTML(g){
+  if (S.guides !== "on") return "";
+  const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
+  const headTop = g.rowsY + g.headTop;
+  const cardTop = headTop + g.headH + g.gapHeadToRow + g.rowPad;
+  return `<div class="guides">
+    <div class="v" style="left:${px(g.contentX)-1}px;background:${A}"></div>
+    <div class="v" style="left:${px(g.contentX + g.sideEdge)-1}px;background:${A}"></div>
+    <div class="v" style="left:${px(g.contentX + g.rowPad)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.contentX + g.descW)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.mediaX)-1}px;background:${B}"></div>
+    <div class="v" style="left:96px;background:${C}"></div>
+    <div class="h" style="top:${px(g.panelH)-1}px;background:${A}"></div>
+    <div class="h" style="top:${px(cardTop)-1}px;background:${C}"></div>
+    <div class="h" style="top:${px(g.mediaH)-1}px;background:${B}"></div>
+    <div class="lab" style="left:${px(g.contentX)+10}px;top:14px;color:${A}">меню ${g.railW} dp</div>
+    <div class="lab" style="left:${px(g.mediaX)+10}px;top:52px;color:${B}">кадр ${Math.round(g.mediaW)} dp · ${g.mediaFrac} %</div>
+    <div class="lab" style="left:${px(g.contentX + g.descW)+10}px;top:90px;color:${C}">описание ${Math.round(g.descW)} dp</div>
+    <div class="lab" style="left:106px;top:${px(g.panelH)-46}px;color:${C}">безопасная зона 48 dp</div>
+    <div class="lab" style="left:${px(g.contentX + g.sideEdge)+10}px;top:${px(headTop)+8}px;color:${A}">заголовок ${g.sideEdge} dp · ряд ${g.rowPad} dp</div>
+    <div class="lab" style="left:${px(g.mediaX)+10}px;top:${px(g.mediaH)-46}px;color:${B}">низ кадра ${Math.round(g.mediaH)} dp</div>
+    <div class="lab" style="right:14px;top:${px(g.panelH)+8}px;color:${A}">панель ${Math.round(g.panelH)} dp · ряды ${Math.round(g.rowsH)} dp</div>
+  </div>`;
+}
+
+function render(){
+  const g = geom();
+  /* Размер карточки меняется ползунком — ряд после этого доводится так же, как на экране. */
+  for (let i = 0; i < ROWS.length; i++) applyBringIntoView(g, i);
+  const st = document.getElementById("stage");
+  /* Описание и заголовки меряются настоящим шрифтом, поэтому сцена рисуется вторым проходом. */
+  for (let pass = 0; pass < 2; pass++){
+    st.innerHTML = `<div class="ruler" id="ruler"></div>`;
+    st.insertAdjacentHTML("beforeend",
+      mediaHTML(g) + descHTML(g) + rowsHTML(g) + railHTML(g) + guidesHTML(g));
+  }
+
+  st.querySelectorAll("[data-card]").forEach(el => {
+    el.addEventListener("click", ev => {
+      ev.preventDefault();
+      ROWS[S.section].index = Number(el.dataset.card);
+      render();
+    });
+  });
+
+  paintConsole(g);
+  paintSpec(g);
+  remember();
+}
+
+/* ── консоль ──────────────────────────────────────────────── */
+function paintSwitches(){
+  const host = document.getElementById("switches");
+  const secOpts = SECTIONS.map((s, i) => [String(i), s.title]);
+  const all = [{k:"section", n:"секция", opts:secOpts}, ...SWITCHES];
+  host.innerHTML = all.map(s => `<div class="seg"><span>${s.n}</span><div class="opts">` +
+    s.opts.map(([v, l]) =>
+      `<button data-sw="${s.k}" data-v="${v}" aria-pressed="${String(S[s.k]) === v}">${esc(l)}</button>`
+    ).join("") + `</div></div>`).join("");
+  host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    const k = b.dataset.sw;
+    S[k] = k === "section" ? Number(b.dataset.v) : b.dataset.v;
+    paintSwitches(); render();
+  }));
+}
+
+function buildConsole(){
+  const host = document.getElementById("console");
+  const groups = [...new Set(CONTROLS.map(c => c.g))];
+  host.innerHTML = groups.map(gn => `<div class="group"><h2>${gn}</h2>` +
+    CONTROLS.filter(c => c.g === gn).map(c => `
+      <div class="ctl">
+        <div class="name">${c.n}</div>
+        <div class="val" id="val-${c.k}"></div>
+        <input type="range" id="in-${c.k}" min="${c.min}" max="${c.max}" step="${c.step}"
+               value="${S[c.k]}" aria-label="${esc(c.n)}">
+        ${c.note ? `<div class="note">${c.note}</div>` : ""}
+      </div>`).join("") + `</div>`).join("");
+  for (const c of CONTROLS){
+    document.getElementById("in-" + c.k).addEventListener("input", e => {
+      S[c.k] = Number(e.target.value); render();
+    });
+  }
+}
+
+function paintConsole(g){
+  for (const c of CONTROLS){
+    const el = document.getElementById("val-" + c.k);
+    const applied = g[c.k];
+    /* Янтарный — «уехало от того, что несёт код». */
+    el.className = "val" + (applied !== SHIPPED[c.k] ? " changed" : "");
+    el.innerHTML = `${applied}&thinsp;${c.u}`;
+    const inp = document.getElementById("in-" + c.k);
+    if (Number(inp.value) !== applied) inp.value = applied;
+  }
+}
+
+function paintSpec(g){
+  const rows = CONTROLS.filter(c => g[c.k] !== SHIPPED[c.k])
+    .map(c => `  ${c.n.padEnd(24, " ")} ${String(SHIPPED[c.k]).padStart(6)} → <b>${String(g[c.k]).padStart(6)}</b> ${c.u}`);
+
+  const notes = [];
+  /* Видно ровно то, что попало в область рядов, а не в страницу: страница выше области
+     просто обрезается снизу. Поэтому запас считается по меньшему из двух. */
+  const visible = Math.min(g.pageH, g.rowsH);
+  const spare = Math.round(visible - g.pageUsed);
+  notes.push(spare >= 0
+    ? `страница:       ${Math.round(g.pageH)} dp в области рядов ${Math.round(g.rowsH)}, содержимое занимает\n` +
+      `                 ${Math.round(g.pageUsed)} — свободно ${spare} dp снизу`
+    : `<b>ряд не влезает:</b> содержимому нужно ${Math.round(g.pageUsed)} dp, видно ${Math.round(visible)} —\n` +
+      `                 карточки обрезаются снизу на ${-spare} dp`);
+  const peek = Math.round(g.rowsH - g.pageH);
+  if (peek > 0) notes.push(`                снизу заглядывает следующая секция на <b>${peek} dp</b>`);
+
+  notes.push(S.expand === "on"
+    ? `кадр:           16:9 от ширины — ${Math.round(g.mediaH)} dp, из них <b>${Math.round(g.mediaH - g.panelH)} dp</b> уходит\n` +
+      `                 под ряд карточек; растворение снизу (${g.bottomFade} dp) там же`
+    : "кадр:           <b>обрезан по панели</b> — ничего не заходит на ряд, но от кадра\n                 остаётся меньше половины высоты");
+
+  notes.push(plotOverflow > 0
+    ? `<b>описание не влезает:</b> ${plotLines} строк, за низ панели уходит ${plotOverflow} dp —\n` +
+      `                 текст ложится на заголовок секции и карточки`
+    : `описание:       ${plotLines} строк, помещается в панель`);
+
+  const fadeGap = Math.round((g.rowBoxH - g.fadeH) / 2);
+  notes.push(fadeGap > g.rowPad
+    ? `<b>растворение короче карточки:</b> ${g.fadeH} dp против ${g.cardH} — сверху и снизу\n` +
+      `                 остаётся по ${fadeGap - g.rowPad} dp неприкрытой карточки`
+    : `растворение:    ${g.fadeH} dp — карточку закрывает целиком`);
+
+  const edgeGap = Math.abs(g.sideEdge - g.rowPad);
+  if (edgeGap > 0) notes.push(`<b>заголовок и карточки не на одном краю:</b> ${g.sideEdge} против ${g.rowPad} dp`);
+
+  notes.push({
+    last:  "«Показать все»: как в коде — только в последней секции («Все»), где он нужен меньше всего;\n                 остальные секции догружаются страницами",
+    every: "«Показать все»: <b>в каждой секции</b> — из «Новинок» и «Горячих» есть куда уйти",
+    none:  "«Показать все»: <b>нигде</b> — все секции догружаются страницами",
+  }[S.showall]);
+
+  notes.push(S.align === "center"
+    ? "название в панели: как в коде — по центру, а факты и описание под ним по левому краю"
+    : "название в панели: <b>по левому краю</b> — на одной оси с фактами и описанием.\n" +
+      "                 VideoDetailsDescription делит центрирование с экраном «Избранное»:\n" +
+      "                 параметр, а не правка на месте");
+
+  notes.push(S.lines === "2"
+    ? "название карточки: как в коде — две строки, поэтому соседние карточки читаются\n                 с двух разных высот"
+    : "название карточки: <b>одна строка с многоточием</b> — весь ряд на одной базовой линии");
+
+  document.getElementById("spec").innerHTML =
+    (rows.length ? rows.join("\n") : "  пока ничего не изменено") + "\n\n  " + notes.join("\n  ");
+}
+
+/* ── пульт ────────────────────────────────────────────────── */
+function move(dir){
+  const r = ROWS[S.section];
+  if (dir === "left")  r.index = Math.max(0, r.index - 1);
+  if (dir === "right") r.index = Math.min(tileCount(S.section) - 1, r.index + 1);
+  if (dir === "up" || dir === "down"){
+    const next = S.section + (dir === "down" ? 1 : -1);
+    if (next < 0 || next >= SECTIONS.length) return;
+    /* Секция занимает страницу целиком, поэтому вниз уходит не соседний ряд, а вся страница. */
+    S.section = next;
+    paintSwitches();
+  }
+}
+
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "SELECT")) return;
+  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down"};
+  if (!map[e.key]) return;
+  e.preventDefault();
+  move(map[e.key]);
+  render();
+});
+
+/* ── подгонка ─────────────────────────────────────────────── */
+function fit(){
+  const wrap = document.getElementById("stagewrap");
+  const avail = wrap.parentElement.clientWidth - 48;
+  const scale = Math.min(1, avail / 1920);
+  wrap.style.width  = Math.round(1920 * scale) + "px";
+  wrap.style.height = Math.round(1080 * scale) + "px";
+  document.getElementById("stage").style.transform = `scale(${scale})`;
+  document.getElementById("scaleOut").innerHTML =
+    `масштаб <b>${scale.toFixed(3)}×</b> · 1 dp = 2 px на устройстве · KM6 1920×1080 @ 320 dpi`;
+}
+window.addEventListener("resize", fit);
+
+document.getElementById("reset").addEventListener("click", () => {
+  forget();
+  Object.assign(S, DEFAULTS);
+  for (const c of CONTROLS) document.getElementById("in-" + c.k).value = DEFAULTS[c.k];
+  paintSwitches();
+  render();   /* render() запишет значения кода обратно — это и есть новое запомненное состояние */
+});
+
+restore();
+paintSwitches();
+buildConsole();
+fit();
+render();
+</script>
