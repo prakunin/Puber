@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.player.component
 
+import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -9,7 +10,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,10 +30,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -36,11 +47,14 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -48,12 +62,14 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import kotlinx.coroutines.launch
 
 private const val PANEL_GRADIENT_START = 0.52f
 private const val PANEL_GRADIENT_ALPHA = 0.42f
 private const val PANEL_ENTER_DURATION_MS = 210
 private const val PANEL_EXIT_DURATION_MS = 160
 private const val PANEL_SLIDE_DIVISOR = 7
+private const val SCROLL_BOX_FOCUS_ALPHA = 0.28f
 
 /**
  * The panel is measured by what is in it, not by the screen: [IntrinsicSize.Max] takes the width
@@ -146,6 +162,61 @@ internal fun PlayerSidePanel(
             }
         }
     }
+}
+
+/**
+ * A page with nothing selectable on it: the whole column takes the focus and the arrows scroll
+ * it, because focusing a row that does not act would promise something that is not there.
+ *
+ * [scrollStep] is a whole number of whatever the page is made of — rows on the stream page, lines
+ * of prose in the About panel — so a press never leaves half of one showing.
+ *
+ * [scrollState] is the caller's, because a panel outlives its own dismissal: the side panel keeps
+ * this content composed through its exit animation, and a page that must reopen at the top has to
+ * say so itself.
+ */
+@Composable
+internal fun PlayerPanelScrollBox(
+    focusRequester: FocusRequester,
+    scrollStep: Dp,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val scrollStepPx = with(LocalDensity.current) { scrollStep.toPx() }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Column(
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .then(
+                if (isFocused) {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = SCROLL_BOX_FOCUS_ALPHA),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                val delta = when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> scrollStepPx
+                    KeyEvent.KEYCODE_DPAD_UP -> -scrollStepPx
+                    else -> return@onPreviewKeyEvent false
+                }
+                scope.launch { scrollState.animateScrollBy(delta) }
+                true
+            }
+            .focusable(interactionSource = interactionSource)
+            .verticalScroll(scrollState)
+            .padding(2.dp),
+        content = content,
+    )
 }
 
 @Composable

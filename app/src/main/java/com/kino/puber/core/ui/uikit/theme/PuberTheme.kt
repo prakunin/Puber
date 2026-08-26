@@ -20,10 +20,22 @@ data object PuberTheme {
          * The shared [HorizontalVideoItemHeight] stays at its smaller value for search, history,
          * collections and the shared horizontal card.
          */
-        val CatalogueRowItemHeight = 190.dp
+        val CatalogueRowItemHeight = 115.dp
         const val HorizontalVideoItemAspectRatio = 16f / 9f
         const val DetailsWeight = 1F
         const val ContentWeight = 1F
+
+        /**
+         * The catalogue tab splits the screen two thirds to one, not down the middle: the panel
+         * carries a 16∶9 frame that has to be worth looking at, and a section below it needs room
+         * for exactly one row of cards and nothing more.
+         *
+         * Deliberately not [DetailsWeight] / [ContentWeight], which the favourites screen also
+         * uses — there the lower half is a grid of full-height posters and would be crushed.
+         * Stated as percentages rather than 2∶1 so the number here is the number on the stand.
+         */
+        const val CatalogueDetailsWeight = 67F
+        const val CatalogueContentWeight = 33F
     }
 }
 

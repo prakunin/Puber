@@ -23,7 +23,12 @@ internal class ReconciledItemFocusState(
     val targetItemId: Int?,
     val focusRequester: FocusRequester,
     val rowHasFocusRef: BooleanArray,
-    val onItemFocused: (Int) -> Unit,
+    /**
+     * Report a card taking focus. Returns false when the row sent focus straight back out to the
+     * card it actually remembers, in which case this event is about to be superseded and the
+     * caller must not act on it — a second call with the right card is already on its way.
+     */
+    val onItemFocused: (Int) -> Boolean,
 )
 
 private data class PendingItemFocus(
@@ -51,6 +56,15 @@ internal fun rememberReconciledItemFocus(
     val pendingFocus = remember(rowKey) { mutableStateOf(PendingItemFocus()) }
     val focusRequester = remember { FocusRequester() }
     val rowHasFocusRef = remember { booleanArrayOf(false) }
+    /**
+     * Has any card in this row taken focus since this composition began?
+     *
+     * Deliberately not [rowHasFocusRef], which answers a different question and is cleared on
+     * every composition where the row is not the target or the content is not focusable — so on
+     * the home screen it reads false between two presses inside the same row. This one is only
+     * ever set, and dies with the composition, which is exactly the event it has to detect.
+     */
+    val focusSeenRef = remember { booleanArrayOf(false) }
     val contentFocusActive = LocalContentFocusActive.current
     if (!contentFocusActive || !isTargetRow) {
         rowHasFocusRef[0] = false
@@ -106,8 +120,8 @@ internal fun rememberReconciledItemFocus(
     )
 
     return reconciledItemFocusState(
-        targetItemId, focusRequester, rowHasFocusRef, focusedItemId, isTargetRow, onRootFocusRestored,
-        rowKey, LocalDetailsPrefetchSurface.current,
+        targetItemId, focusRequester, rowHasFocusRef, focusSeenRef, focusedItemId, isTargetRow,
+        onRootFocusRestored, rowKey, LocalDetailsPrefetchSurface.current,
     )
 }
 
@@ -115,6 +129,7 @@ private fun reconciledItemFocusState(
     targetItemId: Int?,
     focusRequester: FocusRequester,
     rowHasFocusRef: BooleanArray,
+    focusSeenRef: BooleanArray,
     focusedItemId: MutableState<Int?>,
     isTargetRow: Boolean,
     onRootFocusRestored: () -> Unit,
@@ -125,14 +140,33 @@ private fun reconciledItemFocusState(
     focusRequester = focusRequester,
     rowHasFocusRef = rowHasFocusRef,
     onItemFocused = { itemId ->
+        val isFirstSinceComposition = !focusSeenRef[0]
+        focusSeenRef[0] = true
         rowHasFocusRef[0] = true
-        focusedItemId.value = itemId
-        if (isTargetRow && itemId == targetItemId) {
-            onRootFocusRestored()
+        // A row scrolled out of a lazy layout is disposed, and focus coming back into the fresh
+        // composition lands on whatever the focus search picks -- for an upward search, the last
+        // card. The position itself was never lost: `focusedItemId` is `rememberSaveable`, so it
+        // returns with the row. What does not return is the focus group's own saved child, which
+        // died with the composition, and on that first pass neither `focusRestorer` nor the
+        // fallback requester puts focus on the remembered card. So put it there.
+        //
+        // Strictly the first focus of a composition, which is the only moment the two can
+        // disagree for this reason. Later events are the user driving the row, and Left/Right
+        // must be allowed to move.
+        val redirected = isFirstSinceComposition &&
+            targetItemId != null &&
+            targetItemId != itemId &&
+            runCatching { focusRequester.requestFocus() }.getOrDefault(false)
+        if (!redirected) {
+            focusedItemId.value = itemId
+            if (isTargetRow && itemId == targetItemId) {
+                onRootFocusRestored()
+            }
+            // Where a card announces itself as worth fetching. Without an opted-in surface and a
+            // registered row this resolves to nothing, so no row pays for it that did not ask.
+            prefetchSurface?.onItemFocused(rowKey, itemId)
         }
-        // Where a card announces itself as worth fetching. Without an opted-in surface and a
-        // registered row this resolves to nothing, so no row pays for it that did not ask.
-        prefetchSurface?.onItemFocused(rowKey, itemId)
+        !redirected
     },
 )
 

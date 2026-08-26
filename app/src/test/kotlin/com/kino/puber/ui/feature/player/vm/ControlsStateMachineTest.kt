@@ -64,9 +64,9 @@ class ControlsStateMachineTest {
 
     @Test
     fun `openPanel_setsActivePanel`() {
-        machine.openPanel(ActivePanel.AudioSubtitles)
+        machine.openPanel(ActivePanel.Settings)
 
-        assertEquals(ActivePanel.AudioSubtitles, machine.state.activePanel)
+        assertEquals(ActivePanel.Settings, machine.state.activePanel)
     }
 
     @Test
@@ -91,18 +91,18 @@ class ControlsStateMachineTest {
 
     @Test
     fun `openPanel_info_setsActivePanel`() {
-        machine.openPanel(ActivePanel.Info)
+        machine.openPanel(ActivePanel.About)
 
-        assertEquals(ActivePanel.Info, machine.state.activePanel)
+        assertEquals(ActivePanel.About, machine.state.activePanel)
     }
 
     @Test
     fun `closePanel_afterInfo_restoresInfoButtonFocus`() {
-        machine.openPanel(ActivePanel.Info)
+        machine.openPanel(ActivePanel.About)
 
         machine.closePanel()
 
-        assertEquals(FocusTarget.InfoButton, machine.state.focusTarget)
+        assertEquals(FocusTarget.AboutButton, machine.state.focusTarget)
     }
 
     @Test
@@ -120,7 +120,7 @@ class ControlsStateMachineTest {
 
     @Test
     fun `handleBack_withOpenPanel_closesPanel`() {
-        machine.openPanel(ActivePanel.VideoSettings)
+        machine.openPanel(ActivePanel.Settings)
 
         machine.handleBack()
 
@@ -151,14 +151,14 @@ class ControlsStateMachineTest {
     @Test
     fun `applyControlsVisibility_false_withOpenPanel_doesNotHide`() {
         machine.showControls(FocusTarget.Buttons)
-        machine.openPanel(ActivePanel.AudioSubtitles)
+        machine.openPanel(ActivePanel.Settings)
         // After openPanel, controlsVisible is already false; set it manually via
         // a fresh showControls call is not possible while panel is open, so we
         // verify the guard: calling applyControlsVisibility(false) when panel is
         // open must leave activePanel intact and not crash.
         machine.applyControlsVisibility(false)
 
-        assertEquals(ActivePanel.AudioSubtitles, machine.state.activePanel)
+        assertEquals(ActivePanel.Settings, machine.state.activePanel)
     }
 
     @Test

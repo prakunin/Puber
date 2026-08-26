@@ -115,6 +115,9 @@ private fun previewSeriesContent(
 ) = PlayerContentState(
     title = "Кибердеревня",
     subtitle = "2 сезон, 6 серия, Что там, за железным занавесом?",
+    description = "Робот Николай и его создатель Иван Барсуков живут на далёкой планете, " +
+        "где корова доится по расписанию, трактор ходит сам, а корпорация с Земли уже " +
+        "присматривается к участку.",
     isPlaying = true,
     currentPosition = 630_000L,
     duration = 1_647_000L,
@@ -162,6 +165,8 @@ private fun previewMovieContent(
 ) = PlayerContentState(
     title = "Граф Монте-Кристо",
     subtitle = null,
+    description = "Эдмон Дантес возвращается из плавания к невесте и получает вместо свадьбы " +
+        "донос, суд и камеру замка Иф.",
     isPlaying = true,
     currentPosition = 240_000L,
     duration = 10_679_000L,
@@ -308,7 +313,7 @@ private fun SettingsPanelPreview() = PuberTheme {
         state = PlayerViewState.Content(
             previewSeriesContent(
                 controlsVisible = false,
-                activePanel = ActivePanel.AudioSubtitles,
+                activePanel = ActivePanel.Settings,
             )
         ),
         onAction = {},
@@ -316,14 +321,14 @@ private fun SettingsPanelPreview() = PuberTheme {
     )
 }
 
-@Preview(name = "Settings panel · stream info", device = TV_1080p)
+@Preview(name = "About panel", device = TV_1080p)
 @Composable
-private fun SettingsPanelInfoPreview() = PuberTheme {
+private fun AboutPanelPreview() = PuberTheme {
     PlayerScreenContent(
         state = PlayerViewState.Content(
             previewSeriesContent(
                 controlsVisible = false,
-                activePanel = ActivePanel.Info,
+                activePanel = ActivePanel.About,
             )
         ),
         onAction = {},

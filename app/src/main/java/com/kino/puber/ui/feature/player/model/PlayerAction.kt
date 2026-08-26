@@ -24,10 +24,9 @@ internal sealed interface PlayerAction : UIAction {
     data object ResetControlsTimer : PlayerAction
 
     // Panels
-    data object OpenAudioSubtitlesPanel : PlayerAction
-    data object OpenVideoSettingsPanel : PlayerAction
+    data object OpenSettingsPanel : PlayerAction
     data object OpenEpisodesPanel : PlayerAction
-    data object OpenInfoPanel : PlayerAction
+    data object OpenAboutPanel : PlayerAction
     data object ClosePanel : PlayerAction
 
     // Audio & Subtitles selection
@@ -76,7 +75,6 @@ internal enum class FocusTarget {
     SeekBar,
     Buttons,
     EpisodesButton,
-    AudioSubtitlesButton,
-    VideoSettingsButton,
-    InfoButton,
+    AboutButton,
+    SettingsButton,
 }

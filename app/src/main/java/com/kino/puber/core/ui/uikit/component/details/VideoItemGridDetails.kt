@@ -35,8 +35,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -49,31 +54,28 @@ import com.kino.puber.core.ui.uikit.model.Lorem
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 
 
-/**
- * The share of the panel width the description occupies. It is [DescriptionWeight] of the whole in
- * either layout, so the text wraps the same way whether the picture is beside it or behind it.
- */
+/** Side-by-side layout only: the description column measured against the poster column. */
 private const val DescriptionWeight = 3F
 private const val PosterWeight = 5F
-private const val DescriptionWidthFraction = DescriptionWeight / (DescriptionWeight + PosterWeight)
-
-/** How far the picture reaches into the description in the overlapping layout. */
-private const val MediaOverlapOfDescription = 1F / 3F
 
 /**
- * The picture is as wide as it can be while still stopping a third of the way into the
- * description. Running it the whole width instead would scale a 16:9 frame to a panel nearer 3.5:1
- * and throw away half its height; this keeps most of the frame.
+ * Full-bleed layout: how much of the panel the text covers, and how much the picture does.
+ *
+ * These two used to be one derivation — the description was [DescriptionWeight] of the whole in
+ * either layout, and the picture was whatever was left plus a third of the text's width, so that
+ * the two overlapped by a fixed amount. The catalogue stand pulled them apart: the text there
+ * wants 60 % of the width while the picture stays at 75 %, which is far more overlap than the
+ * derivation could express. They are independent numbers now, and the scrim below is what makes
+ * the overlap readable rather than the geometry.
+ *
+ * Only the catalogue takes this branch — favourites draws the two side by side, and the details
+ * screen passes its own fraction to [VideoDetailsMedia].
  */
-private const val MediaWidthFraction =
-    1F - DescriptionWidthFraction * (1F - MediaOverlapOfDescription)
-
-/** Where the description's edge falls across the picture, measured from the picture's own left. */
-private const val DescriptionEdgeInMedia =
-    (DescriptionWidthFraction - (1F - MediaWidthFraction)) / MediaWidthFraction
+private const val FullBleedDescriptionWidthFraction = 0.60F
+private const val FullBleedMediaWidthFraction = 0.75F
 
 /** How much of the picture the scrim still holds back under the last column of text. */
-private const val ScrimAlphaAtTextEdge = 0.80F
+private const val ScrimAlphaAtTextEdge = 0.90F
 
 /** How far across the picture that scrim has faded out completely. */
 private const val ScrimEndFraction = 0.45F
@@ -88,17 +90,103 @@ data class MediaScrim(
     val edgeFraction: Float,
     val alphaAtEdge: Float,
     val endFraction: Float,
+    /**
+     * How tall the fade at the picture's bottom edge is. It lives here rather than as one constant
+     * because the catalogue's frame overflows past the panel and that fade is what ends it, while
+     * on the details screen the same gradient only has to meet the rail below.
+     */
+    val bottomFade: Dp,
 ) {
     companion object {
         val Catalogue = MediaScrim(
-            edgeFraction = DescriptionEdgeInMedia,
+            edgeFraction = 0.10F,
             alphaAtEdge = ScrimAlphaAtTextEdge,
             endFraction = ScrimEndFraction,
+            bottomFade = 50.dp,
         )
 
-        val Details = MediaScrim(edgeFraction = 0.10F, alphaAtEdge = 0.50F, endFraction = 0.50F)
+        val Details = MediaScrim(
+            edgeFraction = 0.10F,
+            alphaAtEdge = 0.50F,
+            endFraction = 0.50F,
+            bottomFade = 48.dp,
+        )
     }
 }
+
+/**
+ * Everything about the description column that the catalogue and the favourites screen disagree
+ * on. Same shape as [MediaScrim] and for the same reason: one component draws this block on two
+ * screens whose layouts have nothing in common, and retuning it in place would move both.
+ *
+ * The type comes through as sizes rather than whole `TextStyle`s so the theme still owns the
+ * family, weight and tracking; only what the stand actually dialled is named here.
+ */
+@Immutable
+data class DescriptionLayout(
+    val horizontalPadding: Dp,
+    val topPadding: Dp,
+    val titleAlignment: Alignment.Horizontal,
+    val titleTextAlign: TextAlign,
+    val titleSize: TextUnit,
+    val titleToRatings: Dp,
+    val ratingsToFacts: Dp,
+    val factsSize: TextUnit,
+    val factsLineHeight: TextUnit,
+    val betweenFactLines: Dp,
+    val factsToPlot: Dp,
+    val plotLineHeight: TextUnit,
+) {
+    companion object {
+        /** What every screen but the catalogue still gets. */
+        val Default = DescriptionLayout(
+            horizontalPadding = 16.dp,
+            topPadding = 4.dp,
+            titleAlignment = Alignment.CenterHorizontally,
+            titleTextAlign = TextAlign.Center,
+            titleSize = TextUnit.Unspecified,
+            titleToRatings = 8.dp,
+            ratingsToFacts = 4.dp,
+            factsSize = TextUnit.Unspecified,
+            factsLineHeight = TextUnit.Unspecified,
+            betweenFactLines = 4.dp,
+            factsToPlot = 8.dp,
+            plotLineHeight = TextUnit.Unspecified,
+        )
+
+        /**
+         * The catalogue panel: the title left aligned on the same axis as everything under it,
+         * and a bigger title over smaller facts, because here the column is 60 % of the width and
+         * lies over a picture rather than standing beside one.
+         */
+        val Catalogue = Default.copy(
+            horizontalPadding = 15.dp,
+            topPadding = 5.dp,
+            titleAlignment = Alignment.Start,
+            titleTextAlign = TextAlign.Start,
+            titleSize = 20.sp,
+            titleToRatings = 4.dp,
+            ratingsToFacts = 5.dp,
+            factsSize = 10.sp,
+            factsLineHeight = 15.sp,
+            plotLineHeight = 15.sp,
+        )
+    }
+}
+
+/**
+ * Overrides only what was actually named. `copy(fontSize = TextUnit.Unspecified)` does not leave
+ * the style's own size alone — it clears it, and the text then falls back to Compose's 14 sp
+ * default. Every screen that takes [DescriptionLayout.Default] names nothing, so it has to come
+ * out of here byte-identical to the style it went in as.
+ */
+private fun TextStyle.override(
+    size: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+): TextStyle = copy(
+    fontSize = if (size.isSpecified) size else fontSize,
+    lineHeight = if (lineHeight.isSpecified) lineHeight else this.lineHeight,
+)
 
 /** The catalogue artwork and trailers are supplied as landscape 16:9 media. */
 private const val LandscapeMediaAspectRatio = 16F / 9F
@@ -136,9 +224,10 @@ fun VideoItemGridDetails(
             // everything the window painted before it; only what comes later survives on top of a
             // playing video.
             VideoDetailsDescription(
-                modifier = Modifier.fillMaxWidth(DescriptionWidthFraction),
+                modifier = Modifier.fillMaxWidth(FullBleedDescriptionWidthFraction),
                 state = state,
                 descriptionMaxLines = descriptionMaxLines,
+                layout = DescriptionLayout.Catalogue,
             )
         }
     } else {
@@ -172,7 +261,7 @@ fun VideoDetailsMedia(
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     expandIntoContent: Boolean = false,
-    widthFraction: Float = MediaWidthFraction,
+    widthFraction: Float = FullBleedMediaWidthFraction,
     scrim: MediaScrim = MediaScrim.Catalogue,
 ) {
     if (expandIntoContent) {
@@ -224,7 +313,7 @@ private fun ExpandedMediaLayout(
     ) { measurables, constraints ->
         val layoutWidth = constraints.maxWidth
         val layoutHeight = constraints.maxHeight
-        val mediaWidth = (layoutWidth * MediaWidthFraction).toInt()
+        val mediaWidth = (layoutWidth * FullBleedMediaWidthFraction).toInt()
         val mediaHeight = (mediaWidth / LandscapeMediaAspectRatio).toInt()
         val media = measurables.single().measure(
             Constraints.fixed(width = mediaWidth, height = mediaHeight),
@@ -241,51 +330,54 @@ fun VideoDetailsDescription(
     modifier: Modifier,
     state: VideoDetailsUIState,
     descriptionMaxLines: Int = Int.MAX_VALUE,
+    layout: DescriptionLayout = DescriptionLayout.Default,
 ) {
+    val factsStyle = MaterialTheme.typography.labelSmall
+        .override(size = layout.factsSize, lineHeight = layout.factsLineHeight)
     Box(
         modifier = modifier
     ) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .padding(horizontal = 16.dp)
-                .padding(top = 4.dp),
+                .padding(horizontal = layout.horizontalPadding)
+                .padding(top = layout.topPadding),
         ) {
             Text(
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
+                    .align(layout.titleAlignment)
                     .placeholder(visible = state.isLoading),
                 text = state.title,
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.titleMedium.override(size = layout.titleSize),
+                textAlign = layout.titleTextAlign,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(layout.titleToRatings))
             Row {
                 state.ratings.forEach { rating ->
                     Rating(rating)
                     Spacer(modifier = Modifier.width(8.dp))
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(layout.ratingsToFacts))
 
             Text(
                 modifier = Modifier
                     .fillMaxWidth()
                     .placeholder(visible = state.isLoading),
                 text = "${state.year}, ${state.genres} ${state.country}",
-                style = MaterialTheme.typography.labelSmall,
+                style = factsStyle,
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(layout.betweenFactLines))
 
             Text(
                 modifier = Modifier
                     .placeholder(visible = state.isLoading),
                 text = state.duration,
-                style = MaterialTheme.typography.labelSmall,
+                style = factsStyle,
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(layout.factsToPlot))
 
             if (state.isLoading) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -306,7 +398,8 @@ fun VideoDetailsDescription(
                     modifier = Modifier
                         .fillMaxWidth(),
                     text = state.description,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall
+                        .override(lineHeight = layout.plotLineHeight),
                     overflow = TextOverflow.Ellipsis,
                     maxLines = descriptionMaxLines,
                 )
@@ -424,7 +517,7 @@ private fun VideoDetailsPoster(
             )
         }
 
-        val gradientHeight = 48.dp
+        val gradientHeight = scrim.bottomFade
         Box(
             modifier = Modifier
                 .height(gradientHeight)

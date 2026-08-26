@@ -12,13 +12,11 @@
     <string name="player_button_mark_watched">Просмотрено</string>
     <string name="player_button_mark_watched_state_watched">Отмечено просмотренным</string>
     <string name="player_button_mark_watched_state_not_watched">Не просмотрено</string>
-    <string name="player_button_audio_subtitles">Аудио и субтитры</string>
-    <string name="player_audio_subtitles_title">Аудио и субтитры</string>
-    <string name="player_button_video">Видео</string>
-    <string name="player_button_info">О потоке</string>
+    <string name="player_button_settings">Настройки</string>
+    <string name="player_button_about_movie">О фильме</string>
+    <string name="player_button_about_series">О сериале</string>
 
-    <!-- Info Panel -->
-    <string name="player_info_title">О потоке</string>
+    <!-- Stream diagnostics: дверь «Поток» внутри настроек -->
     <string name="player_info_quality">Качество</string>
     <string name="player_info_resolution">Разрешение</string>
     <string name="player_info_video_codec">Видеокодек</string>
@@ -36,7 +34,7 @@
     <string name="player_info_section_audio">АУДИО</string>
     <string name="player_info_section_playback">ВОСПРОИЗВЕДЕНИЕ</string>
 
-    <!-- Audio & Subtitles Panel -->
+    <!-- Audio and subtitle pages -->
     <string name="player_panel_sound">ЗВУК</string>
     <string name="player_panel_audio">АУДИО</string>
     <string name="player_panel_subtitles">СУБТИТРЫ</string>
@@ -47,12 +45,11 @@
     <string name="player_subtitle_size_medium">Средний</string>
     <string name="player_subtitle_size_large">Крупный</string>
 
-    <!-- Video Settings Panel -->
+    <!-- Settings Panel -->
     <string name="player_panel_quality">КАЧЕСТВО</string>
     <string name="player_panel_speed">СКОРОСТЬ</string>
     <string name="player_panel_aspect_ratio">СООТНОШЕНИЕ</string>
     <string name="player_panel_buffer">БУФЕР</string>
-    <string name="player_video_settings_title">Настройки видео</string>
     <string name="player_settings_title">Настройки</string>
     <!-- Двери в корне объединённой панели: заглавные player_panel_* остаются заголовками секций. -->
     <string name="player_door_audio">Аудио</string>
@@ -60,6 +57,7 @@
     <string name="player_door_quality">Качество</string>
     <string name="player_door_speed">Скорость</string>
     <string name="player_door_sound">Звук</string>
+    <string name="player_door_stream">Поток</string>
     <string name="player_door_aspect_ratio">Соотношение</string>
     <string name="player_panel_advanced">Дополнительно</string>
     <string name="player_panel_network">СЕТЬ</string>

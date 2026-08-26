@@ -534,10 +534,9 @@ internal class PlayerVM(
             is PlayerAction.ShowControls -> showControls(action.focusTarget)
             is PlayerAction.HideControls -> hideControls()
             is PlayerAction.ResetControlsTimer -> scheduleControlsHide()
-            is PlayerAction.OpenAudioSubtitlesPanel -> openPanel(ActivePanel.AudioSubtitles)
-            is PlayerAction.OpenVideoSettingsPanel -> openPanel(ActivePanel.VideoSettings)
+            is PlayerAction.OpenSettingsPanel -> openPanel(ActivePanel.Settings)
             is PlayerAction.OpenEpisodesPanel -> openPanel(ActivePanel.Episodes)
-            is PlayerAction.OpenInfoPanel -> openPanel(ActivePanel.Info)
+            is PlayerAction.OpenAboutPanel -> openPanel(ActivePanel.About)
             is PlayerAction.ClosePanel -> closePanel()
             is PlayerAction.SelectAudioTrack -> applyAudioTrackSelection(action.index)
             is PlayerAction.SelectSubtitle -> applySubtitleSelection(action.index)
@@ -631,12 +630,8 @@ internal class PlayerVM(
         return if (wanted) playbackController.getDebugInfo() else null
     }
 
-    /** Audio, video and stream info are one panel; any of the three shows live readings. */
-    private fun isSettingsPanel(panel: ActivePanel?): Boolean {
-        return panel == ActivePanel.AudioSubtitles ||
-            panel == ActivePanel.VideoSettings ||
-            panel == ActivePanel.Info
-    }
+    /** The stream diagnostics are a door inside the settings panel, and read live while it is up. */
+    private fun isSettingsPanel(panel: ActivePanel?): Boolean = panel == ActivePanel.Settings
 
     private fun onOkPressed() {
         if (behaviourPreferences.okTogglesPlayPause) {

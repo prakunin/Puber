@@ -34,9 +34,8 @@ internal class ControlsStateMachine {
     fun openPanel(panel: ActivePanel): List<Effect> {
         lastPanelOpener = when (panel) {
             ActivePanel.Episodes -> FocusTarget.EpisodesButton
-            ActivePanel.AudioSubtitles -> FocusTarget.AudioSubtitlesButton
-            ActivePanel.VideoSettings -> FocusTarget.VideoSettingsButton
-            ActivePanel.Info -> FocusTarget.InfoButton
+            ActivePanel.About -> FocusTarget.AboutButton
+            ActivePanel.Settings -> FocusTarget.SettingsButton
             ActivePanel.None -> FocusTarget.Buttons
         }
 

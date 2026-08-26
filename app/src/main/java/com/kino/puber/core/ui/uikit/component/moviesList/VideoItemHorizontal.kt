@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -52,10 +53,15 @@ fun VideoItemHorizontal(
     // A second line lifts the whole text block, so neighbouring cards in a row would read from two
     // different heights. Rows that care about that ask for one line and an ellipsis instead.
     titleMaxLines: Int = 2,
-    // The catalogue's card is the full 150 dp and takes `titleSmall` as it comes. A row that
+    // Most rows draw the card at the full 150 dp and take `titleSmall` as it comes. A row that
     // shrinks the card has to shrink the caption with it, and a font size alone will not do it:
     // `titleSmall` names a 20 sp line, and the box keeps that height whatever the letters do.
     titleStyle: TextStyle = MaterialTheme.typography.titleSmall,
+    // The catalogue row shrank the card to 115 dp and had to pull the caption in with it. Ten
+    // other screens draw this same card at its full size, so these arrive as parameters rather
+    // than being retuned in place.
+    contentPadding: PaddingValues = DefaultCardContentPadding,
+    metaSpacing: Dp = DefaultMetaSpacing,
     onContextMenu: (() -> Unit)? = null,
 ) {
     Card(
@@ -123,7 +129,7 @@ fun VideoItemHorizontal(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(gradientBrush)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(contentPadding),
                 verticalArrangement = Arrangement.Bottom,
             ) {
                 val count = state.unwatchedCount
@@ -147,7 +153,7 @@ fun VideoItemHorizontal(
 
                 if (state.ratings.isNotEmpty() || state.year.isNotBlank()) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(metaSpacing),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (state.year.isNotBlank()) {
@@ -182,6 +188,9 @@ fun VideoItemHorizontal(
         }
     }
 }
+
+private val DefaultCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+private val DefaultMetaSpacing = 16.dp
 
 private fun Modifier.onSelectKeyClick(onClick: () -> Unit): Modifier {
     return onPreviewKeyEvent { event ->

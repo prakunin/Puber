@@ -19,11 +19,17 @@ internal fun PlayerSettingsPanels(
 ) {
     var episodeContextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
 
-    // Audio, video and info are one panel now; which button was pressed only decides
-    // which door the focus lands on.
+    // Audio, video and stream diagnostics are one panel behind one gear; the doors are what
+    // survived of the three buttons that used to open it.
     PlayerSettingsPanel(
         content = content,
         onAction = onAction,
+    )
+
+    PlayerAboutPanel(
+        visible = content.activePanel == ActivePanel.About,
+        isMovie = content.isMovie,
+        description = content.description,
     )
 
     PlayerEpisodesPanel(

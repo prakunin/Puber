@@ -98,9 +98,8 @@ private fun requestControlsFocus(
             FocusTarget.SeekBar -> focusRequesters.seekBar.requestFocus()
             FocusTarget.Buttons -> focusRequesters.firstButton.requestFocus()
             FocusTarget.EpisodesButton -> focusRequesters.episodesButton.requestFocus()
-            FocusTarget.AudioSubtitlesButton -> focusRequesters.audioSubtitlesButton.requestFocus()
-            FocusTarget.VideoSettingsButton -> focusRequesters.videoSettingsButton.requestFocus()
-            FocusTarget.InfoButton -> focusRequesters.infoButton.requestFocus()
+            FocusTarget.AboutButton -> focusRequesters.aboutButton.requestFocus()
+            FocusTarget.SettingsButton -> focusRequesters.settingsButton.requestFocus()
         }
     }
 }

@@ -452,8 +452,9 @@ private fun VideoGridItems(
                     onItemClick = onItemClick,
                     onItemContextMenu = onItemContextMenu,
                     onItemFocused = { _, focusedItem ->
-                        itemFocus.onItemFocused(focusedItem.id)
-                        onItemFocused(focusedItem)
+                        if (itemFocus.onItemFocused(focusedItem.id)) {
+                            onItemFocused(focusedItem)
+                        }
                     },
                 )
             }

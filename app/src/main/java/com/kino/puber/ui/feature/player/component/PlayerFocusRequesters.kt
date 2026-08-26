@@ -8,9 +8,8 @@ internal class PlayerFocusRequesters {
     val player = FocusRequester()
     val firstButton = FocusRequester()
     val episodesButton = FocusRequester()
-    val audioSubtitlesButton = FocusRequester()
-    val videoSettingsButton = FocusRequester()
-    val infoButton = FocusRequester()
+    val aboutButton = FocusRequester()
+    val settingsButton = FocusRequester()
     val seekBar = FocusRequester()
 }
 

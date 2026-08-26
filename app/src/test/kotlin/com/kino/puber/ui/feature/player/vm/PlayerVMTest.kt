@@ -215,14 +215,14 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     @Test
     fun openAudioPanel_setsActivePanel() {
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
-        assertEquals(ActivePanel.AudioSubtitles, contentState(vm).activePanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+        assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
     }
 
     @Test
     fun closePanel_resetsToNone() {
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
         vm.onAction(PlayerAction.ClosePanel)
         assertEquals(ActivePanel.None, contentState(vm).activePanel)
     }
@@ -253,8 +253,8 @@ internal class PlayerVMTest : PlayerVMTestFixture() {
     @Test
     fun openVideoSettingsPanel_setsActivePanel() {
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenVideoSettingsPanel)
-        assertEquals(ActivePanel.VideoSettings, contentState(vm).activePanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+        assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
     }
 
     // endregion

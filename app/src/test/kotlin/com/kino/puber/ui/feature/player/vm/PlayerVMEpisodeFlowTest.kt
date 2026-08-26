@@ -58,19 +58,19 @@ internal class PlayerVMEpisodeFlowTest : PlayerVMTestFixture() {
     @Test
     fun playbackEnded_doesNotStartCountdown_whenPanelIsOpen() {
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         callbackSlot.captured.onPlaybackEnded()
 
         assertNull(contentState(vm).nextEpisodeCountdown)
-        assertEquals(ActivePanel.AudioSubtitles, contentState(vm).activePanel)
+        assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
     }
 
     @Test
     fun closePanel_startsCountdownDeferredWhilePanelWasOpen() {
         every { playbackController.currentPosition } returns 2_399_000L
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenAudioSubtitlesPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
         callbackSlot.captured.onPlaybackEnded()
 
         vm.onAction(PlayerAction.ClosePanel)

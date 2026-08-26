@@ -13,9 +13,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -71,7 +70,7 @@ internal fun PlayerButtonRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        EpisodeLibraryButton(
+        ContentControls(
             state = state,
             actions = actions,
             focusRequesters = focusRequesters,
@@ -83,8 +82,7 @@ internal fun PlayerButtonRow(
             focusRequesters = focusRequesters,
             modifier = Modifier.weight(1f),
         )
-        SecondaryControls(
-            state = state,
+        SettingsControl(
             actions = actions,
             focusRequesters = focusRequesters,
             modifier = Modifier.weight(1f),
@@ -99,6 +97,7 @@ internal fun shouldOpenEpisodesFromButtons(keyCode: Int, isMovie: Boolean): Bool
 internal data class PlayerButtonRowState(
     val isMovie: Boolean,
     val isPlaying: Boolean,
+    val hasDescription: Boolean,
     val hasNextEpisode: Boolean,
     val hasPreviousEpisode: Boolean,
     val canMarkCurrentWatched: Boolean,
@@ -106,8 +105,12 @@ internal data class PlayerButtonRowState(
     val isMarkCurrentWatchedInFlight: Boolean,
 )
 
+/**
+ * The left third is what the viewer is watching: which episode, what it is about, whether it
+ * counts as seen. Nothing here changes how the stream plays — that lives on the right.
+ */
 @Composable
-private fun EpisodeLibraryButton(
+private fun ContentControls(
     state: PlayerButtonRowState,
     actions: PlayerControlActions,
     focusRequesters: PlayerControlFocusRequesters,
@@ -126,7 +129,40 @@ private fun EpisodeLibraryButton(
                 modifier = Modifier.focusRequester(focusRequesters.episodesButton),
             )
         }
+        // No description, no door: the panel would open on an empty page.
+        if (state.hasDescription) {
+            ControlButton(
+                description = stringResource(aboutLabel(state.isMovie)),
+                icon = Icons.Outlined.Info,
+                onClick = actions.onAboutClick,
+                modifier = Modifier.focusRequester(focusRequesters.aboutButton),
+            )
+        }
+        if (state.canMarkCurrentWatched) {
+            ControlButton(
+                description = stringResource(R.string.player_button_mark_watched),
+                icon = if (state.isCurrentMediaWatched) {
+                    PhosphorIcons.Fill.Eye
+                } else {
+                    PhosphorIcons.Duotone.Eye
+                },
+                onClick = actions.onMarkCurrentWatchedClick,
+                selected = state.isCurrentMediaWatched,
+                loading = state.isMarkCurrentWatchedInFlight,
+                stateDescription = stringResource(
+                    if (state.isCurrentMediaWatched) {
+                        R.string.player_button_mark_watched_state_watched
+                    } else {
+                        R.string.player_button_mark_watched_state_not_watched
+                    }
+                ),
+            )
+        }
     }
+}
+
+internal fun aboutLabel(isMovie: Boolean): Int {
+    return if (isMovie) R.string.player_button_about_movie else R.string.player_button_about_series
 }
 
 @Composable
@@ -166,9 +202,12 @@ private fun TransportControls(
     }
 }
 
+/**
+ * The right third is one gear. Audio, video and stream diagnostics used to be three buttons onto
+ * the same panel, differing only in the door the focus landed on; the panel keeps the doors.
+ */
 @Composable
-private fun SecondaryControls(
-    state: PlayerButtonRowState,
+private fun SettingsControl(
     actions: PlayerControlActions,
     focusRequesters: PlayerControlFocusRequesters,
     modifier: Modifier = Modifier,
@@ -179,43 +218,11 @@ private fun SecondaryControls(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ControlButton(
-            description = stringResource(R.string.player_button_audio_subtitles),
-            icon = Icons.Default.Subtitles,
-            onClick = actions.onAudioSubtitlesClick,
-            modifier = Modifier.focusRequester(focusRequesters.audioSubtitlesButton),
+            description = stringResource(R.string.player_button_settings),
+            icon = Icons.Outlined.Settings,
+            onClick = actions.onSettingsClick,
+            modifier = Modifier.focusRequester(focusRequesters.settingsButton),
         )
-        ControlButton(
-            description = stringResource(R.string.player_button_video),
-            icon = Icons.Default.Videocam,
-            onClick = actions.onVideoSettingsClick,
-            modifier = Modifier.focusRequester(focusRequesters.videoSettingsButton),
-        )
-        ControlButton(
-            description = stringResource(R.string.player_button_info),
-            icon = Icons.Outlined.Info,
-            onClick = actions.onInfoClick,
-            modifier = Modifier.focusRequester(focusRequesters.infoButton),
-        )
-        if (state.canMarkCurrentWatched) {
-            ControlButton(
-                description = stringResource(R.string.player_button_mark_watched),
-                icon = if (state.isCurrentMediaWatched) {
-                    PhosphorIcons.Fill.Eye
-                } else {
-                    PhosphorIcons.Duotone.Eye
-                },
-                onClick = actions.onMarkCurrentWatchedClick,
-                selected = state.isCurrentMediaWatched,
-                loading = state.isMarkCurrentWatchedInFlight,
-                stateDescription = stringResource(
-                    if (state.isCurrentMediaWatched) {
-                        R.string.player_button_mark_watched_state_watched
-                    } else {
-                        R.string.player_button_mark_watched_state_not_watched
-                    }
-                ),
-            )
-        }
     }
 }
 

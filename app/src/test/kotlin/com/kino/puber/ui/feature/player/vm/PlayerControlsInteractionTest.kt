@@ -88,41 +88,41 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
 
     // endregion
 
-    // region Info panel
+    // region Settings panel
 
     @Test
-    fun openInfoPanel_setsActivePanel() {
+    fun openSettingsPanel_setsActivePanel() {
         val vm = startedVM()
 
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
-        assertEquals(ActivePanel.Info, contentState(vm).activePanel)
+        assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
     }
 
     @Test
-    fun openInfoPanel_keepsPlaying() {
+    fun openSettingsPanel_keepsPlaying() {
         val vm = startedVM()
 
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         verify(exactly = 0) { playbackController.pause() }
     }
 
     @Test
-    fun openInfoPanel_readsDebugInfoImmediately() {
+    fun openSettingsPanel_readsDebugInfoImmediately() {
         every { playbackController.getDebugInfo() } returns testDebugInfo
         val vm = startedVM()
 
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         assertEquals(testDebugInfo, contentState(vm).debugInfo)
     }
 
     @Test
-    fun closeInfoPanel_dropsDebugInfo_whenDebugOverlayDisabled() {
+    fun closeSettingsPanel_dropsDebugInfo_whenDebugOverlayDisabled() {
         every { playbackController.getDebugInfo() } returns testDebugInfo
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         vm.onAction(PlayerAction.ClosePanel)
 
@@ -130,31 +130,44 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
     }
 
     @Test
-    fun closeInfoPanel_keepsDebugInfo_whenDebugOverlayEnabled() {
+    fun closeSettingsPanel_keepsDebugInfo_whenDebugOverlayEnabled() {
         every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
             debugOverlayEnabled = true,
             okTogglesPlayPause = false,
         )
         every { playbackController.getDebugInfo() } returns testDebugInfo
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         vm.onAction(PlayerAction.ClosePanel)
 
         assertEquals(testDebugInfo, contentState(vm).debugInfo)
     }
 
+    /** The description is not a diagnostics surface: opening it must not start the readings. */
     @Test
-    fun playbackEnded_keepsInfoPanel_withoutRevealingControls() {
+    fun openAboutPanel_doesNotReadDebugInfo() {
+        every { playbackController.getDebugInfo() } returns testDebugInfo
+        val vm = startedVM()
+
+        vm.onAction(PlayerAction.OpenAboutPanel)
+
+        assertEquals(ActivePanel.About, contentState(vm).activePanel)
+        assertNull(contentState(vm).debugInfo)
+        verify(exactly = 0) { playbackController.getDebugInfo() }
+    }
+
+    @Test
+    fun playbackEnded_keepsSettingsPanel_withoutRevealingControls() {
         coEvery {
             contentStateFactory.build(any(), any(), any(), any(), any(), any())
         } returns testContentState.copy(hasNextEpisode = false)
         val vm = startedVM()
-        vm.onAction(PlayerAction.OpenInfoPanel)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
 
         callbackSlot.captured.onPlaybackEnded()
 
-        assertEquals(ActivePanel.Info, contentState(vm).activePanel)
+        assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
         assertFalse(contentState(vm).controlsVisible)
     }
 

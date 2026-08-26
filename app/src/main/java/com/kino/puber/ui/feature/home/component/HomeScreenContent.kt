@@ -454,8 +454,9 @@ internal fun HomeSectionRow(
                     .onFocusChanged {
                         if (it.isFocused) {
                             onSectionFocused()
-                            itemFocus.onItemFocused(item.id)
-                            onItemFocused(item)
+                            if (itemFocus.onItemFocused(item.id)) {
+                                onItemFocused(item)
+                            }
                         }
                     },
                 state = item,

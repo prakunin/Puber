@@ -55,14 +55,14 @@ internal class PlayerPositionPublishingTest : PlayerVMTestFixture() {
             vm.testCancelScope()
         }
 
-    /** The info panel is the one surface that keeps its readings live with the controls hidden. */
+    /** The settings panel is the one surface that keeps its readings live with the controls hidden. */
     @Test
-    fun positionIsPublishedForTheInfoPanelWithTheControlsHidden() =
+    fun positionIsPublishedForTheSettingsPanelWithTheControlsHidden() =
         runTest(mainDispatcher.dispatcher.scheduler) {
             val vm = startedVM()
-            vm.onAction(PlayerAction.OpenInfoPanel)
+            vm.onAction(PlayerAction.OpenSettingsPanel)
             assertFalse(contentState(vm).controlsVisible)
-            assertEquals(ActivePanel.Info, contentState(vm).activePanel)
+            assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
             every { playbackController.currentPosition } returns 90_000L
 
             advanceTimeBy(2_000)

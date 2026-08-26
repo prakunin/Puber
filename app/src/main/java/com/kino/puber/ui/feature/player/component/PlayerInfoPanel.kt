@@ -1,81 +1,35 @@
 package com.kino.puber.ui.feature.player.component
 
-import android.view.KeyEvent
-import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
 import com.kino.puber.R
 import com.kino.puber.ui.feature.player.model.PlayerContentState
-import kotlinx.coroutines.launch
 
 /**
- * Read-only stream diagnostics, a page inside [PlayerSettingsPanel].
+ * Read-only stream diagnostics — the «Поток» door inside [PlayerSettingsPanel].
  *
- * Nothing here is selectable, so the whole column takes the focus and the arrows scroll it —
- * focusing a row that does not act would promise something that is not there.
+ * The step is a whole row, so an arrow press never parks half a reading under the top edge.
  */
 @Composable
-internal fun PlayerInfoPage(
+internal fun PlayerStreamPage(
     entries: List<PlayerInfoEntry>,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
-    val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    val scrollStepPx = with(LocalDensity.current) { 88.dp.toPx() }
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-    val focusShape = RoundedCornerShape(12.dp)
-
-    Column(
-        modifier = modifier
-            .focusRequester(focusRequester)
-            .then(
-                if (isFocused) {
-                    Modifier.border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
-                        shape = focusShape,
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .onPreviewKeyEvent { event ->
-                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                val delta = when (event.nativeKeyEvent.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> scrollStepPx
-                    KeyEvent.KEYCODE_DPAD_UP -> -scrollStepPx
-                    else -> return@onPreviewKeyEvent false
-                }
-                scope.launch { scrollState.animateScrollBy(delta) }
-                true
-            }
-            .focusable(interactionSource = interactionSource)
-            .verticalScroll(scrollState)
-            .padding(2.dp),
+    PlayerPanelScrollBox(
+        focusRequester = focusRequester,
+        scrollStep = StreamScrollStep,
+        scrollState = rememberScrollState(),
+        modifier = modifier,
     ) {
         InfoSection(
             title = stringResource(R.string.player_info_section_video),
@@ -92,6 +46,9 @@ internal fun PlayerInfoPage(
         Spacer(modifier = Modifier.height(12.dp))
     }
 }
+
+/** Two rows and their padding; the readings are single-line and evenly tall. */
+private val StreamScrollStep = 88.dp
 
 internal enum class PlayerInfoSection {
     Video,

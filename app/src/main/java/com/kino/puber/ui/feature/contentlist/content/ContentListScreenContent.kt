@@ -166,7 +166,7 @@ private fun ContentListLayout(
         VideoItemGridDetails(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(PuberTheme.Defaults.DetailsWeight),
+                .weight(PuberTheme.Defaults.CatalogueDetailsWeight),
             state = state.selectedItem,
             trailerUrl = state.previewTrailerUrl,
             onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
@@ -179,7 +179,7 @@ private fun ContentListLayout(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(PuberTheme.Defaults.ContentWeight)
+                    .weight(PuberTheme.Defaults.CatalogueContentWeight)
                     // Focus leaving the rows entirely — into the side rail, most often by pressing
                     // LEFT from the first card of a row — is not seen by `ItemFocused`, which only
                     // ever reports a card gaining focus. Without this the trailer keeps playing,
@@ -377,12 +377,11 @@ private fun LazyListScope.sectionItem(
         val rememberedOnSectionFocused = remember(index) {
             { onSectionFocused(index) }
         }
-        val rememberedOnShowAll = remember(config.id, isLastSection) {
-            if (isLastSection) {
-                { onAction(ContentListAction.ShowAll(config)) }
-            } else {
-                null
-            }
+        // Every section offers it now. It used to be the last section's alone — which is «Все»,
+        // the one place there is nowhere further to go — while «Новинки» and «Горячие», where
+        // there is, had no way out of the row at all.
+        val rememberedOnShowAll = remember(config.id) {
+            { onAction(ContentListAction.ShowAll(config)) }
         }
         val row: @Composable () -> Unit = {
             SectionRowContent(
@@ -397,6 +396,11 @@ private fun LazyListScope.sectionItem(
                 onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },
                 onLoadMore = { sectionVm.onAction(CommonAction.LoadMore) },
                 onShowAll = rememberedOnShowAll,
+                // Whether a row pages in more used to ride on the same flag, so putting the
+                // button in every section would have stopped every section paging. They answer
+                // different questions: the button is a way out to the full grid, and «Все» is the
+                // one section not worth paging, because that grid is the whole catalogue anyway.
+                loadsMore = !isLastSection,
                 onRowEmpty = onRowEmpty,
             )
         }
@@ -456,14 +460,26 @@ internal fun LazyItemScope.SectionListItem(
         Text(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(top = SectionTitleTopPadding)
+                .padding(horizontal = SectionTitleSidePadding),
             text = title,
             style = SectionTitleStyle,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(SectionTitleToRow))
         row()
     }
 }
+
+/**
+ * The heading's own margins. The air above it is what holds the panel's description off it: the
+ * two used to touch, so a long plot landed straight on the section title.
+ *
+ * The side padding is deliberately not the row's. The cards run to the very edge of the content
+ * now and the heading does not; the two were one number only because both happened to read 16 dp.
+ */
+private val SectionTitleTopPadding = 30.dp
+private val SectionTitleSidePadding = 16.dp
+private val SectionTitleToRow = 2.dp
 
 // `HeroCarousel` sets this height on itself and takes no height parameter, so the only way to say
 // "as tall as the hero" is to repeat the number. Used only off the page layout, where the item has

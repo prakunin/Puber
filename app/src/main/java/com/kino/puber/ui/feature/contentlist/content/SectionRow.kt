@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -55,6 +56,7 @@ internal fun SectionRowContent(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onShowAll: (() -> Unit)? = null,
+    loadsMore: Boolean = true,
     onRowEmpty: () -> Unit = {},
     // Fires for real focus entering or leaving this row's content, in *any* section state --
     // Content cards, the Loading shimmer, or the Error row's Retry button -- unlike
@@ -95,6 +97,7 @@ internal fun SectionRowContent(
                 onSectionFocused = onSectionFocused,
                 onLoadMore = onLoadMore,
                 onShowAll = onShowAll,
+                loadsMore = loadsMore,
                 onRowEmpty = onRowEmpty,
             )
         }
@@ -114,6 +117,7 @@ private fun ContentSectionCards(
     onSectionFocused: () -> Unit,
     onLoadMore: () -> Unit,
     onShowAll: (() -> Unit)?,
+    loadsMore: Boolean,
     onRowEmpty: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -138,16 +142,20 @@ private fun ContentSectionCards(
                     .focusRequester(contentFocusRequester)
                     .dpadScrollOptimization(axis = DpadScrollAxis.Horizontal)
                     .focusRestorer(itemFocus.focusRequester),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(CardSpacing),
+                contentPadding = PaddingValues(RowPadding),
             ) {
                 itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
                     val isFallbackTarget = item.id == itemFocus.targetItemId
                     val focusModifier = Modifier.onFocusChanged { focusState ->
                         if (focusState.isFocused) {
                             onSectionFocused()
-                            itemFocus.onItemFocused(item.id)
-                            onItemFocused(item)
+                            // False means the row bounced focus on to the card it remembers, and
+                            // the event for *that* card is already coming. Reporting this one
+                            // would put the wrong film in the panel for a frame and fetch it.
+                            if (itemFocus.onItemFocused(item.id)) {
+                                onItemFocused(item)
+                            }
                         }
                     }
                     val clickCallback = remember(item.id) { { onItemClick(item) } }
@@ -164,6 +172,13 @@ private fun ContentSectionCards(
                         state = item,
                         onClick = clickCallback,
                         itemHeight = PuberTheme.Defaults.CatalogueRowItemHeight,
+                        titleMaxLines = 1,
+                        titleStyle = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = CardTitleSize,
+                            lineHeight = CardTitleLineHeight,
+                        ),
+                        contentPadding = CardContentPadding,
+                        metaSpacing = CardMetaSpacing,
                         onContextMenu = { onItemContextMenu(item) },
                     )
                 }
@@ -177,6 +192,8 @@ private fun ContentSectionCards(
                         ) {
                             Button(
                                 onClick = { onShowAll() },
+                                modifier = Modifier.height(ShowAllButtonHeight),
+                                contentPadding = ShowAllButtonPadding,
                             ) {
                                 Text(
                                     stringResource(R.string.show_all),
@@ -198,13 +215,37 @@ private fun ContentSectionCards(
         }
     }
 
-    if (onShowAll == null) {
+    if (loadsMore) {
         LoadMoreHandler(
             lazyListState = listState,
             loadMoreAtEnd = onLoadMore,
         )
     }
 }
+
+/**
+ * The catalogue row's own numbers, dialled on `docs/design/catalogue`. The card is 115 dp here
+ * against the 150 the shared component defaults to, so its caption and padding come down with it.
+ *
+ * `RowPadding` is zero on purpose: the cards run to the very edge of the content, closer in than
+ * Google's 48 dp safe zone, and the section heading above keeps its own 16 dp instead.
+ */
+private val RowPadding = 0.dp
+private val CardSpacing = 10.dp
+private val CardContentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp)
+private val CardMetaSpacing = 9.dp
+private val CardTitleSize = 10.sp
+
+/**
+ * Below the caption's own 10 sp, and that is the point: `titleSmall` names a 20 sp line and the
+ * box keeps that height whatever the letters do, so the line has to be named too or a one-line
+ * caption still costs 20 dp of a 115 dp card.
+ */
+private val CardTitleLineHeight = 9.sp
+
+/** Two lines of `labelLarge` at 20 sp, and nothing else — the button's own minimum is 40 dp. */
+private val ShowAllButtonHeight = 43.dp
+private val ShowAllButtonPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
 
 @Composable
 private fun ErrorSectionContent(

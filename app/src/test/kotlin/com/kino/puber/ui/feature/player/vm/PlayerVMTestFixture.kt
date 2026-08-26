@@ -239,6 +239,7 @@ internal open class PlayerVMTestFixture {
     protected val testContentState = PlayerContentState(
         title = "Breaking Bad",
         subtitle = "S1E1",
+        description = "A chemistry teacher starts cooking.",
         isPlaying = true,
         currentPosition = 0L,
         duration = 2_400_000L,

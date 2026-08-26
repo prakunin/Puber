@@ -32,10 +32,10 @@ import com.kino.puber.ui.feature.player.model.PlayerContentState
 /**
  * One panel for everything the player can be told from the controls row.
  *
- * The three buttons — audio, video, info — no longer open three differently built panels; they
- * open the same root and put the focus on their own door. Settings that belong to another
- * setting live on its page instead of the root: the sound mode under the audio tracks, the
- * subtitle size under the subtitle tracks, the aspect ratio under the qualities.
+ * A single gear opens it. Audio, video and stream diagnostics were three buttons onto this same
+ * root, differing only in the door the focus landed on; the doors are what survived. Settings
+ * that belong to another setting live on its page instead of the root: the sound mode under the
+ * audio tracks, the subtitle size under the subtitle tracks, the aspect ratio under the qualities.
  */
 internal enum class SettingsDoor {
     Audio,
@@ -43,7 +43,7 @@ internal enum class SettingsDoor {
     Quality,
     Speed,
     Advanced,
-    Info,
+    Stream,
 }
 
 internal enum class SettingsPage {
@@ -53,7 +53,7 @@ internal enum class SettingsPage {
     Quality,
     Speed,
     Advanced,
-    Info,
+    Stream,
 }
 
 /** A door is hidden when the stream has nothing behind it; the rest are always there. */
@@ -67,16 +67,6 @@ internal fun settingsDoors(hasAudioTracks: Boolean, hasQualities: Boolean): List
     }
 }
 
-/** Which door the pressed button lands on, falling forward when that door is not there. */
-internal fun initialSettingsDoor(panel: ActivePanel, doors: List<SettingsDoor>): SettingsDoor {
-    val preferred = when (panel) {
-        ActivePanel.VideoSettings -> SettingsDoor.Quality
-        ActivePanel.Info -> SettingsDoor.Info
-        else -> SettingsDoor.Audio
-    }
-    return doors.firstOrNull { it.ordinal >= preferred.ordinal } ?: doors.first()
-}
-
 internal fun pageOf(door: SettingsDoor): SettingsPage {
     return when (door) {
         SettingsDoor.Audio -> SettingsPage.Audio
@@ -84,7 +74,7 @@ internal fun pageOf(door: SettingsDoor): SettingsPage {
         SettingsDoor.Quality -> SettingsPage.Quality
         SettingsDoor.Speed -> SettingsPage.Speed
         SettingsDoor.Advanced -> SettingsPage.Advanced
-        SettingsDoor.Info -> SettingsPage.Info
+        SettingsDoor.Stream -> SettingsPage.Stream
     }
 }
 
@@ -96,7 +86,7 @@ internal fun doorOf(page: SettingsPage): SettingsDoor? {
         SettingsPage.Quality -> SettingsDoor.Quality
         SettingsPage.Speed -> SettingsDoor.Speed
         SettingsPage.Advanced -> SettingsDoor.Advanced
-        SettingsPage.Info -> SettingsDoor.Info
+        SettingsPage.Stream -> SettingsDoor.Stream
     }
 }
 
@@ -112,23 +102,22 @@ internal fun PlayerSettingsPanel(
     onAction: (UIAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val panel = content.activePanel
-    val visible = panel == ActivePanel.AudioSubtitles ||
-        panel == ActivePanel.VideoSettings ||
-        panel == ActivePanel.Info
+    val visible = content.activePanel == ActivePanel.Settings
     val doors = settingsDoors(
         hasAudioTracks = content.audioTracks.isNotEmpty(),
         hasQualities = content.qualities.isNotEmpty(),
     )
 
     var page by remember { mutableStateOf(SettingsPage.Root) }
-    var rootDoor by remember { mutableStateOf(SettingsDoor.Subtitles) }
+    var rootDoor by remember { mutableStateOf(SettingsDoor.entries.first()) }
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(visible, panel) {
+    // Every opening starts at the top of the root. Which door was last visited is a detail of the
+    // trip inside the panel, not something to carry over to the next press of the gear.
+    LaunchedEffect(visible) {
         page = SettingsPage.Root
         if (visible) {
-            rootDoor = initialSettingsDoor(panel, doors)
+            rootDoor = doors.first()
         }
     }
     LaunchedEffect(visible, page, rootDoor) {
@@ -162,7 +151,7 @@ internal fun PlayerSettingsPanel(
                 SettingsPage.Quality -> QualityPage(content, onAction, focusRequester)
                 SettingsPage.Speed -> SpeedPage(content, onAction, focusRequester)
                 SettingsPage.Advanced -> AdvancedPage(content, onAction, focusRequester)
-                SettingsPage.Info -> PlayerInfoPage(
+                SettingsPage.Stream -> PlayerStreamPage(
                     entries = playerInfoEntries(content),
                     focusRequester = focusRequester,
                 )
@@ -355,7 +344,7 @@ private fun doorTitle(door: SettingsDoor): String {
             SettingsDoor.Quality -> R.string.player_door_quality
             SettingsDoor.Speed -> R.string.player_door_speed
             SettingsDoor.Advanced -> R.string.player_panel_advanced
-            SettingsDoor.Info -> R.string.player_info_title
+            SettingsDoor.Stream -> R.string.player_door_stream
         }
     )
 }
@@ -371,7 +360,7 @@ private fun doorValue(door: SettingsDoor, content: PlayerContentState): String? 
         SettingsDoor.Speed -> content.speeds.getOrNull(content.selectedSpeedIndex)?.label
         SettingsDoor.Advanced -> content.bufferPresets
             .getOrNull(content.selectedBufferPresetIndex)?.label
-        SettingsDoor.Info -> content.debugInfo?.videoResolution
+        SettingsDoor.Stream -> content.debugInfo?.videoResolution
     }
 }
 
@@ -385,7 +374,7 @@ private fun settingsPageTitle(page: SettingsPage): String {
             SettingsPage.Quality -> R.string.player_door_quality
             SettingsPage.Speed -> R.string.player_door_speed
             SettingsPage.Advanced -> R.string.player_panel_advanced
-            SettingsPage.Info -> R.string.player_info_title
+            SettingsPage.Stream -> R.string.player_door_stream
         }
     )
 }

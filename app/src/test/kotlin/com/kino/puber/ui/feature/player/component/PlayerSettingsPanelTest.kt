@@ -1,6 +1,5 @@
 package com.kino.puber.ui.feature.player.component
 
-import com.kino.puber.ui.feature.player.model.ActivePanel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -17,7 +16,7 @@ internal class PlayerSettingsPanelTest {
                 SettingsDoor.Quality,
                 SettingsDoor.Speed,
                 SettingsDoor.Advanced,
-                SettingsDoor.Info,
+                SettingsDoor.Stream,
             ),
             settingsDoors(hasAudioTracks = true, hasQualities = true),
         )
@@ -40,63 +39,15 @@ internal class PlayerSettingsPanelTest {
     }
 
     @Test
-    fun settingsDoors_keepsSubtitlesSpeedAdvancedAndInfo_whenNothingIsAvailable() {
+    fun settingsDoors_keepsSubtitlesSpeedAdvancedAndStream_whenNothingIsAvailable() {
         assertEquals(
             listOf(
                 SettingsDoor.Subtitles,
                 SettingsDoor.Speed,
                 SettingsDoor.Advanced,
-                SettingsDoor.Info,
+                SettingsDoor.Stream,
             ),
             settingsDoors(hasAudioTracks = false, hasQualities = false),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_opensAudio_forTheAudioButton() {
-        assertEquals(
-            SettingsDoor.Audio,
-            initialSettingsDoor(ActivePanel.AudioSubtitles, settingsDoors(true, true)),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_opensQuality_forTheVideoButton() {
-        assertEquals(
-            SettingsDoor.Quality,
-            initialSettingsDoor(ActivePanel.VideoSettings, settingsDoors(true, true)),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_opensInfo_forTheInfoButton() {
-        assertEquals(
-            SettingsDoor.Info,
-            initialSettingsDoor(ActivePanel.Info, settingsDoors(true, true)),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_fallsBackToSubtitles_whenThereAreNoAudioTracks() {
-        assertEquals(
-            SettingsDoor.Subtitles,
-            initialSettingsDoor(ActivePanel.AudioSubtitles, settingsDoors(false, true)),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_fallsBackToSpeed_whenThereAreNoQualities() {
-        assertEquals(
-            SettingsDoor.Speed,
-            initialSettingsDoor(ActivePanel.VideoSettings, settingsDoors(true, false)),
-        )
-    }
-
-    @Test
-    fun initialSettingsDoor_opensTheFirstDoor_whenThePanelIsNotOneOfTheThree() {
-        assertEquals(
-            SettingsDoor.Audio,
-            initialSettingsDoor(ActivePanel.None, settingsDoors(true, true)),
         )
     }
 
