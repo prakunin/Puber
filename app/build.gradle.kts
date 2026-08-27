@@ -1,3 +1,5 @@
+import dev.detekt.gradle.Detekt
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.FileInputStream
 import java.util.Base64
 import java.util.Properties
@@ -214,11 +216,45 @@ detekt {
     buildUponDefaultConfig = false
 }
 
+// Detekt's Android integration hands each task the variant's dependencies but not the variant's own
+// output, so `BuildConfig` - a class AGP generates and javac compiles - resolves nowhere. That cost
+// 26 of the compiler errors that degrade the type resolution `detektAll` exists to provide.
+//
+// The classpath cannot simply be added to: the plugin supplies it as a Gradle convention, and any
+// `from()` here would discard that convention wholesale rather than extend it, leaving detekt with
+// nothing but what we added. So the task takes the classpath over completely, and builds it out of
+// the compilation's own inputs rather than a second guess at detekt's: the Kotlin compile task's
+// libraries (dependencies plus the generated R.jar), the Android boot classpath, and the javac
+// output holding BuildConfig. Reusing the real compilation keeps the two from drifting apart.
+val detektCompilationSource = mapOf(
+    "detektDevDebug" to "compileDevDebugKotlin",
+    "detektDevDebugUnitTest" to "compileDevDebugUnitTestKotlin",
+)
+
+tasks.withType<Detekt>().configureEach {
+    val compileTask = detektCompilationSource[name] ?: return@configureEach
+    classpath.setFrom(
+        tasks.named<KotlinCompile>(compileTask).map { it.libraries },
+        androidComponents.sdkComponents.bootClasspath,
+        tasks.named<JavaCompile>("compileDevDebugJavaWithJavac")
+            .flatMap(JavaCompile::getDestinationDirectory),
+    )
+}
+
 tasks {
     // Single entry point for the static-analysis gate. It delegates to the variant tasks rather
     // than scanning the source tree directly: those compile the variant first, so detekt runs with
     // type resolution and sees the rules a source-set-only pass silently skips (swallowed
     // cancellation, unsafe !!, unused declarations, ...).
+    //
+    // That resolution is good but not complete, and the gate should not be read as stronger than
+    // it is. Detekt 2.0 analyses through the Kotlin Analysis API, and its standalone session
+    // registers no compiler-plugin extensions: kotlin-parcelize and kotlinx-serialization are
+    // simply absent from it, so every @Parcelize class looks like it never implements Parcelable
+    // and every @Serializable model loses serializer(). Those are the ~83 compiler errors a run
+    // still reports, and rules that need types may stay quiet on the files behind them. Handing
+    // the plugins over as -Xplugin through freeCompilerArgs does not help: detekt drops compiler
+    // arguments it does not recognise without a word. Revisit when 2.0 ships a way to load them.
     register("detektAll") {
         group = "verification"
         description = "Runs detekt with type resolution over the dev debug production and unit-test sources."
