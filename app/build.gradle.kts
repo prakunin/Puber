@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.kover)
     id("kotlin-parcelize")
     alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.androidx.room)
@@ -231,6 +232,30 @@ detekt {
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
     baseline = file("$rootDir/config/detekt/detekt-baseline.xml")
     buildUponDefaultConfig = false
+}
+
+// Coverage is measured here, not enforced. There is no verification rule and no threshold: a
+// number picked before anyone has read a report only teaches people to write tests that move it.
+// `make coverage` prints the figure and writes the HTML report.
+kover {
+    reports {
+        filters {
+            excludes {
+                // Generated code. Room's DAO implementations, BuildConfig and the resource classes
+                // are not written in this repository, so they are not ours to cover.
+                classes(
+                    "*_Impl",
+                    "*_Impl\$*",
+                    "com.kino.puber.BuildConfig",
+                    "com.kino.puber.R",
+                    "com.kino.puber.R\$*",
+                )
+
+                // @Preview composables exist to be looked at in the IDE; nothing runs them.
+                annotatedBy("androidx.compose.ui.tooling.preview.Preview")
+            }
+        }
+    }
 }
 
 // Detekt's Android integration hands each task the variant's dependencies but not the variant's own

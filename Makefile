@@ -34,7 +34,7 @@ APK = app/build/outputs/apk/$(FLAVOR)/$(BUILD_TYPE)/app-$(FLAVOR)-$(BUILD_TYPE).
 TARGET := $(ADB) -s $(DEVICE)
 
 .DEFAULT_GOAL := help
-.PHONY: help devices connect build deploy install run stop restart logs info uninstall check require-device
+.PHONY: help devices connect build deploy install run stop restart logs info uninstall check coverage require-device
 
 help:
 	@echo "Puber deploy targets (DEVICE=$(if $(DEVICE),$(DEVICE),<unset>) FLAVOR=$(FLAVOR) BUILD_TYPE=$(BUILD_TYPE) -> $(PACKAGE))"
@@ -51,6 +51,7 @@ help:
 	@echo "  make info        installed version on the device"
 	@echo "  make uninstall   remove the app and its data"
 	@echo "  make check       unit tests, detekt and android lint"
+	@echo "  make coverage    unit-test coverage report"
 	@echo "  make itest       instrumented tests on \$$DEVICE only, keeping its login"
 	@echo "  make auth-save   save this device's KinoPub pairing"
 	@echo "  make auth-restore  put a saved pairing back"
@@ -100,6 +101,9 @@ info: connect
 
 uninstall: connect
 	$(TARGET) uninstall $(PACKAGE)
+
+coverage:
+	$(GRADLE) :app:koverHtmlReport$(VARIANT) :app:koverLog$(VARIANT)
 
 check:
 	$(GRADLE) test$(VARIANT)UnitTest :app:detektAll :app:lint$(VARIANT)

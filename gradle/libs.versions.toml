@@ -33,6 +33,7 @@ androidxTestRunner = "1.7.0"
 room = "3.0.1"
 sqlite = "2.7.0"
 desugarJdkLibs = "2.1.5"
+kover = "0.9.9"
 
 
 [plugins]
@@ -41,6 +42,7 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmarkMacroJunit4" }
 androidx-room = { id = "androidx.room3", version.ref = "room" }
