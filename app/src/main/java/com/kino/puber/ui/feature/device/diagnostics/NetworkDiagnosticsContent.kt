@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.disabled
@@ -66,7 +67,6 @@ import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsView
 import com.kino.puber.ui.feature.device.diagnostics.model.ServerSpeedUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.ln
@@ -238,7 +238,7 @@ private fun Speedometer(
                     color = if (running) primary else onSurfaceVariant,
                 )
                 Text(
-                    text = String.format(Locale.getDefault(), "%.1f", animatedValue),
+                    text = String.format(LocalLocale.current.platformLocale, "%.1f", animatedValue),
                     style = TextStyle(
                         fontSize = 44.sp,
                         lineHeight = 48.sp,
@@ -547,7 +547,7 @@ private fun stateText(state: ServerTestState): String = when (state) {
 @Composable
 private fun ThroughputSample.rateText(): String = stringResource(
     R.string.diagnostics_rate_mbits,
-    String.format(Locale.getDefault(), "%.1f", bitsPerSecond / BITS_PER_MEGABIT),
+    String.format(LocalLocale.current.platformLocale, "%.1f", bitsPerSecond / BITS_PER_MEGABIT),
 )
 
 @Composable

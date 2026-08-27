@@ -50,7 +50,7 @@ help:
 	@echo "  make logs        follow logcat for the app only"
 	@echo "  make info        installed version on the device"
 	@echo "  make uninstall   remove the app and its data"
-	@echo "  make check       unit tests and detekt"
+	@echo "  make check       unit tests, detekt and android lint"
 	@echo "  make itest       instrumented tests on \$$DEVICE only, keeping its login"
 	@echo "  make auth-save   save this device's KinoPub pairing"
 	@echo "  make auth-restore  put a saved pairing back"
@@ -102,7 +102,7 @@ uninstall: connect
 	$(TARGET) uninstall $(PACKAGE)
 
 check:
-	$(GRADLE) test$(VARIANT)UnitTest :app:detektAll
+	$(GRADLE) test$(VARIANT)UnitTest :app:detektAll :app:lint$(VARIANT)
 
 # Instrumented tests on one device, keeping its login.
 #

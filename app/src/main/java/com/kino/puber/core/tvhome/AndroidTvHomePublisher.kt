@@ -1,5 +1,6 @@
 package com.kino.puber.core.tvhome
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -51,6 +52,11 @@ internal class AndroidTvHomePublisher(
         }
     }
 
+    // androidx.tvprovider marks the builder setters @RestrictTo(LIBRARY_GROUP) even though
+    // assembling programs is the only thing the library is there for; every app that publishes to
+    // the Android TV home row calls them. Suppressed on this function alone rather than disabling
+    // the check, so a genuinely restricted call elsewhere still fails the build.
+    @SuppressLint("RestrictedApi")
     private fun publish(
         channelId: Long,
         program: PublishedProgram,

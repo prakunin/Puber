@@ -120,6 +120,7 @@ internal interface PlaybackControl {
     fun release()
 }
 
+@OptIn(UnstableApi::class)
 internal class PlaybackController(
     private val context: Context,
     private val okHttpClient: OkHttpClient,
@@ -154,11 +155,9 @@ internal class PlaybackController(
 
     // Owned rather than left to DefaultLoadControl, which keeps its allocator to itself: this is
     // the only way to read how many bytes the buffer actually holds.
-    @OptIn(UnstableApi::class)
     private var bufferAllocator: DefaultAllocator? = null
     private var targetBufferBytes = 0
 
-    @OptIn(UnstableApi::class)
     private val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
     private var dataSourceFactory: DataSource.Factory? = null
 
@@ -306,7 +305,6 @@ internal class PlaybackController(
         this.callback = callback
     }
 
-    @OptIn(UnstableApi::class)
     override fun prepare(
         stream: StreamCandidate,
         subtitles: List<SubtitleLink>?,
@@ -373,7 +371,6 @@ internal class PlaybackController(
     }
 
     /** Also records the buffer budget the info panel reports the current fill against. */
-    @OptIn(UnstableApi::class)
     private fun buildLoadControl(bufferPreset: BufferPreset): DefaultLoadControl {
         val bufferParams = DeviceBufferConfig.resolve(context, bufferPreset)
         val allocator = DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE)
@@ -407,7 +404,6 @@ internal class PlaybackController(
      * at the one moment playback has nothing in reserve. Handing the position to `setMediaSource`
      * rather than seeking afterwards saves a second buffering round-trip on top.
      */
-    @OptIn(UnstableApi::class)
     private fun createMediaSourceFactory(
         dataSourceFactory: DataSource.Factory,
     ): DefaultMediaSourceFactory {
@@ -514,7 +510,6 @@ internal class PlaybackController(
         targetBufferBytes = 0
     }
 
-    @OptIn(UnstableApi::class)
     private fun disableAc3AndRetry() {
         if (ac3FallbackApplied) {
             callback?.onError(context.getString(R.string.player_error_playback))
@@ -568,7 +563,6 @@ internal class PlaybackController(
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun createDataSourceFactory(): DataSource.Factory {
         val builder = okHttpClient.newBuilder()
             .connectTimeout(
@@ -591,7 +585,6 @@ internal class PlaybackController(
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
-    @OptIn(UnstableApi::class)
     private fun setMediaSource(
         player: ExoPlayer,
         mediaItem: MediaItem,
@@ -622,7 +615,6 @@ internal class PlaybackController(
      * cache. Nothing of it survives: once it reports ready the bytes are on disk and the player is
      * released, and the real [prepare] reads them back instead of opening a cold connection.
      */
-    @OptIn(UnstableApi::class)
     override fun warmUpNext(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         if (warmUpStreamUrl == stream.url) return
         cancelWarmUp()
@@ -692,7 +684,6 @@ internal class PlaybackController(
         warmUpPlayer = null
     }
 
-    @OptIn(UnstableApi::class)
     private fun setWarmUpMediaSource(
         player: ExoPlayer,
         sourceFactory: DataSource.Factory,
@@ -711,7 +702,6 @@ internal class PlaybackController(
         }
     }
 
-    @OptIn(UnstableApi::class)
     override fun getDebugInfo(): PlaybackControl.DebugInfo? {
         val player = exoPlayer ?: return null
         val videoFormat = player.videoFormat

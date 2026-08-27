@@ -66,6 +66,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Android Lint covers what detekt structurally cannot reach: the manifest, the resources, and
+    // API levels weighed against `minSdk` - the check that caught `java.time` crashing on an
+    // Android TV 7.x box. It runs with no baseline file: every error the project had was fixed
+    // rather than grandfathered, so a new one cannot hide behind a backlog of old ones.
+    lint {
+        abortOnError = true
+
+        // The 112 warnings the run still reports are left as warnings on purpose. Promoting them
+        // is its own piece of work, not a side effect of turning the gate on.
+        warningsAsErrors = false
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -77,6 +89,11 @@ android {
     compileOptions {
         sourceCompatibility = Versions.JavaVersionCompat
         targetCompatibility = Versions.JavaVersionCompat
+
+        // The episode schedule works in `java.time`, which the platform only carries from API 26.
+        // With `minSdk` at 24 those calls are a NoClassDefFoundError on an Android TV 7.x box, so
+        // the library is desugared into the APK rather than the dates being rewritten around it.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     composeCompiler {
@@ -263,6 +280,8 @@ tasks {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))

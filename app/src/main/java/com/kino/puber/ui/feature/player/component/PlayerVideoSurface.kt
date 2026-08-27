@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
+import androidx.annotation.OptIn
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 
+@OptIn(UnstableApi::class)
 @Composable
 internal fun PlayerVideoSurface(
     content: PlayerContentState,

@@ -2,6 +2,7 @@ package com.kino.puber.core.ui.uikit.component.details
 
 import android.view.Gravity
 import android.widget.FrameLayout
+import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -138,6 +139,7 @@ internal fun TrailerPreviewPlayer(
     )
 }
 
+@OptIn(UnstableApi::class)
 private fun PlayerView.updateContentGravity(alignContentToTop: Boolean) {
     val contentFrame = findViewById<AspectRatioFrameLayout>(Media3UiR.id.exo_content_frame) ?: return
     val params = contentFrame.layoutParams as? FrameLayout.LayoutParams ?: return

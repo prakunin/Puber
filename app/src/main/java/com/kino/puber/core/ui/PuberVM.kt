@@ -36,6 +36,10 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
         MutableStateFlow(initialViewState)
     }
     private val snackBarMessageFlow = MutableStateFlow<SnackbarMessage?>(null)
+
+    // `asSharedFlow()` builds a new read-only wrapper each time it is called, and calling it inside
+    // a composable does that on every recomposition. Hoisted here so composition collects one flow.
+    private val snackBarMessages = snackBarMessageFlow.asSharedFlow()
     private val started = AtomicBoolean(false)
     protected val viewState: Flow<ViewState> get() = mutableViewState
 
@@ -108,9 +112,7 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
 
     @Composable
     fun collectMessage(initial: SnackbarMessage? = null): State<SnackbarMessage?> {
-        return snackBarMessageFlow
-            .asSharedFlow()
-            .collectAsStateWithLifecycle(initial)
+        return snackBarMessages.collectAsStateWithLifecycle(initial)
     }
 
     protected open fun onStart() {}

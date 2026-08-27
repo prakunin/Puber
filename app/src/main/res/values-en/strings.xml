@@ -408,4 +408,39 @@
     <string name="video_details_resume_movie">Stopped · %1$s left</string>
     <string name="video_details_resume_not_started">Not started · %1$s</string>
     <string name="video_details_resume_finished">Watched</string>
+
+    <string name="device_settings_tmdb_attribution_title">About TMDB</string>
+    <string name="device_settings_tmdb_logo_description">TMDB logo</string>
+    <!-- TMDB requires this wording verbatim; it stays in English in every locale. -->
+    <string name="device_settings_tmdb_attribution_notice">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="tmdb_source_notice">Data and images come from TMDB; dates may change.</string>
+
+    <string name="episode_schedule_season">Season %1$d</string>
+    <string name="episode_schedule_episode">Episode %1$d</string>
+    <string name="episode_schedule_episode_subtitle">%1$s · %2$s</string>
+    <string name="episode_schedule_season_announcement">Season premiere</string>
+    <string name="episode_schedule_release_date">Release date: %1$s</string>
+    <string name="episode_schedule_empty_title">No schedule available</string>
+    <string name="episode_schedule_empty_missing_credentials">TMDB access isn’t set up.</string>
+    <string name="episode_schedule_empty_no_match">This series wasn’t found on TMDB.</string>
+    <string name="episode_schedule_empty_no_upcoming">No upcoming release dates have been announced.</string>
+    <string name="episode_schedule_error_title">Couldn’t load the schedule</string>
+    <string name="episode_schedule_retry">Retry</string>
+
+    <string name="player_scheduled_episode_date">Release date: %1$s</string>
+    <string name="player_scheduled_season_date">Season premiere: %1$s</string>
+
+    <string name="video_details_button_schedule">Schedule</string>
+    <string name="video_details_info_status">Status</string>
+    <string name="video_details_series_status_finished">Series ended</string>
+    <string name="video_details_series_status_ongoing">Series ongoing</string>
+
+    <string name="settings_media3_title">Media3 playback</string>
+    <string name="settings_discard_embedded_artwork">Ignore embedded artwork</string>
+    <string name="settings_discard_embedded_artwork_description">Uses less memory by not loading artwork out of media files.</string>
+    <string name="settings_hagc_playback">Enable experimental HAGC</string>
+    <string name="settings_hagc_playback_description">Passes extra HDR brightness metadata to a decoder that supports it.</string>
+
+    <string name="search_actor_title">Titles featuring %1$s</string>
+    <string name="search_actor_no_results">No results for this actor</string>
 </resources>
