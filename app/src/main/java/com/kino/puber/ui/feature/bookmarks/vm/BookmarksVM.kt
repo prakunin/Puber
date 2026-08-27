@@ -13,12 +13,14 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.bookmarks.BookmarkInteractor
+import com.kino.puber.domain.interactor.details.DetailsInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.ui.feature.bookmarks.model.BookmarksViewState
 
 internal class BookmarksVM(
     router: AppRouter,
     private val interactor: BookmarkInteractor,
+    private val detailsInteractor: DetailsInteractor,
     private val mapper: VideoItemUIMapper,
     private val cardDisplayChanges: CardDisplayChanges,
     override val errorHandler: ErrorHandler,
@@ -74,6 +76,10 @@ internal class BookmarksVM(
             is CommonAction.ItemSavedChanged<*> -> {
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
+            }
+            is CommonAction.ItemWatchedChanged<*> -> {
+                val item = action.item as VideoItemUIState
+                setItemWatched(item, action.isWatched)
             }
             else -> super.onAction(action)
         }
@@ -151,6 +157,27 @@ internal class BookmarksVM(
             interactor.setItemSaved(itemId = item.id, folderId = folderId, saved = saved)
             updateViewState<BookmarksViewState.Content> {
                 copy(items = items.updateSaved(item.id, saved).filterNot { video -> !video.isSaved })
+            }
+        }
+    }
+
+    private fun setItemWatched(item: VideoItemUIState, watched: Boolean) {
+        launch {
+            val update = detailsInteractor.setItemWatched(
+                id = item.id,
+                isSeriesLike = item.isSeriesLike,
+                watched = watched,
+            )
+            updateViewState<BookmarksViewState.Content> {
+                copy(
+                    items = items.map { video ->
+                        if (video.id == item.id) {
+                            video.copy(isWatched = update.isWatched)
+                        } else {
+                            video
+                        }
+                    },
+                )
             }
         }
     }

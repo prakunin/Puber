@@ -12,7 +12,6 @@
     <string name="under_development">В разработке</string>
     <string name="loading">Загрузка</string>
     <string name="rating_content_description">Рейтинг</string>
-    <string name="video_item_watched">Просмотрено</string>
     <string name="context_menu_close">Закрыть</string>
     <string name="context_menu_details">Подробнее</string>
     <string name="context_menu_watch_movie">Смотреть фильм</string>
@@ -22,7 +21,12 @@
     <string name="context_menu_remove_from_bookmarks">Удалить из закладок</string>
     <string name="context_menu_add_to_watchlist">Добавить в «Я смотрю»</string>
     <string name="context_menu_remove_from_watchlist">Удалить из «Я смотрю»</string>
-    <string name="context_menu_refresh_tab">Обновить раздел</string>
+    <string name="context_menu_folder">Папка: %1$s</string>
+    <string name="context_menu_remove_from_folder">Удалить из папки</string>
+    <string name="context_menu_mark_watched">Отметить просмотренным</string>
+    <string name="context_menu_unmark_watched">Снять отметку «Просмотрено»</string>
+    <string name="context_menu_mark_series_watched">Отметить весь сериал просмотренным</string>
+    <string name="context_menu_unmark_series_watched">Снять отметку со всего сериала</string>
     <string name="context_menu_mark_episode_watched">Отметить серию просмотренной</string>
     <string name="context_menu_unmark_episode_watched">Снять отметку с серии</string>
     <string name="context_menu_mark_season_watched">Отметить сезон просмотренным</string>

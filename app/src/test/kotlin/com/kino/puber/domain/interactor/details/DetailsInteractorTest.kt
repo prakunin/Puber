@@ -155,6 +155,29 @@ class DetailsInteractorTest {
     }
 
     @Test
+    fun setItemWatched_marksWholeSeriesInApiAndSeriesWatchIndex() = runTest {
+        coEvery { api.toggleWatchingStatus(42, status = 1) } returns Result.success(
+            WatchingToggleResponse(status = 200, watched = 1)
+        )
+
+        val result = interactor.setItemWatched(
+            id = 42,
+            isSeriesLike = true,
+            watched = true,
+        )
+
+        assertEquals(true, result.isWatched)
+        coVerify(exactly = 1) { api.toggleWatchingStatus(42, status = 1) }
+        coVerify {
+            watchStateRepository.markLocally(
+                itemId = 42,
+                isSeriesLike = true,
+                isFullyWatched = true,
+            )
+        }
+    }
+
+    @Test
     fun setEpisodeWatched_returnsRequestedStateWhenApiOmitsConfirmation_withoutRefreshingDetails() = runTest {
         coEvery { api.toggleWatchingStatus(42, status = 1, season = 1, video = 2) } returns Result.success(
             WatchingToggleResponse(status = 200)

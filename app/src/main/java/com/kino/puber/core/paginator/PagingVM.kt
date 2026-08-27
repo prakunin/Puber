@@ -169,7 +169,6 @@ abstract class PagingVM<T, VS>(
     }
 
     override fun onCleared() {
-        super.onCleared()
         pagingJob.cancel()
         paginator.close()
     }

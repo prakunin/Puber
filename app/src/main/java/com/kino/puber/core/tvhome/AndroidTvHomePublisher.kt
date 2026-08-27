@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.tvprovider.media.tv.PreviewChannelHelper
 import androidx.tvprovider.media.tv.PreviewChannel
 import androidx.tvprovider.media.tv.PreviewProgram
@@ -35,7 +37,7 @@ internal class AndroidTvHomePublisher(
 
     override suspend fun clearAccountPrograms() {
         storedPrograms().values.forEach(::delete)
-        preferences.edit().remove(KEY_PROGRAMS).apply()
+        preferences.edit { remove(KEY_PROGRAMS) }
     }
 
     private fun ensureChannel(): Long {
@@ -44,11 +46,11 @@ internal class AndroidTvHomePublisher(
         val channel = PreviewChannel.Builder()
             .setDisplayName(context.getString(R.string.tv_home_continue_watching))
             .setAppLinkIntentUri(
-                Uri.parse(Intent(context, MainActivity::class.java).toUri(Intent.URI_INTENT_SCHEME)),
+                Intent(context, MainActivity::class.java).toUri(Intent.URI_INTENT_SCHEME).toUri(),
             )
             .build()
         return helper.publishDefaultChannel(channel).also { channelId ->
-            preferences.edit().putLong(KEY_CHANNEL_ID, channelId).apply()
+            preferences.edit { putLong(KEY_CHANNEL_ID, channelId) }
         }
     }
 
@@ -62,12 +64,12 @@ internal class AndroidTvHomePublisher(
         program: PublishedProgram,
         stored: StoredProgram?,
     ): StoredProgram {
-        val intentUri = Uri.parse(uriCodec.internalUri(program.target))
+        val intentUri = uriCodec.internalUri(program.target).toUri()
         val preview = PreviewProgram.Builder()
             .setChannelId(channelId)
             .setType(TvContractCompat.PreviewPrograms.TYPE_MOVIE)
             .setTitle(program.title)
-            .setPosterArtUri(Uri.parse(program.artworkUri))
+            .setPosterArtUri(program.artworkUri.toUri())
             .setIntentUri(intentUri)
             .setInternalProviderId(program.stableKey)
             .setDurationMillis(program.durationMs.toInt())
@@ -77,7 +79,7 @@ internal class AndroidTvHomePublisher(
             .setType(TvContractCompat.PreviewPrograms.TYPE_MOVIE)
             .setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE)
             .setTitle(program.title)
-            .setPosterArtUri(Uri.parse(program.artworkUri))
+            .setPosterArtUri(program.artworkUri.toUri())
             .setIntentUri(intentUri)
             .setInternalProviderId(program.stableKey)
             .setDurationMillis(program.durationMs.toInt())
@@ -124,7 +126,7 @@ internal class AndroidTvHomePublisher(
         val value = programs.entries.joinToString(ENTRY_SEPARATOR) { (key, ids) ->
             listOf(key, ids.previewId, ids.watchNextId).joinToString(FIELD_SEPARATOR)
         }
-        preferences.edit().putString(KEY_PROGRAMS, value).apply()
+        preferences.edit { putString(KEY_PROGRAMS, value) }
     }
 
     private data class StoredProgram(

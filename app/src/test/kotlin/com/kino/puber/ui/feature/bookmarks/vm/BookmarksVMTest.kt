@@ -16,6 +16,9 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.domain.interactor.bookmarks.BookmarkInteractor
+import com.kino.puber.domain.interactor.details.DetailsInteractor
+import com.kino.puber.domain.interactor.details.MovieWatchedUpdate
+import com.kino.puber.ui.feature.bookmarks.model.BookmarksViewState
 import com.kino.puber.util.MainDispatcherExtension
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import io.mockk.coEvery
@@ -40,6 +43,7 @@ class BookmarksVMTest {
     private lateinit var router: AppRouter
     private lateinit var screens: Screens
     private lateinit var interactor: BookmarkInteractor
+    private lateinit var detailsInteractor: DetailsInteractor
     private lateinit var mapper: VideoItemUIMapper
     private lateinit var errorHandler: ErrorHandler
 
@@ -49,11 +53,15 @@ class BookmarksVMTest {
         router = mockk(relaxed = true)
         every { router.screens } returns screens
         interactor = mockk(relaxed = true)
+        detailsInteractor = mockk()
         mapper = mockk(relaxed = true)
         errorHandler = mockk { every { proceed(any()) } returns { } }
         coEvery { interactor.getBookmarks() } returns listOf(bookmark)
         coEvery { interactor.getBookmarkItems(7, page = 1) } returns page()
         every { mapper.mapShortItemList(any()) } returns listOf(videoItem(42))
+        coEvery { detailsInteractor.setItemWatched(any(), any(), any()) } answers {
+            MovieWatchedUpdate(isWatched = invocation.args[2] as Boolean)
+        }
     }
 
     @Test
@@ -96,18 +104,63 @@ class BookmarksVMTest {
         coVerify(exactly = 2) { interactor.getBookmarkItems(7, page = 1) }
     }
 
+    @Test
+    fun itemWatchedChanged_updatesMovieCardWithConfirmedState() {
+        val vm = createVM().also { it.testOnStart() }
+
+        vm.onAction(CommonAction.ItemWatchedChanged(videoItem(42), isWatched = true))
+
+        coVerify(exactly = 1) {
+            detailsInteractor.setItemWatched(42, isSeriesLike = false, watched = true)
+        }
+        val state = vm.testStateValue as BookmarksViewState.Content
+        org.junit.jupiter.api.Assertions.assertTrue(state.items.single().isWatched)
+    }
+
+    @Test
+    fun itemWatchedChanged_marksWholeSeriesThroughItemLevelMutation() {
+        val vm = createVM().also { it.testOnStart() }
+
+        vm.onAction(
+            CommonAction.ItemWatchedChanged(
+                videoItem(id = 42, isSeriesLike = true),
+                isWatched = true,
+            )
+        )
+
+        coVerify(exactly = 1) {
+            detailsInteractor.setItemWatched(42, isSeriesLike = true, watched = true)
+        }
+    }
+
     private val cardDisplayChanges = mockk<CardDisplayChanges> {
         every { changes } returns emptyFlow()
     }
 
-    private fun createVM() = BookmarksVM(router, interactor, mapper, cardDisplayChanges, errorHandler)
+    private fun createVM() = BookmarksVM(
+        router,
+        interactor,
+        detailsInteractor,
+        mapper,
+        cardDisplayChanges,
+        errorHandler,
+    )
 
     private fun page() = PaginatedResponse(
         items = listOf(Item(id = 42, title = "Movie", type = ItemType.MOVIE)),
         pagination = Pagination(current = 1, perpage = 50, total = 1),
     )
 
-    private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
+    private fun videoItem(
+        id: Int,
+        isSeriesLike: Boolean = false,
+    ) = VideoItemUIState(
+        id = id,
+        title = "Item $id",
+        imageUrl = "",
+        bigImageUrl = "",
+        isSeriesLike = isSeriesLike,
+    )
 
     private val bookmark = Bookmark(id = 7, title = "Folder")
 }

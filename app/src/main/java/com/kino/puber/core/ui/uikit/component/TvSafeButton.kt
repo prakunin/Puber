@@ -18,6 +18,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -30,6 +32,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role as SemanticsRole
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 private val ButtonHeight = 48.dp
@@ -42,6 +45,8 @@ internal fun TvSafeButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     primary: Boolean = false,
+    destructive: Boolean = false,
+    quiet: Boolean = false,
     focusableWhenDisabled: Boolean = false,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -50,25 +55,40 @@ internal fun TvSafeButton(
     val colorScheme = MaterialTheme.colorScheme
     val containerColor = when {
         !enabled -> colorScheme.surfaceVariant.copy(alpha = 0.36f)
+        isFocused && destructive -> colorScheme.error
+        isFocused && quiet -> colorScheme.surfaceVariant
         isFocused -> colorScheme.onSurface
+        destructive -> colorScheme.errorContainer.copy(alpha = 0.22f)
+        quiet -> Color.Transparent
         primary -> colorScheme.primaryContainer
         else -> colorScheme.surface
     }
     val contentColor = when {
         !enabled -> colorScheme.onSurface.copy(alpha = 0.38f)
+        isFocused && destructive -> colorScheme.onError
+        isFocused && quiet -> colorScheme.onSurface
         isFocused -> colorScheme.surface
+        destructive -> colorScheme.error
+        quiet -> colorScheme.onSurfaceVariant
         primary -> colorScheme.onPrimaryContainer
         else -> colorScheme.onSurface
     }
     val borderColor = when {
-        primary -> null
         isFocused -> colorScheme.primary
+        destructive -> colorScheme.error.copy(alpha = 0.72f)
+        quiet -> colorScheme.outlineVariant.copy(alpha = 0.72f)
+        primary -> null
         else -> colorScheme.outline
     }
 
     Box(
         modifier = modifier
             .height(ButtonHeight)
+            .graphicsLayer {
+                val pressedScale = if (isSelectPressed) 0.98f else 1f
+                scaleX = pressedScale
+                scaleY = pressedScale
+            }
             .background(containerColor, shape)
             .then(
                 if (borderColor == null) {
@@ -114,6 +134,8 @@ internal fun TvSafeButton(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

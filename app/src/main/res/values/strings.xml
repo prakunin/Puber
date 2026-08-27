@@ -13,7 +13,6 @@
     <string name="history_context_play">Смотреть сначала</string>
     <string name="history_context_delete_exact_media">Удалить эту запись</string>
     <string name="history_context_account_disclosure">Удаление влияет на историю просмотров вашего аккаунта.</string>
-    <string name="settings_updates_title">Обновления</string>
     <string name="settings_auto_update_check">Автоматически проверять обновления</string>
     <string name="settings_auto_update_check_subtitle">Puber будет искать новую версию при запуске приложения.</string>
     <string name="settings_check_for_updates_now">Проверить обновления сейчас</string>

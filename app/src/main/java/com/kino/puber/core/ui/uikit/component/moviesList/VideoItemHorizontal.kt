@@ -53,13 +53,11 @@ fun VideoItemHorizontal(
     // A second line lifts the whole text block, so neighbouring cards in a row would read from two
     // different heights. Rows that care about that ask for one line and an ellipsis instead.
     titleMaxLines: Int = 2,
-    // Most rows draw the card at the full 150 dp and take `titleSmall` as it comes. A row that
-    // shrinks the card has to shrink the caption with it, and a font size alone will not do it:
-    // `titleSmall` names a 20 sp line, and the box keeps that height whatever the letters do.
+    // Most rows draw the card at the full 150 dp and take `titleSmall` as it comes. Callers with a
+    // different card size can tune both font size and line height through this complete style.
     titleStyle: TextStyle = MaterialTheme.typography.titleSmall,
-    // The catalogue row shrank the card to 115 dp and had to pull the caption in with it. Ten
-    // other screens draw this same card at its full size, so these arrive as parameters rather
-    // than being retuned in place.
+    // Padding and metadata spacing remain configurable for denser layouts without changing every
+    // screen that uses the shared card.
     contentPadding: PaddingValues = DefaultCardContentPadding,
     metaSpacing: Dp = DefaultMetaSpacing,
     onContextMenu: (() -> Unit)? = null,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,14 +29,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.kino.puber.core.ui.uikit.component.DpadScrollAxis
 import com.kino.puber.core.ui.uikit.component.FadeGradient
 import com.kino.puber.core.ui.uikit.component.LoadMoreHandler
-import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
+import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
@@ -131,19 +130,23 @@ private fun ContentSectionCards(
 
     Box(
         modifier = Modifier
+            .widthIn(max = CatalogueRowViewportWidth)
             .wrapContentHeight()
             .fillMaxWidth(),
     ) {
-        LazyRow(
+        PositionFocusedItemInLazyLayout(
+            parentFraction = 0.5f,
+            childFraction = 0.5f,
+        ) {
+            LazyRow(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer { clip = false }
                     .focusRequester(contentFocusRequester)
-                    .dpadScrollOptimization(axis = DpadScrollAxis.Horizontal)
                     .focusRestorer(itemFocus.focusRequester),
                 horizontalArrangement = Arrangement.spacedBy(CardSpacing),
-                contentPadding = PaddingValues(RowPadding),
+                contentPadding = PaddingValues(horizontal = RowHorizontalPadding),
             ) {
                 itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
                     val isFallbackTarget = item.id == itemFocus.targetItemId
@@ -173,12 +176,6 @@ private fun ContentSectionCards(
                         onClick = clickCallback,
                         itemHeight = PuberTheme.Defaults.CatalogueRowItemHeight,
                         titleMaxLines = 1,
-                        titleStyle = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = CardTitleSize,
-                            lineHeight = CardTitleLineHeight,
-                        ),
-                        contentPadding = CardContentPadding,
-                        metaSpacing = CardMetaSpacing,
                         onContextMenu = { onItemContextMenu(item) },
                     )
                 }
@@ -192,8 +189,6 @@ private fun ContentSectionCards(
                         ) {
                             Button(
                                 onClick = { onShowAll() },
-                                modifier = Modifier.height(ShowAllButtonHeight),
-                                contentPadding = ShowAllButtonPadding,
                             ) {
                                 Text(
                                     stringResource(R.string.show_all),
@@ -204,6 +199,7 @@ private fun ContentSectionCards(
                         }
                     }
                 }
+            }
         }
         FadeGradient(listState)
     }
@@ -224,28 +220,23 @@ private fun ContentSectionCards(
 }
 
 /**
- * The catalogue row's own numbers, dialled on `docs/design/catalogue`. The card is 115 dp here
- * against the 150 the shared component defaults to, so its caption and padding come down with it.
+ * The catalogue row's own spacing. Its cards now use the shared component's native 150 dp size,
+ * typography and content padding.
  *
- * `RowPadding` is zero on purpose: the cards run to the very edge of the content, closer in than
- * Google's 48 dp safe zone, and the section heading above keeps its own 16 dp instead.
+ * Three complete cards occupy the row viewport. Equal start/end padding keeps the edge cards clear
+ * of the rail and the fade; the centred bring-into-view pivot leaves the first card at the leading
+ * edge, holds intermediate focus in the middle, and lets the final card settle at the trailing
+ * edge when scrolling reaches its limit.
  */
-private val RowPadding = 0.dp
-private val CardSpacing = 10.dp
-private val CardContentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp)
-private val CardMetaSpacing = 9.dp
-private val CardTitleSize = 10.sp
-
-/**
- * Below the caption's own 10 sp, and that is the point: `titleSmall` names a 20 sp line and the
- * box keeps that height whatever the letters do, so the line has to be named too or a one-line
- * caption still costs 20 dp of a 115 dp card.
- */
-private val CardTitleLineHeight = 9.sp
-
-/** Two lines of `labelLarge` at 20 sp, and nothing else — the button's own minimum is 40 dp. */
-private val ShowAllButtonHeight = 43.dp
-private val ShowAllButtonPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+private const val VisibleCardCount = 3
+private val RowHorizontalPadding = 16.dp
+private val CardSpacing = 16.dp
+private val CatalogueCardWidth =
+    PuberTheme.Defaults.CatalogueRowItemHeight * PuberTheme.Defaults.HorizontalVideoItemAspectRatio
+private val CatalogueRowViewportWidth =
+    CatalogueCardWidth * VisibleCardCount +
+        CardSpacing * (VisibleCardCount - 1) +
+        RowHorizontalPadding * 2
 
 @Composable
 private fun ErrorSectionContent(

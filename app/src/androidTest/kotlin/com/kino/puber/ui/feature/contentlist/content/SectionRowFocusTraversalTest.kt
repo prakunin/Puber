@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
@@ -102,6 +103,69 @@ internal class SectionRowFocusTraversalTest {
             assertEquals(1, focusedItemId)
         }
         composeRule.onNodeWithText(itemTitle(row = 0, column = 1)).assertIsFocused()
+    }
+
+    @Test
+    fun horizontalRowShowsThreeCardsAndKeepsMovableFocusCentred() {
+        composeRule.setContent {
+            PuberTheme {
+                Box(
+                    Modifier
+                        .width(HORIZONTAL_ROW_VIEWPORT_WIDTH)
+                        .testTag(HORIZONTAL_ROW_VIEWPORT_TAG),
+                ) {
+                    SectionRowContent(
+                        state = SectionState.Content(
+                            items = (0 until 6).map { column -> item(0, column) },
+                        ),
+                        config = SectionConfig(id = "row_0", title = "Row 0"),
+                        isTargetRow = true,
+                        onItemClick = {},
+                        onItemContextMenu = {},
+                        onItemFocused = {},
+                        onSectionFocused = {},
+                        onRetry = {},
+                        onLoadMore = {},
+                    )
+                }
+            }
+        }
+
+        val viewport = composeRule
+            .onNodeWithTag(HORIZONTAL_ROW_VIEWPORT_TAG)
+            .getUnclippedBoundsInRoot()
+        requestFocus(itemTitle(row = 0, column = 0))
+
+        val first = focusedCardBounds(row = 0, column = 0)
+        assertEquals(
+            "first card leading edge",
+            viewport.left.value + HORIZONTAL_ROW_PADDING.value,
+            first.left.value,
+            BOUNDS_TOLERANCE,
+        )
+        val thirdBeforeScroll = composeRule
+            .onNodeWithText(itemTitle(row = 0, column = 2))
+            .getUnclippedBoundsInRoot()
+        assertEquals(
+            "exactly three cards fit before horizontal scrolling",
+            viewport.right.value - HORIZONTAL_ROW_PADDING.value,
+            thirdBeforeScroll.right.value,
+            BOUNDS_TOLERANCE,
+        )
+
+        pressCurrent(Key.DirectionRight)
+        assertHorizontallyCentred(focusedCardBounds(row = 0, column = 1), viewport)
+        pressCurrent(Key.DirectionRight)
+        assertHorizontallyCentred(focusedCardBounds(row = 0, column = 2), viewport)
+
+        repeat(3) { pressCurrent(Key.DirectionRight) }
+        val last = focusedCardBounds(row = 0, column = 5)
+        assertEquals(
+            "last card trailing edge",
+            viewport.right.value - HORIZONTAL_ROW_PADDING.value,
+            last.right.value,
+            BOUNDS_TOLERANCE,
+        )
     }
 
     @Test
@@ -512,6 +576,17 @@ internal class SectionRowFocusTraversalTest {
         assertEquals("bottom after Right", before.bottom.value, after.bottom.value, BOUNDS_TOLERANCE)
     }
 
+    private fun focusedCardBounds(row: Int, column: Int): DpRect = composeRule
+        .onNodeWithText(itemTitle(row, column))
+        .assertIsFocused()
+        .getUnclippedBoundsInRoot()
+
+    private fun assertHorizontallyCentred(card: DpRect, viewport: DpRect) {
+        val cardCentre = (card.left.value + card.right.value) / 2f
+        val viewportCentre = (viewport.left.value + viewport.right.value) / 2f
+        assertEquals("focused card centre", viewportCentre, cardCentre, BOUNDS_TOLERANCE)
+    }
+
     private data class RowFixture(
         val config: SectionConfig,
         val state: SectionState,
@@ -530,16 +605,19 @@ internal class SectionRowFocusTraversalTest {
     private companion object {
         const val ROW_COUNT = 5
         const val VIEWPORT_TAG = "section_traversal_viewport"
+        const val HORIZONTAL_ROW_VIEWPORT_TAG = "horizontal_row_viewport"
         const val BOUNDS_TOLERANCE = 1f
         val VIEWPORT_HEIGHT = 420.dp
+        val HORIZONTAL_ROW_VIEWPORT_WIDTH = 864.dp
+        val HORIZONTAL_ROW_PADDING = 16.dp
         val MAX_VERTICAL_DELTA = 210.dp
 
-        // Matches the real device: a 960x540 dp screen with a 270 dp list viewport below the
-        // detail panel, and a 190 dp card (PuberTheme.Defaults.CatalogueRowItemHeight) — the
+        // Matches the real device: a 960x540 dp screen with a 205 dp list viewport below the
+        // detail panel, and a 150 dp card (PuberTheme.Defaults.CatalogueRowItemHeight) — the
         // exact numbers behind the bug this test guards against.
         const val SETTLE_VIEWPORT_TAG = "settle_viewport"
         const val SETTLE_HERO_TAG = "settle_hero"
-        val SETTLE_VIEWPORT_HEIGHT = 270.dp
+        val SETTLE_VIEWPORT_HEIGHT = 205.dp
         val focusedCardMatcher = isFocused() and hasAnyDescendant(
             hasText("row-", substring = true),
         )

@@ -1731,7 +1731,6 @@ internal class PlayerVM(
         skipSegmentsJob?.cancel()
         skipCountdownJob?.cancel()
         positionUpdateJob?.cancel()
-        super.onCleared()
     }
 
     private companion object {

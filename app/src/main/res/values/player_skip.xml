@@ -32,6 +32,5 @@
     <string name="settings_hagc_playback_description">Передает совместимому декодеру дополнительные HDR-метаданные яркости.</string>
 
     <!-- Debug -->
-    <string name="settings_debug_title">Отладка</string>
     <string name="settings_debug_overlay">Показывать информацию о потоке</string>
 </resources>

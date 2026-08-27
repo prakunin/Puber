@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="episode_schedule_season">Сезон %1$d</string>
-    <string name="episode_schedule_episode">Серия %1$d</string>
-    <string name="episode_schedule_episode_subtitle">%1$s · %2$s</string>
     <string name="episode_schedule_season_announcement">Премьера сезона</string>
     <string name="episode_schedule_release_date">Дата выхода: %1$s</string>
     <string name="episode_schedule_empty_title">Расписание недоступно</string>

@@ -7,6 +7,7 @@ import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.domain.interactor.bookmarks.BookmarkInteractor
+import com.kino.puber.domain.interactor.details.DetailsInteractor
 import com.kino.puber.ui.feature.bookmarks.vm.BookmarksVM
 import kotlinx.parcelize.Parcelize
 import com.kino.puber.core.di.puberViewModel
@@ -24,6 +25,7 @@ internal class BookmarksScreen : PuberScreen {
     private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
         scope(named(scopeId)) {
             scopedOf(::BookmarkInteractor)
+            scopedOf(::DetailsInteractor)
             scoped { VideoItemUIMapper(get(), get(), get()) }
             viewModelOf(::BookmarksVM)
         }

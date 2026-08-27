@@ -75,7 +75,7 @@ internal sealed interface DetailsButtonUIState {
 @Immutable
 internal data class DetailsInfoUIState(
     val ratings: List<RatingUIState>,
-    /** Kind, season count or duration, status, quality, sound, age -- one chip per fact. */
+    /** Kind, season count or duration, status, country, quality, sound, age -- one chip per fact. */
     val chips: List<String>,
     /** Audio tracks and subtitles, joined by " · ". */
     val factsLine: String,

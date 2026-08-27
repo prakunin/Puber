@@ -13,7 +13,6 @@
     <string name="history_context_play">Watch from beginning</string>
     <string name="history_context_delete_exact_media">Delete this entry</string>
     <string name="history_context_account_disclosure">Deleting this entry affects your account’s watch history.</string>
-    <string name="settings_updates_title">Updates</string>
     <string name="settings_auto_update_check">Automatically check for updates</string>
     <string name="settings_auto_update_check_subtitle">Puber will look for a new version when the app starts.</string>
     <string name="settings_check_for_updates_now">Check for updates now</string>
@@ -52,7 +51,6 @@
     <string name="under_development">Under development</string>
     <string name="loading">Loading</string>
     <string name="rating_content_description">Rating</string>
-    <string name="video_item_watched">Watched</string>
     <string name="context_menu_close">Close</string>
     <string name="context_menu_details">Details</string>
     <string name="context_menu_watch_movie">Watch movie</string>
@@ -62,7 +60,12 @@
     <string name="context_menu_remove_from_bookmarks">Remove from bookmarks</string>
     <string name="context_menu_add_to_watchlist">Add to “Watching”</string>
     <string name="context_menu_remove_from_watchlist">Remove from “Watching”</string>
-    <string name="context_menu_refresh_tab">Refresh section</string>
+    <string name="context_menu_folder">Folder: %1$s</string>
+    <string name="context_menu_remove_from_folder">Remove from folder</string>
+    <string name="context_menu_mark_watched">Mark as watched</string>
+    <string name="context_menu_unmark_watched">Mark as unwatched</string>
+    <string name="context_menu_mark_series_watched">Mark entire series as watched</string>
+    <string name="context_menu_unmark_series_watched">Mark entire series as unwatched</string>
     <string name="context_menu_mark_episode_watched">Mark episode as watched</string>
     <string name="context_menu_unmark_episode_watched">Mark episode as unwatched</string>
     <string name="context_menu_mark_season_watched">Mark season as watched</string>
@@ -105,7 +108,6 @@
     <string name="device_settings_software">Software: %1$s</string>
     <string name="device_settings_retry">Retry</string>
     <string name="device_settings_not_supported">Not supported by this device</string>
-    <string name="device_settings_restart_required">Restart the app to apply</string>
     <string name="settings_watch_index_title">Watch history</string>
     <string name="settings_watch_index_description">Data used for watched markers and hiding watched content</string>
     <string name="settings_watch_index_fully_watched">Marked as watched</string>
@@ -160,11 +162,9 @@
     <string name="content_section_all">All</string>
     <string name="settings_startup_tab">Startup tab</string>
     <string name="main_press_back_again_to_exit">Press Back again to exit</string>
-    <string name="settings_tab_config">Configure tabs</string>
     <string name="settings_menu_sections_title">Sections in the menu</string>
     <string name="settings_menu_sections_description">What the menu carries. A hidden section is not offered as the startup tab</string>
     <string name="settings_menu_section_is_startup_tab">Selected as the startup tab</string>
-    <string name="settings_content_title">Content</string>
     <string name="settings_show_anime">Anime in general lists</string>
     <string name="settings_show_anime_description">Doesn’t affect personal lists or the “Anime” tab</string>
     <string name="settings_hide_watched">Hide watched content</string>
@@ -197,7 +197,6 @@
     <string name="api_domain_auto_failed">Couldn’t find a working KinoPub domain automatically. Enter a current mirror manually.</string>
     <string name="api_domain_reset_done">Mirror reset. The primary domain is now in use.</string>
     <string name="api_domain_open_action">Change KinoPub mirror</string>
-    <string name="api_domain_settings_title">KinoPub access</string>
     <string name="api_domain_settings_subtitle">Update the mirror if the service is unavailable.</string>
     <string name="api_domain_qr_caption">Where to get a mirror</string>
     <string name="api_domain_mirror_site">https://mos-gorsud.site/</string>
@@ -229,22 +228,15 @@
     <string name="player_info_buffer_preset">Buffer preset</string>
     <string name="player_info_dropped_frames">Dropped frames</string>
     <string name="player_info_unknown">—</string>
-    <string name="player_info_close">Close</string>
     <string name="player_info_section_video">VIDEO</string>
     <string name="player_info_section_audio">AUDIO</string>
     <string name="player_info_section_playback">PLAYBACK</string>
-    <string name="player_panel_sound">SOUND</string>
-    <string name="player_panel_audio">AUDIO</string>
-    <string name="player_panel_subtitles">SUBTITLES</string>
     <string name="player_subtitles_off">Off</string>
     <string name="player_subtitle_variant_label">%1$s · variant %2$d</string>
     <string name="player_subtitle_size">Aa Size</string>
     <string name="player_subtitle_size_small">Small</string>
     <string name="player_subtitle_size_medium">Medium</string>
     <string name="player_subtitle_size_large">Large</string>
-    <string name="player_panel_quality">QUALITY</string>
-    <string name="player_panel_speed">SPEED</string>
-    <string name="player_panel_aspect_ratio">ASPECT RATIO</string>
     <string name="player_panel_buffer">BUFFER</string>
     <string name="player_settings_title">Settings</string>
     <!-- Doors in the merged panel root; the upper-case player_panel_* stay as section headers. -->
@@ -266,7 +258,6 @@
     <string name="player_buffer_max">Max (128 MB / 300s)</string>
     <string name="player_fast_dns">Fast DNS</string>
     <string name="player_fast_dns_hint">Use system DNS for video</string>
-    <string name="player_speed_normal">Normal</string>
     <string name="player_aspect_auto">Auto</string>
     <string name="player_sound_stereo">Stereo 2.0</string>
     <string name="player_aspect_stretch">Stretch</string>
@@ -278,7 +269,6 @@
         <item quantity="other">%d seconds left</item>
     </plurals>
     <string name="player_next_episode_cancel">Cancel</string>
-    <string name="player_series_completed">Series completed</string>
     <string name="player_resume_title">Resume from %s?</string>
     <string name="player_resume_continue">Continue</string>
     <string name="player_resume_from_start">From beginning</string>
@@ -308,10 +298,8 @@
     <string name="settings_ok_toggles_play_pause_subtitle">When disabled, OK shows the controls. Pause remains available from the ⏯ button and the remote’s media keys.</string>
     <string name="settings_show_mark_watched_button">Watched button in player</string>
     <string name="settings_show_mark_watched_button_subtitle">Lets you manually mark the current movie or episode as watched.</string>
-    <string name="settings_debug_title">Debug</string>
     <string name="settings_debug_overlay">Show stream information</string>
 
-    <string name="video_details_label_season">Season</string>
     <string name="duration_days_hours_minutes">%1$d d %2$d hr %3$d min</string>
     <string name="duration_days_hours">%1$d d %2$d hr</string>
     <string name="duration_days_minutes">%1$d d %2$d min</string>
@@ -326,7 +314,6 @@
     <string name="video_details_button_watch_series">Watch series</string>
     <string name="video_details_button_trailer">Trailer</string>
     <string name="video_details_trailer_unavailable">Trailer unavailable</string>
-    <string name="video_details_button_select_season">Select season</string>
     <string name="video_details_button_add_to_watchlist">Watch later</string>
     <string name="video_details_button_add_to_bookmarks">Add to bookmarks</string>
     <string name="video_details_button_mark_watched">Mark as watched</string>
@@ -340,21 +327,6 @@
     <string name="video_details_bookmark_added_to_folder">Added to “%1$s”</string>
     <string name="video_details_bookmark_removed_from_folder">Removed from “%1$s”</string>
     <string name="video_details_watched_removed">Marked as unwatched</string>
-    <string name="video_details_info_title">Details</string>
-    <string name="video_details_info_original_title">Original title</string>
-    <string name="video_details_info_year">Year</string>
-    <string name="video_details_info_seasons">Seasons</string>
-    <string name="video_details_info_duration">Duration</string>
-    <string name="video_details_info_genres">Genres</string>
-    <string name="video_details_info_country">Country</string>
-    <string name="video_details_info_age_rating">Age rating</string>
-    <string name="video_details_info_translation">Translation</string>
-    <string name="video_details_info_audio_tracks">Audio tracks</string>
-    <string name="video_details_info_subtitles">Subtitles</string>
-    <string name="video_details_info_director">Director</string>
-    <string name="video_details_info_cast">Cast</string>
-    <string name="video_details_info_quality">Quality</string>
-    <string name="video_details_info_sound">Sound</string>
     <string name="video_details_info_sound_surround">Surround sound</string>
     <string name="video_details_facts_audio_tracks">Audio tracks: %1$d</string>
     <string name="video_details_facts_subtitles">Subtitles: %1$d</string>
@@ -415,9 +387,6 @@
     <string name="device_settings_tmdb_attribution_notice">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
     <string name="tmdb_source_notice">Data and images come from TMDB; dates may change.</string>
 
-    <string name="episode_schedule_season">Season %1$d</string>
-    <string name="episode_schedule_episode">Episode %1$d</string>
-    <string name="episode_schedule_episode_subtitle">%1$s · %2$s</string>
     <string name="episode_schedule_season_announcement">Season premiere</string>
     <string name="episode_schedule_release_date">Release date: %1$s</string>
     <string name="episode_schedule_empty_title">No schedule available</string>
@@ -427,11 +396,7 @@
     <string name="episode_schedule_error_title">Couldn’t load the schedule</string>
     <string name="episode_schedule_retry">Retry</string>
 
-    <string name="player_scheduled_episode_date">Release date: %1$s</string>
-    <string name="player_scheduled_season_date">Season premiere: %1$s</string>
-
     <string name="video_details_button_schedule">Schedule</string>
-    <string name="video_details_info_status">Status</string>
     <string name="video_details_series_status_finished">Series ended</string>
     <string name="video_details_series_status_ongoing">Series ongoing</string>
 
@@ -442,5 +407,4 @@
     <string name="settings_hagc_playback_description">Passes extra HDR brightness metadata to a decoder that supports it.</string>
 
     <string name="search_actor_title">Titles featuring %1$s</string>
-    <string name="search_actor_no_results">No results for this actor</string>
 </resources>

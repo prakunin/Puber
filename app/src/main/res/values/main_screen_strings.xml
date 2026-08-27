@@ -34,11 +34,9 @@
     <string name="content_section_hot">Горячие</string>
     <string name="content_section_all">Все</string>
     <string name="settings_startup_tab">Стартовая вкладка</string>
-    <string name="settings_tab_config">Настройка табов</string>
     <string name="settings_menu_sections_title">Секции меню</string>
     <string name="settings_menu_sections_description">Что показывать в меню. Скрытые секции не предлагаются как стартовая вкладка</string>
     <string name="settings_menu_section_is_startup_tab">Выбрана стартовой вкладкой</string>
-    <string name="settings_content_title">Контент</string>
     <string name="settings_show_anime">Аниме в общих списках</string>
     <string name="settings_show_anime_description">Не влияет на личные списки и вкладку «Аниме»</string>
     <string name="settings_hide_watched">Скрывать просмотренное</string>

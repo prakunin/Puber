@@ -7,4 +7,5 @@ data class TvContextMenuAction(
     val id: String,
     val title: String,
     val enabled: Boolean = true,
+    val destructive: Boolean = false,
 )

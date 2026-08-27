@@ -44,6 +44,7 @@ internal fun HistoryContextMenu(
                 id = ACTION_DELETE_EXACT_MEDIA,
                 title = stringResource(R.string.history_context_delete_exact_media),
                 enabled = isDeleteExactMediaAvailable,
+                destructive = true,
             ),
         ),
         onAction = { action ->

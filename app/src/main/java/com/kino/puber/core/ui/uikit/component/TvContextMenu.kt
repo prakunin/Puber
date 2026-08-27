@@ -3,8 +3,12 @@ package com.kino.puber.core.ui.uikit.component
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -34,6 +38,8 @@ import kotlinx.coroutines.delay
 private const val ACTION_WATCH = "watch"
 private const val ACTION_ADD_TO_SAVED = "add_to_saved"
 private const val ACTION_REMOVE_FROM_SAVED = "remove_from_saved"
+private const val ACTION_MARK_WATCHED = "mark_watched"
+private const val ACTION_UNMARK_WATCHED = "unmark_watched"
 private const val ACTION_MARK_EPISODE_WATCHED = "mark_episode_watched"
 private const val ACTION_MARK_EPISODE_UNWATCHED = "mark_episode_unwatched"
 private const val ACTION_MARK_SEASON_WATCHED = "mark_season_watched"
@@ -44,6 +50,7 @@ private const val CONTEXT_MENU_FOCUS_RETRY_DELAY_MS = 50L
 private const val LONG_SELECT_REPEAT_THRESHOLD = 1
 
 private val ContextMenuWidth = 520.dp
+private val ContextMenuShape = RoundedCornerShape(18.dp)
 
 internal val LocalTvContextMenuLongSelectState =
     compositionLocalOf<TvContextMenuLongSelectState> {
@@ -91,6 +98,7 @@ internal fun TvContextMenuDialog(
     ) { dismiss ->
         Card(
             modifier = modifier.width(ContextMenuWidth),
+            shape = ContextMenuShape,
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
@@ -153,21 +161,32 @@ private fun ContextMenuActions(
             onClick = { onAction(action) },
             enabled = action.enabled,
             primary = index == 0,
-            modifier = if (index == initialFocusActionIndex) {
-                Modifier.focusRequester(actionFocusRequester)
-            } else {
-                Modifier
-            },
+            destructive = action.destructive,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (index == initialFocusActionIndex) {
+                        Modifier.focusRequester(actionFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                ),
         )
     }
+    Spacer(modifier = Modifier.height(4.dp))
     TvSafeButton(
         text = stringResource(R.string.context_menu_close),
         onClick = onClose,
-        modifier = if (initialFocusActionIndex < 0) {
-            Modifier.focusRequester(closeFocusRequester)
-        } else {
-            Modifier
-        },
+        quiet = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (initialFocusActionIndex < 0) {
+                    Modifier.focusRequester(closeFocusRequester)
+                } else {
+                    Modifier
+                }
+            ),
     )
 }
 
@@ -176,22 +195,47 @@ internal fun VideoItemContextMenuDialog(
     item: VideoItemUIState?,
     onDismiss: () -> Unit,
     onAction: (UIAction) -> Unit,
+    removeFromFolderTitle: String? = null,
+    onWatchedChanged: ((VideoItemUIState, Boolean) -> Unit)? = null,
 ) {
     if (item == null) return
+    val folderTitle = removeFromFolderTitle?.takeIf(String::isNotBlank)
     val savedAction = TvContextMenuAction(
         id = if (item.isSaved) ACTION_REMOVE_FROM_SAVED else ACTION_ADD_TO_SAVED,
-        title = stringResource(
-            when {
-                item.isSeriesLike && item.isSaved -> R.string.context_menu_remove_from_watchlist
-                item.isSeriesLike -> R.string.context_menu_add_to_watchlist
-                item.isSaved -> R.string.context_menu_remove_from_bookmarks
-                else -> R.string.context_menu_add_to_bookmarks
-            }
-        ),
+        title = if (item.isSaved && folderTitle != null) {
+            stringResource(R.string.context_menu_remove_from_folder)
+        } else {
+            stringResource(
+                when {
+                    item.isSeriesLike && item.isSaved -> R.string.context_menu_remove_from_watchlist
+                    item.isSeriesLike -> R.string.context_menu_add_to_watchlist
+                    item.isSaved -> R.string.context_menu_remove_from_bookmarks
+                    else -> R.string.context_menu_add_to_bookmarks
+                }
+            )
+        },
+        destructive = item.isSaved,
     )
+    val watchedAction = onWatchedChanged
+        ?.let {
+            TvContextMenuAction(
+                id = if (item.isWatched) ACTION_UNMARK_WATCHED else ACTION_MARK_WATCHED,
+                title = stringResource(
+                    when {
+                        item.isSeriesLike && item.isWatched -> R.string.context_menu_unmark_series_watched
+                        item.isSeriesLike -> R.string.context_menu_mark_series_watched
+                        item.isWatched -> R.string.context_menu_unmark_watched
+                        else -> R.string.context_menu_mark_watched
+                    }
+                ),
+            )
+        }
     TvContextMenuDialog(
         title = item.title,
-        actions = listOf(
+        supportingText = folderTitle?.let {
+            stringResource(R.string.context_menu_folder, it)
+        },
+        actions = listOfNotNull(
             TvContextMenuAction(
                 id = ACTION_WATCH,
                 title = stringResource(
@@ -202,6 +246,7 @@ internal fun VideoItemContextMenuDialog(
                     }
                 ),
             ),
+            watchedAction,
             savedAction,
         ),
         onAction = { action ->
@@ -209,6 +254,8 @@ internal fun VideoItemContextMenuDialog(
                 ACTION_WATCH -> onAction(CommonAction.ItemPlayed(item))
                 ACTION_ADD_TO_SAVED -> onAction(CommonAction.ItemSavedChanged(item, true))
                 ACTION_REMOVE_FROM_SAVED -> onAction(CommonAction.ItemSavedChanged(item, false))
+                ACTION_MARK_WATCHED -> onWatchedChanged?.invoke(item, true)
+                ACTION_UNMARK_WATCHED -> onWatchedChanged?.invoke(item, false)
             }
         },
         onDismiss = onDismiss,

@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.details.model
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.R
 import com.kino.puber.data.api.models.Audio
+import com.kino.puber.data.api.models.Country
 import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
@@ -121,6 +122,23 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
+    fun `production countries are shown in the information chips`() {
+        val item = Item(
+            id = 1,
+            title = "Фильм",
+            type = ItemType.MOVIE,
+            countries = listOf(
+                Country(id = 1, title = "Франция"),
+                Country(id = 2, title = "Бельгия"),
+            ),
+        )
+
+        val chips = mapper.map(item, isInWatchlist = false).info.chips
+
+        assertTrue(chips.contains("Франция, Бельгия")) { chips.toString() }
+    }
+
+    @Test
     fun `an item with nothing to state has an empty facts line`() {
         val item = Item(id = 1, title = "Фильм", type = ItemType.MOVIE)
 
@@ -216,16 +234,16 @@ class DetailsScreenUIMapperTest {
     }
 
     @Test
-    fun map_chips_carrySeriesStatusOnlyWhenKnownAndOnlyForSeries() {
+    fun map_chips_alwaysCarrySeriesStatusAndNeverCarryItForFilms() {
         val finished = "string_${R.string.video_details_series_status_finished}"
         val ongoing = "string_${R.string.video_details_series_status_ongoing}"
 
         assertTrue(mapper.map(series(trailer = null, finished = true)).info.chips.contains(finished))
         assertTrue(mapper.map(series(trailer = null, finished = false)).info.chips.contains(ongoing))
 
-        val unknown = mapper.map(series(trailer = null, finished = null)).info.chips
-        assertFalse(unknown.contains(finished)) { unknown.toString() }
-        assertFalse(unknown.contains(ongoing)) { unknown.toString() }
+        val omittedByApi = mapper.map(series(trailer = null, finished = null)).info.chips
+        assertFalse(omittedByApi.contains(finished)) { omittedByApi.toString() }
+        assertTrue(omittedByApi.contains(ongoing)) { omittedByApi.toString() }
 
         val film = mapper.map(movie(trailer = null, finished = true)).info.chips
         assertFalse(film.contains(finished)) { film.toString() }

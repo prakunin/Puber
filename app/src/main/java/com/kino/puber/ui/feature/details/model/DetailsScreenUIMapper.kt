@@ -269,16 +269,21 @@ internal class DetailsScreenUIMapper(
 
     private fun mapSeriesStatus(item: Item): String? {
         if (!item.type.isSeriesLike()) return null
-        return when (item.finished) {
-            true -> resources.getString(R.string.video_details_series_status_finished)
-            false -> resources.getString(R.string.video_details_series_status_ongoing)
-            null -> null
-        }
+        return resources.getString(
+            if (item.finished == true) {
+                R.string.video_details_series_status_finished
+            } else {
+                // KinoPub may omit `finished` for a series that is still being released. An absent
+                // flag therefore carries the same user-facing meaning as an explicit false.
+                R.string.video_details_series_status_ongoing
+            }
+        )
     }
 
     /**
-     * What the thing is, not what is inside it: kind, size, quality, sound, age. Tracks and
-     * subtitles stay on the line below -- they are read only once the choice is already made.
+     * What the thing is, not what is inside it: kind, size, production country, quality, sound,
+     * age. Tracks and subtitles stay on the line below -- they are read only once the choice is
+     * already made.
      */
     private fun buildChips(item: Item): List<String> = buildList {
         val isSeriesLike = item.type.isSeriesLike()
@@ -297,6 +302,12 @@ internal class DetailsScreenUIMapper(
                 add(with(itemMapper) { total.formatDurationWithResources() })
             }
         }
+        item.countries.orEmpty()
+            .map { country -> country.title.trim() }
+            .filter { country -> country.isNotEmpty() }
+            .joinToString(", ")
+            .takeIf(String::isNotEmpty)
+            ?.let(::add)
         item.displayQuality()?.let(::add)
         if (item.ac3 == 1 || item.mediaItemsHaveSurroundSound()) {
             add(resources.getString(R.string.video_details_info_sound_surround))

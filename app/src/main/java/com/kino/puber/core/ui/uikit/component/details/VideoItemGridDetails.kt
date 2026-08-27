@@ -135,6 +135,7 @@ data class DescriptionLayout(
     val factsLineHeight: TextUnit,
     val betweenFactLines: Dp,
     val factsToPlot: Dp,
+    val plotSize: TextUnit,
     val plotLineHeight: TextUnit,
 ) {
     companion object {
@@ -151,6 +152,7 @@ data class DescriptionLayout(
             factsLineHeight = TextUnit.Unspecified,
             betweenFactLines = 4.dp,
             factsToPlot = 8.dp,
+            plotSize = TextUnit.Unspecified,
             plotLineHeight = TextUnit.Unspecified,
         )
 
@@ -169,7 +171,8 @@ data class DescriptionLayout(
             ratingsToFacts = 5.dp,
             factsSize = 10.sp,
             factsLineHeight = 15.sp,
-            plotLineHeight = 15.sp,
+            plotSize = 14.sp,
+            plotLineHeight = 17.sp,
         )
     }
 }
@@ -399,7 +402,7 @@ fun VideoDetailsDescription(
                         .fillMaxWidth(),
                     text = state.description,
                     style = MaterialTheme.typography.bodySmall
-                        .override(lineHeight = layout.plotLineHeight),
+                        .override(size = layout.plotSize, lineHeight = layout.plotLineHeight),
                     overflow = TextOverflow.Ellipsis,
                     maxLines = descriptionMaxLines,
                 )
@@ -437,18 +440,22 @@ private fun VideoDetailsPoster(
 
         var trailerRendered by remember(trailerUrl) { mutableStateOf(false) }
 
-        PosterStill(
-            imageUrl = currentUrl,
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(),
-            alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
-            onError = {
-                if (urlIndex < imageUrls.lastIndex) {
-                    urlIndex++
-                }
-            },
-        )
+        // A fitted trailer may not occupy the whole poster frame. Remove the still once video is
+        // actually visible so the larger poster cannot show through around the player.
+        if (trailerUrl == null || !trailerRendered) {
+            PosterStill(
+                imageUrl = currentUrl,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(),
+                alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
+                onError = {
+                    if (urlIndex < imageUrls.lastIndex) {
+                        urlIndex++
+                    }
+                },
+            )
+        }
 
         if (trailerUrl != null) {
             TrailerPreviewPlayer(

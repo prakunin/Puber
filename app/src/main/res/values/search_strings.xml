@@ -5,5 +5,4 @@
     <string name="search_start_hint">Введите название фильма или сериала. Поиск начнётся автоматически после 3 символов.</string>
     <string name="search_no_results">Ничего не найдено</string>
     <string name="search_min_query">Введите минимум 3 символа</string>
-    <string name="search_actor_no_results">Ничего не найдено по этому актёру</string>
 </resources>

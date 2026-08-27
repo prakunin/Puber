@@ -29,15 +29,11 @@
     <string name="player_info_buffer_preset">Режим буфера</string>
     <string name="player_info_dropped_frames">Пропущено кадров</string>
     <string name="player_info_unknown">—</string>
-    <string name="player_info_close">Закрыть</string>
     <string name="player_info_section_video">ВИДЕО</string>
     <string name="player_info_section_audio">АУДИО</string>
     <string name="player_info_section_playback">ВОСПРОИЗВЕДЕНИЕ</string>
 
     <!-- Audio and subtitle pages -->
-    <string name="player_panel_sound">ЗВУК</string>
-    <string name="player_panel_audio">АУДИО</string>
-    <string name="player_panel_subtitles">СУБТИТРЫ</string>
     <string name="player_subtitles_off">Выкл.</string>
     <string name="player_subtitle_variant_label">%1$s · вариант %2$d</string>
     <string name="player_subtitle_size">Аа Размер</string>
@@ -46,9 +42,6 @@
     <string name="player_subtitle_size_large">Крупный</string>
 
     <!-- Settings Panel -->
-    <string name="player_panel_quality">КАЧЕСТВО</string>
-    <string name="player_panel_speed">СКОРОСТЬ</string>
-    <string name="player_panel_aspect_ratio">СООТНОШЕНИЕ</string>
     <string name="player_panel_buffer">БУФЕР</string>
     <string name="player_settings_title">Настройки</string>
     <!-- Двери в корне объединённой панели: заглавные player_panel_* остаются заголовками секций. -->
@@ -70,7 +63,6 @@
     <string name="player_buffer_max">Макс (128 МБ / 300с)</string>
     <string name="player_fast_dns">Быстрый DNS</string>
     <string name="player_fast_dns_hint">Системный DNS для видео</string>
-    <string name="player_speed_normal">Норм.</string>
     <string name="player_aspect_auto">Авто</string>
     <string name="player_sound_stereo">Стерео 2.0</string>
     <string name="player_aspect_stretch">Растянуть</string>
@@ -86,7 +78,6 @@
         <item quantity="other">осталось %d секунды</item>
     </plurals>
     <string name="player_next_episode_cancel">Отмена</string>
-    <string name="player_series_completed">Сериал завершён</string>
 
     <!-- Resume Dialog -->
     <string name="player_resume_title">Продолжить просмотр с %s?</string>
@@ -107,6 +98,4 @@
     <string name="player_season_episode_title">%1$d сезон, %2$d серия, %3$s</string>
     <string name="player_season_episodes_count">%1$d сезон, %2$d серий</string>
     <string name="player_episode_untitled">Серия</string>
-    <string name="player_scheduled_episode_date">Дата выхода: %1$s</string>
-    <string name="player_scheduled_season_date">Премьера сезона: %1$s</string>
 </resources>

@@ -176,7 +176,6 @@ internal class MainVM(
 
     override fun onCleared() {
         tabAppRouterHolder.dispose()
-        super.onCleared()
     }
 
     internal companion object {
