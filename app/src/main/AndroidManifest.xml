@@ -4,9 +4,8 @@
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <!-- The Fire TV home row is published as notifications, and from API 33 posting one without
-         this permission silently does nothing. Declaring it only makes the app eligible to ask:
-         nothing requests it at runtime yet, so on a Fire OS build at API 33 or above the home row
-         is still silently empty. This quiets lint; it does not yet fix the feature. -->
+         this permission silently does nothing. Declaring it only makes the app eligible to ask;
+         MainActivity does the asking, and only on a Fire TV that actually needs it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>

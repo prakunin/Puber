@@ -120,6 +120,13 @@ internal interface PlaybackControl {
     fun release()
 }
 
+// Opted in at the class rather than per member, and not only for brevity: lint reports the
+// unstable types of `trackSelector`, `bufferAllocator`, `bandwidthMeter` and the `mediaCache`
+// constructor property against the declarations themselves, and no annotation on a property
+// satisfies it - neither the bare form, which already lands on the backing field, nor `@get:`.
+// Eleven member annotations left twenty-two errors standing. The cost is that a method added here
+// later reaches experimental Media3 without the compiler asking it to say so, which is a fair
+// price only because this class is an ExoPlayer wrapper and nothing else.
 @OptIn(UnstableApi::class)
 internal class PlaybackController(
     private val context: Context,
