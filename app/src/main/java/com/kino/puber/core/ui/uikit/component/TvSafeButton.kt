@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,33 +54,9 @@ internal fun TvSafeButton(
     var isSelectPressed by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(ButtonCornerRadius)
     val colorScheme = MaterialTheme.colorScheme
-    val containerColor = when {
-        !enabled -> colorScheme.surfaceVariant.copy(alpha = 0.36f)
-        isFocused && destructive -> colorScheme.error
-        isFocused && quiet -> colorScheme.surfaceVariant
-        isFocused -> colorScheme.onSurface
-        destructive -> colorScheme.errorContainer.copy(alpha = 0.22f)
-        quiet -> Color.Transparent
-        primary -> colorScheme.primaryContainer
-        else -> colorScheme.surface
-    }
-    val contentColor = when {
-        !enabled -> colorScheme.onSurface.copy(alpha = 0.38f)
-        isFocused && destructive -> colorScheme.onError
-        isFocused && quiet -> colorScheme.onSurface
-        isFocused -> colorScheme.surface
-        destructive -> colorScheme.error
-        quiet -> colorScheme.onSurfaceVariant
-        primary -> colorScheme.onPrimaryContainer
-        else -> colorScheme.onSurface
-    }
-    val borderColor = when {
-        isFocused -> colorScheme.primary
-        destructive -> colorScheme.error.copy(alpha = 0.72f)
-        quiet -> colorScheme.outlineVariant.copy(alpha = 0.72f)
-        primary -> null
-        else -> colorScheme.outline
-    }
+    val containerColor = colorScheme.containerColor(enabled, isFocused, destructive, quiet, primary)
+    val contentColor = colorScheme.contentColor(enabled, isFocused, destructive, quiet, primary)
+    val borderColor = colorScheme.borderColor(isFocused, destructive, quiet, primary)
 
     Box(
         modifier = modifier
@@ -175,3 +152,50 @@ private fun Modifier.onTvSelectClick(
 }
 
 private fun Key.isSelectKey(): Boolean = this == Key.DirectionCenter || this == Key.Enter
+
+private fun ColorScheme.containerColor(
+    enabled: Boolean,
+    isFocused: Boolean,
+    isDestructive: Boolean,
+    isQuiet: Boolean,
+    isPrimary: Boolean,
+): Color = when {
+    !enabled -> surfaceVariant.copy(alpha = 0.36f)
+    isFocused && isDestructive -> error
+    isFocused && isQuiet -> surfaceVariant
+    isFocused -> onSurface
+    isDestructive -> errorContainer.copy(alpha = 0.22f)
+    isQuiet -> Color.Transparent
+    isPrimary -> primaryContainer
+    else -> surface
+}
+
+private fun ColorScheme.contentColor(
+    enabled: Boolean,
+    isFocused: Boolean,
+    isDestructive: Boolean,
+    isQuiet: Boolean,
+    isPrimary: Boolean,
+): Color = when {
+    !enabled -> onSurface.copy(alpha = 0.38f)
+    isFocused && isDestructive -> onError
+    isFocused && isQuiet -> onSurface
+    isFocused -> surface
+    isDestructive -> error
+    isQuiet -> onSurfaceVariant
+    isPrimary -> onPrimaryContainer
+    else -> onSurface
+}
+
+private fun ColorScheme.borderColor(
+    isFocused: Boolean,
+    isDestructive: Boolean,
+    isQuiet: Boolean,
+    isPrimary: Boolean,
+): Color? = when {
+    isFocused -> primary
+    isDestructive -> error.copy(alpha = 0.72f)
+    isQuiet -> outlineVariant.copy(alpha = 0.72f)
+    isPrimary -> null
+    else -> outline
+}

@@ -112,6 +112,10 @@ internal class DetailsInteractor(
                 id = id,
                 status = if (watched) WATCHED_STATUS else UNWATCHED_STATUS,
             ).getOrThrow()
+        } catch (cancellation: CancellationException) {
+            // Reverting here would be a suspending call in a cancelled scope: it cannot finish, and
+            // the caller is being torn down anyway. Rethrown untouched so the cancellation lands.
+            throw cancellation
         } catch (error: Throwable) {
             // A pending row is never corrected by a sync, so a failed toggle must not leave one
             // behind — that would hide the movie for good.

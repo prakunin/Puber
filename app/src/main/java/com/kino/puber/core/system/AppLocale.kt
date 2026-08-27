@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.LocaleList
+import androidx.core.content.edit
 import com.kino.puber.core.model.AppLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +38,7 @@ object AppLocale {
     }
 
     fun store(context: Context, language: AppLanguage) {
-        preferences(context).edit().putString(KEY_LANGUAGE, language.name).apply()
+        preferences(context).edit { putString(KEY_LANGUAGE, language.name) }
         languageState.value = language
     }
 

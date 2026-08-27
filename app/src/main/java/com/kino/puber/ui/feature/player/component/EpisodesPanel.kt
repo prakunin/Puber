@@ -85,11 +85,11 @@ private val FullScreenPanelColor = Color(0xFF090B0F)
 internal fun EpisodesPanel(
     visible: Boolean,
     episodes: VideoGridUIState?,
+    modifier: Modifier = Modifier,
     initialFocusedItemId: Int? = null,
     onEpisodeSelected: (VideoItemUIState) -> Unit,
     onEpisodeContextMenu: ((VideoItemUIState) -> Unit)? = null,
     allowFocusExit: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -134,12 +134,12 @@ internal fun EpisodesPanel(
 internal fun PlayerEpisodesPanel(
     visible: Boolean,
     episodes: EpisodesPanelUIState?,
+    modifier: Modifier = Modifier,
     initialFocusedItemId: Int? = null,
     onEpisodeSelected: (VideoItemUIState) -> Unit,
     onEpisodeContextMenu: ((VideoItemUIState) -> Unit)? = null,
     onDismiss: () -> Unit,
     allowFocusExit: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     val currentSeason = episodes?.seasons
         ?.firstOrNull { season -> season.episodes.any { it.id == initialFocusedItemId } }

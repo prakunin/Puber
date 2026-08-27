@@ -42,8 +42,8 @@ internal fun HistoryCard(
     onClick: () -> Unit,
     onContextMenu: () -> Unit,
     onFocus: () -> Unit,
-    blockRightFocusExit: Boolean = false,
     modifier: Modifier = Modifier,
+    blockRightFocusExit: Boolean = false,
 ) {
     val focusRequester = remember(state.rowKey) { FocusRequester() }
     val contentFocusActive = LocalContentFocusActive.current

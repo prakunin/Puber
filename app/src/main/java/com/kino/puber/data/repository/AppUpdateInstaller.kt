@@ -2,10 +2,10 @@ package com.kino.puber.data.repository
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import java.io.File
 
 internal class AppUpdateInstaller(
@@ -24,7 +24,7 @@ internal class AppUpdateInstaller(
 
         val intent = Intent(
             Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-            Uri.parse("package:${context.packageName}"),
+            ("package:${context.packageName}").toUri(),
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }

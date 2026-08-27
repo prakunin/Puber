@@ -6,8 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import com.kino.puber.MainActivity
 import com.kino.puber.R
 import com.kino.puber.core.contentlink.ContentUriCodec
@@ -36,13 +37,13 @@ internal class FireTvHomePublisher(
 
     override suspend fun clearAccountPrograms() {
         storedIds().values.forEach(notificationManager::cancel)
-        preferences.edit().remove(KEY_NOTIFICATION_IDS).apply()
+        preferences.edit { remove(KEY_NOTIFICATION_IDS) }
     }
 
     private fun buildNotification(program: PublishedProgram, notificationId: Int): Notification {
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse(uriCodec.internalUri(program.target))
+            data = (uriCodec.internalUri(program.target)).toUri()
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -104,9 +105,7 @@ internal class FireTvHomePublisher(
         .toMap()
 
     private fun storeIds(ids: Map<String, Int>) {
-        preferences.edit()
-            .putStringSet(KEY_NOTIFICATION_IDS, ids.mapTo(mutableSetOf()) { "${it.key}:${it.value}" })
-            .apply()
+        preferences.edit { putStringSet(KEY_NOTIFICATION_IDS, ids.mapTo(mutableSetOf()) { "${it.key}:${it.value}" }) }
     }
 
     private companion object {

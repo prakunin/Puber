@@ -1,5 +1,6 @@
 package com.kino.puber.data.repository
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.media.MediaCodecInfo
@@ -74,6 +75,10 @@ internal class DeviceInfoRepository(
         }
     }
 
+    // DolbyVisionProfileDvheSt is a compile-time int constant, so the comparison inlines and
+    // nothing looks the field up at runtime. A device below API 27 simply never reports that
+    // profile, which is the answer this function wants anyway.
+    @SuppressLint("InlinedApi")
     private fun isHdrCodecSupported(): Boolean {
         return hevcDecoders().any { codec ->
             codec.getCapabilitiesForType(HEVC_MIME_TYPE).profileLevels.any { profileLevel ->

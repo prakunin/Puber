@@ -1,6 +1,7 @@
 package com.kino.puber.data.repository
 
 import android.content.Context
+import androidx.core.content.edit
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.BufferPreset
 
@@ -31,7 +32,7 @@ class PlayerPreferencesRepository(context: Context) {
         subtitleLang: String?,
         subtitleUrl: String?,
     ) {
-        prefs.edit().apply {
+        prefs.edit {
             if (audioLang != null) {
                 putString("${KEY_AUDIO_LANG_PREFIX}$itemId", audioLang)
             } else {
@@ -52,7 +53,6 @@ class PlayerPreferencesRepository(context: Context) {
             } else {
                 remove("${KEY_SUBTITLE_URL_PREFIX}$itemId")
             }
-            apply()
         }
     }
 
@@ -62,57 +62,57 @@ class PlayerPreferencesRepository(context: Context) {
     }
 
     fun saveSubtitleSize(size: SubtitleSize) {
-        prefs.edit().putInt(KEY_SUBTITLE_SIZE, size.ordinal).apply()
+        prefs.edit { putInt(KEY_SUBTITLE_SIZE, size.ordinal) }
     }
 
     var skipIntroEnabled: Boolean
         get() = prefs.getBoolean(KEY_SKIP_INTRO, true)
-        set(value) = prefs.edit().putBoolean(KEY_SKIP_INTRO, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_SKIP_INTRO, value) }
 
     var skipRecapEnabled: Boolean
         get() = prefs.getBoolean(KEY_SKIP_RECAP, true)
-        set(value) = prefs.edit().putBoolean(KEY_SKIP_RECAP, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_SKIP_RECAP, value) }
 
     var skipCreditsEnabled: Boolean
         get() = prefs.getBoolean(KEY_SKIP_CREDITS, true)
-        set(value) = prefs.edit().putBoolean(KEY_SKIP_CREDITS, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_SKIP_CREDITS, value) }
 
     var debugOverlayEnabled: Boolean
         get() = prefs.getBoolean(KEY_DEBUG_OVERLAY, false)
-        set(value) = prefs.edit().putBoolean(KEY_DEBUG_OVERLAY, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_DEBUG_OVERLAY, value) }
 
     /** When disabled, the D-pad OK button reveals the controls overlay instead of pausing. */
     var okTogglesPlayPause: Boolean
         get() = prefs.getBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, false)
-        set(value) = prefs.edit().putBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_OK_TOGGLES_PLAY_PAUSE, value) }
 
     /** Shows the manual watched-state control in the player's secondary actions. */
     var showMarkWatchedButton: Boolean
         get() = prefs.getBoolean(KEY_SHOW_MARK_WATCHED_BUTTON, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_MARK_WATCHED_BUTTON, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_SHOW_MARK_WATCHED_BUTTON, value) }
 
     var preferSurroundAudio: Boolean
         get() = prefs.getBoolean(KEY_PREFER_SURROUND, false)
-        set(value) = prefs.edit().putBoolean(KEY_PREFER_SURROUND, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_PREFER_SURROUND, value) }
 
     var bufferPreset: BufferPreset
         get() {
             val ordinal = prefs.getInt(KEY_BUFFER_PRESET, BufferPreset.AUTO.ordinal)
             return BufferPreset.entries.getOrElse(ordinal) { BufferPreset.AUTO }
         }
-        set(value) = prefs.edit().putInt(KEY_BUFFER_PRESET, value.ordinal).apply()
+        set(value) = prefs.edit { putInt(KEY_BUFFER_PRESET, value.ordinal) }
 
     var fastDnsEnabled: Boolean
         get() = prefs.getBoolean(KEY_FAST_DNS, true)
-        set(value) = prefs.edit().putBoolean(KEY_FAST_DNS, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_FAST_DNS, value) }
 
     var discardEmbeddedArtworkMetadata: Boolean
         get() = prefs.getBoolean(KEY_DISCARD_EMBEDDED_ARTWORK_METADATA, true)
-        set(value) = prefs.edit().putBoolean(KEY_DISCARD_EMBEDDED_ARTWORK_METADATA, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_DISCARD_EMBEDDED_ARTWORK_METADATA, value) }
 
     var hagcPlaybackEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAGC_PLAYBACK_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_HAGC_PLAYBACK_ENABLED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_HAGC_PLAYBACK_ENABLED, value) }
 
     private companion object {
         const val PREFS_NAME = "player_preferences"

@@ -74,9 +74,40 @@ android {
     lint {
         abortOnError = true
 
-        // The 112 warnings the run still reports are left as warnings on purpose. Promoting them
-        // is its own piece of work, not a side effect of turning the gate on.
+        // Warnings are not fatal, and five real ones are left standing on purpose. Three are
+        // IconLocation: the wordmark and the two QR bitmaps sit in `drawable/`, and moving them to
+        // `drawable-nodpi` stops the platform scaling them, which changes their size on a
+        // television and wants an eye on the screen rather than a build log. Two are
+        // PluralsCandidate on strings that carry a season number beside an episode count; a
+        // `<plurals>` takes one quantity, so those need splitting at the call sites.
+        //
+        // The checks disabled below are a different matter: they are advisories that would fire
+        // forever without anyone being wrong.
         warningsAsErrors = false
+
+        disable += setOf(
+            // Dependency freshness, not code quality. Upgrading AGP, Kotlin and the libraries is
+            // its own change with its own verification.
+            "GradleDependency",
+            "NewerVersionAvailable",
+            "AndroidGradlePluginVersion",
+
+            // This is an Android TV application. ChromeOS is not a target, so a missing x86_64
+            // ABI is the intended state rather than an oversight.
+            "ChromeOsAbiSupport",
+
+            // `autoVerify` needs an assetlinks.json served from kino.pub, a domain this fork does
+            // not control. The filter still works as a plain link; it just cannot be verified.
+            "AppLinkWarning",
+
+            // Locales are switched in-process by AppLocale. The Play Core call the check asks for
+            // belongs to app bundles, and releases here are APKs published on GitHub.
+            "AppBundleLocaleChanges",
+
+            // `localeConfig` is declared deliberately ahead of the API level that reads it; below
+            // API 33 the platform ignores the attribute and nothing is lost.
+            "UnusedAttribute",
+        )
     }
 
     buildFeatures {

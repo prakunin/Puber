@@ -3,7 +3,6 @@ package com.kino.puber.core.tvhome
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.tvprovider.media.tv.PreviewChannelHelper
@@ -43,11 +42,12 @@ internal class AndroidTvHomePublisher(
     private fun ensureChannel(): Long {
         val storedId = preferences.getLong(KEY_CHANNEL_ID, NO_ID)
         if (storedId != NO_ID && helper.getPreviewChannel(storedId) != null) return storedId
+        // Two different `toUri` in a row read as a typo: the first is Intent's, which serialises
+        // the intent to a string, and the second parses that string back into a Uri.
+        val appLink = Intent(context, MainActivity::class.java).toUri(Intent.URI_INTENT_SCHEME)
         val channel = PreviewChannel.Builder()
             .setDisplayName(context.getString(R.string.tv_home_continue_watching))
-            .setAppLinkIntentUri(
-                Intent(context, MainActivity::class.java).toUri(Intent.URI_INTENT_SCHEME).toUri(),
-            )
+            .setAppLinkIntentUri(appLink.toUri())
             .build()
         return helper.publishDefaultChannel(channel).also { channelId ->
             preferences.edit { putLong(KEY_CHANNEL_ID, channelId) }

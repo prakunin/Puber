@@ -165,7 +165,7 @@ private fun HistoryContent(
                 gridState = gridState,
                 focusedUiKey = focusedUiKey,
                 menuUiKey = menuUiKey,
-                gridFocusModifier = Modifier.focusRequester(gridFocusRequester),
+                modifier = Modifier.focusRequester(gridFocusRequester),
                 onAction = onAction,
             )
         }
@@ -271,14 +271,14 @@ private fun HistoryGrid(
     gridState: LazyGridState,
     focusedUiKey: String?,
     menuUiKey: String?,
-    gridFocusModifier: Modifier,
     onAction: (UIAction) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(GRID_COLUMNS),
             state = gridState,
-            modifier = gridFocusModifier
+            modifier = modifier
                 .fillMaxSize()
                 .focusRestorer(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),

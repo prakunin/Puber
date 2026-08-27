@@ -15,8 +15,8 @@ internal fun SkipSegmentOverlay(
     state: SkipSegmentUIState?,
     onSkip: () -> Unit,
     onCancel: () -> Unit,
-    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     PlayerTimedActionOverlay(
         visible = state != null,

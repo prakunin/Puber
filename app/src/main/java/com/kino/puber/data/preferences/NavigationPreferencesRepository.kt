@@ -1,6 +1,7 @@
 package com.kino.puber.data.preferences
 
 import android.content.Context
+import androidx.core.content.edit
 import com.kino.puber.ui.feature.main.model.TabType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,7 +58,7 @@ class NavigationPreferencesRepository(context: Context) {
     fun getAutoTrailerEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_TRAILER, true)
 
     fun setAutoTrailerEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_TRAILER, enabled).apply()
+        prefs.edit { putBoolean(KEY_AUTO_TRAILER, enabled) }
     }
 
     fun getStartupTab(): TabType {
@@ -66,7 +67,7 @@ class NavigationPreferencesRepository(context: Context) {
     }
 
     fun setStartupTab(tab: TabType) {
-        prefs.edit().putString(KEY_STARTUP_TAB, tab.name).apply()
+        prefs.edit { putString(KEY_STARTUP_TAB, tab.name) }
     }
 
     fun getStartupTabOptions(): List<TabType> {
@@ -94,21 +95,21 @@ class NavigationPreferencesRepository(context: Context) {
     private fun adoptTopTabsMenuIfNeeded() {
         val legacyMode = prefs.getString(KEY_LEGACY_NAVIGATION_MODE, null) ?: return
         val legacyTabs = prefs.getString(KEY_LEGACY_TOP_TABS, null)
-        val editor = prefs.edit()
-        if (legacyMode == LEGACY_TOP_TABS_MODE && legacyTabs != null) {
-            editor.putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(deserializeTabs(legacyTabs))))
-            editor.putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
+        prefs.edit {
+            if (legacyMode == LEGACY_TOP_TABS_MODE && legacyTabs != null) {
+                putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(deserializeTabs(legacyTabs))))
+                putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
+            }
+            remove(KEY_LEGACY_NAVIGATION_MODE)
+            remove(KEY_LEGACY_TOP_TABS)
         }
-        editor.remove(KEY_LEGACY_NAVIGATION_MODE)
-        editor.remove(KEY_LEGACY_TOP_TABS)
-        editor.apply()
     }
 
     fun setVisibleTabs(tabs: List<TabType>) {
-        prefs.edit()
-            .putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(tabs)))
-            .putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
-            .apply()
+        prefs.edit {
+            putString(KEY_DRAWER_TABS, serializeTabs(ensureRequiredTabs(tabs)))
+            putInt(KEY_MENU_SCHEMA_VERSION, MENU_SCHEMA_VERSION)
+        }
         menuTabsRevision.update { it + 1 }
     }
 
@@ -124,17 +125,17 @@ class NavigationPreferencesRepository(context: Context) {
     }
 
     fun setShowAnime(show: Boolean) {
-        prefs.edit().putBoolean(KEY_SHOW_ANIME, show).apply()
+        prefs.edit { putBoolean(KEY_SHOW_ANIME, show) }
         _contentPreferences.update { it.copy(showAnime = show) }
     }
 
     fun setHideWatched(hide: Boolean) {
-        prefs.edit().putBoolean(KEY_HIDE_WATCHED, hide).apply()
+        prefs.edit { putBoolean(KEY_HIDE_WATCHED, hide) }
         _contentPreferences.update { it.copy(hideWatched = hide) }
     }
 
     fun setShowWatchedIndicators(show: Boolean) {
-        prefs.edit().putBoolean(KEY_SHOW_WATCHED_INDICATORS, show).apply()
+        prefs.edit { putBoolean(KEY_SHOW_WATCHED_INDICATORS, show) }
         _contentPreferences.update { it.copy(showWatchedIndicators = show) }
     }
 

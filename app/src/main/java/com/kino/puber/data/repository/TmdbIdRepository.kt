@@ -1,6 +1,7 @@
 package com.kino.puber.data.repository
 
 import android.content.Context
+import androidx.core.content.edit
 
 class TmdbIdRepository(context: Context) {
 
@@ -12,7 +13,7 @@ class TmdbIdRepository(context: Context) {
     }
 
     fun saveTmdbId(imdbId: String, tmdbId: Int) {
-        prefs.edit().putInt("$KEY_PREFIX$imdbId", tmdbId).apply()
+        prefs.edit { putInt("$KEY_PREFIX$imdbId", tmdbId) }
     }
 
     private companion object {

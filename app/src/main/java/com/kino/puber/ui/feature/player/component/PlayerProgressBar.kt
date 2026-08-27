@@ -47,11 +47,11 @@ internal fun PlayerProgressBar(
     currentPosition: Long,
     duration: Long,
     bufferedPosition: Long,
+    modifier: Modifier = Modifier,
     isBuffering: Boolean = false,
     onSeekForward: () -> Unit = {},
     onSeekBackward: () -> Unit = {},
     onOkPressed: () -> Unit = {},
-    modifier: Modifier = Modifier,
     focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
     val progress = remember(currentPosition, duration) { progressOf(currentPosition, duration) }

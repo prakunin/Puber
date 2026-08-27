@@ -136,13 +136,13 @@ internal fun PlayerTimedActionOverlay(
     totalSeconds: Int,
     focusPrimaryAction: Boolean,
     /** Changes when a different prompt takes over without the plate ever going away. */
+    modifier: Modifier = Modifier,
     promptKey: Any? = null,
     debugName: String = "timed_action",
     compactCancel: Boolean = false,
     onAction: () -> Unit,
     onCancel: () -> Unit,
     bottomInset: Dp = 0.dp,
-    modifier: Modifier = Modifier,
 ) {
     BackHandler(enabled = visible, onBack = onCancel)
 

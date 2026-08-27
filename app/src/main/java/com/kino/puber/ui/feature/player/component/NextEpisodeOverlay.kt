@@ -14,8 +14,8 @@ internal fun NextEpisodeOverlay(
     countdown: Int?,
     onNextEpisode: () -> Unit,
     onCancel: () -> Unit,
-    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     PlayerTimedActionOverlay(
         visible = countdown != null,
