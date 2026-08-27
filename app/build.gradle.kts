@@ -268,18 +268,25 @@ kover {
 // the compilation's own inputs rather than a second guess at detekt's: the Kotlin compile task's
 // libraries (dependencies plus the generated R.jar), the Android boot classpath, and the javac
 // output holding BuildConfig. Reusing the real compilation keeps the two from drifting apart.
-val detektCompilationSource = mapOf(
-    "detektDevDebug" to "compileDevDebugKotlin",
-    "detektDevDebugUnitTest" to "compileDevDebugUnitTestKotlin",
-)
-
+// Each variant task is matched to its own compilation by name rather than from a hand-written
+// list, so adding a flavour or a build type cannot leave a detekt task quietly analysing against
+// the plugin's classpath again - a regression that shows up as nothing at all, just a less
+// accurate report. Tasks with no variant in their name (the source-set `detekt`) derive nothing
+// and keep the convention, which is what they should have.
 tasks.withType<Detekt>().configureEach {
-    val compileTask = detektCompilationSource[name] ?: return@configureEach
+    val variant = name.removePrefix("detekt").takeIf { it != name && it.isNotEmpty() }
+        ?: return@configureEach
+    val kotlinCompileName = "compile${variant}Kotlin"
+    if (kotlinCompileName !in tasks.names) return@configureEach
+
+    // `BuildConfig` belongs to the production variant: the unit-test compilation compiles no Java
+    // of its own, so `detektDevDebugUnitTest` reads the class out of `devDebug`.
+    val javaCompileName = "compile${variant.removeSuffix("UnitTest")}JavaWithJavac"
+
     classpath.setFrom(
-        tasks.named<KotlinCompile>(compileTask).map { it.libraries },
+        tasks.named<KotlinCompile>(kotlinCompileName).map { it.libraries },
         androidComponents.sdkComponents.bootClasspath,
-        tasks.named<JavaCompile>("compileDevDebugJavaWithJavac")
-            .flatMap(JavaCompile::getDestinationDirectory),
+        tasks.named<JavaCompile>(javaCompileName).flatMap(JavaCompile::getDestinationDirectory),
     )
 }
 

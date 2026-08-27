@@ -37,8 +37,11 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     }
     private val snackBarMessageFlow = MutableStateFlow<SnackbarMessage?>(null)
 
-    // `asSharedFlow()` builds a new read-only wrapper each time it is called, and calling it inside
-    // a composable does that on every recomposition. Hoisted here so composition collects one flow.
+    // `asSharedFlow()` returns a new read-only wrapper on each call, and `collectAsStateWithLifecycle`
+    // passes the flow to `produceState`, which keys a `LaunchedEffect` on it. Calling it inside the
+    // composable therefore handed that effect a different key every recomposition and tore the
+    // collecting coroutine down and back up each time. No value was lost - the flow replays its
+    // latest to a new subscriber - but the churn was real. One wrapper, collected once.
     private val snackBarMessages = snackBarMessageFlow.asSharedFlow()
     private val started = AtomicBoolean(false)
     protected val viewState: Flow<ViewState> get() = mutableViewState
