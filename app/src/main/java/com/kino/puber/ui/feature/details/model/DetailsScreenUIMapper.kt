@@ -260,6 +260,7 @@ internal class DetailsScreenUIMapper(
         return DetailsInfoUIState(
             ratings = details.ratings,
             chips = buildChips(item),
+            genresLine = buildGenresLine(item),
             factsLine = buildFactsLine(item),
             directorLine = buildDirectorLine(item),
             castLine = buildCastLine(item),
@@ -302,6 +303,7 @@ internal class DetailsScreenUIMapper(
                 add(with(itemMapper) { total.formatDurationWithResources() })
             }
         }
+        item.year?.takeIf { year -> year > 0 }?.let { year -> add(year.toString()) }
         item.countries.orEmpty()
             .map { country -> country.title.trim() }
             .filter { country -> country.isNotEmpty() }
@@ -314,6 +316,15 @@ internal class DetailsScreenUIMapper(
         }
         item.ageRating?.takeIf(String::isNotBlank)?.let(::add)
     }
+
+    private fun buildGenresLine(item: Item): String =
+        item.genres.orEmpty()
+            .map { genre -> genre.title.trim() }
+            .filter { genre -> genre.isNotEmpty() }
+            .joinToString(", ")
+            .takeIf(String::isNotEmpty)
+            ?.let { genres -> resources.getString(R.string.video_details_facts_genres, genres) }
+            .orEmpty()
 
     private fun buildFactsLine(item: Item): String = buildList {
         item.voice?.takeIf(String::isNotBlank)?.let(::add)

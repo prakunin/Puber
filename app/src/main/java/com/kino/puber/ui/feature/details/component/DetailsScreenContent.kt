@@ -216,6 +216,7 @@ private fun DetailsHero(
         )
         Spacer(modifier = Modifier.height(GAP_PLOT_TO_FACTS))
         Spacer(modifier = Modifier.weight(HERO_FACTS_ABOVE))
+        HeroLine(state.info.genresLine)
         HeroLine(state.info.factsLine)
         HeroLine(state.info.directorLine)
         HeroLine(state.info.castLine)

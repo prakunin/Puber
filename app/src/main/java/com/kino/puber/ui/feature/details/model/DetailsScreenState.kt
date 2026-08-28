@@ -75,8 +75,13 @@ internal sealed interface DetailsButtonUIState {
 @Immutable
 internal data class DetailsInfoUIState(
     val ratings: List<RatingUIState>,
-    /** Kind, season count or duration, status, country, quality, sound, age -- one chip per fact. */
+    /** Kind, season count or duration, status, year, country, quality, sound, age -- one chip each. */
     val chips: List<String>,
+    /**
+     * `Жанры: …`. A line rather than a chip: four genres run past the right edge of a row that
+     * neither wraps nor scrolls, where a line ellipsizes instead. Empty when there are none.
+     */
+    val genresLine: String,
     /** Audio tracks and subtitles, joined by " · ". */
     val factsLine: String,
     /** `Режиссёр: …`. Empty when the payload carries no director. */

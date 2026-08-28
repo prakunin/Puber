@@ -296,6 +296,7 @@ class DetailsVMTrailerPreviewTest {
         info = DetailsInfoUIState(
             ratings = emptyList(),
             chips = emptyList(),
+            genresLine = "",
             factsLine = "",
             directorLine = "",
             castLine = "",

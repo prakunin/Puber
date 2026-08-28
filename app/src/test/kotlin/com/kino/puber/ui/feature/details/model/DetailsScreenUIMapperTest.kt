@@ -92,9 +92,10 @@ class DetailsScreenUIMapperTest {
             id = 1,
             title = "Фильм / Movie",
             type = ItemType.MOVIE,
-            // The year and the genres belong to the meta line. They are set so the assertions
-            // that they stay out have something to catch: without them the item could not have
-            // produced either string, and the check would pass on emptiness alone.
+            // The year is a chip and the genres a line of their own. They are set so the
+            // assertions about where each one lands have something to catch: without them the
+            // item could not have produced either string, and the checks would pass on
+            // emptiness alone.
             year = 2026,
             genres = listOf(Genre(id = 1, title = "Комедия")),
             videos = listOf(Video(id = 1, files = listOf(VideoFile(quality = "1080")))),
@@ -116,9 +117,46 @@ class DetailsScreenUIMapperTest {
         assertFalse(facts.contains("16+")) { facts }
         assertFalse(facts.contains("2026")) { facts }
         assertFalse(facts.contains("Комедия")) { facts }
-        // ...and the year and the genres went to the meta line.
-        assertTrue(mapped.details.year.contains("2026")) { mapped.details.year }
-        assertTrue(mapped.details.genres.contains("Комедия")) { mapped.details.genres }
+    }
+
+    /**
+     * The year is short and fixed, so it reads as one more chip beside the country. The genres
+     * are not: a list of four runs past the right edge of a row that neither wraps nor scrolls,
+     * so they take a line of their own where long text ellipsizes instead of vanishing.
+     */
+    @Test
+    fun `the year is a chip and the genres are a line of their own`() {
+        val item = Item(
+            id = 1,
+            title = "Фильм",
+            type = ItemType.MOVIE,
+            year = 2026,
+            genres = listOf(Genre(id = 1, title = "Комедия"), Genre(id = 2, title = "Драма")),
+        )
+
+        val mapped = mapper.map(item, isInWatchlist = false)
+
+        assertTrue(mapped.info.chips.contains("2026")) { mapped.info.chips.toString() }
+        assertEquals(
+            resources.getString(R.string.video_details_facts_genres, "Комедия, Драма"),
+            mapped.info.genresLine,
+        )
+        assertFalse(mapped.info.chips.any { it.contains("Комедия") }) { mapped.info.chips.toString() }
+    }
+
+    @Test
+    fun `an item without a year or genres carries neither the chip nor the line`() {
+        val mapped = mapper.map(
+            Item(id = 1, title = "Фильм", type = ItemType.MOVIE),
+            isInWatchlist = false,
+        )
+
+        assertEquals("", mapped.info.genresLine)
+        // The year is the only chip that is a bare number, so nothing reading as one means no
+        // year slipped in as an empty or zero value.
+        assertFalse(mapped.info.chips.any { chip -> chip.all(Char::isDigit) }) {
+            mapped.info.chips.toString()
+        }
     }
 
     @Test

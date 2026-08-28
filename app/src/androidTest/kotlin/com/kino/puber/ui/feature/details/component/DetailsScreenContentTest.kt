@@ -30,6 +30,7 @@ private const val HERO_TITLE = "Hero Title"
 private const val HERO_DESCRIPTION = "Short plot synopsis."
 private const val HERO_CHIP = "4K"
 private const val HERO_FACTS_LINE = "Дубляж · Дорожек: 3"
+private const val HERO_GENRES_LINE = "Жанры: Драма, Фантастика"
 private const val HERO_DIRECTOR_LINE = "Режиссёр: Иван Иванов"
 private const val HERO_CAST_LINE = "В ролях: Пётр Петров, Сидор Сидоров"
 private const val HERO_RESUME_LINE = "Остановились на 2 сезоне, 1 серии"
@@ -257,6 +258,7 @@ internal class DetailsScreenContentTest {
             info = DetailsInfoUIState(
                 ratings = emptyList(),
                 chips = listOf(HERO_CHIP),
+                genresLine = HERO_GENRES_LINE,
                 factsLine = factsLine,
                 directorLine = HERO_DIRECTOR_LINE,
                 castLine = HERO_CAST_LINE,

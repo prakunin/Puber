@@ -116,6 +116,7 @@ private fun previewInfo(
 ) = DetailsInfoUIState(
     ratings = details.ratings,
     chips = chips,
+    genresLine = "Жанры: Боевик, Комедия, Приключения",
     factsLine = "Дубляж · Дорожек: 3 · Субтитры: 2",
     directorLine = "Режиссёр: Ларри Ян",
     castLine = "В ролях: Джеки Чан, Чжан Цзыфэн, Тони Люн Ка-Фай, Юй Жунгуан, Ху Чжэнь",
@@ -151,7 +152,7 @@ private fun previewSeriesContent(
     details = previewSeriesDetails,
     info = previewInfo(
         details = previewSeriesDetails,
-        chips = listOf("Сериал", "2 сезона", "Сериал выходит", "4K", "Объёмный звук", "16+"),
+        chips = listOf("Сериал", "2 сезона", "Сериал выходит", "2024", "Россия", "4K", "Объёмный звук", "16+"),
         resumeLine = "Остановились на 2 сезоне, 6 серии · осталось 22 мин",
     ),
     buttons = previewSeriesButtons,
@@ -168,7 +169,7 @@ private fun previewMovieContent(
     details = previewMovieDetails,
     info = previewInfo(
         details = previewMovieDetails,
-        chips = listOf("Фильм", "2 ч 58 мин", "1080p", "Объёмный звук", "18+"),
+        chips = listOf("Фильм", "2 ч 58 мин", "2023", "США", "1080p", "Объёмный звук", "18+"),
         resumeLine = "Не начат · 2 ч 58 мин",
     ),
     buttons = previewMovieButtons,

@@ -330,6 +330,7 @@
     <string name="video_details_info_sound_surround">Surround sound</string>
     <string name="video_details_facts_audio_tracks">Audio tracks: %1$d</string>
     <string name="video_details_facts_subtitles">Subtitles: %1$d</string>
+    <string name="video_details_facts_genres">Genres: %1$s</string>
     <string name="video_details_facts_director">Director: %1$s</string>
     <string name="video_details_facts_cast">Cast: %1$s</string>
     <string name="video_details_similar_title">Similar</string>

@@ -33,6 +33,7 @@
     <string name="video_details_info_sound_surround">Объёмный звук</string>
     <string name="video_details_facts_audio_tracks">Дорожек: %1$d</string>
     <string name="video_details_facts_subtitles">Субтитры: %1$d</string>
+    <string name="video_details_facts_genres">Жанры: %1$s</string>
     <string name="video_details_facts_director">Режиссёр: %1$s</string>
     <string name="video_details_facts_cast">В ролях: %1$s</string>
     <string name="video_details_series_status_finished">Сериал завершён</string>
