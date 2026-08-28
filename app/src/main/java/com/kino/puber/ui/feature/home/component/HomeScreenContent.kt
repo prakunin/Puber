@@ -42,14 +42,12 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.ApiDomainDialog
-import com.kino.puber.core.ui.uikit.component.DpadScrollAxis
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.TvSafeButton
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
-import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
 import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchRow
 import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchSurface
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
@@ -431,38 +429,48 @@ internal fun HomeSectionRow(
         onRowEmpty = onRowEmpty,
     )
 
-    LazyRow(
-        state = listState,
-        modifier = Modifier
-            .graphicsLayer { clip = false }
-            .dpadScrollOptimization(axis = DpadScrollAxis.Horizontal)
-            .focusRestorer(itemFocus.focusRequester),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-    ) {
-        itemsIndexed(items = items, key = { _, item -> item.id }) { index, item ->
-            val isFocusTarget = item.id == itemFocus.targetItemId
-            VideoItemHorizontal(
-                modifier = Modifier
-                    .then(
-                        if (isFocusTarget) {
-                            Modifier.focusRequester(itemFocus.focusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .onFocusChanged {
-                        if (it.isFocused) {
-                            onSectionFocused()
-                            if (itemFocus.onItemFocused(item.id)) {
-                                onItemFocused(item)
+    // The row needs a spec of its own. `LocalBringIntoViewSpec` reaches down from the column that
+    // wraps the whole screen, and that one is written for vertical travel: a card already fully
+    // visible does not move the row at all, so the highlight walks to the right edge, and the
+    // first card past it lands its leading edge at 30 % of the width, throwing the highlight back.
+    // Halves on both sides pin the focused card's centre to the row's, the way the catalogue rows
+    // do; at either end the list clamps and the card sits at the edge instead.
+    //
+    // `dpadScrollOptimization` is gone with it: it holds the row still while a key repeats, which
+    // is the very behaviour being replaced here.
+    PositionFocusedItemInLazyLayout(parentFraction = 0.5f, childFraction = 0.5f) {
+        LazyRow(
+            state = listState,
+            modifier = Modifier
+                .graphicsLayer { clip = false }
+                .focusRestorer(itemFocus.focusRequester),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+        ) {
+            itemsIndexed(items = items, key = { _, item -> item.id }) { index, item ->
+                val isFocusTarget = item.id == itemFocus.targetItemId
+                VideoItemHorizontal(
+                    modifier = Modifier
+                        .then(
+                            if (isFocusTarget) {
+                                Modifier.focusRequester(itemFocus.focusRequester)
+                            } else {
+                                Modifier
                             }
-                        }
-                    },
-                state = item,
-                onClick = { onItemClick(item) },
-                onContextMenu = onItemContextMenu?.let { callback -> { callback(item) } },
-            )
+                        )
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                onSectionFocused()
+                                if (itemFocus.onItemFocused(item.id)) {
+                                    onItemFocused(item)
+                                }
+                            }
+                        },
+                    state = item,
+                    onClick = { onItemClick(item) },
+                    onContextMenu = onItemContextMenu?.let { callback -> { callback(item) } },
+                )
+            }
         }
     }
 }

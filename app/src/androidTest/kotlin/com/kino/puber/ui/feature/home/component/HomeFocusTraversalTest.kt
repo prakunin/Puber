@@ -158,6 +158,53 @@ internal class HomeFocusTraversalTest {
         assertBoundsAndViewport(snapshots)
     }
 
+    /**
+     * The focused card stays put and the row travels under it, the way the catalogue rows behave.
+     *
+     * Home used to inherit the column's spec through `LocalBringIntoViewSpec`: a card already
+     * fully visible moved the row not at all, so the highlight walked rightwards, and the first
+     * card past the edge landed its leading edge at 30 % of the width, throwing the highlight back
+     * again. That saw-tooth is what reads as the focus jumping about.
+     */
+    @Test
+    fun rightAlongAHomeRowKeepsTheFocusedCardCentred() {
+        val section = HomeSectionState(
+            title = "Home row 0",
+            type = HomeSectionType.ContinueWatching,
+            items = (0 until CENTRING_ITEM_COUNT).map { column -> item(0, column) },
+        )
+        composeRule.setContent {
+            PuberTheme {
+                HomeScreenContent(
+                    state = HomeViewState.Content(sections = listOf(section)),
+                    onAction = {},
+                    onHeroClick = {},
+                    onCollectionClick = { _, _ -> },
+                )
+            }
+        }
+
+        requestFocus(itemTitle(0, 0))
+        val viewport = composeRule.onRoot().getUnclippedBoundsInRoot()
+
+        // The first cards cannot be centred -- the list is already at scroll zero -- so the walk
+        // starts far enough in that there is room on both sides of the focused card.
+        repeat(CENTRING_FIRST_INDEX) { pressCurrent(Key.DirectionRight) }
+        (CENTRING_FIRST_INDEX..CENTRING_LAST_INDEX).forEach { column ->
+            assertCentred(column, focusedCard().getUnclippedBoundsInRoot(), viewport)
+            pressCurrent(Key.DirectionRight)
+        }
+    }
+
+    private fun assertCentred(column: Int, card: DpRect, viewport: DpRect) {
+        assertEquals(
+            "card $column centre",
+            (viewport.left.value + viewport.right.value) / 2f,
+            (card.left.value + card.right.value) / 2f,
+            BOUNDS_TOLERANCE,
+        )
+    }
+
     private fun seedStableTargets() {
         repeat(HOME_ROW_TYPES.lastIndex) { index ->
             val row = index + 1
@@ -262,6 +309,14 @@ internal class HomeFocusTraversalTest {
         const val HERO_TITLE = "Featured hero"
         const val ITEM_TITLE_PREFIX = "home-row-"
         const val BOUNDS_TOLERANCE = 1f
+
+        /**
+         * Eight cards leave room to centre the middle ones: at either end the list is clamped at
+         * scroll zero or its maximum, so the card there sits at the edge rather than the centre.
+         */
+        const val CENTRING_ITEM_COUNT = 8
+        const val CENTRING_FIRST_INDEX = 3
+        const val CENTRING_LAST_INDEX = 4
         val MAX_VERTICAL_DELTA = 240.dp
         val ITEM_TITLE_PATTERN = Regex("""home-row-(\d+)-item-(\d+)""")
         val HOME_ROW_TYPES = listOf(
