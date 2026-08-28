@@ -2,17 +2,27 @@ package com.kino.puber.ui.feature.device.settings
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -145,6 +155,45 @@ internal fun LazyListScope.developerItems(
             onToggle = { onAction(DeviceSettingsActions.ToggleDebugOverlay) },
         )
     }
+}
+
+private val InformationBlockOutlineWidth = 2.dp
+
+/**
+ * A stop the D-pad can land on for a block that carries nothing but information.
+ *
+ * The panel is a lazy column, and on the television it scrolls only when focus moves into an
+ * item. Anything sitting below the last control is therefore out of reach for good: the section's
+ * own information — the device card, the TMDB attribution — would stay under the fold with no
+ * press that could bring it up. This takes focus and does nothing with it, so an outline rather
+ * than the filled highlight of the rows above is what says where the user is and that there is
+ * nothing here to press. Left goes back to the section list, the way it does from every row.
+ */
+@Composable
+internal fun InformationBlock(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .returnFocusLeft(LocalSettingsLeftFocusRequester.current)
+            .focusable()
+            // One focus stop is one thing to announce: without this the heading, the card's lines
+            // and the attribution stay separate nodes that a screen reader walks past on its own,
+            // while the D-pad and the outline sit on the block around them.
+            .semantics(mergeDescendants = true) {}
+            .border(
+                width = InformationBlockOutlineWidth,
+                color = if (focused) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                shape = RoundedCornerShape(14.dp),
+            )
+            .padding(InformationBlockOutlineWidth),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        content = content,
+    )
 }
 
 @Composable

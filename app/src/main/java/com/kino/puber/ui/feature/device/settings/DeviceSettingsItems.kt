@@ -144,7 +144,7 @@ internal fun SettingsListItem(
 }
 
 @Suppress("DEPRECATION")
-private fun Modifier.returnFocusLeft(focusRequester: FocusRequester?): Modifier =
+internal fun Modifier.returnFocusLeft(focusRequester: FocusRequester?): Modifier =
     if (focusRequester == null) {
         this
     } else {

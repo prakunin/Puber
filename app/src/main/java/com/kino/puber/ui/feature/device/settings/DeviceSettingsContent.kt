@@ -504,30 +504,32 @@ private fun LazyListScope.generalItems(
             onClick = { onAction(DeviceSettingsActions.CheckForUpdatesNow) },
         )
     }
-    item(key = "about-heading") {
-        SectionHeading(stringResource(R.string.settings_about_device_title))
-    }
-    item(key = "device") {
-        DeviceInfoCard(device = state.device)
-    }
-    item(key = "tmdb-attribution-heading") {
-        SectionHeading(stringResource(R.string.device_settings_tmdb_attribution_title))
+    // Each heading travels with the block underneath it: the two are one focus stop, so the
+    // heading cannot end up scrolled off the top of the panel while its content is on screen.
+    item(key = "about-device") {
+        InformationBlock(modifier = Modifier.testTag(SettingsTestTags.AboutDevice)) {
+            SectionHeading(stringResource(R.string.settings_about_device_title))
+            DeviceInfoCard(device = state.device)
+        }
     }
     item(key = "tmdb-attribution") {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.tmdb_logo_primary_short_blue),
-                contentDescription = stringResource(R.string.device_settings_tmdb_logo_description),
-                modifier = Modifier.size(width = 96.dp, height = 40.dp),
-            )
-            Text(
-                text = stringResource(R.string.device_settings_tmdb_attribution_notice),
-                style = MaterialTheme.typography.bodySmall,
-            )
+        InformationBlock(modifier = Modifier.testTag(SettingsTestTags.TmdbAttribution)) {
+            SectionHeading(stringResource(R.string.device_settings_tmdb_attribution_title))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.tmdb_logo_primary_short_blue),
+                    contentDescription = stringResource(R.string.device_settings_tmdb_logo_description),
+                    modifier = Modifier.size(width = 96.dp, height = 40.dp),
+                )
+                Text(
+                    text = stringResource(R.string.device_settings_tmdb_attribution_notice),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }

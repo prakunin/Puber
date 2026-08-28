@@ -18,15 +18,17 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.printToString
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -125,14 +127,67 @@ internal class DeviceSettingsContentFocusTest {
 
     @Test
     fun playbackSectionScrollsByFocusToLastSegmentSetting() {
-        setSuccessContent()
+        // The section has to be the open one: the list is the picker for it, so asking for focus
+        // on any other row enters the group and its onEnter hands focus back to the open section.
+        // Walking the panel is what this test is about; switching sections has its own test.
+        setSuccessContent(initialSection = SettingsSection.Playback)
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
         playback.requestFocus()
         playback.press(Key.DirectionRight)
 
-        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        pressDownUntil(rowWithText(context.getString(R.string.settings_skip_credits)))
 
         focusedItem(context.getString(R.string.settings_skip_credits)).assertIsFocused()
+    }
+
+    /**
+     * Everything below the update rows in General is information — the device card and the TMDB
+     * attribution. A lazy column on the television scrolls only when focus moves into an item, so
+     * unless those blocks can hold focus themselves the bottom of the section stays off screen no
+     * matter what the user presses.
+     */
+    @Test
+    fun generalSectionScrollsByFocusThroughItsInformationToTheTmdbAttribution() {
+        setSuccessContent()
+        val general = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.General.name))
+        general.requestFocus().press(Key.DirectionRight)
+
+        pressDownUntil(hasTestTag(SettingsTestTags.AboutDevice))
+        composeRule.onNodeWithTag(SettingsTestTags.AboutDevice).assertIsFocused()
+
+        focusedNode().press(Key.DirectionDown)
+
+        val attribution = composeRule.onNodeWithTag(SettingsTestTags.TmdbAttribution)
+        attribution.assertIsFocused()
+        // Bounds come back already clipped to the panel, so they alone cannot tell a block that
+        // fits from one cut off at the fold. The block's own height is what the clipped bounds
+        // have to match for all of it to be on screen.
+        val node = attribution.fetchSemanticsNode()
+        assertEquals(
+            "the attribution is ${node.size.height}px tall but only ${node.boundsInRoot.height}px show",
+            node.size.height.toFloat(),
+            node.boundsInRoot.height,
+            1f,
+        )
+        val panel = composeRule.onNodeWithTag(SettingsTestTags.Content).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the attribution at ${node.boundsInRoot} is outside the panel at $panel",
+            node.boundsInRoot.top >= panel.top - 1f && node.boundsInRoot.bottom <= panel.bottom + 1f,
+        )
+    }
+
+    @Test
+    fun leftFromTheTmdbAttributionReturnsToTheGeneralSection() {
+        setSuccessContent()
+        val general = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.General.name))
+        general.requestFocus().press(Key.DirectionRight)
+        pressDownUntil(hasTestTag(SettingsTestTags.TmdbAttribution))
+
+        composeRule.onNodeWithTag(SettingsTestTags.TmdbAttribution)
+            .assertIsFocused()
+            .press(Key.DirectionLeft)
+
+        general.assertIsFocused()
     }
 
     @Test
@@ -140,7 +195,7 @@ internal class DeviceSettingsContentFocusTest {
         setSuccessContent(initialSection = SettingsSection.Playback)
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
         playback.requestFocus().press(Key.DirectionRight)
-        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        pressDownUntil(rowWithText(context.getString(R.string.settings_skip_credits)))
         focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
 
         playback.press(Key.DirectionRight)
@@ -153,7 +208,7 @@ internal class DeviceSettingsContentFocusTest {
         setSuccessContent(initialSection = SettingsSection.Playback)
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
         playback.requestFocus().press(Key.DirectionRight)
-        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        pressDownUntil(rowWithText(context.getString(R.string.settings_skip_credits)))
         focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
 
         playback.press(Key.DirectionDown)
@@ -169,7 +224,7 @@ internal class DeviceSettingsContentFocusTest {
         setSuccessContent(initialSection = SettingsSection.Playback)
         val playback = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Playback.name))
         playback.requestFocus().press(Key.DirectionRight)
-        repeat(5) { focusedNode().press(Key.DirectionDown) }
+        pressDownUntil(rowWithText(context.getString(R.string.settings_skip_credits)))
 
         focusedItem(context.getString(R.string.settings_skip_credits)).press(Key.DirectionLeft)
 
@@ -202,9 +257,10 @@ internal class DeviceSettingsContentFocusTest {
         val network = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Network.name))
         network.requestFocus()
         network.press(Key.DirectionRight)
-        // The panel is entered on the diagnostics row now, so it takes two Down presses — past
-        // the mirror row — to reach the server-location list before it can be expanded.
-        focusedNode().press(Key.DirectionDown).press(Key.DirectionDown).press(Key.Enter)
+        // The panel is entered on its top row, the mirror one, so the server-location list is the
+        // next row down; the speed test sits below it.
+        pressDownUntil(rowWithText(context.getString(R.string.device_setting_server_location)))
+        focusedNode().press(Key.Enter)
 
         focusedItem("Automatic").assertIsFocused().press(Key.Back)
         composeRule.waitForIdle()
@@ -276,9 +332,11 @@ internal class DeviceSettingsContentFocusTest {
             initialSection = SettingsSection.Network,
         )
 
+        // The row's disabled semantics sit on the clickable surface, which the merged tree returns
+        // for the label directly. Walking up from the unmerged label instead stops on the layout
+        // wrapper in between, which carries nothing to assert on.
         composeRule
-            .onNodeWithText(context.getString(R.string.device_setting_support_ssl), useUnmergedTree = true)
-            .onParent()
+            .onNodeWithText(context.getString(R.string.device_setting_support_ssl))
             .assertIsNotEnabled()
     }
 
@@ -472,6 +530,31 @@ internal class DeviceSettingsContentFocusTest {
     )
 
     private fun focusedNode() = composeRule.onNode(isFocused(), useUnmergedTree = true)
+
+    /**
+     * Walks the open panel down until the wanted row holds focus.
+     *
+     * Sections grow: a count of presses written against the list as it stood keeps passing for a
+     * while after a setting is inserted, then quietly starts asserting about whatever row the old
+     * count now lands on. Pressing until the row is reached says what the test means, and the
+     * assertion that follows still fails plainly if the row is unreachable.
+     */
+    private fun pressDownUntil(matcher: SemanticsMatcher, maxPresses: Int = 12) {
+        repeat(maxPresses) {
+            if (composeRule.onAllNodes(isFocused() and matcher, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            ) {
+                return
+            }
+            focusedNode().press(Key.DirectionDown)
+        }
+        throw AssertionError(
+            "no row matched after $maxPresses presses; focus stopped on " +
+                composeRule.onNode(isFocused(), useUnmergedTree = true).printToString(maxDepth = 3)
+        )
+    }
+
+    private fun rowWithText(text: String) = hasAnyDescendant(hasText(text))
 
     private fun SemanticsNodeInteraction.requestFocus(): SemanticsNodeInteraction {
         performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
