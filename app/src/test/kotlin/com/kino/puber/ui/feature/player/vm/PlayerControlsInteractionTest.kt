@@ -191,5 +191,9 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         bufferedDuration = "12.0s",
         bufferedBytes = "38.0 / 64 MB",
         streamSource = "MSK01",
+        renderRate = "24.0 / 24 fps",
+        frameDrops = "0 (keyframe 0, run 0)",
+        frameReleaseOffset = "+0.0 ms",
+        videoSwitch = "—",
     )
 }

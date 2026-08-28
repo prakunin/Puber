@@ -11,6 +11,9 @@ import com.kino.puber.domain.model.EpisodeScheduleResult
 import com.kino.puber.domain.model.ScheduledEpisode
 import com.kino.puber.domain.model.ScheduledSeason
 import com.kino.puber.domain.model.ScheduleProvider
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toKotlinLocalDate
 import java.time.LocalDate as JavaLocalDate
@@ -18,6 +21,12 @@ import kotlin.time.Duration.Companion.hours
 
 class EpisodeScheduleRepository(
     private val tmdbApiClient: TmdbApiClient,
+    /**
+     * A schedule is up to a dozen season documents parsed and folded into one list. That work is
+     * done here rather than wherever the details screen happened to ask from, so opening a series
+     * never pays for it on the caller's thread.
+     */
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val today: () -> LocalDate = {
         JavaLocalDate.now().toKotlinLocalDate()
     },
@@ -34,7 +43,9 @@ class EpisodeScheduleRepository(
         val normalizedImdbId = normalizeImdbId(imdbId)
         val currentDate = today()
         return cache.getOrPut(cacheKey(normalizedImdbId, currentDate)) {
-            loadSchedule(normalizedImdbId, currentDate)
+            withContext(workerDispatcher) {
+                loadSchedule(normalizedImdbId, currentDate)
+            }
         }
     }
 

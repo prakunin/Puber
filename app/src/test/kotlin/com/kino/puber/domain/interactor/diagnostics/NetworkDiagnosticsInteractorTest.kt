@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.random.Random
 
 internal class NetworkDiagnosticsInteractorTest {
 
@@ -35,6 +36,7 @@ internal class NetworkDiagnosticsInteractorTest {
         downloader = downloader,
         latencyProbe = latencyProbe,
         cacheBuster = { "fixed" },
+        random = Random(SHUFFLE_SEED),
     )
 
     private fun currentServer(server: SpeedTestServer = SpeedTestServer.Amsterdam) {
@@ -55,8 +57,10 @@ internal class NetworkDiagnosticsInteractorTest {
         assertInstanceOf(ServerTestState.Success::class.java, result.state(SpeedTestServer.Moscow))
         assertEquals(ServerTestState.Pending, result.state(SpeedTestServer.Amsterdam))
         assertEquals(1, downloadedUrls.size)
-        assertTrue(downloadedUrls.single().startsWith("https://speed.msk-static-05.cdntogo.net/"))
-        assertTrue(downloadedUrls.single().endsWith("r=fixed&ckSize=100"))
+        val expectedUrl = Regex(
+            """https://speed\.msk-static-0[567]\.cdntogo\.net/speedtest/garbage\.php\?r=fixed&ckSize=100""",
+        )
+        assertTrue(downloadedUrls.single().matches(expectedUrl), downloadedUrls.single())
     }
 
     @Test
@@ -98,8 +102,138 @@ internal class NetworkDiagnosticsInteractorTest {
 
         val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
 
-        assertEquals(ServerTestState.Failure, result.state(SpeedTestServer.Amsterdam))
+        val amsterdam = result.state(SpeedTestServer.Amsterdam) as ServerTestState.Failure
+        assertEquals(null, amsterdam.sample)
+        // The CDN answered every ping and served nothing: worth saying on the screen.
+        assertEquals(20L, amsterdam.latency?.pingMillis)
         assertTrue(result.finished)
+    }
+
+    @Test
+    fun run_movesToTheNextShard_whenOneIsUnreachable() = runTest {
+        currentServer()
+        val downloader = BoundedDownloader { url, maxBytes, onProgress ->
+            downloadedUrls += url
+            if (downloadedUrls.size == 1) error("Shard unreachable")
+            val sample = ThroughputSample(maxBytes, 1_000)
+            onProgress(sample)
+            sample
+        }
+
+        val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
+
+        assertInstanceOf(ServerTestState.Success::class.java, result.state(SpeedTestServer.Amsterdam))
+        assertEquals(2, downloadedUrls.size)
+        assertEquals(2, downloadedUrls.distinct().size)
+    }
+
+    @Test
+    fun run_skipsAShardThatNeverAnswers_withoutAttemptingItsDownload() = runTest {
+        currentServer()
+        val probedUrls = linkedSetOf<String>()
+        val latencyProbe = LatencyProbe { url ->
+            probedUrls += url
+            if (probedUrls.size == 1) error("Probe refused") else 20L
+        }
+
+        val result = interactor(latencyProbe = latencyProbe)
+            .run(SpeedTestServer.Amsterdam)
+            .toList()
+            .last()
+        val amsterdam = result.state(SpeedTestServer.Amsterdam) as ServerTestState.Success
+
+        // The silent shard cost five one-second probes, not a download timeout on top of them.
+        assertEquals(1, downloadedUrls.size)
+        val silentShard = probedUrls.first().substringBefore("/speedtest")
+        assertFalse(downloadedUrls.single().startsWith(silentShard))
+        assertEquals(20L, amsterdam.latency?.pingMillis)
+    }
+
+    @Test
+    fun run_keepsTheMeasuredSpeed_whenTheTransferBreaksAfterProgress() = runTest {
+        currentServer()
+        val downloader = BoundedDownloader { url, _, onProgress ->
+            downloadedUrls += url
+            onProgress(ThroughputSample(2_000_000, 1_000))
+            error("Connection reset")
+        }
+
+        val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
+        val amsterdam = result.state(SpeedTestServer.Amsterdam) as ServerTestState.Failure
+
+        assertEquals(2_000_000, amsterdam.sample?.bytes)
+        assertEquals(20L, amsterdam.latency?.pingMillis)
+        // The link broke, not the shard: another shard would only measure the same break again.
+        assertEquals(1, downloadedUrls.size)
+    }
+
+    @Test
+    fun run_doesNotCallASecondOfTransferARate_whenTheDownloadDiedEarly() = runTest {
+        currentServer()
+        // The downloader keeps the bytes that arrived when a transfer breaks, so a dead connection
+        // reaches the interactor as an ordinary short sample rather than as an error.
+        val downloader = BoundedDownloader { url, _, onProgress ->
+            downloadedUrls += url
+            val sample = ThroughputSample(2_000_000, 300)
+            onProgress(sample)
+            sample
+        }
+
+        val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
+        val amsterdam = result.state(SpeedTestServer.Amsterdam) as ServerTestState.Failure
+
+        assertEquals(2_000_000, amsterdam.sample?.bytes)
+        assertEquals(1, downloadedUrls.size)
+    }
+
+    @Test
+    fun run_acceptsAShortSample_whenTheTransferRanForTheWholeDeadline() = runTest {
+        currentServer()
+        val downloader = BoundedDownloader { url, _, onProgress ->
+            downloadedUrls += url
+            // Far below the requested payload, but it measured the link for twenty seconds: that is
+            // an ordinary television on an ordinary connection.
+            val sample = ThroughputSample(20_000_000, 20_000)
+            onProgress(sample)
+            sample
+        }
+
+        val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
+
+        assertInstanceOf(ServerTestState.Success::class.java, result.state(SpeedTestServer.Amsterdam))
+    }
+
+    @Test
+    fun run_movesToTheNextShard_whenOneDeliversNothingWithoutFailing() = runTest {
+        currentServer()
+        val downloader = BoundedDownloader { url, maxBytes, onProgress ->
+            downloadedUrls += url
+            val sample = if (downloadedUrls.size == 1) {
+                ThroughputSample(0, 8_000)
+            } else {
+                ThroughputSample(maxBytes, 1_000)
+            }
+            onProgress(sample)
+            sample
+        }
+
+        val result = interactor(downloader).run(SpeedTestServer.Amsterdam).toList().last()
+
+        assertInstanceOf(ServerTestState.Success::class.java, result.state(SpeedTestServer.Amsterdam))
+        assertEquals(2, downloadedUrls.size)
+    }
+
+    @Test
+    fun run_stopsAfterThreeShards_whenTheServerIsUnreachable() = runTest {
+        currentServer()
+        val downloader = BoundedDownloader { url, _, _ ->
+            downloadedUrls += url
+            error("Shard unreachable")
+        }
+
+        interactor(downloader).run(SpeedTestServer.Amsterdam).toList()
+
+        assertEquals(3, downloadedUrls.size)
     }
 
     @Test
@@ -147,4 +281,8 @@ internal class NetworkDiagnosticsInteractorTest {
         assertEquals(null, run.recommendedServer)
     }
 
+    private companion object {
+        /** A fixed seed so the shard the test measures does not change between runs. */
+        const val SHUFFLE_SEED = 7
+    }
 }

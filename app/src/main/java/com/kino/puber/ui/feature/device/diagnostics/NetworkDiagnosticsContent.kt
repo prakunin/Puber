@@ -126,7 +126,7 @@ internal fun NetworkDiagnosticsContent(
     val dialRow = runningRow
         ?: bestServer?.let { server -> state.servers.firstOrNull { it.server == server } }
         ?: state.currentServer?.let { server -> state.servers.firstOrNull { it.server == server } }
-    val dialSample = dialRow?.state?.sampleOrNull()
+    val dialSample = dialRow?.state?.displaySampleOrNull()
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -436,7 +436,7 @@ private fun ServerResultCard(
             pressedContentColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
-        val stateColor = if (row.state == ServerTestState.Failure) {
+        val stateColor = if (row.state is ServerTestState.Failure) {
             MaterialTheme.colorScheme.error
         } else {
             contentColor
@@ -504,15 +504,29 @@ private fun LatencyResult(latency: LatencySample, contentColor: Color) {
     }
 }
 
+/**
+ * Deliberately blind to a failed attempt's partial bytes: this feeds the "best result" badge and
+ * the recommendation behind it, and a transfer that broke half way measured how far it got, not how
+ * fast the server is.
+ */
 private fun ServerTestState.sampleOrNull(): ThroughputSample? = when (this) {
     is ServerTestState.Running -> sample
     is ServerTestState.Success -> sample
     else -> null
 }
 
+/**
+ * What the dial shows, which is whatever the card above it says — a broken attempt's partial rate
+ * included. Ranking keeps to [sampleOrNull]: showing a figure and recommending on it are different
+ * claims.
+ */
+private fun ServerTestState.displaySampleOrNull(): ThroughputSample? =
+    sampleOrNull() ?: (this as? ServerTestState.Failure)?.sample
+
 private fun ServerTestState.latencyOrNull(): LatencySample? = when (this) {
     is ServerTestState.Running -> latency
     is ServerTestState.Success -> latency
+    is ServerTestState.Failure -> latency
     else -> null
 }
 
@@ -540,7 +554,9 @@ private fun stateText(state: ServerTestState): String = when (state) {
     is ServerTestState.Running -> state.sample?.rateText()
         ?: stringResource(R.string.diagnostics_state_running)
     is ServerTestState.Success -> state.sample.rateText()
-    ServerTestState.Failure -> stringResource(R.string.diagnostics_failure_request)
+    is ServerTestState.Failure -> state.sample
+        ?.let { stringResource(R.string.diagnostics_failure_partial, it.rateText()) }
+        ?: stringResource(R.string.diagnostics_failure_request)
     ServerTestState.Cancelled -> stringResource(R.string.diagnostics_skipped_cancelled)
 }
 
@@ -572,7 +588,11 @@ private fun SpeedTestServer.title(): String = stringResource(
 @Composable
 private fun resultSummary(state: NetworkDiagnosticsViewState): String {
     val successful = state.servers.count { it.state is ServerTestState.Success }
+    val interrupted = state.servers.any { (it.state as? ServerTestState.Failure)?.sample != null }
     return when {
+        // A transfer that broke after reporting a rate is not the same as a server that never
+        // answered, and the card beside this line is already showing that rate.
+        successful == 0 && interrupted -> stringResource(R.string.diagnostics_summary_interrupted)
         successful == 0 -> stringResource(R.string.diagnostics_summary_all_failed)
         successful == 1 -> stringResource(R.string.diagnostics_summary_partial)
         state.currentServer == null -> stringResource(R.string.diagnostics_summary_complete)

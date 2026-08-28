@@ -60,8 +60,10 @@
     <string name="diagnostics_ping_value">Ping %1$s мс</string>
     <string name="diagnostics_jitter_value">Jitter %1$s мс</string>
     <string name="diagnostics_failure_request">Ошибка загрузки</string>
+    <string name="diagnostics_failure_partial">%1$s — прервано</string>
     <string name="diagnostics_skipped_cancelled">Отменено</string>
     <string name="diagnostics_summary_all_failed">Ни один сервер не удалось проверить.</string>
+    <string name="diagnostics_summary_interrupted">Проверка прервалась — сравнение недоступно.</string>
     <string name="diagnostics_summary_partial">Проверен только один сервер — сравнение недоступно.</string>
     <string name="diagnostics_summary_complete">Проверка двух серверов завершена.</string>
     <string name="diagnostics_summary_current_fastest">Текущий сервер показал лучшую скорость.</string>

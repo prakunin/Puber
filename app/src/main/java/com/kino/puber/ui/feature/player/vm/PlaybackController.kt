@@ -32,6 +32,7 @@ import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -82,6 +83,11 @@ internal interface PlaybackControl {
         val bufferedDuration: String,
         val bufferedBytes: String,
         val streamSource: String,
+        /** Diagnostics for a picture that runs at the wrong speed; see [PlaybackDebugFormat]. */
+        val renderRate: String,
+        val frameDrops: String,
+        val frameReleaseOffset: String,
+        val videoSwitch: String,
     )
 
     val currentPosition: Long
@@ -143,6 +149,7 @@ internal class PlaybackController(
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
     private var currentStreamUrl: String? = null
     private var effectiveStreamSource: String? = null
+    private val videoRenderDiagnostics = VideoRenderDiagnostics()
     private var warmUpPlayer: ExoPlayer? = null
     private var warmUpStreamUrl: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -255,7 +262,37 @@ internal class PlaybackController(
             // Unlike DataSpec.uri, this URI reflects the endpoint after HTTP redirects.
             updateEffectiveStreamSource(loadEventInfo.uri.host, mediaLoadData)
         }
+
+        /**
+         * A null evaluation is the first format of a playback, not a switch between two of them,
+         * and only the switches are worth a line on the overlay.
+         */
+        override fun onVideoInputFormatChanged(
+            eventTime: AnalyticsListener.EventTime,
+            format: Format,
+            decoderReuseEvaluation: DecoderReuseEvaluation?,
+        ) {
+            val evaluation = decoderReuseEvaluation ?: return
+            videoRenderDiagnostics.onFormatSwitched(
+                fromFormat = evaluation.oldFormat,
+                toFormat = format,
+                decoderTransition = evaluation.decoderTransition(),
+                atPositionMs = eventTime.currentPlaybackPositionMs,
+            )
+        }
     }
+
+    private fun DecoderReuseEvaluation.decoderTransition(): DecoderTransition =
+        when (result) {
+            DecoderReuseEvaluation.REUSE_RESULT_NO ->
+                DecoderTransition.Restarted
+
+            DecoderReuseEvaluation.REUSE_RESULT_YES_WITH_FLUSH ->
+                DecoderTransition.Flushed
+
+            // Reconfiguration and plain reuse both keep the frames already queued.
+            else -> DecoderTransition.Kept
+        }
 
     private fun recoverBehindLiveWindow() {
         exoPlayer?.let { player ->
@@ -362,6 +399,7 @@ internal class PlaybackController(
                 addAnalyticsListener(analyticsListener)
             }
         exoPlayer = player
+        videoRenderDiagnostics.reset()
 
         val mediaItem = buildMediaItem(stream.url, subtitles)
         setMediaSource(player, mediaItem, stream.type)
@@ -435,6 +473,9 @@ internal class PlaybackController(
         setMediaSource(player, mediaItem, stream.type, startPositionMs = savedPosition)
         currentStreamUrl = stream.url
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
+        // The readings describe the stream being left behind, and a quality switch recorded against
+        // it would be read as belonging to the new one.
+        videoRenderDiagnostics.reset()
 
         player.trackSelectionParameters = savedTrackParams
         player.prepare()
@@ -513,6 +554,7 @@ internal class PlaybackController(
         dataSourceFactory = null
         currentStreamUrl = null
         effectiveStreamSource = null
+        videoRenderDiagnostics.reset()
         bufferAllocator = null
         targetBufferBytes = 0
     }
@@ -716,6 +758,7 @@ internal class PlaybackController(
 
         val decoderCounters = player.videoDecoderCounters
         val dropped = decoderCounters?.droppedBufferCount ?: 0
+        val renderReadings = videoRenderDiagnostics.read(decoderCounters, videoFormat?.frameRate)
 
         val bufferedMs = player.bufferedPosition - player.currentPosition
         val bufferedSec = (bufferedMs / 1000.0).coerceAtLeast(0.0)
@@ -741,6 +784,10 @@ internal class PlaybackController(
             ),
             streamSource = effectiveStreamSource
                 ?: PlaybackDebugFormat.streamSource(currentStreamUrl),
+            renderRate = renderReadings.renderRate,
+            frameDrops = renderReadings.frameDrops,
+            frameReleaseOffset = renderReadings.frameReleaseOffset,
+            videoSwitch = renderReadings.videoSwitch,
         )
     }
 

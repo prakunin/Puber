@@ -16,7 +16,7 @@ plugins {
     alias(libs.plugins.androidx.room)
 }
 
-val currentVersion = "1.8.62"
+val currentVersion = "1.9.63"
 
 private fun readProperties(name: String): Properties = Properties().apply {
     rootProject.file(name)

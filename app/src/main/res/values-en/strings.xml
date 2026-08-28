@@ -357,8 +357,10 @@
     <string name="diagnostics_ping_value">Ping %1$s ms</string>
     <string name="diagnostics_jitter_value">Jitter %1$s ms</string>
     <string name="diagnostics_failure_request">Download failed</string>
+    <string name="diagnostics_failure_partial">%1$s — interrupted</string>
     <string name="diagnostics_skipped_cancelled">Cancelled</string>
     <string name="diagnostics_summary_all_failed">Neither server could be tested.</string>
+    <string name="diagnostics_summary_interrupted">The test broke off — no comparison available.</string>
     <string name="diagnostics_summary_partial">Only one server was tested, so they cannot be compared.</string>
     <string name="diagnostics_summary_complete">Both servers have been tested.</string>
     <string name="diagnostics_summary_current_fastest">The current server produced the best speed.</string>

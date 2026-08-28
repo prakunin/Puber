@@ -44,11 +44,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.kino.puber.core.ui.uikit.component.Rating
 import com.kino.puber.core.ui.uikit.component.RatingUIState
+import com.kino.puber.core.ui.uikit.component.SkeletonAsyncImage
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 import com.kino.puber.core.ui.uikit.model.Lorem
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
@@ -437,6 +437,7 @@ private fun VideoDetailsPoster(
         }
         var urlIndex by remember(imageUrls) { mutableIntStateOf(0) }
         val currentUrl = imageUrls.getOrNull(urlIndex)
+        val posterRequest = rememberPosterRequest(currentUrl)
 
         var trailerRendered by remember(trailerUrl) { mutableStateOf(false) }
 
@@ -444,7 +445,7 @@ private fun VideoDetailsPoster(
         // actually visible so the larger poster cannot show through around the player.
         if (trailerUrl == null || !trailerRendered) {
             PosterStill(
-                imageUrl = currentUrl,
+                request = posterRequest,
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(),
@@ -480,7 +481,7 @@ private fun VideoDetailsPoster(
                 exit = fadeOut(),
             ) {
                 PosterStill(
-                    imageUrl = currentUrl,
+                    request = posterRequest,
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(),
@@ -543,20 +544,42 @@ private fun VideoDetailsPoster(
     }
 }
 
+/**
+ * Built once per URL rather than per recomposition. The still is redrawn on every focus move,
+ * trailer tick and description swap on the details screen, and a fresh [ImageRequest] each time is
+ * a fresh Coil request each time: the same picture re-fetched instead of read from memory.
+ *
+ * Both copies of the still - the one under a buffering trailer and the one beside it - share this
+ * single request for the same reason.
+ */
+@Composable
+private fun rememberPosterRequest(imageUrl: String?): ImageRequest? {
+    val context = LocalContext.current
+    return remember(imageUrl, context) {
+        imageUrl
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { url ->
+                ImageRequest.Builder(context)
+                    .data(url)
+                    .crossfade(true)
+                    .build()
+            }
+    }
+}
+
 @Composable
 private fun PosterStill(
-    imageUrl: String?,
+    request: ImageRequest?,
     modifier: Modifier,
     alignment: Alignment = Alignment.Center,
     onError: () -> Unit = {},
 ) {
-    AsyncImage(
-        modifier = modifier.placeholder(visible = imageUrl.isNullOrEmpty()),
-        model = ImageRequest.Builder(LocalContext.current)
-            .data(imageUrl)
-            .crossfade(true)
-            .build(),
-        onError = { onError() },
+    SkeletonAsyncImage(
+        // The outer skeleton covers having no URL at all; the component's own covers the wait for
+        // a URL that is still arriving, which is what an incomplete poster set looks like here.
+        modifier = modifier.placeholder(visible = request == null),
+        model = request,
+        onError = onError,
         contentDescription = null,
         contentScale = ContentScale.FillWidth,
         alignment = alignment,

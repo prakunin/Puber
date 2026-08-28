@@ -30,7 +30,9 @@ internal fun DebugOverlay(
         DebugLine("Video", "${debugInfo.videoResolution}  ${debugInfo.videoCodec}  ${debugInfo.videoBitrate}")
         DebugLine("Audio", "${debugInfo.audioCodec}  ${debugInfo.audioChannels}")
         DebugLine("Buffer", "${debugInfo.bufferedDuration}  ${debugInfo.bufferedBytes}")
-        DebugLine("Dropped", debugInfo.droppedFrames)
+        DebugLine("Render", "${debugInfo.renderRate}  offset ${debugInfo.frameReleaseOffset}")
+        DebugLine("Dropped", debugInfo.frameDrops)
+        DebugLine("Switch", debugInfo.videoSwitch)
     }
 }
 

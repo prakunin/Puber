@@ -14,11 +14,14 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
+import java.util.concurrent.Executors
 
 internal class EpisodeScheduleRepositoryTest {
 
@@ -177,6 +180,7 @@ internal class EpisodeScheduleRepositoryTest {
         coEvery { failingApi.getTvDetails(101) } throws IllegalStateException("transport")
         val failingRepository = EpisodeScheduleRepository(
             tmdbApiClient = failingApi,
+            workerDispatcher = UnconfinedTestDispatcher(),
             today = { today },
         )
 
@@ -228,6 +232,7 @@ internal class EpisodeScheduleRepositoryTest {
         )
         val repository = EpisodeScheduleRepository(
             tmdbApiClient = api,
+            workerDispatcher = UnconfinedTestDispatcher(),
             today = { currentDate },
         )
 
@@ -251,9 +256,34 @@ internal class EpisodeScheduleRepositoryTest {
         coVerify(exactly = 2) { api.getTvSeasonDetails(101, 2) }
     }
 
+    @Test
+    fun getSchedule_loadsOnTheWorkerDispatcher_notOnTheCaller() = runTest {
+        val worker = Executors
+            .newSingleThreadExecutor { runnable -> Thread(runnable, WORKER_THREAD_NAME) }
+            .asCoroutineDispatcher()
+        val loadThreads = mutableListOf<String>()
+        every { api.isConfigured } returns true
+        coEvery { api.findTvByImdbId("tt123") } answers {
+            loadThreads += Thread.currentThread().name
+            Result.success(null)
+        }
+
+        val result = worker.use { dispatcher ->
+            EpisodeScheduleRepository(
+                tmdbApiClient = api,
+                workerDispatcher = dispatcher,
+                today = { today },
+            ).getSchedule("tt123")
+        }
+
+        assertEquals(EpisodeScheduleResult.NoMatch, result)
+        assertEquals(listOf(WORKER_THREAD_NAME), loadThreads)
+    }
+
     private fun repository(): EpisodeScheduleRepository {
         return EpisodeScheduleRepository(
             tmdbApiClient = api,
+            workerDispatcher = UnconfinedTestDispatcher(),
             today = { today },
         )
     }
@@ -265,5 +295,9 @@ internal class EpisodeScheduleRepositoryTest {
             .single()
             .episodes
             .map(ScheduledEpisode::episodeNumber)
+    }
+
+    private companion object {
+        const val WORKER_THREAD_NAME = "episode-schedule-worker"
     }
 }
