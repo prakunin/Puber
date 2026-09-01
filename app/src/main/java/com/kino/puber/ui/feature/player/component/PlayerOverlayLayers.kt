@@ -75,7 +75,7 @@ internal fun PlayerControlsLayer(
         isBuffering = content.isBuffering,
         isMovie = content.isMovie,
         isPlaying = content.isPlaying,
-        hasDescription = !content.description.isNullOrBlank(),
+        hasAbout = !content.about.isEmpty,
         hasNextEpisode = content.hasNextEpisode,
         hasPreviousEpisode = content.hasPreviousEpisode,
         canMarkCurrentWatched = content.canMarkCurrentWatched && content.showMarkWatchedButton,

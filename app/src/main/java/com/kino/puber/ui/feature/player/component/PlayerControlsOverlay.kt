@@ -31,7 +31,7 @@ internal fun PlayerControlsOverlay(
     isBuffering: Boolean,
     isMovie: Boolean,
     isPlaying: Boolean,
-    hasDescription: Boolean,
+    hasAbout: Boolean,
     hasNextEpisode: Boolean,
     hasPreviousEpisode: Boolean,
     canMarkCurrentWatched: Boolean,
@@ -74,7 +74,7 @@ internal fun PlayerControlsOverlay(
                 buttonState = PlayerButtonRowState(
                     isMovie = isMovie,
                     isPlaying = isPlaying,
-                    hasDescription = hasDescription,
+                    hasAbout = hasAbout,
                     hasNextEpisode = hasNextEpisode,
                     hasPreviousEpisode = hasPreviousEpisode,
                     canMarkCurrentWatched = canMarkCurrentWatched,

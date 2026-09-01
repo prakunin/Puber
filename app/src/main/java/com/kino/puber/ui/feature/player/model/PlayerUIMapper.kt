@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.player.model
 
 import android.content.Context
 import com.kino.puber.R
+import com.kino.puber.core.ui.model.DurationLabel
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Audio
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
@@ -163,6 +164,23 @@ internal class PlayerUIMapper(
 
     fun buildTitle(item: Item): String {
         return item.title
+    }
+
+    /**
+     * The About panel's contents. [resolvedDurationSeconds] is the length of what is playing now,
+     * which is not the same as the item's own duration once the item is a series.
+     */
+    fun buildAbout(item: Item, resolvedDurationSeconds: Int?): PlayerAboutUIState {
+        val seconds = PlayerAboutFactory.durationSeconds(item, resolvedDurationSeconds)
+        return PlayerAboutFactory.build(
+            item = item,
+            durationLabel = seconds?.let { total ->
+                val template = DurationLabel.template(total)
+                context.getString(template.resId, *template.args.toTypedArray())
+            },
+            imdbLabel = context.getString(R.string.player_about_rating_imdb),
+            kinopoiskLabel = context.getString(R.string.player_about_rating_kinopoisk),
+        )
     }
 
     fun buildSubtitle(seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?): String? {

@@ -16,6 +16,12 @@
     <string name="player_button_about_movie">О фильме</string>
     <string name="player_button_about_series">О сериале</string>
 
+    <!-- Панель «О фильме»: название, факты и состав -->
+    <string name="player_about_section_director">Режиссёр</string>
+    <string name="player_about_section_cast">В ролях</string>
+    <string name="player_about_rating_imdb">IMDb</string>
+    <string name="player_about_rating_kinopoisk">Кинопоиск</string>
+
     <!-- Stream diagnostics: дверь «Поток» внутри настроек -->
     <string name="player_info_quality">Качество</string>
     <string name="player_info_resolution">Разрешение</string>

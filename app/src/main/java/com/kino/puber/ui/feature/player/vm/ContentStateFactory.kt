@@ -23,7 +23,7 @@ internal class ContentStateFactory(private val mapper: PlayerUIMapper) {
     ): PlayerContentState = PlayerContentState(
         title = mapper.buildTitle(item),
         subtitle = mapper.buildSubtitle(resolved.seasonNumber, resolved.episodeNumber, resolved.episodeTitle),
-        description = item.plot?.trim()?.takeIf(String::isNotEmpty),
+        about = mapper.buildAbout(item, resolved.duration),
         isPlaying = resumeDialog == null,
         currentPosition = 0L,
         duration = resolved.duration?.toLong()?.times(1000) ?: 0L,

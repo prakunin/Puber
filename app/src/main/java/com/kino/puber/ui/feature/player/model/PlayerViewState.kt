@@ -19,8 +19,8 @@ internal data class PlayerContentState(
     val title: String,
     val subtitle: String?,
 
-    /** The item's own plot, shown by the About panel. Null when the API gave us none. */
-    val description: String?,
+    /** Everything the About panel shows: the plot and the facts around it. */
+    val about: PlayerAboutUIState,
 
     // Playback
     val isPlaying: Boolean,
@@ -100,7 +100,8 @@ internal data class SkipSegmentUIState(
 /**
  * Everything the controls row can open. Audio, video and stream diagnostics are one [Settings]
  * panel — three buttons opening the same root only ever differed in which door took the focus —
- * and [About] is the item's own description, which the player had no way to show before.
+ * and [About] is what the item itself is: the plot, the facts and the credits the player had no
+ * way to show before.
  */
 @Immutable
 internal enum class ActivePanel {

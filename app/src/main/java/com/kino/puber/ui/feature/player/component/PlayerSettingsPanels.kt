@@ -29,7 +29,7 @@ internal fun PlayerSettingsPanels(
     PlayerAboutPanel(
         visible = content.activePanel == ActivePanel.About,
         isMovie = content.isMovie,
-        description = content.description,
+        about = content.about,
     )
 
     PlayerEpisodesPanel(

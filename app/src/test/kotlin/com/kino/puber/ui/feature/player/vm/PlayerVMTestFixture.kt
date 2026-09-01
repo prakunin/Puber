@@ -21,6 +21,7 @@ import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.BufferPresetUIState
+import com.kino.puber.ui.feature.player.model.PlayerAboutUIState
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
@@ -239,7 +240,15 @@ internal open class PlayerVMTestFixture {
     protected val testContentState = PlayerContentState(
         title = "Breaking Bad",
         subtitle = "S1E1",
-        description = "A chemistry teacher starts cooking.",
+        about = PlayerAboutUIState(
+            title = "Breaking Bad",
+            metaLine = "2008 · 47 min · USA · 18+",
+            genresLine = "Drama, crime",
+            ratingsLine = "IMDb 9.5",
+            description = "A chemistry teacher starts cooking.",
+            director = "Vince Gilligan",
+            cast = "Bryan Cranston, Aaron Paul",
+        ),
         isPlaying = true,
         currentPosition = 0L,
         duration = 2_400_000L,

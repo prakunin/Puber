@@ -98,3 +98,34 @@ internal data class ResumeDialogState(
     val formattedTime: String,
     val episodeInfo: String? = null,
 )
+
+/**
+ * Everything the About panel knows about what is playing.
+ *
+ * Each line is already joined and cleaned by [PlayerAboutFactory]: an empty string or a null means
+ * the API sent nothing, and the panel leaves that row out rather than printing a dash.
+ */
+@Immutable
+internal data class PlayerAboutUIState(
+    val title: String,
+    /** `2010 · 2 ч 28 мин · США · 16+` — what the thing is, in one line. */
+    val metaLine: String,
+    val genresLine: String,
+    /** `IMDb 8.8 · Кинопоиск 8.7`. */
+    val ratingsLine: String,
+    val description: String?,
+    val director: String?,
+    val cast: String?,
+) {
+    /**
+     * The title does not count towards this: the player already prints it above the progress bar,
+     * so a panel carrying nothing else would open on what the viewer can read behind it.
+     */
+    val isEmpty: Boolean
+        get() = metaLine.isEmpty() &&
+            genresLine.isEmpty() &&
+            ratingsLine.isEmpty() &&
+            description == null &&
+            director == null &&
+            cast == null
+}

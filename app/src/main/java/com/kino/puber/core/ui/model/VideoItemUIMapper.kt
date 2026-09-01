@@ -156,32 +156,8 @@ class VideoItemUIMapper(
     }
 
     fun Int.formatDurationWithResources(): String {
-        val days = this / 86400
-        val hours = (this % 86400) / 3600
-        val minutes = (this % 3600) / 60
-
-        return when {
-            days > 0 && hours > 0 && minutes > 0 -> resources.getString(
-                R.string.duration_days_hours_minutes, days, hours, minutes
-            )
-
-            days > 0 && hours > 0 -> resources.getString(
-                R.string.duration_days_hours, days, hours
-            )
-
-            days > 0 && minutes > 0 -> resources.getString(
-                R.string.duration_days_minutes, days, minutes
-            )
-
-            days > 0 -> resources.getString(R.string.duration_days_only, days)
-            hours > 0 && minutes > 0 -> resources.getString(
-                R.string.duration_hours_minutes, hours, minutes
-            )
-
-            hours > 0 -> resources.getString(R.string.duration_hours_only, hours)
-            minutes > 0 -> resources.getString(R.string.duration_minutes_only, minutes)
-            else -> resources.getString(R.string.duration_zero)
-        }
+        val template = DurationLabel.template(this)
+        return resources.getString(template.resId, *template.args.toTypedArray())
     }
 
     private fun String.formatTitle(): String {

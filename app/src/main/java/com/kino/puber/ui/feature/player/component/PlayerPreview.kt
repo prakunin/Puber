@@ -19,6 +19,7 @@ import com.kino.puber.ui.feature.player.model.BufferPresetUIState
 import com.kino.puber.ui.feature.player.model.EpisodeSeasonUIState
 import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
+import com.kino.puber.ui.feature.player.model.PlayerAboutUIState
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
 import com.kino.puber.ui.feature.player.model.PlayerViewState
@@ -115,9 +116,17 @@ private fun previewSeriesContent(
 ) = PlayerContentState(
     title = "Кибердеревня",
     subtitle = "2 сезон, 6 серия, Что там, за железным занавесом?",
-    description = "Робот Николай и его создатель Иван Барсуков живут на далёкой планете, " +
-        "где корова доится по расписанию, трактор ходит сам, а корпорация с Земли уже " +
-        "присматривается к участку.",
+    about = PlayerAboutUIState(
+        title = "Кибердеревня",
+        metaLine = "2023 · 27 мин · Россия · 16+",
+        genresLine = "Комедия, фантастика",
+        ratingsLine = "IMDb 7.6 · Кинопоиск 8.1",
+        description = "Робот Николай и его создатель Иван Барсуков живут на далёкой планете, " +
+            "где корова доится по расписанию, трактор ходит сам, а корпорация с Земли уже " +
+            "присматривается к участку.",
+        director = "Сергей Васильев",
+        cast = "Сергей Чихачёв, Юрий Кузнецов, Александра Бортич",
+    ),
     isPlaying = true,
     currentPosition = 630_000L,
     duration = 1_647_000L,
@@ -165,8 +174,16 @@ private fun previewMovieContent(
 ) = PlayerContentState(
     title = "Граф Монте-Кристо",
     subtitle = null,
-    description = "Эдмон Дантес возвращается из плавания к невесте и получает вместо свадьбы " +
-        "донос, суд и камеру замка Иф.",
+    about = PlayerAboutUIState(
+        title = "Граф Монте-Кристо",
+        metaLine = "2024 · 2 ч 58 мин · Франция · 16+",
+        genresLine = "Драма, приключения",
+        ratingsLine = "IMDb 7.8 · Кинопоиск 8.2",
+        description = "Эдмон Дантес возвращается из плавания к невесте и получает вместо свадьбы " +
+            "донос, суд и камеру замка Иф.",
+        director = "Александр де Ла Пательер, Матьё Делапорт",
+        cast = "Пьер Нинэ, Бастьен Бульон, Анаис Демустье",
+    ),
     isPlaying = true,
     currentPosition = 240_000L,
     duration = 10_679_000L,

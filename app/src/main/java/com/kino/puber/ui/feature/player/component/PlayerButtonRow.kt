@@ -97,7 +97,7 @@ internal fun shouldOpenEpisodesFromButtons(keyCode: Int, isMovie: Boolean): Bool
 internal data class PlayerButtonRowState(
     val isMovie: Boolean,
     val isPlaying: Boolean,
-    val hasDescription: Boolean,
+    val hasAbout: Boolean,
     val hasNextEpisode: Boolean,
     val hasPreviousEpisode: Boolean,
     val canMarkCurrentWatched: Boolean,
@@ -129,8 +129,8 @@ private fun ContentControls(
                 modifier = Modifier.focusRequester(focusRequesters.episodesButton),
             )
         }
-        // No description, no door: the panel would open on an empty page.
-        if (state.hasDescription) {
+        // Nothing known about the item, no door: the panel would open on an empty page.
+        if (state.hasAbout) {
             ControlButton(
                 description = stringResource(aboutLabel(state.isMovie)),
                 icon = Icons.Outlined.Info,
