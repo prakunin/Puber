@@ -4,26 +4,31 @@ Base class: `core/ui/PuberVM.kt`. Paginated screens use `PagingVM` on top of it
 (see [paging-and-filters.md](paging-and-filters.md)).
 
 ```kotlin
-internal class FavoriteVM(
+internal class BookmarksVM(
     router: AppRouter,
+    private val interactor: BookmarkInteractor,
+    private val mapper: VideoItemUIMapper,
     override val errorHandler: ErrorHandler,
-    private val interactor: FavoritesInteractor,
-    private val mapper: FavoriteItemUIMapper,
-) : PuberVM<FavoriteViewState>(router) {
+) : PuberVM<BookmarksViewState>(router) {
 
-    override val initialViewState = FavoriteViewState.Loading
+    override val initialViewState: BookmarksViewState = BookmarksViewState.Loading
 
-    override fun onStart() { load() }
+    override fun onStart() { loadFolders() }
 
     override fun onAction(action: UIAction) {
         when (action) {
-            CommonAction.RetryClicked -> load()
+            CommonAction.RetryClicked -> loadFolders()
             is CommonAction.ItemSelected<*> -> onItemSelected(action)
             else -> super.onAction(action)
         }
     }
 }
 ```
+
+Shortened from `ui/feature/bookmarks/vm/BookmarksVM.kt`, which takes two more
+collaborators. `errorHandler` is optional: a view model that maps its own
+failures into state, such as `FavoriteVM`, leaves it null and never calls
+`dispatchError`.
 
 ## What the base class gives you
 

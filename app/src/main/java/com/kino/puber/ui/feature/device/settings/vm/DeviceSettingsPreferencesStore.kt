@@ -5,7 +5,7 @@ import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 
 /** Local, synchronous settings used by the Settings screen. */
 internal interface DeviceSettingsPreferencesStore {

@@ -12,7 +12,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
-import com.kino.puber.domain.interactor.auth.model.AuthState
+import com.kino.puber.domain.model.AuthState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.ui.feature.auth.model.AuthViewState
 import com.kino.puber.util.FakeResourceProvider

@@ -81,12 +81,51 @@ class ControlsStateMachineTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `closePanel_afterEpisodes_onlySchedulesControlsHide`() {
+    fun `closePanel_afterEpisodes_schedulesControlsHideAndReportsThePanelClosed`() {
         machine.openPanel(ActivePanel.Episodes)
 
         val effects = machine.closePanel()
 
-        assertEquals(listOf(ControlsStateMachine.Effect.ScheduleHide), effects)
+        // The second effect is how the caller learns to drop what it put on screen for the panel.
+        // Every way out of a panel comes through here, so no dismissal path can forget.
+        assertEquals(
+            listOf(ControlsStateMachine.Effect.ScheduleHide, ControlsStateMachine.Effect.PanelClosed),
+            effects,
+        )
+    }
+
+    @Test
+    fun `handleBack_afterPlaybackEnded_leavesThePlayer`() {
+        machine.showControlsForEndedPlayback()
+
+        val effects = machine.handleBack()
+
+        // The controls are up because the media ran out. Hiding them would strand the viewer on a
+        // finished picture with nothing left to press.
+        assertEquals(listOf(ControlsStateMachine.Effect.SaveAndExit), effects)
+    }
+
+    @Test
+    fun `handleBack_afterPlaybackResumed_hidesTheControlsAgain`() {
+        machine.showControlsForEndedPlayback()
+        machine.onPlaybackResumed()
+
+        val effects = machine.handleBack()
+
+        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), effects)
+        assertFalse(machine.state.controlsVisible)
+    }
+
+    @Test
+    fun `showControlsForEndedPlayback_cancelsAPendingHide`() {
+        machine.showControls(FocusTarget.Buttons)
+
+        val effects = machine.showControlsForEndedPlayback()
+
+        // Without this the hide scheduled while the viewer had the controls up fires a few seconds
+        // later and takes away the only thing on the screen.
+        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), effects)
+        assertTrue(machine.state.controlsVisible)
     }
 
     @Test

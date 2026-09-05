@@ -12,11 +12,11 @@ import com.adamglin.phosphoricons.duotone.GearSix
 import com.adamglin.phosphoricons.duotone.Ghost
 import com.adamglin.phosphoricons.duotone.Heart
 import com.adamglin.phosphoricons.duotone.House
+import com.adamglin.phosphoricons.duotone.MagnifyingGlass
 import com.adamglin.phosphoricons.duotone.MicrophoneStage
 import com.adamglin.phosphoricons.duotone.MonitorPlay
 import com.adamglin.phosphoricons.duotone.Playlist
 import com.adamglin.phosphoricons.duotone.TelevisionSimple
-import com.adamglin.phosphoricons.duotone.MagnifyingGlass
 import com.adamglin.phosphoricons.duotone.Trophy
 import com.kino.puber.R
 import com.kino.puber.core.system.ResourceProvider
@@ -24,6 +24,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.domain.model.TabType
 
 internal class MainUIMapper(
     private val resources: ResourceProvider,

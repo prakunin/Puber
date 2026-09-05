@@ -1,6 +1,7 @@
 package com.kino.puber.domain.interactor.device
 
 import com.kino.puber.data.api.models.DeviceResponse
+import com.kino.puber.domain.model.DeviceSettingType
 import kotlinx.coroutines.flow.Flow
 
 interface IDeviceSettingInteractor {

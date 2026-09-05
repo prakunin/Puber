@@ -2,8 +2,8 @@ package com.kino.puber.ui.feature.device.settings.model
 
 import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.domain.interactor.device.DeviceSettingType
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.DeviceSettingType
+import com.kino.puber.domain.model.TabType
 
 internal sealed interface DeviceSettingsActions : UIAction {
 

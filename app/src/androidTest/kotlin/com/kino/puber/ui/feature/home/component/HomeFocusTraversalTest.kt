@@ -189,10 +189,9 @@ internal class HomeFocusTraversalTest {
 
         // The first cards cannot be centred -- the list is already at scroll zero -- so the walk
         // starts far enough in that there is room on both sides of the focused card.
-        repeat(CENTRING_FIRST_INDEX) { pressCurrent(Key.DirectionRight) }
         (CENTRING_FIRST_INDEX..CENTRING_LAST_INDEX).forEach { column ->
+            pressUntilFocused(Key.DirectionRight, itemTitle(0, column), maxPresses = 8)
             assertCentred(column, focusedCard().getUnclippedBoundsInRoot(), viewport)
-            pressCurrent(Key.DirectionRight)
         }
     }
 
@@ -205,21 +204,45 @@ internal class HomeFocusTraversalTest {
         )
     }
 
+    /**
+     * Walks each row to the card it should remember, with the D-pad.
+     *
+     * A card cannot be seeded by asking it for focus: the row remembers the card the user moved
+     * to, and a request placed from outside that bookkeeping is undone by it - focus stays on the
+     * card the row was already holding. Right is what a user presses and what the row records.
+     */
     private fun seedStableTargets() {
         repeat(HOME_ROW_TYPES.lastIndex) { index ->
             val row = index + 1
-            pressCurrent(Key.DirectionDown)
-            requestFocus(
-                when (row) {
-                    1, 3, 4 -> itemTitle(row, 1)
-                    else -> itemTitle(row, 0)
-                },
-            )
+            pressUntilFocused(Key.DirectionDown, itemTitle(row, 0))
+            if (row in SEEDED_SECOND_CARD_ROWS) {
+                pressUntilFocused(Key.DirectionRight, itemTitle(row, 1))
+            }
         }
         repeat(HOME_ROW_TYPES.lastIndex) {
             pressCurrent(Key.DirectionUp)
         }
-        requestFocus(itemTitle(0, 0))
+        // Row 0 keeps its first card, so walking back up lands on it with nothing left to press.
+        composeRule.onNodeWithText(itemTitle(0, 0)).assertIsFocused()
+    }
+
+    /**
+     * Presses until the wanted card holds focus.
+     *
+     * Focus placed by a semantics request leaves the screen's hero claim unresolved, and the first
+     * key press afterwards is spent settling it rather than moving anywhere. Pressing until the
+     * card is reached says what the test means and does not depend on which press that is.
+     */
+    private fun pressUntilFocused(key: Key, title: String, maxPresses: Int = 6) {
+        repeat(maxPresses) {
+            if (composeRule.onAllNodes(isFocused() and hasText(title)).fetchSemanticsNodes()
+                    .isNotEmpty()
+            ) {
+                return
+            }
+            pressCurrent(key)
+        }
+        composeRule.onNodeWithText(title).assertIsFocused()
     }
 
     private fun requestFocus(title: String) {
@@ -314,6 +337,8 @@ internal class HomeFocusTraversalTest {
          * Eight cards leave room to centre the middle ones: at either end the list is clamped at
          * scroll zero or its maximum, so the card there sits at the edge rather than the centre.
          */
+        val SEEDED_SECOND_CARD_ROWS = setOf(1, 3, 4)
+
         const val CENTRING_ITEM_COUNT = 8
         const val CENTRING_FIRST_INDEX = 3
         const val CENTRING_LAST_INDEX = 4

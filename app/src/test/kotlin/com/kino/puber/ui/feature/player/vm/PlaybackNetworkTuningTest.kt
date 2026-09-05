@@ -1,6 +1,6 @@
 package com.kino.puber.ui.feature.player.vm
 
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 

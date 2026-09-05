@@ -1,10 +1,8 @@
 package com.kino.puber.ui.feature.main.model
 
-import android.os.Parcelable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.kino.puber.R
-import kotlinx.parcelize.Parcelize
+import com.kino.puber.domain.model.TabType
 
 @Immutable
 internal data class MainViewState(
@@ -20,24 +18,3 @@ internal data class MainTab(
     val isSelected: Boolean = false,
     val isVisible: Boolean = false,
 )
-
-@Parcelize
-enum class TabType(val title: Int, val enabled: Boolean = true) : Parcelable {
-    Home(R.string.main_tabs_home),
-    Search(R.string.main_tabs_search),
-    Favourites(R.string.main_tabs_favorites),
-    Bookmarks(R.string.main_tabs_bookmarks, enabled = false),
-    History(R.string.main_tabs_history),
-    Movies(R.string.main_tabs_movies),
-    Series(R.string.main_tabs_series),
-    Cartoons(R.string.main_tabs_cartoons, enabled = false),
-    Anime(R.string.main_tabs_anime, enabled = false),
-    For4k(R.string.main_tabs_f4k),
-    Concerts(R.string.main_tabs_concerts),
-    DocMovies(R.string.main_tabs_docmovies),
-    DocSeries(R.string.main_tabs_docseries),
-    TvShows(R.string.main_tabs_tvshows),
-    Collections(R.string.main_tabs_collections, enabled = false),
-    SportTV(R.string.main_tabs_sport_tv, enabled = false),
-    Settings(R.string.main_tabs_settings),
-}

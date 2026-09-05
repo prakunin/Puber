@@ -2,7 +2,7 @@ package com.kino.puber.ui.feature.player.vm
 
 import android.app.ActivityManager
 import android.content.Context
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 
 /**
  * Buffer thresholds handed to `DefaultLoadControl`.

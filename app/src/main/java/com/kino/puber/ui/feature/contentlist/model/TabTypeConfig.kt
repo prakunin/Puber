@@ -4,7 +4,7 @@ import com.kino.puber.R
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.data.api.models.ItemType
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 
 internal object TabTypeConfig {
 

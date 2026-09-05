@@ -19,7 +19,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
 import com.kino.puber.ui.feature.episodeschedule.model.EpisodeScheduleScreenParams
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 import kotlinx.parcelize.Parcelize
 import org.junit.Rule

@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
@@ -12,7 +12,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi
 import com.kino.puber.ui.feature.device.settings.model.SettingOptionUi
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 
 private val previewDevice = DeviceUi(
     title = "Android TV",

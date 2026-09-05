@@ -3,7 +3,7 @@ package com.kino.puber.ui.feature.device.settings.model
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import com.kino.puber.R
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 
 internal enum class SettingsSection(@StringRes val titleRes: Int) {
     General(R.string.settings_section_general),

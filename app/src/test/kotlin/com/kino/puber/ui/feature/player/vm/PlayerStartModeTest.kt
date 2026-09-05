@@ -12,7 +12,7 @@ import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.ScreensImpl
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerStartMode

@@ -30,7 +30,7 @@ import com.kino.puber.ui.feature.home.component.HomeScreen
 import com.kino.puber.ui.feature.history.component.HistoryScreen
 import com.kino.puber.ui.feature.collections.component.CollectionsScreen
 import com.kino.puber.ui.feature.bookmarks.component.BookmarksScreen
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.parcelize.Parcelize
 
 internal object ScreensImpl : Screens {

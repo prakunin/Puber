@@ -33,7 +33,7 @@ import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
@@ -48,7 +48,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import com.kino.puber.core.model.AppLanguage
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 
 private const val FocusTimeoutMillis = 3_000L
 private const val NeighbourTag = "settings-neighbour"

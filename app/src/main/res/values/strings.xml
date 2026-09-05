@@ -3,6 +3,13 @@
     <string name="tv_home_continue_watching">Продолжить просмотр</string>
     <string name="tv_home_recommendation_channel">Продолжить просмотр</string>
     <string name="error_generic">Не удалось выполнить запрос. Попробуйте ещё раз.</string>
+    <string name="error_no_connection">Нет подключения к интернету. Проверьте сеть и попробуйте ещё раз.</string>
+    <string name="error_network">Сервер не отвечает. Проверьте подключение и попробуйте ещё раз.</string>
+    <string name="error_server_response">Сервер ответил ошибкой %1$d. Попробуйте ещё раз.</string>
+    <string name="error_unauthorized">Сессия истекла. Войдите в аккаунт ещё раз.</string>
+    <string name="error_malformed_response">Сервер прислал неожиданный ответ. Попробуйте ещё раз.</string>
+    <string name="error_auth_pending">Подтвердите вход на сайте — код ещё не активирован.</string>
+    <string name="error_auth_failed">Не удалось войти. Запросите новый код и попробуйте ещё раз.</string>
     <string name="history_title">История</string>
     <string name="history_empty_title">История просмотров пуста</string>
     <string name="history_empty_description">Начните смотреть фильм или сериал — он появится здесь.</string>

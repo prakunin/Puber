@@ -2,7 +2,7 @@ package com.kino.puber.core.ui.navigation.component
 
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.ui.feature.history.component.HistoryScreen
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test

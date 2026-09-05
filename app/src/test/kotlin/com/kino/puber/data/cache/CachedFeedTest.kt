@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -103,6 +104,26 @@ class CachedFeedTest {
             ),
             emissions,
         )
+    }
+
+    @Test
+    fun anExceptionFromTheCollectorReachesTheCallerUnchanged() = runTest {
+        // The collector does real work — the details repository writes to Room from inside one — so
+        // it can fail. Emitting from inside the load's own catch turned that failure into a
+        // RefreshFailed about the *loader*, on top of tripping Flow's exception transparency, and
+        // the real cause never reached anyone.
+        val subject = feed()
+        subject.putAll(mapOf("k" to "stored"))
+        now += 11.minutes.inWholeMilliseconds
+        val failure = IllegalStateException("the collector could not store the value")
+
+        val thrown = assertThrows<IllegalStateException> {
+            subject.load("k", ttl = 10.minutes) { "fresh" }.collect { cached ->
+                if (cached is Cached.Value && !cached.isStale) throw failure
+            }
+        }
+
+        assertSame(failure, thrown)
     }
 
     @Test

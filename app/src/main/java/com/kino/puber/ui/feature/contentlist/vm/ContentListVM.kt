@@ -54,6 +54,7 @@ internal class ContentListVM(
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
             is ContentListAction.TrailerPreviewFinished -> stopTrailerPreview()
             is ContentListAction.TrailerPreviewStopped -> stopTrailerPreview()
+            else -> super.onAction(action)
         }
     }
 

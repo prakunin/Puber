@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 
 @Immutable
@@ -71,14 +72,6 @@ internal data class BufferPresetUIState(
     val label: String,
     val preset: BufferPreset,
 )
-
-enum class BufferPreset {
-    AUTO,
-    SMALL,
-    MEDIUM,
-    LARGE,
-    MAX,
-}
 
 @Immutable
 internal data class SeekIndicatorState(

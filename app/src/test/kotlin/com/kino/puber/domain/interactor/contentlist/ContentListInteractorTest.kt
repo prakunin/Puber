@@ -19,7 +19,7 @@ import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.util.FakePayloadStore
 import io.mockk.coEvery
 import io.mockk.coVerify

@@ -14,7 +14,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.player.model.ActivePanel
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.BufferPresetUIState
 import com.kino.puber.ui.feature.player.model.EpisodeSeasonUIState
 import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState

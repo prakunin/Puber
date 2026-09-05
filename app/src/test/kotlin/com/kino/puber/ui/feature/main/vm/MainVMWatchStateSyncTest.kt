@@ -16,7 +16,7 @@ import com.kino.puber.ui.feature.main.model.MainAction
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coVerify
 import io.mockk.every

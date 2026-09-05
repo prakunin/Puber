@@ -17,7 +17,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
@@ -33,7 +33,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
 import com.kino.puber.ui.feature.device.settings.model.MenuSectionUi
 import com.kino.puber.ui.feature.device.settings.model.SelectableMenuTabs
 import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 

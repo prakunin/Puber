@@ -43,7 +43,7 @@ import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import java.io.FileNotFoundException
 import java.io.IOException

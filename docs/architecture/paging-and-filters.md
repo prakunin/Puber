@@ -31,9 +31,16 @@ Implement:
 - optional `onLoadFirstPageWithKey(key)` when paging is keyed.
 
 Available to the subclass: `refresh()`, `resetPaging(key)`,
-`notifyLoadNextPage()`, `notifyLoadingPrev(forced)`, `setPrevPage(list)`,
-`updateItem(item)`, `setPageError(error)`, `setGeneralError(error)`, and
+`refreshPagingKeepingContent()`, `notifyLoadNextPage()`,
+`notifyLoadingPrev(forced)`, `setPrevPage(list)`, `updateItem(item)`,
+`setPageError(error)`, `setGeneralError(error)`, and
 `pagingLaunch(context, start) { }`.
+
+`resetPaging(key)` and `refreshPagingKeepingContent()` are a pair and differ in
+what the user sees. `resetPaging` clears the list first, which is right when the
+list's identity changed - a new filter, a new query. `refreshPagingKeepingContent`
+reloads the same list and keeps drawing it meanwhile, because on a remote an
+emptied list has no card left to hold the focus.
 
 Run paging coroutines through `pagingLaunch`, passing the matching handler:
 `errorHandlerGeneral` for the first page (a failure replaces the screen) and

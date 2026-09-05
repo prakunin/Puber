@@ -36,7 +36,7 @@ import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeViewState
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -178,28 +178,45 @@ internal class HomeSectionRemovalFocusTest {
         chrome.assertIsNotFocused()
     }
 
+    /**
+     * Walks from the chrome into the row and along it, with the D-pad.
+     *
+     * The card is not asked for focus directly. A row remembers the card the user moved to, and
+     * focus dropped onto a card from outside that bookkeeping is not remembered as the row's own -
+     * so when that card is then removed the row has nothing to fall back to and focus escapes to
+     * the chrome, which is the very thing this test exists to catch.
+     */
     private fun focusCard(
         previousIds: List<Int>,
         targetId: Int,
     ) {
         val targetIndex = previousIds.indexOf(targetId)
         check(targetIndex >= 0)
-        composeRule
-            .onNodeWithText(cardTitle(previousIds.first()))
-            .performSemanticsAction(SemanticsActions.RequestFocus)
-            .assertIsFocused()
-
+        pressUntilFocused(Key.DirectionDown, cardTitle(previousIds.first()))
         repeat(targetIndex) { index ->
-            composeRule
-                .onNodeWithText(cardTitle(previousIds[index]))
-                .performKeyInput {
-                    keyDown(Key.DirectionRight)
-                    keyUp(Key.DirectionRight)
-                }
-            composeRule
-                .onNodeWithText(cardTitle(previousIds[index + 1]))
-                .assertIsFocused()
+            pressUntilFocused(Key.DirectionRight, cardTitle(previousIds[index + 1]))
         }
+    }
+
+    /**
+     * Presses until the wanted card holds focus. Focus placed by a semantics request leaves the
+     * screen's hero claim unresolved, and the first press afterwards is spent settling it rather
+     * than moving anywhere, so a single press cannot be counted on to arrive.
+     */
+    private fun pressUntilFocused(key: Key, title: String, maxPresses: Int = 6) {
+        repeat(maxPresses) {
+            if (composeRule.onAllNodes(isFocused() and hasText(title)).fetchSemanticsNodes()
+                    .isNotEmpty()
+            ) {
+                return
+            }
+            composeRule.onNode(isFocused()).performKeyInput {
+                keyDown(key)
+                keyUp(key)
+            }
+            composeRule.waitForIdle()
+        }
+        composeRule.onNodeWithText(title).assertIsFocused()
     }
 
     /**

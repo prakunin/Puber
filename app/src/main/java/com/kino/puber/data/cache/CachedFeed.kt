@@ -183,7 +183,11 @@ class CachedFeed<V : Any>(
         // flag as it started, and the failure would be reported as one to shrug off.
         val generationWhenCachedWasRead = store.generation
         var cachedStillBelongsToCurrentGeneration = cached != null
-        try {
+        // Computed here and emitted below rather than inside the try: an emit runs the downstream
+        // collector, and this one writes to Room. A collector that throws would be caught by the
+        // catch below, which would then emit a second time — masking the real error behind a
+        // RefreshFailed and tripping Flow's exception-transparency check on top of it.
+        val outcome = try {
             var fresh: Stamped<V>
             var generationMoved: Boolean
             do {
@@ -233,14 +237,15 @@ class CachedFeed<V : Any>(
                     cachedStillBelongsToCurrentGeneration = false
                 }
             } while (generationMoved)
-            emit(Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt))
+            Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
             val wipedWhileLoading = store.generation != generationWhenCachedWasRead
             if (!cachedStillBelongsToCurrentGeneration || wipedWhileLoading) throw error
-            emit(Cached.RefreshFailed(error))
+            Cached.RefreshFailed(error)
         }
+        emit(outcome)
     }
 
     /**

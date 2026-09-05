@@ -50,7 +50,7 @@ import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeViewState
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,7 +69,6 @@ private const val COLLECTION_SCREEN_TAG = "collection_destination"
 private const val COLLECTION_BACK_TAG = "collection_back"
 private const val BOUNDS_TOLERANCE = 1f
 private const val MAX_FOCUSED_NODE_DIAGNOSTICS = 5
-private const val COLLECTIONS_ROW_INDEX = 5
 
 /**
  * A collection opens from Home the way a details screen does, but it is pushed inside the tab flow
@@ -141,12 +140,7 @@ internal class HomeCollectionBackFocusTest {
                 .onNodeWithText("row-0-item-0")
                 .performSemanticsAction(SemanticsActions.RequestFocus)
                 .assertIsFocused()
-            repeat(COLLECTIONS_ROW_INDEX) { row ->
-                composeRule
-                    .onNodeWithText("row-$row-item-0")
-                    .performDirection(Key.DirectionDown)
-                composeRule.mainClock.advanceTimeBy(300)
-            }
+            pressUntilFocused(Key.DirectionDown, "collection-0")
             composeRule
                 .onNodeWithText("collection-0")
                 .performDirection(Key.DirectionRight)
@@ -231,6 +225,29 @@ internal class HomeCollectionBackFocusTest {
                 val tag = node.config.getOrNull(SemanticsProperties.TestTag)
                 "text=$text, tag=$tag, bounds=${node.boundsInRoot}"
             }
+    }
+
+    /**
+     * Presses until the wanted card holds focus, rather than counting rows.
+     *
+     * Focus placed by a semantics request leaves the screen's hero claim unresolved, and the first
+     * press afterwards is spent settling it instead of moving a row - so a count of presses lands
+     * one row short. It would also have to be kept in step with the number of rows the fixture
+     * builds.
+     */
+    private fun pressUntilFocused(key: Key, title: String, maxPresses: Int = 10) {
+        repeat(maxPresses) {
+            if (composeRule.onAllNodes(isFocused() and hasText(title)).fetchSemanticsNodes()
+                    .isNotEmpty()
+            ) {
+                return
+            }
+            // Pressed on whatever holds focus: the wanted row may still be below the fold and
+            // uncomposed, and a key cannot be injected into a node that is not there.
+            composeRule.onNode(isFocused()).performDirection(key)
+            composeRule.mainClock.advanceTimeBy(300)
+        }
+        composeRule.onNodeWithText(title).assertIsFocused()
     }
 
     private fun SemanticsNodeInteraction.performDirection(key: Key) {

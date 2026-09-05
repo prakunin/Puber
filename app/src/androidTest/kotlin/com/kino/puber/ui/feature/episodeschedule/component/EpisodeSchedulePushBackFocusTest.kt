@@ -141,7 +141,7 @@ private object ProbeScreens : Screens {
     override fun networkDiagnostics(): PuberScreen = unsupported()
 
     override fun contentList(
-        tabType: com.kino.puber.ui.feature.main.model.TabType,
+        tabType: com.kino.puber.domain.model.TabType,
     ): PuberScreen = unsupported()
 
     override fun underDevelopment(): PuberScreen = unsupported()

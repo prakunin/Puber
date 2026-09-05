@@ -8,7 +8,7 @@ import cafe.adriel.voyager.navigator.NavigatorDisposeBehavior
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.parcelize.IgnoredOnParcel

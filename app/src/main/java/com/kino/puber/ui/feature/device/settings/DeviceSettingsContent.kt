@@ -61,13 +61,13 @@ import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MIL
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.delay
 
 private val ScreenHorizontalPadding = 48.dp

@@ -13,7 +13,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
-import com.kino.puber.domain.interactor.auth.model.AuthState
+import com.kino.puber.domain.model.AuthState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity

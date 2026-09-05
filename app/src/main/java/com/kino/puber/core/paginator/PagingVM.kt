@@ -174,6 +174,6 @@ abstract class PagingVM<T, VS>(
     }
 
     private fun cancelLoading() {
-        pagingJob.cancelChildren(CancellationException(("Stop paging employee expenses")))
+        pagingJob.cancelChildren(CancellationException("Paging restarted"))
     }
 }

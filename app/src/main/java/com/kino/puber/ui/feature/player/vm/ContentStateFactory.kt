@@ -4,7 +4,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.player.ResolvedMedia
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.ActivePanel
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper

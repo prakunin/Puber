@@ -4,7 +4,7 @@ import com.kino.puber.data.api.models.DeviceResponseModel
 import com.kino.puber.data.api.models.SettingList
 import com.kino.puber.data.api.models.SettingValue
 import com.kino.puber.data.api.models.SettingsResponse
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceUi

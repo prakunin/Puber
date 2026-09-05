@@ -3,7 +3,7 @@ package com.kino.puber.data.repository
 import android.content.Context
 import androidx.core.content.edit
 import com.kino.puber.domain.model.SubtitleSize
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 
 class PlayerPreferencesRepository(context: Context) {
 

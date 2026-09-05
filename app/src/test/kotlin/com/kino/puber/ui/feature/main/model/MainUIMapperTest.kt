@@ -7,6 +7,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.history.component.HistoryScreen
 import com.kino.puber.util.FakeResourceProvider

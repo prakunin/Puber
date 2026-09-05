@@ -2,7 +2,7 @@ package com.kino.puber.data.repository
 
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.DeviceResponse
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 

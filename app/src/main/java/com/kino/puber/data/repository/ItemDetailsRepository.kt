@@ -95,7 +95,12 @@ class ItemDetailsRepository(
 
     private suspend fun fetchItem(id: Int): Item {
         val response = api.getItemDetails(id).getOrThrow()
-        return checkNotNull(response.item) { "Details response for item $id carried no item" }
+        // The envelope's own error field is the only wording the API gives for a refusal it still
+        // answers 200 to; without it this reported "carried no item", which describes the symptom
+        // and hides the cause.
+        return checkNotNull(response.item) {
+            response.error ?: "Details response for item $id carried no item"
+        }
     }
 
     /**

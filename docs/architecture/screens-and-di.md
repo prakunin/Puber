@@ -49,8 +49,10 @@ focus, and the DI scope of two instances collide. Compute it with
 override val key: ScreenKey = "ContentListScreen_${tabType.name}"
 ```
 
-See `ContentListScreen.kt`, `ShowAllScreen.kt`, `HistoryScreen.kt`, and
-`DetailsScreen.kt`, which builds its key from item id plus the initial episode.
+See `ContentListScreen.kt` and `ShowAllScreen.kt`, and `DetailsScreen.kt`,
+which builds its key from item id plus the initial episode. A screen that takes
+no parameters needs none of this: `HistoryScreen.kt` names itself with the
+constant `"HistoryScreen"`, because only one instance of it can ever exist.
 
 ## Content composable
 

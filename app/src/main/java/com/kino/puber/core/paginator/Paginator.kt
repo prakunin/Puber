@@ -194,16 +194,7 @@ object Paginator {
         state: State
     ): State {
         sideEffectListener(SideEffect.LoadFirstPage)
-        val data: List<T> = when (state) {
-            is State.Data<*> -> state.data as List<T>
-            is State.Refreshing<*> -> state.data as List<T>
-            is State.LoadingNext<*> -> state.data as List<T>
-            is State.LoadingPrev<*> -> state.data as List<T>
-            is State.PageErrorNext<*> -> state.data as List<T>
-            is State.PageErrorPrev<*> -> state.data as List<T>
-            is State.Error<*> -> state.data as List<T>
-            else -> emptyList()
-        }
+        val data: List<T> = dataOf<T>(state).orEmpty()
         return if (data.isEmpty()) State.Loading else State.Refreshing(data)
     }
 
@@ -259,7 +250,16 @@ object Paginator {
             is State.PageErrorNext<*> -> state
             is State.PageErrorPrev<*> -> state
 
-            else -> State.Loading
+            is State.Error<*> -> {
+                val key = state.data.firstOrNull()
+                sideEffectListener(SideEffect.LoadPrevPage(key))
+                State.LoadingPrev(state.data as List<T>)
+            }
+
+            // Empty, ErrorEmpty and Loading carry no page to reach back from. Answering with
+            // State.Loading, as this used to, put up the full-screen spinner and emitted no side
+            // effect with it, so nothing was ever going to take it down again.
+            else -> state
         }
     }
 
@@ -294,7 +294,22 @@ object Paginator {
                 State.LoadingNext(state.data as List<T>)
             }
 
-            else -> State.Loading
+            is State.PageErrorPrev<*> -> {
+                val key = state.data.lastOrNull()
+                sideEffectListener(SideEffect.LoadNextPage(key))
+                State.LoadingNext(state.data as List<T>)
+            }
+
+            is State.Error<*> -> {
+                val key = state.data.lastOrNull()
+                sideEffectListener(SideEffect.LoadNextPage(key))
+                State.LoadingNext(state.data as List<T>)
+            }
+
+            // Empty, ErrorEmpty and Loading have no page to follow. State.Loading here left the
+            // screen on a spinner with no request behind it: the view models draw Error and
+            // PageErrorPrev as content, so scrolling to the end of one hung the list for good.
+            else -> state
         }
     }
 
@@ -378,214 +393,80 @@ object Paginator {
         }
     }
 
-    @Suppress("LongMethod")
+    /**
+     * The list a state is carrying, or null for the states that hold none.
+     *
+     * [State.Error] belongs here: it keeps the pages it had when the reload failed, and the view
+     * models draw it as content rather than as an error screen.
+     */
+    private fun <T> dataOf(state: State): List<T>? = when (state) {
+        is State.Data<*> -> state.data as List<T>
+        is State.Refreshing<*> -> state.data as List<T>
+        is State.LoadingNext<*> -> state.data as List<T>
+        is State.LoadingPrev<*> -> state.data as List<T>
+        is State.PageErrorNext<*> -> state.data as List<T>
+        is State.PageErrorPrev<*> -> state.data as List<T>
+        is State.Error<*> -> state.data as List<T>
+        else -> null
+    }
+
+    /**
+     * The same state around a different list, or null for the states that carry none.
+     *
+     * The three item mutations below used to spell every branch out for themselves, three times
+     * over. That is how [State.Error] came to be missing from all of them: an item updated while
+     * the list carried a general error was dropped, and an item added to one replaced the whole
+     * list with itself.
+     */
+    private fun <T> State.withData(items: List<T>): State? = when (this) {
+        is State.Data<*> -> State.Data(items, key as T?)
+        is State.Refreshing<*> -> State.Refreshing(items)
+        is State.LoadingNext<*> -> State.LoadingNext(items)
+        is State.LoadingPrev<*> -> State.LoadingPrev(items)
+        is State.PageErrorNext<*> -> State.PageErrorNext(items, error)
+        is State.PageErrorPrev<*> -> State.PageErrorPrev(items, error)
+        is State.Error<*> -> State.Error(items, error)
+        else -> null
+    }
+
     private fun <T> executeUpdateItem(
         action: Action.ItemUpdated<T>,
         state: State,
         comparator: EquallyFunction<T>,
     ): State {
-        val item = action.item
-        return when (state) {
-            is State.Data<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.Data(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.LoadingNext<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.LoadingNext(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.LoadingPrev<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.LoadingPrev(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.Refreshing<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.Refreshing(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.PageErrorNext<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.PageErrorNext(Collections.unmodifiableList(newList), state.error)
-                } else {
-                    state
-                }
-            }
-
-            is State.PageErrorPrev<*> -> {
-                val items = state.data as List<T>
-                val index = items.indexOfFirst { comparator.isItemTheSame(it, item) }
-                if (index >= 0) {
-                    val newList = items.toMutableList()
-                    newList[index] = item
-                    State.PageErrorPrev(Collections.unmodifiableList(newList), state.error)
-                } else {
-                    state
-                }
-            }
-
-            else -> state
-        }
+        val items = dataOf<T>(state) ?: return state
+        val index = items.indexOfFirst { comparator.isItemTheSame(it, action.item) }
+        if (index < 0) return state
+        val newList = items.toMutableList()
+        newList[index] = action.item
+        return state.withData(Collections.unmodifiableList(newList)) ?: state
     }
 
-    @Suppress("LongMethod")
     private fun <T> executeDeleteItem(
         action: Action.ItemDeleted<T>,
         state: State,
         comparator: EquallyFunction<T>,
     ): State {
-        val item = action.item
-        return when (state) {
-            is State.Data<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.Data(Collections.unmodifiableList(newList))
-                } else {
-                    State.Empty
-                }
-            }
-
-            is State.LoadingNext<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.LoadingNext(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.LoadingPrev<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.LoadingPrev(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.Refreshing<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.Refreshing(Collections.unmodifiableList(newList))
-                } else {
-                    state
-                }
-            }
-
-            is State.PageErrorNext<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.PageErrorNext(Collections.unmodifiableList(newList), state.error)
-                } else {
-                    state
-                }
-            }
-
-            is State.PageErrorPrev<*> -> {
-                val items = state.data as List<T>
-                val newList = items.toMutableList()
-                newList.removeAll { comparator.isItemTheSame(it, item) }
-                if (newList.isNotEmpty()) {
-                    State.PageErrorPrev(Collections.unmodifiableList(newList), state.error)
-                } else {
-                    state
-                }
-            }
-
-            else -> state
+        val items = dataOf<T>(state) ?: return state
+        val newList = items.toMutableList()
+        val removed = newList.removeAll { comparator.isItemTheSame(it, action.item) }
+        return when {
+            !removed -> state
+            // Only a settled list may empty the screen. A list with a page still in flight keeps
+            // its state, because that page is about to arrive and needs somewhere to land.
+            newList.isEmpty() -> if (state is State.Data<*>) State.Empty else state
+            else -> state.withData(Collections.unmodifiableList(newList)) ?: state
         }
     }
-
 
     private fun <T> executeAddedItem(
         action: Action.ItemAdded<T>,
         state: State,
         comparator: EquallyFunction<T>,
     ): State {
-        val item = action.item
-        return when (state) {
-            is State.Data<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.Data(newList)
-            }
-
-            is State.LoadingNext<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.LoadingNext(newList)
-            }
-
-            is State.LoadingPrev<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.LoadingPrev(newList)
-            }
-
-            is State.Refreshing<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.Refreshing(newList)
-            }
-
-            is State.PageErrorNext<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.PageErrorNext(newList, state.error)
-            }
-
-            is State.PageErrorPrev<*> -> {
-                val items = state.data as List<T>
-                val newList = addItemOrUpdate(items, item, comparator)
-                State.PageErrorPrev(newList, state.error)
-            }
-
-            else -> State.Data(listOf(item))
-        }
+        val items = dataOf<T>(state)
+            ?: return State.Data(listOf(action.item))
+        return state.withData(addItemOrUpdate(items, action.item, comparator)) ?: state
     }
 
     private fun <T> addItemOrUpdate(

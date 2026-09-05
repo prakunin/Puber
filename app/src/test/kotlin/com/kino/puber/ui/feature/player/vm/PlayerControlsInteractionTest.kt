@@ -144,6 +144,34 @@ internal class PlayerControlsInteractionTest : PlayerVMTestFixture() {
         assertEquals(testDebugInfo, contentState(vm).debugInfo)
     }
 
+    /** Back is the usual way out of the panel, and must drop the readings like the gear does. */
+    @Test
+    fun backOutOfSettingsPanel_dropsDebugInfo_whenDebugOverlayDisabled() {
+        every { playbackController.getDebugInfo() } returns testDebugInfo
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        assertEquals(ActivePanel.None, contentState(vm).activePanel)
+        assertNull(contentState(vm).debugInfo)
+    }
+
+    @Test
+    fun backOutOfSettingsPanel_keepsDebugInfo_whenDebugOverlayEnabled() {
+        every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
+            debugOverlayEnabled = true,
+            okTogglesPlayPause = false,
+        )
+        every { playbackController.getDebugInfo() } returns testDebugInfo
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        assertEquals(testDebugInfo, contentState(vm).debugInfo)
+    }
+
     /** The description is not a diagnostics surface: opening it must not start the readings. */
     @Test
     fun openAboutPanel_doesNotReadDebugInfo() {

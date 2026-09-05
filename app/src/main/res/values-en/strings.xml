@@ -3,6 +3,13 @@
     <string name="tv_home_continue_watching">Continue watching</string>
     <string name="tv_home_recommendation_channel">Continue watching</string>
     <string name="error_generic">Couldn’t complete the request. Please try again.</string>
+    <string name="error_no_connection">No internet connection. Check the network and try again.</string>
+    <string name="error_network">The server is not responding. Check the connection and try again.</string>
+    <string name="error_server_response">The server answered with error %1$d. Please try again.</string>
+    <string name="error_unauthorized">The session has expired. Sign in again.</string>
+    <string name="error_malformed_response">The server sent an unexpected response. Please try again.</string>
+    <string name="error_auth_pending">Confirm the sign-in on the website — the code is not active yet.</string>
+    <string name="error_auth_failed">Sign-in failed. Request a new code and try again.</string>
     <string name="history_title">History</string>
     <string name="history_empty_title">Your watch history is empty</string>
     <string name="history_empty_description">Start watching a movie or series and it will appear here.</string>

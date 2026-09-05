@@ -2,7 +2,7 @@ package com.kino.puber.data.preferences
 
 import android.content.Context
 import androidx.core.content.edit
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

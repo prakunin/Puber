@@ -10,7 +10,7 @@ import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.model.SubtitleSize
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import kotlinx.coroutines.CancellationException
 
 private const val WATCHED_STATUS = 1

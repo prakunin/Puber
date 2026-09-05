@@ -15,8 +15,13 @@ import io.ktor.client.request.parameter
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
 
-class TheIntroDbApiClient {
+class TheIntroDbApiClient(
+    // The app's shared engine, so this API resolves through the same DNS-over-HTTPS setup and
+    // connection pool as every other call rather than building a second one of its own.
+    okHttpClient: OkHttpClient,
+) {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -24,6 +29,7 @@ class TheIntroDbApiClient {
     }
 
     private val httpClient = HttpClient(OkHttp) {
+        engine { preconfigured = okHttpClient }
         install(ContentNegotiation) { json(json) }
         install(DefaultRequest) {
             url("https://api.theintrodb.org/v2/")

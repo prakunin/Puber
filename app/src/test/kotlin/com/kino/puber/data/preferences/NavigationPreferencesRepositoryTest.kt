@@ -2,7 +2,7 @@ package com.kino.puber.data.preferences
 
 import android.content.Context
 import com.kino.puber.util.FakeSharedPreferences
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineStart

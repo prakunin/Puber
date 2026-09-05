@@ -87,6 +87,7 @@ internal class ShowAllVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
+            else -> super.onAction(action)
         }
     }
 

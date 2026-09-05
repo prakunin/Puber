@@ -51,6 +51,15 @@ internal object PlayerCountdowns {
     const val SKIP_MIN_COUNTDOWN_SEC = 3
 
     /**
+     * How much media has to be left after the credits for skipping them to lead anywhere.
+     *
+     * Credits usually run to the last frame, and on a film or a last episode there is no next
+     * episode waiting behind them either, so the skip would land on the closing image. Only a tail
+     * long enough to hold something — a scene after the credits — earns the prompt.
+     */
+    const val CREDITS_MIN_TAIL_MS = 10_000L
+
+    /**
      * How long a cancelled skip prompt stays cancelled. Long enough that rewinding a few seconds
      * inside the segment does not undo the answer, short enough that coming back to the same
      * segment much later is treated as a fresh question.

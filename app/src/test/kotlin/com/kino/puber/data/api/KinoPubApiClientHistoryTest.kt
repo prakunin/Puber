@@ -207,7 +207,7 @@ internal class KinoPubApiClientHistoryTest {
             connectivityManager = connectivityManager,
             cryptoPreferenceRepository = preferences,
             sessionEventBus = SessionEventBus(),
-            mainApiBaseUrl = baseUrl,
+            mainApiBaseUrl = { baseUrl },
         )
     }
 

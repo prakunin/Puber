@@ -26,7 +26,7 @@ import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
 import com.kino.puber.ui.feature.showall.ShowAllScreen
-import com.kino.puber.ui.feature.main.model.TabType
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.every

@@ -2,10 +2,10 @@ package com.kino.puber.data.api
 
 import com.kino.puber.BuildConfig
 import com.kino.puber.core.coroutine.runCatchingCancellable
+import com.kino.puber.core.error.ApiError
 import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.auth.DeviceCodeResponse
 import com.kino.puber.data.api.auth.DeviceFlowResult
-import com.kino.puber.data.api.auth.OAuthError
 import com.kino.puber.data.api.auth.TokenResponse
 import com.kino.puber.data.api.history.HistoryPageResponse
 import com.kino.puber.data.api.history.clearHistoryMedia
@@ -76,6 +76,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.http.Url
 import io.ktor.http.contentType
@@ -103,7 +104,13 @@ class KinoPubApiClient(
     private val connectivityManager: ConnectivityManager,
     private val cryptoPreferenceRepository: ICryptoPreferenceRepository,
     private val sessionEventBus: SessionEventBus,
-    private val mainApiBaseUrl: String = KinoPubConfig.MAIN_API_BASE_URL,
+    /**
+     * Where the content API lives, asked for per request rather than captured once: the account can
+     * be moved to a mirror while the app runs, and this client is a singleton that outlives the
+     * switch. Every content call goes through it, so a test can point the whole client at a local
+     * server instead of only the two calls that used to honour it.
+     */
+    private val mainApiBaseUrl: () -> String = { KinoPubConfig.MAIN_API_BASE_URL },
     /**
      * Told which domain a request was talking to when the transport gave out, so the code that
      * chooses mirrors stops trusting it. This client is the only thing in the app that finds out —
@@ -172,13 +179,9 @@ class KinoPubApiClient(
             }
         }
 
-        // Retry on failure
+        // Retry on failure, but only where repeating the request cannot change anything.
         install(HttpRequestRetry) {
-            maxRetries = MAX_RETRIES
-            retryIf { _, response ->
-                response.status.value >= 500
-            }
-            exponentialDelay()
+            retryOnlyRepeatableRequests(MAX_RETRIES)
         }
     }
 
@@ -206,10 +209,11 @@ class KinoPubApiClient(
             // A cancelled refresh is not a dead session — reporting it as one would
             // log the user out whenever the calling scope simply went away.
             throw e
+        } catch (e: ApiError.Unauthorized) {
+            // Already the session-expired signal raised below: re-wrapping it would only bury the
+            // cause of the first failure under a second one saying the same thing.
+            throw e
         } catch (e: Exception) {
-            if (e is IllegalStateException && e.message == REFRESH_TOKEN_FAILURE_MESSAGE) {
-                throw e
-            }
             log("Refresh token request failed")
             sessionExpiredFailure(e)
         }
@@ -218,7 +222,7 @@ class KinoPubApiClient(
     /** Drops the session and aborts the refresh; callers treat this as "sign in again". */
     private fun sessionExpiredFailure(cause: Throwable? = null): Nothing {
         onSessionExpired()
-        throw IllegalStateException(REFRESH_TOKEN_FAILURE_MESSAGE, cause)
+        throw ApiError.Unauthorized(serverMessage = "Failed to refresh token", cause = cause)
     }
 
     fun isAuthenticated(): Boolean =
@@ -243,7 +247,7 @@ class KinoPubApiClient(
         genre: String? = null,
         conditions: List<String>? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items") {
+        httpClient.get("${mainApiBaseUrl()}items") {
             type?.let { parameter("type", it) }
             sort?.let { parameter("sort", it) }
             page?.let { parameter("page", it) }
@@ -257,7 +261,7 @@ class KinoPubApiClient(
      * Get item details by ID
      */
     suspend fun getItemDetails(id: Int): Result<ApiResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/$id")
+        httpClient.get("${mainApiBaseUrl()}items/$id")
     }
 
     /**
@@ -266,7 +270,7 @@ class KinoPubApiClient(
     suspend fun getItemsByShortcut(
         shortcut: String, type: String? = null, page: Int? = null, genre: String? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/$shortcut") {
+        httpClient.get("${mainApiBaseUrl()}items/$shortcut") {
             type?.let { parameter("type", it) }
             page?.let { parameter("page", it) }
             genre?.let { parameter("genre", it) }
@@ -279,7 +283,7 @@ class KinoPubApiClient(
     suspend fun searchItems(
         query: String, field: String? = null, perpage: Int? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/search") {
+        httpClient.get("${mainApiBaseUrl()}items/search") {
             parameter("q", query)
             field?.let { parameter("field", it) }
             perpage?.let { parameter("perpage", it) }
@@ -292,7 +296,7 @@ class KinoPubApiClient(
     suspend fun searchByTitle(
         title: String, type: String? = null, perpage: Int? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items") {
+        httpClient.get("${mainApiBaseUrl()}items") {
             parameter("title", title)
             type?.let { parameter("type", it) }
             perpage?.let { parameter("perpage", it) }
@@ -305,7 +309,7 @@ class KinoPubApiClient(
     suspend fun searchByDirector(
         director: String, sort: String? = null, perpage: Int? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items") {
+        httpClient.get("${mainApiBaseUrl()}items") {
             parameter("director", director)
             sort?.let { parameter("sort", it) }
             perpage?.let { parameter("perpage", it) }
@@ -318,7 +322,7 @@ class KinoPubApiClient(
     suspend fun searchByActor(
         actor: String, sort: String? = null, perpage: Int? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items") {
+        httpClient.get("${mainApiBaseUrl()}items") {
             parameter("actor", actor)
             sort?.let { parameter("sort", it) }
             perpage?.let { parameter("perpage", it) }
@@ -329,7 +333,7 @@ class KinoPubApiClient(
      * Get similar items
      */
     suspend fun getSimilarItems(id: Int): Result<ApiResponseList<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/similar") {
+        httpClient.get("${mainApiBaseUrl()}items/similar") {
             parameter("id", id)
         }
     }
@@ -338,7 +342,7 @@ class KinoPubApiClient(
      * Get item comments
      */
     suspend fun getItemComments(id: Int): Result<List<Comment>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/comments") {
+        httpClient.get("${mainApiBaseUrl()}items/comments") {
             parameter("id", id)
         }
     }
@@ -351,7 +355,7 @@ class KinoPubApiClient(
      * signed link comes from. The response holds a list, one entry per available rendition.
      */
     suspend fun getTrailerLinks(id: Int): Result<TrailerLinksResponse> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/trailer") {
+        httpClient.get("${mainApiBaseUrl()}items/trailer") {
             parameter("id", id)
         }
     }
@@ -364,7 +368,7 @@ class KinoPubApiClient(
     suspend fun getHistory(
         type: String, subscribed: Int? = null
     ): Result<List<History>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/$type") {
+        httpClient.get("${mainApiBaseUrl()}watching/$type") {
             subscribed?.let { parameter("subscribed", it) }
         }
     }
@@ -372,14 +376,14 @@ class KinoPubApiClient(
     suspend fun getWatchingList(onlySubscribed: Boolean = false): Result<ApiResponseList<Item>> =
         apiCall {
             val subscribed = if (onlySubscribed) 1 else 0
-            httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/serials?subscribed=$subscribed")
+            httpClient.get("${mainApiBaseUrl()}watching/serials?subscribed=$subscribed")
         }
 
     /**
      * Movies the account has started or finished, with their playback progress.
      */
     suspend fun getWatchingMovies(): Result<ApiResponseList<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/movies")
+        httpClient.get("${mainApiBaseUrl()}watching/movies")
     }
 
     /**
@@ -387,14 +391,14 @@ class KinoPubApiClient(
      */
     suspend fun getHistoryData(page: Int): Result<PaginatedResponse<History>> =
         apiCall<HistoryPageResponse> {
-            httpClient.fetchHistoryPage(page, mainApiBaseUrl)
+            httpClient.fetchHistoryPage(page, mainApiBaseUrl())
         }.map(HistoryPageResponse::toModel)
 
     /**
      * Clear item history
      */
     suspend fun clearItemHistory(id: Int): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}history/clear-for-item") {
+        httpClient.post("${mainApiBaseUrl()}history/clear-for-item") {
             parameter("id", id)
         }
     }
@@ -408,13 +412,13 @@ class KinoPubApiClient(
      * Clear history for the exact media represented by a selected history row.
      */
     suspend fun clearExactMediaHistory(mediaId: Int): Result<Unit> =
-        apiCall { httpClient.clearHistoryMedia(mediaId, mainApiBaseUrl) }
+        apiCall { httpClient.clearHistoryMedia(mediaId, mainApiBaseUrl()) }
 
     /**
      * Clear season history
      */
     suspend fun clearSeasonHistory(id: Int): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}history/clear-for-season") {
+        httpClient.post("${mainApiBaseUrl()}history/clear-for-season") {
             parameter("id", id)
         }
     }
@@ -425,7 +429,7 @@ class KinoPubApiClient(
     suspend fun toggleWatchingStatus(
         id: Int, status: Int? = null, season: Int? = null, video: Int? = null
     ): Result<WatchingToggleResponse> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/toggle") {
+        httpClient.get("${mainApiBaseUrl()}watching/toggle") {
             parameter("id", id)
             status?.let { parameter("status", it) }
             season?.let { parameter("season", it) }
@@ -439,7 +443,7 @@ class KinoPubApiClient(
     suspend fun setWatchingTime(
         id: Int, videoNumber: Int, time: Int, season: Int? = null
     ): Result<WatchingStatus> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/marktime") {
+        httpClient.get("${mainApiBaseUrl()}watching/marktime") {
             parameter("id", id)
             parameter("video", videoNumber)
             parameter("time", time)
@@ -451,7 +455,7 @@ class KinoPubApiClient(
      * Toggle watchlist
      */
     suspend fun toggleWatchlist(id: Int): Result<WatchlistToggleResponse> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}watching/togglewatchlist") {
+        httpClient.get("${mainApiBaseUrl()}watching/togglewatchlist") {
             parameter("id", id)
         }
     }
@@ -463,7 +467,7 @@ class KinoPubApiClient(
      */
     suspend fun getBookmarks(): Result<List<Bookmark>> =
         apiCall<ApiResponseList<Bookmark>> {
-            httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks")
+            httpClient.get("${mainApiBaseUrl()}bookmarks")
         }.map { it.items.orEmpty() }
 
     /**
@@ -472,7 +476,7 @@ class KinoPubApiClient(
     suspend fun getBookmarkItems(
         id: Int, page: Int? = null
     ): Result<PaginatedResponse<Item>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/$id") {
+        httpClient.get("${mainApiBaseUrl()}bookmarks/$id") {
             page?.let { parameter("page", it) }
         }
     }
@@ -481,7 +485,7 @@ class KinoPubApiClient(
      * Create bookmark
      */
     suspend fun createBookmark(title: String): Result<Bookmark> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/create") {
+        httpClient.post("${mainApiBaseUrl()}bookmarks/create") {
             setBody(mapOf("title" to title))
             contentType(ContentType.Application.Json)
         }
@@ -491,7 +495,7 @@ class KinoPubApiClient(
      * Add item to bookmark
      */
     suspend fun addBookmarkItem(itemId: Int, folderId: Int): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/add") {
+        httpClient.post("${mainApiBaseUrl()}bookmarks/add") {
             setBody(
                 mapOf(
                     "item" to itemId, "folder" to folderId
@@ -505,7 +509,7 @@ class KinoPubApiClient(
      * Remove item from bookmark
      */
     suspend fun removeBookmarkItem(itemId: Int, folderId: Int): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/remove-item") {
+        httpClient.post("${mainApiBaseUrl()}bookmarks/remove-item") {
             setBody(
                 mapOf(
                     "item" to itemId, "folder" to folderId
@@ -519,7 +523,7 @@ class KinoPubApiClient(
      * Delete bookmark
      */
     suspend fun deleteBookmark(folderId: Int): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/remove-folder") {
+        httpClient.post("${mainApiBaseUrl()}bookmarks/remove-folder") {
             setBody(mapOf("folder" to folderId))
             contentType(ContentType.Application.Json)
         }
@@ -533,7 +537,7 @@ class KinoPubApiClient(
     suspend fun getCollections(
         sort: String? = null, page: Int? = null
     ): Result<PaginatedResponse<KCollection>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}collections") {
+        httpClient.get("${mainApiBaseUrl()}collections") {
             sort?.let { parameter("sort", it) }
             page?.let { parameter("page", it) }
         }
@@ -543,7 +547,7 @@ class KinoPubApiClient(
      * Get collection items
      */
     suspend fun getCollectionItems(id: Int): Result<CollectionViewResponse> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}collections/view") {
+        httpClient.get("${mainApiBaseUrl()}collections/view") {
             parameter("id", id)
         }
     }
@@ -554,28 +558,28 @@ class KinoPubApiClient(
      * Get account info
      */
     suspend fun getAccountInfo(): Result<UserInfo> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}user")
+        httpClient.get("${mainApiBaseUrl()}user")
     }
 
     /**
      * Get current device settings
      */
     suspend fun getDeviceSettings(): Result<DeviceResponse> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}device/info")
+        httpClient.get("${mainApiBaseUrl()}device/info")
     }
 
     /**
      * Get device settings by ID
      */
     suspend fun getDeviceSettingsById(deviceId: String): Result<DeviceSettings> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}device/$deviceId")
+        httpClient.get("${mainApiBaseUrl()}device/$deviceId")
     }
 
     /**
      * Get devices info
      */
     suspend fun getDevicesInfo(): Result<List<DeviceSettings>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}device/device")
+        httpClient.get("${mainApiBaseUrl()}device/device")
     }
 
     /**
@@ -584,7 +588,7 @@ class KinoPubApiClient(
     suspend fun updateDeviceInfo(
         title: String, hardware: String, software: String
     ): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}device/notify") {
+        httpClient.post("${mainApiBaseUrl()}device/notify") {
             // The API reads these from the POST body; query parameters are kept as a fallback.
             parameter("title", title)
             parameter("hardware", hardware)
@@ -606,7 +610,7 @@ class KinoPubApiClient(
      * Unlink device
      */
     suspend fun unlinkDevice(): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}device/unlink")
+        httpClient.post("${mainApiBaseUrl()}device/unlink")
     }
 
     // Metadata API
@@ -615,7 +619,7 @@ class KinoPubApiClient(
      * Get genres
      */
     suspend fun getGenres(type: String? = null): Result<List<Genre>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}genres") {
+        httpClient.get("${mainApiBaseUrl()}genres") {
             type?.let { parameter("type", it) }
         }
     }
@@ -624,7 +628,7 @@ class KinoPubApiClient(
      * Get countries
      */
     suspend fun getCountries(): Result<List<Country>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}countries")
+        httpClient.get("${mainApiBaseUrl()}countries")
     }
 
     // Reference data API (based on official documentation)
@@ -633,35 +637,35 @@ class KinoPubApiClient(
      * Get server locations
      */
     suspend fun getServerLocations(): Result<List<ServerLocation>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}server-locations")
+        httpClient.get("${mainApiBaseUrl()}server-locations")
     }
 
     /**
      * Get streaming types
      */
     suspend fun getStreamingTypes(): Result<List<StreamingType>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}streaming-types")
+        httpClient.get("${mainApiBaseUrl()}streaming-types")
     }
 
     /**
      * Get translation types
      */
     suspend fun getTranslationTypes(): Result<List<TranslationType>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}translation-types")
+        httpClient.get("${mainApiBaseUrl()}translation-types")
     }
 
     /**
      * Get voice authors
      */
     suspend fun getVoiceAuthors(): Result<List<VoiceAuthor>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}voice-authors")
+        httpClient.get("${mainApiBaseUrl()}voice-authors")
     }
 
     /**
      * Get quality types
      */
     suspend fun getQualityTypes(): Result<List<QualityType>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}quality-types")
+        httpClient.get("${mainApiBaseUrl()}quality-types")
     }
 
     // TV Broadcasting API
@@ -670,14 +674,14 @@ class KinoPubApiClient(
      * Get TV channels
      */
     suspend fun getTVChannels(): Result<List<TVChannel>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}tv/channels")
+        httpClient.get("${mainApiBaseUrl()}tv/channels")
     }
 
     /**
      * Get TV channel details
      */
     suspend fun getTVChannelDetails(id: Int): Result<TVChannel> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}tv/channels/$id")
+        httpClient.get("${mainApiBaseUrl()}tv/channels/$id")
     }
 
     // Media files and links API
@@ -688,7 +692,7 @@ class KinoPubApiClient(
     suspend fun getMediaLinks(
         id: Int, season: Int? = null, episode: Int? = null
     ): Result<MediaLinks> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/media-links") {
+        httpClient.get("${mainApiBaseUrl()}items/media-links") {
             parameter("id", id)
             season?.let { parameter("season", it) }
             episode?.let { parameter("episode", it) }
@@ -699,7 +703,7 @@ class KinoPubApiClient(
      * Get video file link by filename
      */
     suspend fun getVideoFileLink(filename: String): Result<String> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/media-link") {
+        httpClient.get("${mainApiBaseUrl()}items/media-link") {
             parameter("filename", filename)
         }
     }
@@ -710,7 +714,7 @@ class KinoPubApiClient(
     suspend fun getItemFiles(
         id: Int, season: Int? = null, episode: Int? = null
     ): Result<ItemFiles> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/files") {
+        httpClient.get("${mainApiBaseUrl()}items/files") {
             parameter("id", id)
             season?.let { parameter("season", it) }
             episode?.let { parameter("episode", it) }
@@ -725,7 +729,7 @@ class KinoPubApiClient(
     suspend fun voteForItem(
         id: Int, rating: Int // 1-10
     ): Result<VoteResult> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}items/vote") {
+        httpClient.post("${mainApiBaseUrl()}items/vote") {
             setBody(
                 mapOf(
                     "id" to id, "rating" to rating
@@ -739,7 +743,7 @@ class KinoPubApiClient(
      * Remove vote for item
      */
     suspend fun removeVoteForItem(id: Int): Result<VoteResult> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}items/vote/remove") {
+        httpClient.post("${mainApiBaseUrl()}items/vote/remove") {
             setBody(mapOf("id" to id))
             contentType(ContentType.Application.Json)
         }
@@ -751,14 +755,14 @@ class KinoPubApiClient(
      * Get all devices on account
      */
     suspend fun getAllDevices(): Result<List<DeviceInfo>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}device/devices")
+        httpClient.get("${mainApiBaseUrl()}device/devices")
     }
 
     /**
      * Remove specific device by ID
      */
     suspend fun removeDevice(deviceId: String): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}device/remove") {
+        httpClient.post("${mainApiBaseUrl()}device/remove") {
             setBody(mapOf("device_id" to deviceId))
             contentType(ContentType.Application.Json)
         }
@@ -777,7 +781,7 @@ class KinoPubApiClient(
         streamingType: Int? = null,
         serverLocation: Int? = null
     ): Result<Unit> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}device/$deviceId/settings") {
+        httpClient.post("${mainApiBaseUrl()}device/$deviceId/settings") {
             val params = io.ktor.http.Parameters.build {
                 supportSsl?.let { append("supportSsl", it.toString()) }
                 supportHevc?.let { append("supportHevc", it.toString()) }
@@ -798,7 +802,7 @@ class KinoPubApiClient(
      */
     suspend fun getItemBookmarkFolders(itemId: Int): Result<List<BookmarkFolder>> =
         apiCall<BookmarkFoldersResponse> {
-            httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/get-item-folders") {
+            httpClient.get("${mainApiBaseUrl()}bookmarks/get-item-folders") {
                 parameter("item", itemId)
             }
         }.map { response -> response.folders }
@@ -807,7 +811,7 @@ class KinoPubApiClient(
      * Toggle bookmark (add/remove from folder)
      */
     suspend fun toggleBookmark(itemId: Int, folderId: Int): Result<BookmarkToggleResult> = apiCall {
-        httpClient.post("${KinoPubConfig.MAIN_API_BASE_URL}bookmarks/toggle") {
+        httpClient.post("${mainApiBaseUrl()}bookmarks/toggle") {
             setBody(
                 mapOf(
                     "item" to itemId, "folder" to folderId
@@ -823,7 +827,7 @@ class KinoPubApiClient(
      * Get item seasons (for TV shows)
      */
     suspend fun getItemSeasons(id: Int): Result<List<Season>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/$id/seasons")
+        httpClient.get("${mainApiBaseUrl()}items/$id/seasons")
     }
 
     /**
@@ -832,7 +836,7 @@ class KinoPubApiClient(
     suspend fun getSeasonEpisodes(
         itemId: Int, seasonNumber: Int
     ): Result<List<Episode>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/$itemId/seasons/$seasonNumber/episodes")
+        httpClient.get("${mainApiBaseUrl()}items/$itemId/seasons/$seasonNumber/episodes")
     }
 
     /**
@@ -841,13 +845,13 @@ class KinoPubApiClient(
     suspend fun getEpisodeDetails(
         itemId: Int, seasonNumber: Int, episodeNumber: Int
     ): Result<Episode> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}items/$itemId/seasons/$seasonNumber/episodes/$episodeNumber")
+        httpClient.get("${mainApiBaseUrl()}items/$itemId/seasons/$seasonNumber/episodes/$episodeNumber")
     }
 
     // Subtitles API
 
     suspend fun getSubtitles(): Result<List<SubtitleLink>> = apiCall {
-        httpClient.get("${KinoPubConfig.MAIN_API_BASE_URL}subtitles")
+        httpClient.get("${mainApiBaseUrl()}subtitles")
     }
 
     // Notifications API (Extra API v1.1)
@@ -1008,13 +1012,13 @@ class KinoPubApiClient(
         // domain this request actually went to.
         val domain = KinoPubConfig.CURRENT_API_DOMAIN
         return try {
-            val response = block()
+            val response = block().requireSuccessful()
             Result.success(response.body<T>())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             reportIfDomainUnreachable(domain, e)
-            Result.failure(e)
+            Result.failure(e.asApiFailure())
         }
     }
 
@@ -1031,11 +1035,11 @@ class KinoPubApiClient(
     suspend inline fun <reified T> thirdPartyApiCall(
         block: suspend () -> HttpResponse
     ): Result<T> = try {
-        Result.success(block().body<T>())
+        Result.success(block().requireSuccessful().body<T>())
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(e.asApiFailure())
     }
 
     /**
@@ -1050,14 +1054,14 @@ class KinoPubApiClient(
     suspend fun getDeviceCode(): Result<DeviceCodeResponse> = try {
         val response = httpClient.post("${KinoPubConfig.OAUTH_BASE_URL}device") {
             parameter("grant_type", KinoPubConfig.GRANT_TYPE_DEVICE_CODE)
-            // CLIENT_ID и CLIENT_SECRET добавляются автоматически через KinoPubParametersInterceptor
+            // CLIENT_ID and CLIENT_SECRET are appended by KinoPubParametersPlugin.
         }
 
         handleApiResponse<DeviceCodeResponse>(response)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(e.asApiFailure())
     }
 
     /**
@@ -1078,23 +1082,8 @@ class KinoPubApiClient(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(e.asApiFailure())
     }
-
-    /**
-     * Refresh access token using refresh token
-     * POST /oauth2/token?grant_type=refresh_token&client_id=myclient&client_secret=mysecret&refresh_token=qwertyu12345678
-     *//*suspend fun refreshToken(refreshToken: String): Result<TokenResponse> = try {
-        val response = httpClient.post("${KinoPubConfig.OAUTH_BASE_URL}token") {
-            parameter("grant_type", KinoPubConfig.GRANT_TYPE_REFRESH_TOKEN)
-            parameter("refresh_token", refreshToken)
-            // CLIENT_ID и CLIENT_SECRET добавляются автоматически через KinoPubParametersInterceptor
-        }
-
-        handleApiResponse<TokenResponse>(response)
-    } catch (e: Exception) {
-        Result.failure(e)
-    }*/
 
     /**
      * Complete OAuth device flow with polling
@@ -1137,10 +1126,10 @@ class KinoPubApiClient(
                 return@flow
             }
 
-            // Check if error is polling-related (authorization_pending)
+            // Still waiting for the user to confirm the code is the one answer this flow keeps
+            // to itself; everything else is news the caller has to act on.
             val error = tokenResult.exceptionOrNull() ?: return@flow
-            val isAuthorizationPending =
-                error.message?.contains("authorization_pending", true) ?: false
+            val isAuthorizationPending = error is ApiError.OAuth && error.isAuthorizationPending
 
             if (!isAuthorizationPending) {
                 // Emit non-recoverable error and complete the flow
@@ -1172,28 +1161,25 @@ class KinoPubApiClient(
 
         try {
             json.decodeFromString<T>(responseText)
-        } catch (_: Exception) {
-            throw IllegalStateException("OAuth response decoding failed")
+        } catch (error: Exception) {
+            throw ApiError.Serialization(error)
         }
     }
 
-    private fun buildApiError(responseText: String, statusCode: Int? = null): Exception {
-        return try {
-            val error = json.decodeFromString<OAuthError>(responseText)
-            Exception("OAuth Error: ${error.error}")
-        } catch (_: Exception) {
-            val prefix = statusCode?.let { "HTTP $it" } ?: "API"
-            Exception("$prefix error response")
-        }
-    }
+    /**
+     * The OAuth endpoints answer refusals with their own error code, and the device flow branches
+     * on it, so that code has to survive as something other than a sentence in a message.
+     */
+    private fun buildApiError(responseText: String, statusCode: Int? = null): ApiError =
+        parseOAuthError(responseText)
+            ?: httpFailure(statusCode ?: HttpStatusCode.OK.value, responseText)
 
     private fun shouldSendKinoPubToken(host: String): Boolean {
-        return host == Url(mainApiBaseUrl).host ||
+        return host == Url(mainApiBaseUrl()).host ||
             host == Url(KinoPubConfig.OAUTH_BASE_URL).host
     }
 
     companion object {
-        private const val REFRESH_TOKEN_FAILURE_MESSAGE = "Failed to refresh token"
         private const val MAX_RETRIES = 3
         private const val CONNECT_TIMEOUT = 60_000L
         private const val READ_TIMEOUT = 120_000L

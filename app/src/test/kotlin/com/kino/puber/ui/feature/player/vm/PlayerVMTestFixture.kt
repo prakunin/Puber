@@ -19,7 +19,7 @@ import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.BufferPresetUIState
 import com.kino.puber.ui.feature.player.model.PlayerAboutUIState
 import com.kino.puber.ui.feature.player.model.PlayerContentState

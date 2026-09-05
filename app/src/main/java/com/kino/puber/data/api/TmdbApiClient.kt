@@ -19,6 +19,7 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import okhttp3.OkHttpClient
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
@@ -36,7 +37,12 @@ class TmdbApiClient private constructor(
     private val httpClient: HttpClient,
 ) {
 
-    constructor() : this(createHttpClient())
+    /**
+     * Built on the app's shared OkHttp client so this API resolves through the same DNS-over-HTTPS
+     * setup, connection pool and cache as everything else. A second engine of its own would answer
+     * to whatever the device's resolver says, which is exactly what that setup exists to avoid.
+     */
+    constructor(okHttpClient: OkHttpClient) : this(createHttpClient(okHttpClient))
 
     val isConfigured: Boolean
         get() = BuildConfig.TMDB_READ_ACCESS_TOKEN.isNotBlank()
@@ -140,7 +146,8 @@ class TmdbApiClient private constructor(
 
         fun forTesting(httpClient: HttpClient): TmdbApiClient = TmdbApiClient(httpClient)
 
-        private fun createHttpClient(): HttpClient = HttpClient(OkHttp) {
+        private fun createHttpClient(okHttpClient: OkHttpClient): HttpClient = HttpClient(OkHttp) {
+            engine { preconfigured = okHttpClient }
             install(ContentNegotiation) {
                 json(
                     Json {

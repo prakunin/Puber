@@ -9,12 +9,25 @@ internal class ControlsStateMachine {
         val controlsVisible: Boolean = false,
         val focusTarget: FocusTarget? = null,
         val activePanel: ActivePanel = ActivePanel.None,
+        /**
+         * The controls are up because the media ran out, not because the viewer asked for them.
+         * Back then leaves the player instead of tidying them away, since there is nothing behind
+         * them left to watch.
+         */
+        val playbackEnded: Boolean = false,
     )
 
     sealed interface Effect {
         data object ScheduleHide : Effect
         data object CancelHide : Effect
         data object SaveAndExit : Effect
+
+        /**
+         * A panel came down, whichever way it was dismissed. What was put on screen for it has to
+         * come down with it, so the caller gets told once instead of every dismissal path having to
+         * remember.
+         */
+        data object PanelClosed : Effect
     }
 
     var state = State()
@@ -49,14 +62,37 @@ internal class ControlsStateMachine {
             controlsVisible = true,
             focusTarget = lastPanelOpener,
         )
-        return listOf(Effect.ScheduleHide)
+        return listOf(Effect.ScheduleHide, Effect.PanelClosed)
     }
 
     fun handleBack(): List<Effect> {
         return when {
             state.activePanel != ActivePanel.None -> closePanel()
+            // Hiding the controls here would leave the viewer on a finished picture with nothing
+            // to press, so the way out is out.
+            state.playbackEnded -> listOf(Effect.SaveAndExit)
             state.controlsVisible -> hideControls()
             else -> listOf(Effect.SaveAndExit)
+        }
+    }
+
+    /**
+     * Controls put up by the end of the media, and left up.
+     *
+     * There is no picture left to reveal by hiding them, and a hide scheduled earlier would take
+     * away the only thing on screen. This used to be written straight into the published content,
+     * which left this class believing the controls were still down — harmless to look at, but the
+     * reason back worked at all afterwards. The state says so now instead.
+     */
+    fun showControlsForEndedPlayback(): List<Effect> {
+        state = state.copy(controlsVisible = true, focusTarget = null, playbackEnded = true)
+        return listOf(Effect.CancelHide)
+    }
+
+    /** Playing again, so the controls go back to being the viewer's to summon and dismiss. */
+    fun onPlaybackResumed() {
+        if (state.playbackEnded) {
+            state = state.copy(playbackEnded = false)
         }
     }
 

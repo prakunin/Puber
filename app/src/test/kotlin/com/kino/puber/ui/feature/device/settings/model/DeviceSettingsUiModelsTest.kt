@@ -1,7 +1,7 @@
 package com.kino.puber.ui.feature.device.settings.model
 
 import com.kino.puber.R
-import com.kino.puber.domain.interactor.device.DeviceSettingType
+import com.kino.puber.domain.model.DeviceSettingType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test

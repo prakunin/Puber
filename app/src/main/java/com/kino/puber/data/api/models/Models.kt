@@ -94,7 +94,7 @@ data class Item(
     val watching: WatchingInfo? = null,
     val fps: Float? = null,
     @SerialName("age_rating") val ageRating: String? = null,
-) : java.io.Serializable
+)
 
 @Serializable(with = ItemType.ItemTypeSerializer::class)
 enum class ItemType(val value: String) {

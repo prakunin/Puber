@@ -36,7 +36,7 @@ import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import com.kino.puber.ui.feature.player.model.PlayerScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
-import com.kino.puber.ui.feature.player.model.BufferPreset
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
 import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.ui.feature.player.model.QualityUIState
@@ -182,6 +182,7 @@ internal class PlayerVM(
             updateContent {
                 copy(isPlaying = isPlaying)
             }
+            if (isPlaying) controlsStateMachine.onPlaybackResumed()
             if (isBuffering && !wasBuffering) {
                 // Debounce: only show spinner if buffering lasts > 800ms
                 bufferingDebounceJob?.cancel()
@@ -661,6 +662,17 @@ internal class PlayerVM(
         processEffects(effects)
     }
 
+    /**
+     * Puts the controls up for good at the end of the media. Writing `controlsVisible` into the
+     * content on its own, which is what this used to do, left the state machine holding the
+     * opposite, and back only worked afterwards because of that disagreement.
+     */
+    private fun showControlsForEndedPlayback() {
+        val effects = controlsStateMachine.showControlsForEndedPlayback()
+        applyControlsState()
+        processEffects(effects)
+    }
+
     private fun scheduleControlsHide() {
         controlsHideJob?.cancel()
         controlsHideJob = launch {
@@ -685,12 +697,15 @@ internal class PlayerVM(
     private fun closePanel() {
         val effects = controlsStateMachine.closePanel()
         applyControlsState()
+        processEffects(effects)
+    }
+
+    private fun onPanelClosed() {
         if (!behaviourPreferences.debugOverlayEnabled) {
             // Readings taken for the info panel must not leak into the debug overlay, which
             // becomes visible again together with the controls.
             updateContent { copy(debugInfo = null) }
         }
-        processEffects(effects)
         // A countdown may have become eligible while the panel owned focus. Re-evaluate once the
         // player is interactive again, including the case where playback already reached its end.
         checkEarlyNextEpisode()
@@ -712,6 +727,7 @@ internal class PlayerVM(
             when (effect) {
                 is ControlsStateMachine.Effect.ScheduleHide -> scheduleControlsHide()
                 is ControlsStateMachine.Effect.CancelHide -> controlsHideJob?.cancel()
+                is ControlsStateMachine.Effect.PanelClosed -> onPanelClosed()
                 is ControlsStateMachine.Effect.SaveAndExit -> exitPlayer()
             }
         }
@@ -819,22 +835,43 @@ internal class PlayerVM(
         }
     }
 
-    private fun switchEpisode(seasonNumber: Int, episodeNumber: Int) {
-        if (episodeSwitchInProgress) return
-        episodeSwitchInProgress = true
-        saveCurrentPosition()
-        playbackController.release()
+    /**
+     * Drops everything that belonged to the media that was playing, so whatever starts next begins
+     * from the same place however it was reached.
+     *
+     * Written once because it was not: switching episode cleared all of this and retrying after an
+     * error cleared none of it, so a retried stream came back with the previous episode's countdown
+     * still ticking, its skip segments still armed, and the saved audio and subtitle tracks already
+     * marked as restored and therefore never applied.
+     */
+    private fun resetMediaSession() {
         countdownJob?.cancel()
+        countdownJob = null
         skipCountdownJob?.cancel()
+        skipCountdownJob = null
         dismissedSegmentJob?.cancel()
+        dismissedSegmentJob = null
         seekIndicatorHideJob?.cancel()
         positionUpdateJob?.cancel()
         skipSegmentsJob?.cancel()
+        bufferingDebounceJob?.cancel()
         segments = emptyList()
         creditsSegment = null
         dismissedSegmentType = null
         countdownDismissed = false
         tracksRestoredForCurrentMedia = false
+        controlsStateMachine.onPlaybackResumed()
+        // Left where the last media stopped, the first tick of the next one reads as a seek jump
+        // and takes down the prompt that has only just gone up.
+        lastPositionMs = 0L
+    }
+
+    private fun switchEpisode(seasonNumber: Int, episodeNumber: Int) {
+        if (episodeSwitchInProgress) return
+        episodeSwitchInProgress = true
+        saveCurrentPosition()
+        playbackController.release()
+        resetMediaSession()
 
         updateViewState(PlayerViewState.Loading)
         startPreparingPlayback(
@@ -1173,7 +1210,7 @@ internal class PlayerVM(
             // An open panel owns the screen; revealing the controls under it would also expose
             // the debug overlay the user may have switched off.
             !content.isMovie && content.activePanel == ActivePanel.None ->
-                updateContent { copy(controlsVisible = true) }
+                showControlsForEndedPlayback()
         }
     }
 
@@ -1234,6 +1271,7 @@ internal class PlayerVM(
     private fun retryPlayback() {
         updateViewState(PlayerViewState.Loading)
         playbackController.release()
+        resetMediaSession()
         loadContent()
     }
 
@@ -1512,12 +1550,29 @@ internal class PlayerVM(
         state: PlayerContentState,
         activeSegment: SkipSegment,
     ): Boolean {
-        val isCreditsWithNextEpisode = activeSegment.type == SkipSegmentType.CREDITS &&
-            !state.isMovie &&
-            state.hasNextEpisode
-        return !isCreditsWithNextEpisode &&
+        return leadsSomewhere(state, activeSegment) &&
             activeSegment.type != dismissedSegmentType &&
             state.activeSkipSegment?.type != activeSegment.type
+    }
+
+    /**
+     * Whether skipping this segment would get the viewer anywhere.
+     *
+     * Credits are the one kind that may have nothing behind them. With a next episode to go to they
+     * are the next-episode countdown's business and the prompt stands aside, which this already
+     * did. Without one — a film, or the last episode of a series — the prompt used to go up anyway,
+     * on the same plate in the same corner as the next-episode countdown, and skipping wound the
+     * media on to its closing frame. Only a tail with something left in it still earns the offer.
+     */
+    private fun leadsSomewhere(state: PlayerContentState, segment: SkipSegment): Boolean {
+        if (segment.type != SkipSegmentType.CREDITS) return true
+        val nextEpisodeOwnsThem = !state.isMovie && state.hasNextEpisode
+        val skipTarget = segment.endMs
+        val duration = playbackController.duration
+        return !nextEpisodeOwnsThem &&
+            skipTarget != null &&
+            duration > 0 &&
+            duration - skipTarget >= PlayerCountdowns.CREDITS_MIN_TAIL_MS
     }
 
     private fun startSkipSegmentCountdown(segment: SkipSegment) {
@@ -1582,6 +1637,9 @@ internal class PlayerVM(
         // the segment checks off, and faster playback can outrun a countdown that fitted when it
         // started. A skip that rewinds is worse than one that does not happen.
         updateContent { copy(activeSkipSegment = null) }
+        // Cancelled, not merely forgotten: pressing the button ends a countdown that is still
+        // running, and a job only dropped keeps writing to a plate that has already gone.
+        skipCountdownJob?.cancel()
         skipCountdownJob = null
     }
 
@@ -1712,6 +1770,10 @@ internal class PlayerVM(
         progressTracker.stopSync()
         positionUpdateJob?.cancel()
         skipSegmentsJob?.cancel()
+        // Both countdowns end here too: either one firing while the writes drain would start the
+        // next episode on a player that is already on its way out.
+        countdownJob?.cancel()
+        skipCountdownJob?.cancel()
         saveCurrentPosition()
         closeJob = launch {
             awaitPendingMutations()
