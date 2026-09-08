@@ -29,12 +29,18 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -443,6 +449,75 @@ class HomeVMIncrementalPublishTest {
         runCurrent()
 
         assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled)
+    }
+
+    @Test
+    fun publishSectionsSerializesConcurrentSectionArrivals() = runTest {
+        // Eight collectors can each call publishSections() on their own arrival, and once the
+        // mapping hops to presentationDispatcher — a real thread pool in production — nothing stops
+        // two of those calls from mapping at once. Whichever one's updateViewState lands last wins,
+        // even when it started first and its snapshot is by then stale relative to the other. The
+        // mutex has to make the whole publish (snapshot through updateViewState) exclusive so that
+        // can't happen; this proves the exclusivity directly by watching whether a second publish's
+        // mapping is ever entered while a first one is still in progress.
+        val watchingSection = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val hotSection = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        every { interactor.observeWatchingItems(any()) } returns watchingSection
+        every { interactor.observeHotItems() } returns hotSection
+
+        val threadPool = Executors.newFixedThreadPool(4)
+        try {
+            val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+            vm.testOnStart()
+
+            // The other five sections plus collections resolve immediately and settle the screen;
+            // ContinueWatching and Hot are still pending because their controlled flows above have
+            // not emitted anything yet.
+            val settleDeadline = System.currentTimeMillis() + 2_000
+            while (vm.testStateValue !is HomeViewState.Content && System.currentTimeMillis() < settleDeadline) {
+                Thread.sleep(10)
+            }
+            assertTrue(vm.testStateValue is HomeViewState.Content, "the unrelated sections never settled")
+
+            val firstMappingEntered = CountDownLatch(1)
+            val releaseFirstMapping = CountDownLatch(1)
+            val firstMappingGate = AtomicBoolean(false)
+            val secondMappingEntered = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                if (firstMappingGate.compareAndSet(false, true)) {
+                    // The first publish triggered below: park here holding the lock, the way a slow
+                    // mapping legitimately could.
+                    firstMappingEntered.countDown()
+                    releaseFirstMapping.await(5, TimeUnit.SECONDS)
+                } else {
+                    secondMappingEntered.set(true)
+                }
+                null
+            }
+
+            watchingSection.tryEmit(Cached.Value(listOf(item(1)), isStale = false))
+            assertTrue(
+                firstMappingEntered.await(2, TimeUnit.SECONDS),
+                "the first publish never started mapping",
+            )
+
+            hotSection.tryEmit(Cached.Value(listOf(item(2)), isStale = false))
+            Thread.sleep(200)
+            assertFalse(
+                secondMappingEntered.get(),
+                "the second publish mapped sections while the first still held the lock",
+            )
+
+            releaseFirstMapping.countDown()
+
+            val secondSettleDeadline = System.currentTimeMillis() + 2_000
+            while (!secondMappingEntered.get() && System.currentTimeMillis() < secondSettleDeadline) {
+                Thread.sleep(10)
+            }
+            assertTrue(secondMappingEntered.get(), "the second publish never ran after the first released")
+        } finally {
+            threadPool.shutdown()
+        }
     }
 
     private fun collection(id: Int) = KCollection(id = id, title = "Collection $id")

@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.kino.puber.R
 import com.kino.puber.core.ui.PuberVM
@@ -67,6 +69,20 @@ internal class HomeVM(
 
     override val initialViewState: HomeViewState = HomeViewState.Loading()
     private var loadHomeJob: Job? = null
+
+    /**
+     * Serializes [publishSections] end to end — snapshot, presentation-dispatcher hop, and publish.
+     *
+     * [loadContentSections] launches up to [TOTAL_SECTIONS] collectors that each call
+     * [publishSections] on their own arrival, and the mapping now runs on [presentationDispatcher],
+     * a real thread pool in production. Two overlapping calls can finish their hop in a different
+     * order than they started it, and without this lock the call that lands last wins — even when it
+     * started first and its snapshot is now older than the other call's, which would publish a screen
+     * missing rows already shown. Holding the lock across the snapshot too means each publish that
+     * gets to run reads the freshest state rather than one captured while an earlier call was still
+     * in flight.
+     */
+    private val publishMutex = Mutex()
 
     /**
      * What each section last returned, keyed by the row it draws.
@@ -427,9 +443,11 @@ internal class HomeVM(
     }
 
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */
-    private suspend fun publishSections() {
+    private suspend fun publishSections() = publishMutex.withLock {
         // Snapshot the main-thread state before hopping: the maps below are written by collectors on
-        // the main dispatcher and must not be read from another thread.
+        // the main dispatcher and must not be read from another thread. Taken inside the lock so a
+        // publish that had to wait its turn reads the freshest state, not one captured before an
+        // earlier publish finished.
         val sections = loadedSections.toMap()
         val collections = loadedCollections
         val watchedAt = lastWatchedAt
