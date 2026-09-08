@@ -29,10 +29,14 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.CountDownLatch
@@ -466,33 +470,40 @@ class HomeVMIncrementalPublishTest {
         every { interactor.observeHotItems() } returns hotSection
 
         val threadPool = Executors.newFixedThreadPool(4)
+        val watcherScope = CoroutineScope(threadPool.asCoroutineDispatcher())
         try {
             val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
             vm.testOnStart()
 
             // The other five sections plus collections resolve immediately and settle the screen;
             // ContinueWatching and Hot are still pending because their controlled flows above have
-            // not emitted anything yet.
-            val settleDeadline = System.currentTimeMillis() + 2_000
-            while (vm.testStateValue !is HomeViewState.Content && System.currentTimeMillis() < settleDeadline) {
-                Thread.sleep(10)
+            // not emitted anything yet. Watched from a real background collector rather than polled,
+            // so the wait below is a genuine bounded latch await, not a sleep.
+            val initialContentLatch = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { it is HomeViewState.Content }
+                initialContentLatch.countDown()
             }
-            assertTrue(vm.testStateValue is HomeViewState.Content, "the unrelated sections never settled")
+            assertTrue(
+                initialContentLatch.await(2, TimeUnit.SECONDS),
+                "the unrelated sections never settled",
+            )
 
             val firstMappingEntered = CountDownLatch(1)
             val releaseFirstMapping = CountDownLatch(1)
             val firstMappingGate = AtomicBoolean(false)
-            val secondMappingEntered = AtomicBoolean(false)
+            val secondMappingEntered = CountDownLatch(1)
             every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
                 if (firstMappingGate.compareAndSet(false, true)) {
                     // The first publish triggered below: park here holding the lock, the way a slow
                     // mapping legitimately could.
                     firstMappingEntered.countDown()
                     releaseFirstMapping.await(5, TimeUnit.SECONDS)
                 } else {
-                    secondMappingEntered.set(true)
+                    secondMappingEntered.countDown()
                 }
-                null
+                stateFor(type)
             }
 
             watchingSection.tryEmit(Cached.Value(listOf(item(1)), isStale = false))
@@ -502,20 +513,35 @@ class HomeVMIncrementalPublishTest {
             )
 
             hotSection.tryEmit(Cached.Value(listOf(item(2)), isStale = false))
-            Thread.sleep(200)
+            // A bounded wait that is meant to time out: without the mutex, the second publish's
+            // mapping starts immediately and this latch counts down well within 200ms instead.
             assertFalse(
-                secondMappingEntered.get(),
+                secondMappingEntered.await(200, TimeUnit.MILLISECONDS),
                 "the second publish mapped sections while the first still held the lock",
             )
 
+            // The second publish's snapshot, taken only once it gets the lock, has both sections -
+            // the freshest state, not the one the first publish captured. Watched from a real
+            // background collector and awaited on a bounded latch, so the test does not return (and
+            // tear down the VM's threads) before that publish has actually landed.
+            val bothSectionsPublished = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { state ->
+                    state is HomeViewState.Content &&
+                        state.sections.any { it.type == HomeSectionType.ContinueWatching } &&
+                        state.sections.any { it.type == HomeSectionType.Hot }
+                }
+                bothSectionsPublished.countDown()
+            }
+
             releaseFirstMapping.countDown()
 
-            val secondSettleDeadline = System.currentTimeMillis() + 2_000
-            while (!secondMappingEntered.get() && System.currentTimeMillis() < secondSettleDeadline) {
-                Thread.sleep(10)
-            }
-            assertTrue(secondMappingEntered.get(), "the second publish never ran after the first released")
+            assertTrue(
+                bothSectionsPublished.await(2, TimeUnit.SECONDS),
+                "the second publish never landed a state with both sections",
+            )
         } finally {
+            watcherScope.cancel()
             threadPool.shutdown()
         }
     }
