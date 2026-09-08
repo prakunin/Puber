@@ -8,6 +8,7 @@ import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
@@ -53,7 +54,7 @@ internal class HomeVM(
     private val cardDisplayChanges: CardDisplayChanges,
     private val resources: ResourceProvider,
     override val errorHandler: ErrorHandler,
-    private val presentationDispatcher: CoroutineDispatcher,
+    private val presentationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : PuberVM<HomeViewState>(router) {
 
     companion object {
@@ -83,6 +84,19 @@ internal class HomeVM(
      * in flight.
      */
     private val publishMutex = Mutex()
+
+    /**
+     * Bumped every time [clearRowsFromPreviousCatalogue] runs, so a publish parked at the
+     * [presentationDispatcher] hop can tell its snapshot describes a catalogue that no longer exists.
+     *
+     * A clear is not suspend and never takes [publishMutex] — it writes straight through underneath a
+     * publish that is mid-hop. Without this, that publish would resume afterwards and write a
+     * `Content` built entirely from its pre-clear snapshot over the `Loading` state the clear just
+     * published, resurrecting rows [clearRowsFromPreviousCatalogue]'s own contract says must be
+     * dropped. Captured inside the lock alongside the rest of the snapshot; [publishSections] skips
+     * its own publish if this has moved by the time the hop returns.
+     */
+    private var catalogueEpoch = 0
 
     /**
      * What each section last returned, keyed by the row it draws.
@@ -422,6 +436,7 @@ internal class HomeVM(
         // than absent — the same distinction the flag exists to keep.
         heroSettled = false
         loadedCacheGeneration = interactor.cacheGeneration
+        catalogueEpoch++
         if (stateValue is HomeViewState.Content) {
             updateViewState(HomeViewState.Loading(apiDomainDialog = currentDialogState()))
         }
@@ -444,13 +459,16 @@ internal class HomeVM(
 
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */
     private suspend fun publishSections() = publishMutex.withLock {
-        // Snapshot the main-thread state before hopping: the maps below are written by collectors on
-        // the main dispatcher and must not be read from another thread. Taken inside the lock so a
-        // publish that had to wait its turn reads the freshest state, not one captured before an
-        // earlier publish finished.
+        // Snapshot the main-thread state before hopping: the maps below, heroSettled and the epoch
+        // are written by collectors — or by a catalogue clear — on the main dispatcher and must not
+        // be read fresh after the hop, which is exactly the window a clear can land in. Taken inside
+        // the lock so a publish that had to wait its turn reads the freshest state, not one captured
+        // before an earlier publish finished.
+        val epoch = catalogueEpoch
         val sections = loadedSections.toMap()
         val collections = loadedCollections
         val watchedAt = lastWatchedAt
+        val heroSettledAtSnapshot = heroSettled
         val mapped = withContext(presentationDispatcher) {
             MappedHome(
                 heroItems = videoItemMapper.mapHeroItems(
@@ -478,11 +496,18 @@ internal class HomeVM(
                 ).sortedBy { it.type.ordinal },
             )
         }
+        if (catalogueEpoch != epoch) {
+            // A clear landed while this publish was parked at the hop: its snapshot describes a
+            // catalogue that is no longer on screen. The clear already published its own Loading
+            // state (or a later publish will publish the new catalogue's rows); writing this one
+            // over it would resurrect rows the clear specifically exists to drop.
+            return@withLock
+        }
         updateViewState(
             HomeViewState.Content(
                 heroItems = mapped.heroItems,
                 sections = applySavedOverrides(mapped.sections),
-                heroSettled = heroSettled,
+                heroSettled = heroSettledAtSnapshot,
                 apiDomainDialog = currentDialogState(),
             )
         )

@@ -53,6 +53,13 @@ import org.junit.jupiter.api.extension.RegisterExtension
 class HomeVMIncrementalPublishTest {
 
     companion object {
+        // The real-thread race tests in this file (a genuinely multi-threaded presentationDispatcher,
+        // a blocking CountDownLatch.await() parking the VM's own coroutine) depend on this being the
+        // default UnconfinedTestDispatcher: it dispatches VM work immediately, on whatever thread
+        // resumes it, rather than queuing it on a virtual-time scheduler. Under a StandardTestDispatcher
+        // that queued work would only run when the test coroutine itself advances the scheduler, but
+        // the test thread is the one blocked on the latch awaits below — so every latch would time out
+        // waiting for a resumption that only the test thread could ever pump.
         @JvmField
         @RegisterExtension
         val mainDispatcher = MainDispatcherExtension()
@@ -471,8 +478,8 @@ class HomeVMIncrementalPublishTest {
 
         val threadPool = Executors.newFixedThreadPool(4)
         val watcherScope = CoroutineScope(threadPool.asCoroutineDispatcher())
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
         try {
-            val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
             vm.testOnStart()
 
             // The other five sections plus collections resolve immediately and settle the screen;
@@ -541,6 +548,226 @@ class HomeVMIncrementalPublishTest {
                 "the second publish never landed a state with both sections",
             )
         } finally {
+            // Cancels the VM's own collectors (including any still parked on a controlled flow that
+            // never emitted again) so they cannot resume later and interfere with a subsequent test -
+            // they would otherwise stay alive for the rest of the suite, since this file's tests never
+            // call this VM instance again after their own assertions.
+            vm.testCancelScope()
+            watcherScope.cancel()
+            threadPool.shutdown()
+        }
+    }
+
+    @Test
+    fun aPublishParkedAtTheHopCannotResurrectRowsAClearAlreadyDropped() = runTest {
+        // clearRowsFromPreviousCatalogue() is not suspend and never takes publishMutex: it writes
+        // straight through underneath a publish that is mid-hop at presentationDispatcher. Without an
+        // epoch guard, that publish would resume afterwards and write a Content built from its
+        // pre-clear snapshot over the Loading state the clear just published - exactly what that
+        // function's own KDoc says must not happen. The new catalogue's sections are held open for
+        // the rest of the test, so the only way Content can reappear is the stale publish winning
+        // this race.
+        //
+        // The stale publish has to come from the cardDisplayChanges-triggered refreshHomePresentation
+        // path, not from a fresh section arrival: every publish launched under loadHomeJob is a child
+        // of that job, and the loadHome() the clear below triggers cancels the previous loadHomeJob,
+        // which kills a parked publish before it can resume and demonstrate the race. The
+        // cardDisplayChanges collector is launched directly under viewModelScope in onStart, outside
+        // loadHomeJob, so it survives.
+        val threadPool = Executors.newFixedThreadPool(6)
+        val watcherScope = CoroutineScope(threadPool.asCoroutineDispatcher())
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+        try {
+            vm.testOnStart()
+
+            // Waits for every one of the 8 initial collectors' own publishSections() calls to fully
+            // drain, not just for the first to land - mapHeroItems runs exactly once per publish, so 8
+            // calls means the mutex has nothing left queued. Gating mapItemSection before this point
+            // risks catching a leftover initial-burst publish instead of the one triggered below: that
+            // leftover is itself a child of loadHomeJob and gets silently cancelled (not resurrected)
+            // once the clear's loadHome() cancels that job, but it also means the trigger below - the
+            // one call that isn't scoped under loadHomeJob and could actually demonstrate the race - is
+            // left queued behind it and doesn't take its (stale, pre-clear) snapshot until after the
+            // clear, defeating the test.
+            verify(exactly = 8, timeout = 2_000) { videoItemMapper.mapHeroItems(any()) }
+            assertTrue(vm.testStateValue is HomeViewState.Content, "the unrelated sections never settled")
+
+            val mappingEntered = CountDownLatch(1)
+            val releaseMapping = CountDownLatch(1)
+            val mappingGate = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
+                if (mappingGate.compareAndSet(false, true)) {
+                    // Parks the publish this test triggers below mid-hop, holding its pre-clear
+                    // snapshot, the way a slow mapping legitimately could.
+                    mappingEntered.countDown()
+                    releaseMapping.await(5, TimeUnit.SECONDS)
+                }
+                stateFor(type)
+            }
+
+            // Triggers a publish built from the still-current (about to be cleared) catalogue, from
+            // the one path that survives the loadHome() the clear below performs, and parks it mid-hop.
+            displayChanges.emit(Unit)
+            assertTrue(
+                mappingEntered.await(2, TimeUnit.SECONDS),
+                "the stale publish never started mapping",
+            )
+
+            // The new catalogue's sections never answer for the rest of this test, so nothing but
+            // the stale publish parked above can turn Loading back into Content from here on.
+            val neverCompletes = CompletableDeferred<Unit>()
+            every { interactor.observeWatchingItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+            every { interactor.observeFreshItems() } returns flow { neverCompletes.await() }
+            every { interactor.observePopularMovies() } returns flow { neverCompletes.await() }
+            every { interactor.observePopularSeries() } returns flow { neverCompletes.await() }
+            every { interactor.observeWatchLaterItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeBookmarkItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeCollections() } returns flow { neverCompletes.await() }
+
+            val clearedToLoading = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { it is HomeViewState.Loading }
+                clearedToLoading.countDown()
+            }
+            vm.onAction(HomeAction.ResetApiDomain)
+            assertTrue(
+                clearedToLoading.await(2, TimeUnit.SECONDS),
+                "the domain reset never cleared the screen to Loading",
+            )
+            assertTrue(vm.testStateValue is HomeViewState.Loading)
+
+            val staleContentRepublished = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { it is HomeViewState.Content }
+                staleContentRepublished.countDown()
+            }
+
+            releaseMapping.countDown()
+
+            // A bounded wait that is meant to time out: without the epoch guard, the stale publish's
+            // remaining (unblocked) mapping work finishes in well under 500ms and republishes Content.
+            assertFalse(
+                staleContentRepublished.await(500, TimeUnit.MILLISECONDS),
+                "the stale publish republished the previous catalogue's rows over the cleared screen",
+            )
+            assertTrue(vm.testStateValue is HomeViewState.Loading)
+        } finally {
+            // Cancels the VM's own collectors (including any still parked on a controlled flow that
+            // never emitted again) so they cannot resume later and interfere with a subsequent test -
+            // they would otherwise stay alive for the rest of the suite, since this file's tests never
+            // call this VM instance again after their own assertions.
+            vm.testCancelScope()
+            watcherScope.cancel()
+            threadPool.shutdown()
+        }
+    }
+
+    @Test
+    fun heroSettledIsSnapshottedWithTheRestOfThePublishSoAStalePublishCannotPairItWithEmptyHeroItems() = runTest {
+        // heroSettled is written on the main thread by collectSection the moment the hot section's own
+        // cached value arrives - synchronously, regardless of the mutex, since that happens before the
+        // hot arrival's own publishSections() call even starts. A publish that began earlier and is
+        // still parked at the presentation-dispatcher hop must not read this fresh once it resumes:
+        // its heroItems were already computed from a snapshot that did not include the hot section, so
+        // pairing that empty heroItems with a fresh heroSettled = true collapses the carousel row for
+        // one frame - on a television, a moved focus, not just a visual blip.
+        val watchingSection = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val hotSection = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        every { interactor.observeWatchingItems(any()) } returns watchingSection
+        every { interactor.observeHotItems() } returns hotSection
+
+        val threadPool = Executors.newFixedThreadPool(6)
+        val watcherScope = CoroutineScope(threadPool.asCoroutineDispatcher())
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+        try {
+            vm.testOnStart()
+
+            // ContinueWatching and Hot are held back by the controlled flows above, so initial settle
+            // is the other five sections plus collections: six publishSections() calls. Waits for all
+            // six to fully drain through the mutex (mapHeroItems runs exactly once per publish, so six
+            // calls means nothing is left queued) before installing the gate below - otherwise the gate
+            // risks catching one of these leftover calls instead of the one triggered below, which is
+            // scoped under loadHomeJob same as they are and so wouldn't even demonstrate anything about
+            // a publish that outlives it.
+            verify(exactly = 6, timeout = 2_000) { videoItemMapper.mapHeroItems(any()) }
+            assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled)
+
+            val firstMappingEntered = CountDownLatch(1)
+            val releaseFirstMapping = CountDownLatch(1)
+            val firstMappingGate = AtomicBoolean(false)
+            val secondMappingEntered = CountDownLatch(1)
+            val releaseSecondMapping = CountDownLatch(1)
+            val secondMappingGate = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
+                // Both gates are keyed on type rather than "whichever call comes first": ContinueWatching
+                // and Hot's flows are held back by the controlled flows above and so never contribute to
+                // initial settle, which means the only publishes whose mapping loops can ever reach these
+                // two types are the ones triggered below - immune to a leftover initial-settle call still
+                // queued on the mutex winning a gate instead. The second gate matters because a StateFlow
+                // collector can miss the first publish's state entirely if the second one lands before it
+                // gets scheduled - conflation only guarantees the latest value, not every intermediate one
+                // - so the only reliable way to observe the first publish's content is to park the second
+                // one before it can overwrite it.
+                when {
+                    type == HomeSectionType.ContinueWatching && firstMappingGate.compareAndSet(false, true) -> {
+                        firstMappingEntered.countDown()
+                        releaseFirstMapping.await(5, TimeUnit.SECONDS)
+                    }
+                    type == HomeSectionType.Hot && secondMappingGate.compareAndSet(false, true) -> {
+                        secondMappingEntered.countDown()
+                        releaseSecondMapping.await(5, TimeUnit.SECONDS)
+                    }
+                }
+                stateFor(type)
+            }
+
+            // Triggers a publish snapshotted before the hot section has answered, and parks it mid-hop.
+            watchingSection.tryEmit(Cached.Value(listOf(item(1)), isStale = false))
+            assertTrue(
+                firstMappingEntered.await(2, TimeUnit.SECONDS),
+                "the first publish never started mapping",
+            )
+
+            // The hot section answers while the first publish is still parked: heroSettled flips on
+            // the main thread immediately, well before the hot arrival's own publish gets anywhere
+            // near the mutex.
+            hotSection.tryEmit(Cached.Value(listOf(item(2)), isStale = false))
+
+            releaseFirstMapping.countDown()
+
+            // The first publish is released and lands; the second (hot-triggered) publish is now next
+            // in line for the mutex and parks in turn, on its own gate, before it can touch state - so
+            // the assertion below reads the first publish's content, not a state a StateFlow collector
+            // raced to observe before conflation swallowed it.
+            assertTrue(
+                secondMappingEntered.await(2, TimeUnit.SECONDS),
+                "the second publish never started mapping",
+            )
+            assertEquals(
+                false,
+                (vm.testStateValue as HomeViewState.Content).heroSettled,
+                "a publish snapshotted before the hot section answered must not publish heroSettled = true",
+            )
+
+            val bothSettled = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { state -> state is HomeViewState.Content && state.heroSettled }
+                bothSettled.countDown()
+            }
+            releaseSecondMapping.countDown()
+            assertTrue(
+                bothSettled.await(2, TimeUnit.SECONDS),
+                "the hot section's own publish never landed with heroSettled = true",
+            )
+        } finally {
+            // Cancels the VM's own collectors (including any still parked on a controlled flow that
+            // never emitted again) so they cannot resume later and interfere with a subsequent test -
+            // they would otherwise stay alive for the rest of the suite, since this file's tests never
+            // call this VM instance again after their own assertions.
+            vm.testCancelScope()
             watcherScope.cancel()
             threadPool.shutdown()
         }

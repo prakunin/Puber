@@ -183,6 +183,14 @@ private fun onBackPressed(router: AppRouter): Boolean {
  * Voyager pops a screen itself when no back dispatcher claimed the press, and that path never
  * reaches [AppRouter.back]. Whatever result listener that screen was meant to serve would stay in
  * the router for the life of the flow, holding the caller's view model.
+ *
+ * Safe to race against [AppRouter.back] itself only because Compose's `GlobalSnapshotManager`
+ * defers `sendApplyNotifications` to its own coroutine: the `snapshotFlow` below can never resume
+ * synchronously inside `back()`'s body, so it cannot drop a listener before `dispatchResult` -
+ * called right after `runCommand(Command.Back)`, still within that same synchronous call - has
+ * delivered its result. A future refactor that moves this watcher onto [AppRouter.events] instead
+ * of `navigator.items` would reintroduce the dropped-result bug this function exists to fix, since
+ * `events()` is exactly the synchronous path `back()` runs on.
  */
 @Composable
 internal fun DropResultListenersOnPop(navigator: Navigator, router: AppRouter) {

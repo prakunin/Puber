@@ -209,7 +209,7 @@ private fun Key.isSelectKey(): Boolean {
     return this == Key.DirectionCenter || this == Key.Enter
 }
 
-/** Значения читаются только в draw-фазе (`graphicsLayer`), чтобы анимация не рекомпозировала `HeroItem`. */
+/** Values are read only in the draw phase (via `graphicsLayer`), so the animation never recomposes `HeroItem`. */
 private class KenBurnsTransform(val scale: State<Float>, val translateX: State<Float>) {
     companion object {
         val Still = KenBurnsTransform(ConstantFloatState(1f), ConstantFloatState(0f))
