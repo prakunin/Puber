@@ -28,6 +28,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -458,7 +459,9 @@ class HomeVMIncrementalPublishTest {
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
 
-    private fun createVM() = HomeVM(
+    private fun createVM(
+        presentationDispatcher: CoroutineDispatcher = mainDispatcher.dispatcher,
+    ) = HomeVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
@@ -468,5 +471,6 @@ class HomeVMIncrementalPublishTest {
         cardDisplayChanges = cardDisplayChanges,
         resources = FakeResourceProvider(),
         errorHandler = errorHandler,
+        presentationDispatcher = presentationDispatcher,
     )
 }

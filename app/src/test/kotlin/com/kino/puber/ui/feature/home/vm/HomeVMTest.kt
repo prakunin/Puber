@@ -37,6 +37,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -383,12 +386,28 @@ class HomeVMTest {
         verify { interactor.prepareHomeItems(listOf(hot), lastWatched, false) }
     }
 
+    @Test
+    fun sectionsAreMappedOnThePresentationDispatcher() = runTest {
+        // Sorting and mapping eight sections is main-thread work the rows do not need; the publish
+        // has to hop to the injected dispatcher and only then land as content.
+        val presentation = StandardTestDispatcher(testScheduler)
+        val vm = createVM(presentationDispatcher = presentation)
+
+        vm.testOnStart()
+        assertTrue(vm.testStateValue is HomeViewState.Loading)
+
+        advanceUntilIdle()
+        assertTrue(vm.testStateValue is HomeViewState.Content)
+    }
+
     private val displayChanges = MutableSharedFlow<Unit>()
     private val cardDisplayChanges = mockk<CardDisplayChanges> {
         every { changes } returns this@HomeVMTest.displayChanges
     }
 
-    private fun createVM() = HomeVM(
+    private fun createVM(
+        presentationDispatcher: CoroutineDispatcher = mainDispatcher.dispatcher,
+    ) = HomeVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
@@ -398,6 +417,7 @@ class HomeVMTest {
         cardDisplayChanges = cardDisplayChanges,
         resources = FakeResourceProvider(),
         errorHandler = errorHandler,
+        presentationDispatcher = presentationDispatcher,
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(

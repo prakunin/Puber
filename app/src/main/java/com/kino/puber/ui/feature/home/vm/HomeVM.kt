@@ -7,14 +7,17 @@ import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 import com.kino.puber.R
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
+import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
@@ -48,6 +51,7 @@ internal class HomeVM(
     private val cardDisplayChanges: CardDisplayChanges,
     private val resources: ResourceProvider,
     override val errorHandler: ErrorHandler,
+    private val presentationDispatcher: CoroutineDispatcher,
 ) : PuberVM<HomeViewState>(router) {
 
     companion object {
@@ -318,7 +322,7 @@ internal class HomeVM(
      * Reports a hot section that finished without leaving a carousel behind, so the rows stop
      * waiting for one. A section that failed has answered as definitively as one that succeeded.
      */
-    private fun markHeroSettled(type: HomeSectionType) {
+    private suspend fun markHeroSettled(type: HomeSectionType) {
         if (type != HomeSectionType.Hot || heroSettled) return
         heroSettled = true
         // Nothing else republishes on a section that produced no value, and a screen still on its
@@ -423,38 +427,53 @@ internal class HomeVM(
     }
 
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */
-    private fun publishSections() {
-        val mapped = listOfNotNull(
-            *loadedSections
-                .map { (type, items) ->
-                    mapper.mapItemSection(
-                        interactor.prepareHomeItems(
-                            items = items,
-                            lastWatchedAt = lastWatchedAt,
-                            sortByLastWatched = type == HomeSectionType.WatchLater ||
-                                type == HomeSectionType.Bookmarks,
-                        ),
-                        type,
-                    )
-                }
-                .toTypedArray(),
-            loadedCollections?.let { mapper.mapCollectionSection(it) },
-        ).sortedBy { it.type.ordinal }.let(::applySavedOverrides)
-
-        val hotItems = interactor.prepareHomeItems(
-            items = loadedSections[HomeSectionType.Hot].orEmpty(),
-            lastWatchedAt = lastWatchedAt,
-            sortByLastWatched = false,
-        )
+    private suspend fun publishSections() {
+        // Snapshot the main-thread state before hopping: the maps below are written by collectors on
+        // the main dispatcher and must not be read from another thread.
+        val sections = loadedSections.toMap()
+        val collections = loadedCollections
+        val watchedAt = lastWatchedAt
+        val mapped = withContext(presentationDispatcher) {
+            MappedHome(
+                heroItems = videoItemMapper.mapHeroItems(
+                    interactor.prepareHomeItems(
+                        items = sections[HomeSectionType.Hot].orEmpty(),
+                        lastWatchedAt = watchedAt,
+                        sortByLastWatched = false,
+                    ).take(HERO_ITEMS_COUNT),
+                ),
+                sections = listOfNotNull(
+                    *sections
+                        .map { (type, items) ->
+                            mapper.mapItemSection(
+                                interactor.prepareHomeItems(
+                                    items = items,
+                                    lastWatchedAt = watchedAt,
+                                    sortByLastWatched = type == HomeSectionType.WatchLater ||
+                                        type == HomeSectionType.Bookmarks,
+                                ),
+                                type,
+                            )
+                        }
+                        .toTypedArray(),
+                    collections?.let { mapper.mapCollectionSection(it) },
+                ).sortedBy { it.type.ordinal },
+            )
+        }
         updateViewState(
             HomeViewState.Content(
-                heroItems = videoItemMapper.mapHeroItems(hotItems.take(HERO_ITEMS_COUNT)),
-                sections = mapped,
+                heroItems = mapped.heroItems,
+                sections = applySavedOverrides(mapped.sections),
                 heroSettled = heroSettled,
                 apiDomainDialog = currentDialogState(),
             )
         )
     }
+
+    private class MappedHome(
+        val heroItems: List<HeroItemState>,
+        val sections: List<HomeSectionState>,
+    )
 
     /** Per-[loadContentSections] call counters, so a cancelled run can't skew the next one's. */
     private class LoadRun {

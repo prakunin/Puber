@@ -12,10 +12,11 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.vm.HomeVM
+import kotlinx.coroutines.Dispatchers
 import kotlinx.parcelize.Parcelize
 import com.kino.puber.core.di.puberViewModel
 import org.koin.core.module.dsl.scopedOf
-import org.koin.core.module.dsl.viewModelOf
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.core.scope.Scope
 import org.koin.core.scope.ScopeID
@@ -30,7 +31,20 @@ internal class HomeScreen : PuberScreen {
             scopedOf(::HomeInteractor)
             scoped { VideoItemUIMapper(get(), get(), get()) }
             scoped { HomeUIMapper(get(), get()) }
-            viewModelOf(::HomeVM)
+            viewModel {
+                HomeVM(
+                    router = get(),
+                    interactor = get(),
+                    mapper = get(),
+                    videoItemMapper = get(),
+                    apiDomainInteractor = get(),
+                    savedItemInteractor = get(),
+                    cardDisplayChanges = get(),
+                    resources = get(),
+                    errorHandler = get(),
+                    presentationDispatcher = Dispatchers.Default,
+                )
+            }
         }
     }
 
