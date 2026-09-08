@@ -70,6 +70,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -909,12 +910,6 @@ class KinoPubApiClient(
                 throw IllegalStateException("Unable to delete stale update download")
             }
 
-            val response = httpClient.get(url)
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("Update download failed with HTTP ${response.status.value}")
-            }
-
-            val totalBytes = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
             var lastProgress = -1
 
             fun dispatchProgress(percent: Int) {
@@ -925,12 +920,22 @@ class KinoPubApiClient(
                 }
             }
 
-            streamToFile(
-                channel = response.bodyAsChannel(),
-                tempFile = tempFile,
-                totalBytes = totalBytes,
-                dispatchProgress = ::dispatchProgress,
-            )
+            // `get()` would hand back a response whose body Ktor has already read into memory in full;
+            // only a prepared statement streams, and the statement is valid inside `execute` alone.
+            httpClient.prepareGet(url).execute { response ->
+                if (!response.status.isSuccess()) {
+                    throw IllegalStateException("Update download failed with HTTP ${response.status.value}")
+                }
+
+                val totalBytes = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+
+                streamToFile(
+                    channel = response.bodyAsChannel(),
+                    tempFile = tempFile,
+                    totalBytes = totalBytes,
+                    dispatchProgress = ::dispatchProgress,
+                )
+            }
             moveIntoPlace(tempFile, targetFile)
 
             dispatchProgress(PERCENT_MAX)
