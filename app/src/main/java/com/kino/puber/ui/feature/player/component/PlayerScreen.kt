@@ -61,6 +61,7 @@ internal data class PlayerScreen(private val params: PlayerScreenParams) : Fulls
         val vm = puberViewModel<PlayerVM>()
         val state by vm.collectViewState()
         val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
+        val exoPlayer = remember(vm) { vm::getExoPlayer }
 
         LifecycleAction(
             event = Lifecycle.Event.ON_STOP,
@@ -71,7 +72,7 @@ internal data class PlayerScreen(private val params: PlayerScreenParams) : Fulls
         PlayerScreenContent(
             state = state,
             onAction = onAction,
-            exoPlayer = vm::getExoPlayer,
+            exoPlayer = exoPlayer,
         )
 
         val message by vm.collectMessage()

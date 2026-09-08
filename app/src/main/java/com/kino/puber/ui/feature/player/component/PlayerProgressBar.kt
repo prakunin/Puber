@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,16 +59,7 @@ internal fun PlayerProgressBar(
     val currentTimeText = remember(currentPosition) { formatTimeMs(currentPosition) }
     val remainingTimeText = remember(currentPosition, duration) { formatRemainingTime(currentPosition, duration) }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "buffering_shimmer")
-    val shimmerProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(SHIMMER_DURATION_MS, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "shimmer",
-    )
+    val shimmerProgress = bufferingShimmer(isBuffering)
 
     Column(
         modifier = modifier
@@ -89,6 +80,30 @@ internal fun PlayerProgressBar(
             onOkPressed = onOkPressed,
         )
     }
+}
+
+/**
+ * The shimmer exists only while buffering. An infinite transition drives a frame loop for as long
+ * as it is composed, so creating it unconditionally kept the whole progress bar recomposing at
+ * 60 fps whenever the controls were up. The value comes back as [State] and is read in draw only.
+ */
+@Composable
+private fun bufferingShimmer(isBuffering: Boolean): State<Float> {
+    if (!isBuffering) return NoShimmer
+    val infiniteTransition = rememberInfiniteTransition(label = "buffering_shimmer")
+    return infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(SHIMMER_DURATION_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmer",
+    )
+}
+
+private val NoShimmer: State<Float> = object : State<Float> {
+    override val value: Float = 0f
 }
 
 @Composable
@@ -113,7 +128,7 @@ private fun ProgressBarRow(
     remainingTimeText: String,
     progress: Float,
     bufferedProgress: Float,
-    shimmerProgress: Float,
+    shimmerProgress: State<Float>,
     isBuffering: Boolean,
     focusRequester: FocusRequester,
     onSeekForward: () -> Unit,
@@ -169,7 +184,7 @@ private fun timeTextStyle() = MaterialTheme.typography.bodyMedium.copy(
 private fun SeekTrack(
     progress: Float,
     bufferedProgress: Float,
-    shimmerProgress: Float,
+    shimmerProgress: State<Float>,
     isBuffering: Boolean,
     focusRequester: FocusRequester,
     onSeekForward: () -> Unit,
@@ -216,7 +231,7 @@ private fun TrackBackground() {
 }
 
 @Composable
-private fun BufferedTrack(bufferedProgress: Float, shimmerProgress: Float, isBuffering: Boolean) {
+private fun BufferedTrack(bufferedProgress: Float, shimmerProgress: State<Float>, isBuffering: Boolean) {
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = Modifier
@@ -228,7 +243,7 @@ private fun BufferedTrack(bufferedProgress: Float, shimmerProgress: Float, isBuf
                     Modifier.drawBehind {
                         drawRect(color = onSurfaceVariant.copy(alpha = BUFFERING_TRACK_ALPHA))
                         val bandWidth = size.width * SHIMMER_BAND_WIDTH_FRACTION
-                        val x = shimmerProgress * (size.width + bandWidth) - bandWidth
+                        val x = shimmerProgress.value * (size.width + bandWidth) - bandWidth
                         drawRect(
                             brush = Brush.linearGradient(
                                 colors = listOf(
