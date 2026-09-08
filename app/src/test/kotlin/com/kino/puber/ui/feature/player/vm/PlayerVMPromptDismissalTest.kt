@@ -42,6 +42,7 @@ internal class PlayerVMPromptDismissalTest : PlayerVMTestFixture() {
             assertNull(contentState(vm).activeSkipSegment)
 
             every { playbackController.currentPosition } returns 7_000L
+            callbackSlot.captured.onSeekPerformed()
             advanceTimeBy(2_000)
 
             assertNull(contentState(vm).activeSkipSegment)
@@ -86,8 +87,32 @@ internal class PlayerVMPromptDismissalTest : PlayerVMTestFixture() {
 
             // Rewound: the earlier "not this time" no longer speaks for where they are now.
             every { playbackController.currentPosition } returns 20_000L
+            callbackSlot.captured.onSeekPerformed()
             advanceTimeBy(1_200)
             callbackSlot.captured.onPlaybackEnded()
+
+            assertNotNull(contentState(vm).nextEpisodeCountdown)
+            vm.testCancelScope()
+        }
+
+    /**
+     * The sampler runs every half second, but nothing guarantees it is on time: a warm-up, a
+     * recomposition or a stall can hold it back, and the media moves on meanwhile. That is not the
+     * viewer taking the wheel, and the prompt they are watching count down must survive it.
+     */
+    @Test
+    fun aLateTickDoesNotTakeTheNextEpisodePromptDown() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            // Inside the tail the prompt is armed from: duration minus its lead-in.
+            every { playbackController.currentPosition } returns 2_380_000L
+            val vm = startedVM()
+            advanceTimeBy(600)
+            assertNotNull(contentState(vm).nextEpisodeCountdown)
+
+            // One sample later the media has moved on by four seconds, no one having pressed
+            // anything: the tick simply arrived late.
+            every { playbackController.currentPosition } returns 2_384_000L
+            advanceTimeBy(600)
 
             assertNotNull(contentState(vm).nextEpisodeCountdown)
             vm.testCancelScope()
@@ -102,6 +127,7 @@ internal class PlayerVMPromptDismissalTest : PlayerVMTestFixture() {
             assertNotNull(contentState(vm).nextEpisodeCountdown)
 
             every { playbackController.currentPosition } returns 20_000L
+            callbackSlot.captured.onSeekPerformed()
             advanceTimeBy(1_200)
 
             assertNull(contentState(vm).nextEpisodeCountdown)

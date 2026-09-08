@@ -64,7 +64,13 @@ internal data class PlayerContentState(
     val isCurrentMediaWatched: Boolean,
     val isMarkCurrentWatchedInFlight: Boolean,
 
-    // Next episode countdown
+    /**
+     * Seconds the next-episode prompt counts down from, or null while no prompt is up.
+     *
+     * Written once per prompt and left alone: the overlay runs the clock for the bar and the digit
+     * from this number. Rewriting it every second with the seconds left made every tick a fresh
+     * screen state, and on the television the recomposition that followed cost the bar a frame.
+     */
     val nextEpisodeCountdown: Int?,
 
     // Skip segment overlay
@@ -89,12 +95,12 @@ internal data class SkipSegmentUIState(
     val label: String,
     val targetPositionMs: Long,
     val type: SkipSegmentType,
-    val countdown: Int,
     /**
-     * What [countdown] started at. The bar divides by it, and it is not the same for every prompt:
-     * a segment with little left gets a shorter countdown so the skip still runs before it ends.
+     * Seconds the prompt counts down from. Not the same for every prompt: a segment with little
+     * left gets a shorter countdown so the skip still runs before it ends. Like
+     * [PlayerContentState.nextEpisodeCountdown] it is written once; the overlay runs the clock.
      */
-    val totalSeconds: Int = countdown,
+    val countdown: Int,
 )
 
 /**

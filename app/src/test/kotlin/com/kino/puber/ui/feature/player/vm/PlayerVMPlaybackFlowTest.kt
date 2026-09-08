@@ -15,6 +15,7 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -372,6 +373,22 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun resumeFromPosition_startsOverWhenTheOfferIsTheEndOfTheMedia() {
+        // An item whose details carry no duration reaches the dialog unfiltered, so the offer can
+        // be the closing frame itself. Taking it must not play the last moment and end again.
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
+            resumeDialog = ResumeDialogState(savedPosition = 2_400_000L, formattedTime = "40:00", episodeInfo = null),
+            isPlaying = false,
+        )
+        val vm = startedVM()
+
+        vm.onAction(PlayerAction.ResumeFromPosition)
+
+        verify { playbackController.seekTo(0) }
+        assertNull(contentState(vm).resumeDialog)
+    }
+
+    @Test
     fun startFromBeginning_seeksToZero_clearsDialog() {
         coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
             resumeDialog = ResumeDialogState(savedPosition = 120_000L, formattedTime = "2:00", episodeInfo = null),
@@ -384,6 +401,31 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         verify { playbackController.seekTo(0) }
         verify { playbackController.play() }
         assertNull(contentState(vm).resumeDialog)
+    }
+
+    @Test
+    fun resumeDialog_notOfferedWhenTheSavedPositionIsTheEndOfTheMedia() {
+        every { interactor.resolveMedia(any(), any(), any(), any()) } returns testResolvedMedia.copy(
+            watchingTime = 2_400,
+        )
+
+        startedVM()
+
+        coVerify { contentStateFactory.build(any(), any(), isNull(), any(), any(), any()) }
+    }
+
+    @Test
+    fun resumeDialog_offeredForAPositionWithMediaLeftBehindIt() {
+        every { interactor.resolveMedia(any(), any(), any(), any()) } returns testResolvedMedia.copy(
+            watchingTime = 1_200,
+        )
+
+        val resumeDialog = slot<ResumeDialogState>()
+
+        startedVM()
+
+        coVerify { contentStateFactory.build(any(), any(), capture(resumeDialog), any(), any(), any()) }
+        assertEquals(1_200_000L, resumeDialog.captured.savedPosition)
     }
 
     // endregion
@@ -413,6 +455,93 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.CancelSkipSegment)
 
         assertNull(contentState(vm).activeSkipSegment)
+    }
+
+    // endregion
+
+    // region End of media
+
+    @Test
+    fun playbackEnded_onMovie_returnsToTheCallingScreen() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
+            isMovie = true,
+            hasNextEpisode = false,
+            hasPreviousEpisode = false,
+        )
+        startedVM()
+
+        callbackSlot.captured.onPlaybackEnded()
+
+        verifyContentChangeResult(ContentChangeType.Watched, ContentChangeType.PlaybackProgress)
+    }
+
+    @Test
+    fun playbackEnded_onLastEpisode_returnsToTheCallingScreen() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
+            hasNextEpisode = false,
+        )
+        startedVM()
+
+        callbackSlot.captured.onPlaybackEnded()
+
+        verify { router.back(RESULT_CONTENT_CHANGED, any()) }
+    }
+
+    @Test
+    fun playbackEnded_underOpenPanel_waitsForThePanelToClose() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
+            isMovie = true,
+            hasNextEpisode = false,
+            hasPreviousEpisode = false,
+        )
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenAboutPanel)
+
+        callbackSlot.captured.onPlaybackEnded()
+        verify(exactly = 0) { router.back(any(), any()) }
+
+        // The way a panel really comes down: back closes it, and the exit follows it out.
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        verify { router.back(RESULT_CONTENT_CHANGED, any()) }
+    }
+
+    /**
+     * An invariant rather than a scene: playback reporting itself as playing retires the pending
+     * exit, so no restart made from inside a panel can carry an exit that belonged to media which
+     * has since been replaced.
+     */
+    @Test
+    fun playbackEndedUnderPanel_thenPlayingAgain_keepsThePlayerOpen() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(
+            isMovie = true,
+            hasNextEpisode = false,
+            hasPreviousEpisode = false,
+        )
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+
+        callbackSlot.captured.onPlaybackEnded()
+        callbackSlot.captured.onPlaybackStateChanged(
+            isPlaying = true,
+            isBuffering = false,
+            position = 0L,
+            duration = 2_400_000L,
+            buffered = 0L,
+        )
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        verify(exactly = 0) { router.back(any(), any()) }
+    }
+
+    @Test
+    fun playbackEnded_withNextEpisode_countsDownInsteadOfLeaving() {
+        val vm = startedVM()
+
+        callbackSlot.captured.onPlaybackEnded()
+
+        assertNotNull(contentState(vm).nextEpisodeCountdown)
+        verify(exactly = 0) { router.back(any(), any()) }
     }
 
     // endregion

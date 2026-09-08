@@ -83,14 +83,33 @@ internal class PlayerVMSkipCountdownFitTest : PlayerVMTestFixture() {
             playFor(1.0)
             val prompt = contentState(vm).activeSkipSegment
             assertNotNull(prompt)
-            // 9.5s of segment left, minus the second zero gets and the three the skip has to save.
-            assertEquals(5, prompt?.countdown)
-            assertEquals(5, prompt?.totalSeconds)
+            // 10s of segment left, minus the second zero gets and the three the skip has to save.
+            assertEquals(6, prompt?.countdown)
 
             // The countdown runs out while the segment is still on screen, so the skip happens.
-            playFor(6.5)
+            playFor(7.5)
             verify { playbackController.seekTo(18_000) }
             assertNull(contentState(vm).activeSkipSegment)
+            vm.testCancelScope()
+        }
+
+    /**
+     * The prompt is written once and left alone: the overlay runs the clock for the bar and the
+     * digit, and a state rewritten every second cost the bar a frame on every tick.
+     */
+    @Test
+    fun thePromptIsNotRewrittenAsItCountsDown() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            playingInto(SkipSegment(SkipSegmentType.INTRO, startMs = 10_000, endMs = 40_000), from = 7_500)
+            val vm = startedVM()
+            playFor(1.0)
+            val prompt = contentState(vm).activeSkipSegment
+            assertNotNull(prompt)
+
+            playFor(3.0)
+
+            assertEquals(prompt, contentState(vm).activeSkipSegment)
+            assertEquals(PlayerCountdowns.SKIP_SEGMENT_SEC, contentState(vm).activeSkipSegment?.countdown)
             vm.testCancelScope()
         }
 
@@ -98,7 +117,7 @@ internal class PlayerVMSkipCountdownFitTest : PlayerVMTestFixture() {
     fun countdownUsesActualPlayerSpeedWhenUiStateHasResetForANewEpisode() =
         runTest(mainDispatcher.dispatcher.scheduler) {
             every { playbackController.playbackSpeed } returns 2f
-            playingInto(SkipSegment(SkipSegmentType.INTRO, startMs = 10_000, endMs = 30_000), from = 7_500)
+            playingInto(SkipSegment(SkipSegmentType.INTRO, startMs = 10_000, endMs = 28_000), from = 7_500)
             val vm = startedVM()
 
             playFor(1.0)
@@ -128,10 +147,16 @@ internal class PlayerVMSkipCountdownFitTest : PlayerVMTestFixture() {
             vm.testCancelScope()
         }
 
+    /**
+     * Entered inside its lead-in rather than at its edge: from the very first moment the segment is
+     * offerable there is too little of it left, so the answer has to be no at every sample. Read
+     * from further back the first sample lands where seven seconds are still ahead, which the
+     * countdown does fit into — that is the sibling case above, not this one.
+     */
     @Test
     fun aSegmentTooShortToSaveAnythingIsNeverOffered() =
         runTest(mainDispatcher.dispatcher.scheduler) {
-            playingInto(SkipSegment(SkipSegmentType.INTRO, startMs = 10_000, endMs = 15_000), from = 7_500)
+            playingInto(SkipSegment(SkipSegmentType.INTRO, startMs = 10_000, endMs = 15_000), from = 8_500)
             val vm = startedVM()
 
             repeat(16) {

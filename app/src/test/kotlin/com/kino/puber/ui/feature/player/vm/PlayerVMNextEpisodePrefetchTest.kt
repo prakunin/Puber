@@ -53,6 +53,7 @@ internal class PlayerVMNextEpisodePrefetchTest : PlayerVMTestFixture() {
 
             // Seeking puts the question back on the table, so the prompt returns...
             every { playbackController.currentPosition } returns 20_000L
+            callbackSlot.captured.onSeekPerformed()
             advanceTimeBy(1_200)
             callbackSlot.captured.onPlaybackEnded()
             assertNotNull(contentState(vm).nextEpisodeCountdown)

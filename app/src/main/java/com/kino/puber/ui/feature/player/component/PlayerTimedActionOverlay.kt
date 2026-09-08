@@ -16,6 +16,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -27,7 +28,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,21 +48,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.ObserverModifierNode
+import androidx.compose.ui.node.SemanticsModifierNode
+import androidx.compose.ui.node.invalidateSemantics
+import androidx.compose.ui.node.observeReads
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.ui.feature.player.model.PlayerCountdowns
+import kotlin.math.ceil
 
 private const val TIMED_ACTION_ENTER_MS = 190
 private const val TIMED_ACTION_EXIT_MS = 140
@@ -94,8 +109,8 @@ private val TimedActionBorderWidth = 1.dp
 private val TimedActionCornerRadius = 12.dp
 
 /**
- * The gap between the label and its counter. Non-breaking: the plate is only as wide as its text,
- * and a number that wrapped onto a second line would take the plate's height with it.
+ * The gap between the label and its counter: a space on the end of the label, so the two are set
+ * apart by exactly what a space between them would have measured.
  */
 private const val TIMED_ACTION_LABEL_GAP = '\u00A0'
 
@@ -106,23 +121,42 @@ private const val TIMED_ACTION_LABEL_GAP = '\u00A0'
 private const val TIMED_ACTION_DIGIT_SPACE = '\u2007'
 
 /**
- * Label with the seconds left, in a column as wide as the counter will ever need.
+ * The seconds left, in a column as wide as the counter will ever need.
  *
  * The row hangs off the right edge of the screen and the plate grows leftwards, so a column that
  * narrows halfway through a two-digit countdown would drag the label sideways under the eye that
  * is reading it. Padding the short values keeps the plate one width for the whole wait.
  */
-internal fun timedActionLabel(label: String, countdown: Int, totalSeconds: Int): String {
-    if (totalSeconds <= 0) return label
-    val value = countdown.coerceIn(0, totalSeconds)
-    val digits = value.toString().padStart(totalSeconds.toString().length, TIMED_ACTION_DIGIT_SPACE)
-    return "$label$TIMED_ACTION_LABEL_GAP$digits"
+internal fun timedActionDigits(countdown: Int, totalSeconds: Int): String {
+    val value = countdown.coerceIn(0, totalSeconds.coerceAtLeast(0))
+    return value.toString().padStart(totalSeconds.toString().length, TIMED_ACTION_DIGIT_SPACE)
+}
+
+/**
+ * Well under a frame's worth of the bar. A tick boundary that is not exact in float — one seventh,
+ * say — must still flip the digit on the frame the bar reaches it, not the one after.
+ */
+private const val TIMED_ACTION_TICK_EPSILON = 1e-3f
+
+/**
+ * The seconds the plate prints while the bar stands at [progress] of its run.
+ *
+ * The bar covers the whole wait, the tick zero is held for included, so the digit is however many
+ * whole ticks are still ahead, less the one that reads as zero. It flips as the bar crosses a tick
+ * boundary and not before, and holds zero from the last tick to the end.
+ */
+internal fun timedActionSecondsLeft(progress: Float, totalSeconds: Int): Int {
+    if (totalSeconds <= 0) return 0
+    val totalTicks = totalSeconds + PlayerCountdowns.ZERO_TICK_SEC
+    val ticksAhead = (1f - progress.coerceIn(0f, 1f)) * totalTicks
+    val remainingTicks = ceil(ticksAhead - TIMED_ACTION_TICK_EPSILON).toInt()
+    return (remainingTicks - PlayerCountdowns.ZERO_TICK_SEC).coerceIn(0, totalSeconds)
 }
 
 private data class TimedActionPresentation(
     /**
-     * Label and counter as one string, captured when the prompt goes up and updated on every tick.
-     * Keeping it in the state means the copy that is animating out keeps the number it went out on.
+     * The label without its counter, captured when the prompt goes up. The counter comes off the
+     * clock, which stops when the prompt goes down, so the copy animating out keeps its number.
      */
     val actionLabel: String,
 )
@@ -132,8 +166,8 @@ internal fun PlayerTimedActionOverlay(
     visible: Boolean,
     actionLabel: String,
     cancelLabel: String,
-    countdown: Int,
-    totalSeconds: Int,
+    /** Seconds the prompt counts down from. The overlay runs the clock from there on its own. */
+    seconds: Int,
     focusPrimaryAction: Boolean,
     /** Changes when a different prompt takes over without the plate ever going away. */
     modifier: Modifier = Modifier,
@@ -162,21 +196,29 @@ internal fun PlayerTimedActionOverlay(
         }
     }
 
-    // One run of the bar per prompt, not one per tick: the countdown only says where to start it.
-    val fill = remember(promptKey) { Animatable(0f) }
+    // The clock lives here, and there is one of it: the bar reads it every frame and the digit
+    // flips when it crosses a tick, so the two cannot drift apart, and a second passing changes
+    // nothing outside this plate. A state rewritten every second from the view model recomposed
+    // the whole player on each tick, which on the television took longer than a frame — the bar
+    // skipped one every second. The view model now only says how many seconds to count from.
+    val fill = remember { Animatable(0f) }
+    // The seconds the prompt on screen counts from, kept through its exit: the copy animating out
+    // is drawn against the total it went out with, not the fallback that arrives with the null.
+    val shownSeconds = remember { mutableIntStateOf(seconds) }
+    if (visible) shownSeconds.intValue = seconds
+    val secondsLeft = remember {
+        derivedStateOf { timedActionSecondsLeft(fill.value, shownSeconds.intValue) }
+    }
     LaunchedEffect(visible, promptKey) {
+        // Going down cancels the run in progress, and the bar and the digit stay where they were
+        // for as long as the exit takes.
         if (!visible) return@LaunchedEffect
-        // Ticks, not seconds: zero gets one of its own before the action runs, and the bar measures
-        // the whole wait, so that tick is part of it.
-        val totalTicks = totalSeconds + PlayerCountdowns.ZERO_TICK_SEC
-        val remainingTicks = countdown.coerceIn(0, totalSeconds) + PlayerCountdowns.ZERO_TICK_SEC
-        // Where the bar would already be. A prompt that goes up part-way through its countdown —
-        // or a recomposition arriving late — starts from there instead of replaying the beginning.
-        fill.snapTo((totalTicks - remainingTicks).toFloat() / totalTicks)
+        // The bar measures the whole wait, the tick zero is held for included.
+        fill.snapTo(0f)
         fill.animateTo(
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = (remainingTicks * PlayerCountdowns.TICK_MS).toInt(),
+                durationMillis = PlayerCountdowns.wholeWaitMs(seconds).toInt(),
                 easing = LinearEasing,
             ),
         )
@@ -192,25 +234,12 @@ internal fun PlayerTimedActionOverlay(
     LaunchedEffect(visible, promptKey) {
         debugState.recordLifecycle(
             event = if (visible) "shown" else "hidden",
-            countdown = countdown,
-            totalSeconds = totalSeconds,
+            countdown = secondsLeft.value,
+            totalSeconds = shownSeconds.intValue,
         )
     }
 
-    // The plate now prints the seconds, but a printed number is no use to a screen reader either,
-    // and the cancel button never carried one. The seconds stay in the state on both buttons,
-    // because either of them can hold the focus, and state changes are what get announced.
-    val secondsLeft = pluralStringResource(
-        R.plurals.player_timed_action_seconds_left,
-        countdown.coerceAtLeast(0),
-        countdown.coerceAtLeast(0),
-    )
-
-    val presentation = if (visible) {
-        TimedActionPresentation(timedActionLabel(actionLabel, countdown, totalSeconds))
-    } else {
-        null
-    }
+    val presentation = if (visible) TimedActionPresentation(actionLabel) else null
 
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedContent(
@@ -245,20 +274,21 @@ internal fun PlayerTimedActionOverlay(
                         focusRequester = cancelFocusRequester,
                         emphasized = false,
                         iconOnly = compactCancel,
-                        timeLeft = secondsLeft,
+                        secondsLeft = secondsLeft,
                     )
                     TimedActionButton(
                         label = displayed.actionLabel,
                         onClick = onAction,
                         focusRequester = primaryFocusRequester,
                         emphasized = true,
-                        timeLeft = secondsLeft,
+                        secondsLeft = secondsLeft,
+                        countsFrom = shownSeconds,
                         progress = fill::value,
                         onBoundsChanged = debugState::updateBounds,
                         onProgressDrawn = { width, height, progressValue, cornerRadiusPx ->
                             debugState.recordDraw(
-                                countdown = countdown,
-                                totalSeconds = totalSeconds,
+                                countdown = secondsLeft.value,
+                                totalSeconds = shownSeconds.intValue,
                                 width = width,
                                 height = height,
                                 progress = progressValue,
@@ -278,14 +308,29 @@ private fun TimedActionButton(
     onClick: () -> Unit,
     focusRequester: FocusRequester,
     emphasized: Boolean,
-    /** What the fill shows and cannot say: the time left, for the screen reader. */
-    timeLeft: String,
+    /**
+     * Seconds left on the clock. Not read in this composition: the label reads it in a scope of
+     * its own and the screen-reader description watches it from a node, so a second passing
+     * re-lays out one line of text and recomposes nothing else on the screen.
+     */
+    secondsLeft: State<Int>,
     iconOnly: Boolean = false,
+    /** Seconds the clock started from, for the plate that prints the count beside its label. */
+    countsFrom: State<Int>? = null,
     progress: (() -> Float)? = null,
     onBoundsChanged: ((Rect) -> Unit)? = null,
     onProgressDrawn: ((width: Float, height: Float, progress: Float, cornerRadiusPx: Float) -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // What the fill shows and cannot say. A printed number is no use to a screen reader either,
+    // and the cancel button never carried one. The seconds go into the state of both buttons,
+    // because either of them can hold the focus, and state changes are what get announced.
+    val resources = LocalContext.current.resources
+    val describeTimeLeft = remember(resources) {
+        { seconds: Int ->
+            resources.getQuantityString(R.plurals.player_timed_action_seconds_left, seconds, seconds)
+        }
+    }
     val shape = RoundedCornerShape(TimedActionCornerRadius)
     val bedColor = MaterialTheme.colorScheme.surface.copy(alpha = TIMED_ACTION_BED_ALPHA)
     // The bed is near-black, so a hairline keeps the pill's shape on a dark frame too.
@@ -328,7 +373,7 @@ private fun TimedActionButton(
                     Modifier
                 },
             )
-            .semantics { stateDescription = timeLeft }
+            .timeLeftSemantics(secondsLeft, describeTimeLeft)
             .onFocusChanged { focused = it.isFocused }
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged?.invoke(coordinates.boundsInWindow())
@@ -388,15 +433,99 @@ private fun TimedActionButton(
                     }
                 },
             ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
-                    // 10 dp, not 12: the plate is 75 px tall on a 1080p screen instead of 83, which
-                    // sits better against the video without crowding the label.
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                TimedActionLabelText(label = label, secondsLeft = secondsLeft, countsFrom = countsFrom)
             }
         }
+    }
+}
+
+/**
+ * The label and, when the plate counts, the seconds left beside it.
+ *
+ * The seconds are drawn, not composed. Every value the clock can show is laid out once when the
+ * prompt goes up, and a tick picks the layout to draw in the same pass that moves the bar, so
+ * nothing is composed or laid out again for it. Laying one line of text out afresh every second
+ * cost the television most of a frame, and the bar — animated frame by frame — skipped one.
+ */
+@Composable
+private fun TimedActionLabelText(label: String, secondsLeft: State<Int>, countsFrom: State<Int>?) {
+    // Merged the way Text merges it, so the drawn digits sit on the same line as the label.
+    val style = LocalTextStyle.current.merge(MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp))
+    // 10 dp, not 12: the plate is 75 px tall on a 1080p screen instead of 83, which sits better
+    // against the video without crowding the label.
+    val padding = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+    if (countsFrom == null) {
+        Text(text = label, style = style, modifier = padding)
+        return
+    }
+    val totalSeconds = countsFrom.value
+    val measurer = rememberTextMeasurer()
+    val digits = remember(measurer, style, totalSeconds) {
+        (0..totalSeconds).map { measurer.measure(timedActionDigits(it, totalSeconds), style) }
+    }
+    val column = with(LocalDensity.current) {
+        DpSize(digits.maxOf { it.size.width }.toDp(), digits.maxOf { it.size.height }.toDp())
+    }
+    val color = LocalContentColor.current
+    Row(modifier = padding, verticalAlignment = Alignment.CenterVertically) {
+        Text(text = "$label$TIMED_ACTION_LABEL_GAP", style = style)
+        Spacer(
+            modifier = Modifier
+                .size(column)
+                .drawBehind {
+                    drawText(digits[secondsLeft.value.coerceIn(0, totalSeconds)], color = color)
+                },
+        )
+    }
+}
+
+/**
+ * The seconds left as the button's state description, following the clock without a recomposition.
+ *
+ * A `semantics { }` block that captured the seconds would be a new lambda every second, and the
+ * whole button would recompose to carry it — the cost this overlay exists to avoid. The node
+ * watches the clock itself and invalidates only its semantics when the number changes, which is
+ * what a screen reader listens for.
+ */
+private fun Modifier.timeLeftSemantics(secondsLeft: State<Int>, describe: (Int) -> String): Modifier =
+    this then TimeLeftSemanticsElement(secondsLeft, describe)
+
+private data class TimeLeftSemanticsElement(
+    val secondsLeft: State<Int>,
+    val describe: (Int) -> String,
+) : ModifierNodeElement<TimeLeftSemanticsNode>() {
+    override fun create() = TimeLeftSemanticsNode(secondsLeft, describe)
+
+    override fun update(node: TimeLeftSemanticsNode) {
+        node.secondsLeft = secondsLeft
+        node.describe = describe
+        node.readClock()
+    }
+}
+
+private class TimeLeftSemanticsNode(
+    var secondsLeft: State<Int>,
+    var describe: (Int) -> String,
+) : Modifier.Node(), SemanticsModifierNode, ObserverModifierNode {
+
+    private var seconds = 0
+
+    override fun onAttach() {
+        readClock()
+    }
+
+    /** Reads the clock under observation, so the next change comes back as [onObservedReadsChanged]. */
+    fun readClock() {
+        observeReads { seconds = secondsLeft.value }
+        invalidateSemantics()
+    }
+
+    override fun onObservedReadsChanged() {
+        readClock()
+    }
+
+    override fun SemanticsPropertyReceiver.applySemantics() {
+        stateDescription = describe(seconds)
     }
 }
 

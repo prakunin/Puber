@@ -3,13 +3,7 @@
 package com.kino.puber.ui.feature.player.component
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
-import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
@@ -21,6 +15,7 @@ import com.kino.puber.ui.feature.player.model.EpisodesPanelUIState
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.PlayerAboutUIState
 import com.kino.puber.ui.feature.player.model.PlayerContentState
+import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import com.kino.puber.ui.feature.player.model.PlayerUIMapper
 import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.ui.feature.player.model.QualityUIState
@@ -388,31 +383,19 @@ private fun ResumeDialogPreview() = PuberTheme {
 
 @Preview(name = "Next episode countdown", device = TV_1080p)
 @Composable
-private fun NextEpisodeCountdownPreview() {
-    var countdown by remember { mutableIntStateOf(PREVIEW_COUNTDOWN_START) }
-
-    LaunchedEffect(Unit) {
-        while (countdown > 0) {
-            delay(1000)
-            countdown--
-        }
-    }
-
-    PuberTheme {
-        PlayerScreenContent(
-            state = PlayerViewState.Content(
-                previewSeriesContent(
-                    controlsVisible = false,
-                    nextEpisodeCountdown = countdown,
-                )
-            ),
-            onAction = {},
-            exoPlayer = { null },
-        )
-    }
+private fun NextEpisodeCountdownPreview() = PuberTheme {
+    // The overlay runs the countdown itself; the state only says how many seconds it starts from.
+    PlayerScreenContent(
+        state = PlayerViewState.Content(
+            previewSeriesContent(
+                controlsVisible = false,
+                nextEpisodeCountdown = PlayerCountdowns.NEXT_EPISODE_SEC,
+            )
+        ),
+        onAction = {},
+        exoPlayer = { null },
+    )
 }
-
-private const val PREVIEW_COUNTDOWN_START = 7
 
 @Preview(name = "Buffering — controls hidden", device = TV_1080p)
 @Composable

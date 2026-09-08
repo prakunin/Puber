@@ -5,57 +5,65 @@ import org.junit.jupiter.api.Test
 
 internal class TimedActionLabelTest {
 
-    /** Non-breaking, so the number never wraps away from the label it counts for. */
-    private val gap = '\u00A0'
-
     /** Figure space: exactly the width of a digit. */
-    private val pad = '\u2007'
+    private val pad = ' '
 
     @Test
-    fun timedActionLabel_putsTheCountdownAfterTheLabel() {
-        assertEquals(
-            "Skip intro${gap}5",
-            timedActionLabel("Skip intro", countdown = 5, totalSeconds = 7),
-        )
+    fun timedActionDigits_printsTheSecondsLeft() {
+        assertEquals("5", timedActionDigits(countdown = 5, totalSeconds = 7))
     }
 
     @Test
-    fun timedActionLabel_keepsTheColumnAsWideAsTheTotal() {
-        assertEquals(
-            "Skip intro$gap${pad}4",
-            timedActionLabel("Skip intro", countdown = 4, totalSeconds = 12),
-        )
-        assertEquals(
-            "Skip intro${gap}12",
-            timedActionLabel("Skip intro", countdown = 12, totalSeconds = 12),
-        )
+    fun timedActionDigits_keepsTheColumnAsWideAsTheTotal() {
+        assertEquals("${pad}4", timedActionDigits(countdown = 4, totalSeconds = 12))
+        assertEquals("12", timedActionDigits(countdown = 12, totalSeconds = 12))
     }
 
     @Test
-    fun timedActionLabel_showsZeroForTheLastTick() {
-        assertEquals(
-            "Skip intro${gap}0",
-            timedActionLabel("Skip intro", countdown = 0, totalSeconds = 7),
-        )
+    fun timedActionDigits_showsZeroForTheLastTick() {
+        assertEquals("0", timedActionDigits(countdown = 0, totalSeconds = 7))
     }
 
     @Test
-    fun timedActionLabel_clampsACountdownOutsideItsTotal() {
-        assertEquals(
-            "Skip intro${gap}0",
-            timedActionLabel("Skip intro", countdown = -3, totalSeconds = 7),
-        )
-        assertEquals(
-            "Skip intro${gap}7",
-            timedActionLabel("Skip intro", countdown = 9, totalSeconds = 7),
-        )
+    fun timedActionDigits_clampsACountdownOutsideItsTotal() {
+        assertEquals("0", timedActionDigits(countdown = -3, totalSeconds = 7))
+        assertEquals("7", timedActionDigits(countdown = 9, totalSeconds = 7))
     }
 
     @Test
-    fun timedActionLabel_leavesTheLabelAloneWhenThereIsNoCountdown() {
-        assertEquals(
-            "Skip intro",
-            timedActionLabel("Skip intro", countdown = 3, totalSeconds = 0),
-        )
+    fun timedActionDigits_isZeroWithNothingToCount() {
+        assertEquals("0", timedActionDigits(countdown = 3, totalSeconds = 0))
+    }
+
+    /** Seven seconds are eight ticks of the bar: the count, and the one zero is held for. */
+    @Test
+    fun timedActionSecondsLeft_readsTheWholeCountOffAnUnstartedBar() {
+        assertEquals(7, timedActionSecondsLeft(progress = 0f, totalSeconds = 7))
+    }
+
+    @Test
+    fun timedActionSecondsLeft_flipsExactlyOnTheTickBoundary() {
+        assertEquals(7, timedActionSecondsLeft(progress = 0.9f / 8, totalSeconds = 7))
+        assertEquals(6, timedActionSecondsLeft(progress = 1f / 8, totalSeconds = 7))
+        assertEquals(6, timedActionSecondsLeft(progress = 1.5f / 8, totalSeconds = 7))
+    }
+
+    /** A total whose ticks are not exact in float must not come out a frame late. */
+    @Test
+    fun timedActionSecondsLeft_survivesInexactTickBoundaries() {
+        assertEquals(5, timedActionSecondsLeft(progress = 1f / 7, totalSeconds = 6))
+        assertEquals(10, timedActionSecondsLeft(progress = 2f / 13, totalSeconds = 12))
+    }
+
+    @Test
+    fun timedActionSecondsLeft_holdsZeroForTheLastTickAndAfter() {
+        assertEquals(0, timedActionSecondsLeft(progress = 7f / 8, totalSeconds = 7))
+        assertEquals(0, timedActionSecondsLeft(progress = 1f, totalSeconds = 7))
+        assertEquals(0, timedActionSecondsLeft(progress = 1.2f, totalSeconds = 7))
+    }
+
+    @Test
+    fun timedActionSecondsLeft_isZeroWithNothingToCount() {
+        assertEquals(0, timedActionSecondsLeft(progress = 0f, totalSeconds = 0))
     }
 }

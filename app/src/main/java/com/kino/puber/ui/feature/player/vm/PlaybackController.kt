@@ -66,6 +66,18 @@ internal interface PlaybackControl {
 
         fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int)
         fun onPlaybackEnded()
+
+        /**
+         * The playhead was moved rather than carried there — by the viewer, or by a skip the player
+         * ran for them.
+         *
+         * Reported from the calls that carry that intent, so that nothing has to infer it from two
+         * positions and a stopwatch. Media3's own discontinuity would not do: it reports the
+         * player's internal repositioning — a re-prepare after a buffer or DNS change, an error
+         * recovery — in the same breath as the viewer's, and prompts would come down for work the
+         * viewer never asked for.
+         */
+        fun onSeekPerformed()
         fun onStreamReady(streamUrl: String)
         fun onStreamFailure(message: String, recovery: StreamRecovery, streamUrl: String)
         fun onError(message: String)
@@ -488,6 +500,7 @@ internal class PlaybackController(
             // playWhenReady stays true once media ends, so play() alone would be a no-op there.
             if (player.playbackState == Player.STATE_ENDED) {
                 player.seekToDefaultPosition()
+                callback?.onSeekPerformed()
             }
             player.play()
         }
@@ -500,6 +513,7 @@ internal class PlaybackController(
     override fun seekTo(positionMs: Long) {
         exoPlayer?.let { player ->
             player.seekTo(positionMs)
+            callback?.onSeekPerformed()
             if (player.playWhenReady) {
                 seekStallRecovery.start(player)
             } else {

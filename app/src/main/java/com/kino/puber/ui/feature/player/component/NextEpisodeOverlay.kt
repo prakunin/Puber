@@ -22,8 +22,7 @@ internal fun NextEpisodeOverlay(
         // No number: the bar is the countdown, and a digit ticking beside it only competes with it.
         actionLabel = stringResource(R.string.player_next_episode),
         cancelLabel = stringResource(R.string.player_next_episode_cancel),
-        countdown = countdown ?: PlayerCountdowns.NEXT_EPISODE_SEC,
-        totalSeconds = PlayerCountdowns.NEXT_EPISODE_SEC,
+        seconds = countdown ?: PlayerCountdowns.NEXT_EPISODE_SEC,
         focusPrimaryAction = true,
         debugName = "next_episode",
         compactCancel = true,

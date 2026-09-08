@@ -60,6 +60,16 @@ internal object PlayerCountdowns {
     const val CREDITS_MIN_TAIL_MS = 10_000L
 
     /**
+     * How close to the end a saved position has to be for the media to count as finished.
+     *
+     * Playback that ran to its end saves the duration as the watching time, and offering to
+     * continue from there would play the last moment and drop the viewer straight back out, since
+     * the end of the media is now the way out. A position this near the end is not a place to
+     * resume, so the media starts from the beginning instead.
+     */
+    const val RESUME_FINISHED_TAIL_MS = 10_000L
+
+    /**
      * How long a cancelled skip prompt stays cancelled. Long enough that rewinding a few seconds
      * inside the segment does not undo the answer, short enough that coming back to the same
      * segment much later is treated as a fresh question.
@@ -68,4 +78,11 @@ internal object PlayerCountdowns {
 
     /** How far from the end the prompt goes up without credits data. */
     const val NEXT_EPISODE_FALLBACK_OFFSET_MS = NEXT_EPISODE_TAIL_MS + NEXT_EPISODE_SEC * 1_000L
+
+    /**
+     * How long a prompt counting down from [seconds] stays up before its action runs: the seconds
+     * themselves and the tick zero is held for. The view model waits this long, and the overlay
+     * runs its bar over the same span, so the two cannot disagree about when the wait ends.
+     */
+    fun wholeWaitMs(seconds: Int): Long = (seconds + ZERO_TICK_SEC) * TICK_MS
 }

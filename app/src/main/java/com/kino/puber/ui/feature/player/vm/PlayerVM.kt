@@ -151,9 +151,14 @@ internal class PlayerVM(
     private var creditsSegment: SkipSegment? = null
     private var dismissedSegmentType: SkipSegmentType? = null
     private var countdownDismissed = false
+    /**
+     * The media ran out while a panel had the screen, so the way out waits for the panel to come
+     * down. Leaving from under it would take away the episode list the viewer opened to choose
+     * what to watch next.
+     */
+    private var exitWhenPanelCloses = false
     private var tracksRestoredForCurrentMedia = false
     private var episodeSwitchInProgress = false
-    private var lastPositionMs: Long = 0L
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
     private val queuedProgressSaves = LinkedHashMap<MediaKey, ProgressSave>()
@@ -182,7 +187,7 @@ internal class PlayerVM(
             updateContent {
                 copy(isPlaying = isPlaying)
             }
-            if (isPlaying) controlsStateMachine.onPlaybackResumed()
+            if (isPlaying) onPlaybackResumed()
             if (isBuffering && !wasBuffering) {
                 // Debounce: only show spinner if buffering lasts > 800ms
                 bufferingDebounceJob?.cancel()
@@ -218,6 +223,10 @@ internal class PlayerVM(
 
         override fun onPlaybackEnded() {
             this@PlayerVM.onPlaybackEnded()
+        }
+
+        override fun onSeekPerformed() {
+            this@PlayerVM.onSeekPerformed()
         }
 
         override fun onStreamReady(streamUrl: String) {
@@ -324,7 +333,7 @@ internal class PlayerVM(
             subtitles = resolved.subtitles,
         )
         val resumeDialog = when (startMode) {
-            PlayerStartMode.ResumeIfAvailable -> buildResumeDialog(resolved.watchingTime)
+            PlayerStartMode.ResumeIfAvailable -> buildResumeDialog(resolved.watchingTime, resolved.duration)
             PlayerStartMode.StartFromBeginning -> null
         }
         val baseContentState = contentStateFactory.build(
@@ -353,9 +362,10 @@ internal class PlayerVM(
         return !closing && generation == mediaGeneration
     }
 
-    private fun buildResumeDialog(watchingTime: Int?): ResumeDialogState? {
+    private fun buildResumeDialog(watchingTime: Int?, durationSeconds: Int?): ResumeDialogState? {
         val savedPosition = watchingTime?.toLong()?.times(1000) ?: 0L
         if (savedPosition <= 0) return null
+        if (isFinishedPosition(savedPosition, durationSeconds?.toLong()?.times(1000) ?: 0L)) return null
         val media = currentMedia
         val episodeInfo = if (media?.seasonNumber != null && media.episodeNumber != null) {
             mapper.buildSubtitle(media.seasonNumber, media.episodeNumber, null)
@@ -367,6 +377,17 @@ internal class PlayerVM(
             formattedTime = mapper.formatTime(savedPosition),
             episodeInfo = episodeInfo,
         )
+    }
+
+    /**
+     * Whether the saved position is the end of the media rather than a place in it.
+     *
+     * Media that ran out writes its duration as the watching time, and continuing from there plays
+     * the last moment and ends again — which now takes the viewer out of the player. What was
+     * watched to the end starts from the beginning instead.
+     */
+    private fun isFinishedPosition(savedPosition: Long, durationMs: Long): Boolean {
+        return durationMs > 0 && durationMs - savedPosition <= PlayerCountdowns.RESUME_FINISHED_TAIL_MS
     }
 
     private fun initializePlayer(savedPosition: Long?) {
@@ -673,6 +694,15 @@ internal class PlayerVM(
         processEffects(effects)
     }
 
+    /**
+     * Something is playing again, so nothing on screen belongs to the end of the last media any
+     * more — neither the controls held up by it nor an exit still waiting on a panel.
+     */
+    private fun onPlaybackResumed() {
+        controlsStateMachine.onPlaybackResumed()
+        exitWhenPanelCloses = false
+    }
+
     private fun scheduleControlsHide() {
         controlsHideJob?.cancel()
         controlsHideJob = launch {
@@ -705,6 +735,10 @@ internal class PlayerVM(
             // Readings taken for the info panel must not leak into the debug overlay, which
             // becomes visible again together with the controls.
             updateContent { copy(debugInfo = null) }
+        }
+        if (exitWhenPanelCloses) {
+            exitPlayer()
+            return
         }
         // A countdown may have become eligible while the panel owned focus. Re-evaluate once the
         // player is interactive again, including the case where playback already reached its end.
@@ -828,6 +862,9 @@ internal class PlayerVM(
         for (season in seasons) {
             val episode = season.episodes?.find { it.id == episodeId }
             if (episode != null) {
+                // Cleared before the panel comes down: closing it is what would otherwise carry
+                // out the exit the ended media asked for, and the viewer has just asked for more.
+                exitWhenPanelCloses = false
                 closePanel()
                 switchEpisode(season.number, episode.number)
                 return
@@ -860,10 +897,7 @@ internal class PlayerVM(
         dismissedSegmentType = null
         countdownDismissed = false
         tracksRestoredForCurrentMedia = false
-        controlsStateMachine.onPlaybackResumed()
-        // Left where the last media stopped, the first tick of the next one reads as a seek jump
-        // and takes down the prompt that has only just gone up.
-        lastPositionMs = 0L
+        onPlaybackResumed()
     }
 
     private fun switchEpisode(seasonNumber: Int, episodeNumber: Int) {
@@ -1199,18 +1233,22 @@ internal class PlayerVM(
         autoMarkCurrentAsWatched()
         val state = stateValue as? PlayerViewState.Content ?: return
         val content = state.content
+        // A film, or the last episode of a series: there is nothing behind this closing frame, so
+        // the player hands the viewer back to the screen they started it from instead of leaving
+        // them on a still picture with nothing to press.
+        if (content.isMovie || !content.hasNextEpisode) {
+            if (content.activePanel == ActivePanel.None) exitPlayer() else exitWhenPanelCloses = true
+            return
+        }
         when {
-            !content.isMovie &&
-                content.hasNextEpisode &&
-                content.activePanel == ActivePanel.None &&
+            content.activePanel == ActivePanel.None &&
                 content.nextEpisodeCountdown == null &&
                 // Cancelling on the credits means cancelled, not postponed: only a seek since then
                 // puts the question back on the table.
                 !countdownDismissed -> startNextEpisodeCountdown()
             // An open panel owns the screen; revealing the controls under it would also expose
             // the debug overlay the user may have switched off.
-            !content.isMovie && content.activePanel == ActivePanel.None ->
-                showControlsForEndedPlayback()
+            content.activePanel == ActivePanel.None -> showControlsForEndedPlayback()
         }
     }
 
@@ -1221,12 +1259,9 @@ internal class PlayerVM(
         }
         countdownJob?.cancel()
         countdownJob = launch {
-            // Zero is a number the viewer gets to see: the switch happens on the tick after it, not
-            // on the same frame it appears, which is what made the last second feel clipped.
-            for (i in PlayerCountdowns.NEXT_EPISODE_SEC downTo 0) {
-                updateContent { copy(nextEpisodeCountdown = i) }
-                delay(PlayerCountdowns.TICK_MS)
-            }
+            // The state is not rewritten as the seconds pass: the overlay runs the clock. Zero is a
+            // number the viewer gets to see, so the wait is one tick longer than the count.
+            delay(PlayerCountdowns.wholeWaitMs(PlayerCountdowns.NEXT_EPISODE_SEC))
             playNextEpisode()
         }
     }
@@ -1241,7 +1276,15 @@ internal class PlayerVM(
 
     private fun resumeFromSavedPosition() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
-        val position = state.resumeDialog?.savedPosition ?: 0L
+        val savedPosition = state.resumeDialog?.savedPosition ?: 0L
+        // Asked again with the player's own duration: an item whose details carry none reaches the
+        // dialog with the end of the media as its offer, and taking it would play the last moment
+        // and drop the viewer straight back out.
+        val position = if (isFinishedPosition(savedPosition, playbackController.duration)) {
+            0L
+        } else {
+            savedPosition
+        }
         playbackController.seekTo(position)
         playbackController.play()
         updateContent {
@@ -1350,15 +1393,10 @@ internal class PlayerVM(
                         }
                     }
                     if (isPlaying) {
-                        // Ahead of the rest: a countdown that is already up used to hide the jump
-                        // check behind itself and keep running through a seek.
-                        val jumped = handlePositionJump(playbackController.currentPosition)
                         checkAutoMarkWatched()
                         checkNextEpisodePrefetch()
-                        if (!jumped) {
-                            checkEarlyNextEpisode()
-                            checkSkipSegment()
-                        }
+                        checkEarlyNextEpisode()
+                        checkSkipSegment()
                     }
                 }
             }
@@ -1507,21 +1545,20 @@ internal class PlayerVM(
      * this time" on the next episode is forgotten — by the time they reach the credits again the
      * answer may well be different. A cancelled skip segment is left alone: that one runs on its own
      * timer, so a rewind inside the segment does not undo it.
+     *
+     * The player says when this happens. Comparing two sampled positions against a fixed threshold,
+     * which is what this used to do, could not tell a seek from a sampler that arrived late — and a
+     * warm-up or a stall makes it arrive late exactly while the next-episode prompt is counting
+     * down. The prompt was then taken away and put straight back up, restarted, with nobody having
+     * touched anything.
      */
-    private fun handlePositionJump(currentPos: Long): Boolean {
-        val positionDelta = kotlin.math.abs(currentPos - lastPositionMs)
-        lastPositionMs = currentPos
-        return if (positionDelta > SEEK_JUMP_THRESHOLD_MS) {
-            updateContent { copy(activeSkipSegment = null, nextEpisodeCountdown = null) }
-            skipCountdownJob?.cancel()
-            skipCountdownJob = null
-            countdownJob?.cancel()
-            countdownJob = null
-            countdownDismissed = false
-            true
-        } else {
-            false
-        }
+    private fun onSeekPerformed() {
+        updateContent { copy(activeSkipSegment = null, nextEpisodeCountdown = null) }
+        skipCountdownJob?.cancel()
+        skipCountdownJob = null
+        countdownJob?.cancel()
+        countdownJob = null
+        countdownDismissed = false
     }
 
     private fun handleActiveSkipSegment(state: PlayerContentState, currentPos: Long) {
@@ -1585,16 +1622,11 @@ internal class PlayerVM(
             targetPositionMs = segment.endMs ?: playbackController.duration,
             type = segment.type,
             countdown = seconds,
-            totalSeconds = seconds,
         )
         updateContent { copy(activeSkipSegment = uiState) }
         skipCountdownJob = launch {
-            // Same as the next-episode countdown: zero gets its own second before the skip runs.
-            for (i in seconds - 1 downTo 0) {
-                delay(PlayerCountdowns.TICK_MS)
-                updateContent { copy(activeSkipSegment = activeSkipSegment?.copy(countdown = i)) }
-            }
-            delay(PlayerCountdowns.TICK_MS)
+            // Same as the next-episode countdown: written once, and zero gets its own second.
+            delay(PlayerCountdowns.wholeWaitMs(seconds))
             performSkipSegment()
         }
     }
@@ -1803,7 +1835,6 @@ internal class PlayerVM(
         const val AUTO_MARK_WATCHED_THRESHOLD = 0.10
         const val PLAY_PAUSE_INDICATOR_HIDE_DELAY_MS = 1500L
         const val BUFFERING_DEBOUNCE_MS = 800L
-        const val SEEK_JUMP_THRESHOLD_MS = 2_000L
         const val NEXT_EPISODE_PREFETCH_LEAD_MS = 60_000L
         const val SWITCHED_EPISODE_QUALITY_INDEX = 0
         const val DEFAULT_SPEED = 1.0f
