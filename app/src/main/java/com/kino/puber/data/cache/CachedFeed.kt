@@ -50,6 +50,8 @@ class CachedFeed<V : Any>(
     private val json: Json = DefaultJson,
     private val clock: () -> Long = System::currentTimeMillis,
     maximumSize: Int = DEFAULT_MAXIMUM_SIZE,
+    maximumMemoryWeight: Long = Long.MAX_VALUE,
+    memoryWeigher: (V) -> Int = { 1 },
 ) {
     private val defaultTtl = ttl
 
@@ -66,6 +68,8 @@ class CachedFeed<V : Any>(
         // One clock has to govern both tiers, or a test that advances the fake clock leaves the
         // in-memory tier frozen in real time and the two disagree about what is fresh.
         nowNanos = { clock() * NANOS_PER_MILLI },
+        maximumWeight = maximumMemoryWeight,
+        weigher = { stamped -> memoryWeigher(stamped.value) },
     )
 
     /**

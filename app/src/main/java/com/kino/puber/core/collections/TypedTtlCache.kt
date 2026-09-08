@@ -34,11 +34,14 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
     private val maximumSize: Int = 256,
     maximumConcurrentLoads: Int = 16,
     private val nowNanos: () -> Long = System::nanoTime,
+    private val maximumWeight: Long = Long.MAX_VALUE,
+    private val weigher: (V) -> Int = { 1 },
 ) : TypedTtlCache<K, V> {
 
     private data class Entry<V>(
         val value: V,
         val expiresAtNanos: Long,
+        val weight: Int,
     )
 
     private class Flight<V> {
@@ -66,10 +69,12 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
     )
     private val flights = HashMap<K, Flight<V>>()
     private val loadPermits = Semaphore(maximumConcurrentLoads)
+    private var totalWeight = 0L
 
     init {
         require(maximumSize > 0) { "maximumSize must be positive" }
         require(maximumConcurrentLoads > 0) { "maximumConcurrentLoads must be positive" }
+        require(maximumWeight > 0) { "maximumWeight must be positive" }
     }
 
     override fun get(key: K): V? = synchronized(lock) {
@@ -109,7 +114,7 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
         defaultValue: suspend () -> V,
     ): V {
         val (flight, displaced) = synchronized(lock) {
-            completed.remove(key)
+            removeCompletedUnsafe(key)
             val displaced = flights.remove(key)
             val replacement = Flight<V>()
             flights[key] = replacement
@@ -154,7 +159,7 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
 
     override fun remove(key: K) {
         val invalidatedFlight = synchronized(lock) {
-            completed.remove(key)
+            removeCompletedUnsafe(key)
             flights.remove(key)
         }
         invalidatedFlight?.outcome?.complete(FlightOutcome.Invalidated)
@@ -163,6 +168,7 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
     override fun clear() {
         val invalidatedFlights = synchronized(lock) {
             completed.clear()
+            totalWeight = 0L
             val activeFlights = flights.values.toList()
             flights.clear()
             activeFlights
@@ -262,15 +268,25 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
         if (!isExpired(entry)) {
             return entry.value
         }
-        completed.remove(key)
+        removeCompletedUnsafe(key)
         return null
     }
 
+    private fun removeCompletedUnsafe(key: K): Entry<V>? {
+        val removed = completed.remove(key) ?: return null
+        totalWeight -= removed.weight
+        return removed
+    }
+
     private fun putUnsafe(key: K, value: V, ttl: Duration) {
+        removeCompletedUnsafe(key)
+        val weight = weigher(value).coerceAtLeast(0)
         completed[key] = Entry(
             value = value,
             expiresAtNanos = expirationTime(ttl),
+            weight = weight,
         )
+        totalWeight += weight
         evictExpiredAndOverflowUnsafe()
     }
 
@@ -288,13 +304,15 @@ class TypedTtlCacheImpl<K : Any, V : Any>(
     private fun evictExpiredAndOverflowUnsafe() {
         val iterator = completed.entries.iterator()
         while (iterator.hasNext()) {
-            if (isExpired(iterator.next().value)) {
+            val entry = iterator.next().value
+            if (isExpired(entry)) {
+                totalWeight -= entry.weight
                 iterator.remove()
             }
         }
-        while (completed.size > maximumSize) {
+        while (completed.size > maximumSize || (totalWeight > maximumWeight && completed.size > 1)) {
             completed.entries.iterator().run {
-                next()
+                totalWeight -= next().value.weight
                 remove()
             }
         }

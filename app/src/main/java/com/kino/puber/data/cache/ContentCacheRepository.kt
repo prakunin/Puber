@@ -37,6 +37,11 @@ class ContentCacheRepository(
         ttl = CachedFeed.HardCeiling,
         keyPrefix = CONTENT_PREFIX,
         clock = clock,
+        // A details record carries the whole seasons/episodes/files tree of a series, a megabyte of
+        // JSON for a long one, and the hard ceiling keeps it pinned for a week. Count alone let a
+        // browsing session pile tens of megabytes of strings into this tier; Room still has them all.
+        maximumMemoryWeight = MEMORY_TIER_BYTES,
+        memoryWeigher = { payload -> payload.length * Char.SIZE_BYTES },
     )
     private val seenWatchStateVersions = ConcurrentHashMap<String, Long>()
     private val legacyCleanupMutex = Mutex()
@@ -612,6 +617,7 @@ class ContentCacheRepository(
         private const val CONTENT_PREFIX = "content:v1:"
         private const val STALE_TIMESTAMP = 0L
         private const val FIRST_PAGE = 1
+        private const val MEMORY_TIER_BYTES = 16L * 1024 * 1024
         private val LEGACY_PREFIXES = listOf(
             CacheKeys.HomePrefix,
             CacheKeys.ItemPrefix,

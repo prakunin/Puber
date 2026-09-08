@@ -339,4 +339,44 @@ class TypedTtlCacheTest {
         assertEquals(failure, failed.await().exceptionOrNull())
         assertEquals("value", cache.getOrPut("next") { "value" })
     }
+
+    @Test
+    fun put_evictsTheLeastRecentlyUsedEntriesOnceTheWeightLimitIsExceeded() {
+        val cache = TypedTtlCacheImpl<String, String>(maximumWeight = 10, weigher = { it.length })
+        cache.put("a", "aaaa")
+        cache.put("b", "bbbb")
+        // Touching "a" makes "b" the least recently used entry.
+        assertEquals("aaaa", cache.get("a"))
+
+        cache.put("c", "cccc")
+
+        assertEquals(null, cache.get("b"))
+        assertEquals("aaaa", cache.get("a"))
+        assertEquals("cccc", cache.get("c"))
+    }
+
+    @Test
+    fun replacingAValue_countsOnlyTheNewWeight() {
+        val cache = TypedTtlCacheImpl<String, String>(maximumWeight = 10, weigher = { it.length })
+        cache.put("a", "aaaaaaaa")
+        cache.put("a", "aa")
+
+        cache.put("b", "bbbbbbbb")
+
+        assertEquals("aa", cache.get("a"))
+        assertEquals("bbbbbbbb", cache.get("b"))
+    }
+
+    @Test
+    fun removingAnEntry_releasesItsWeight() {
+        val cache = TypedTtlCacheImpl<String, String>(maximumWeight = 10, weigher = { it.length })
+        cache.put("a", "aaaaaaaa")
+        cache.remove("a")
+
+        cache.put("b", "bbbbbbbb")
+        cache.put("c", "cc")
+
+        assertEquals("bbbbbbbb", cache.get("b"))
+        assertEquals("cc", cache.get("c"))
+    }
 }
