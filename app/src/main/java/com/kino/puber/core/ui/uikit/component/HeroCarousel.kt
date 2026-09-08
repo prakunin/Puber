@@ -25,8 +25,8 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -209,22 +209,30 @@ private fun Key.isSelectKey(): Boolean {
     return this == Key.DirectionCenter || this == Key.Enter
 }
 
-/** The Ken Burns drift, or a still frame when this page is not the one being looked at. */
-@Immutable
-private data class KenBurnsTransform(val scale: Float, val translateX: Float)
+/** Значения читаются только в draw-фазе (`graphicsLayer`), чтобы анимация не рекомпозировала `HeroItem`. */
+private class KenBurnsTransform(val scale: State<Float>, val translateX: State<Float>) {
+    companion object {
+        val Still = KenBurnsTransform(ConstantFloatState(1f), ConstantFloatState(0f))
+    }
+}
+
+private class ConstantFloatState(override val value: Float) : State<Float>
 
 /**
  * The pager keeps neighbouring pages composed, and an infinite transition runs for as long as it is
  * composed — so without this every hero page drifts at once, forever, and the ones off screen pay
  * the same per-frame invalidation as the visible one for nothing. On the weaker TV boxes that is
  * continuous GPU work behind a still picture.
+ *
+ * The animated values are handed back as [State] and read inside `graphicsLayer`, so a frame of the
+ * drift invalidates only the layer, never the composition of the hero card.
  */
 @Composable
 private fun kenBurns(animate: Boolean, driftDirection: Float): KenBurnsTransform {
-    if (!animate) return KenBurnsTransform(scale = 1f, translateX = 0f)
+    if (!animate) return KenBurnsTransform.Still
 
     val infiniteTransition = rememberInfiniteTransition(label = "kenBurns")
-    val scale by infiniteTransition.animateFloat(
+    val scale = infiniteTransition.animateFloat(
         initialValue = 1.0f,
         targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
@@ -233,7 +241,7 @@ private fun kenBurns(animate: Boolean, driftDirection: Float): KenBurnsTransform
         ),
         label = "kenBurnsScale",
     )
-    val translateX by infiniteTransition.animateFloat(
+    val translateX = infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = KEN_BURNS_DRIFT_PX * driftDirection,
         animationSpec = infiniteRepeatable(
@@ -242,7 +250,7 @@ private fun kenBurns(animate: Boolean, driftDirection: Float): KenBurnsTransform
         ),
         label = "kenBurnsTranslateX",
     )
-    return KenBurnsTransform(scale = scale, translateX = translateX)
+    return remember(scale, translateX) { KenBurnsTransform(scale, translateX) }
 }
 
 @Composable
@@ -278,7 +286,7 @@ private fun HeroItem(
                 }
             }
             val driftDirection = remember(state.id) { if ((state.id % 2) == 0) 1f else -1f }
-            val (scale, translateX) = kenBurns(animate = animate, driftDirection = driftDirection)
+            val transform = kenBurns(animate = animate, driftDirection = driftDirection)
             SkeletonAsyncImage(
                 model = imageRequest,
                 onError = { if (urlIndex < urls.lastIndex) urlIndex++ },
@@ -288,9 +296,10 @@ private fun HeroItem(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        val scale = transform.scale.value
                         scaleX = scale
                         scaleY = scale
-                        translationX = translateX
+                        translationX = transform.translateX.value
                     },
             )
 
