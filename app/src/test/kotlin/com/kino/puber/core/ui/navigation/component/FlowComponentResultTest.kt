@@ -5,6 +5,7 @@ import com.kino.puber.core.ui.navigation.Command
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.RootPuberScreen
+import cafe.adriel.voyager.core.screen.Screen
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -72,7 +73,7 @@ class FlowComponentResultTest {
             rootRouter.navigateForResult(screen, RESULT_CONTENT_CHANGED, listener)
         }
         verify(exactly = 0) {
-            router.setOnceResultListener(RESULT_CONTENT_CHANGED, listener)
+            router.setOnceResultListener(RESULT_CONTENT_CHANGED, owner = screen, listener = listener)
         }
     }
 
@@ -96,7 +97,17 @@ class FlowComponentResultTest {
 
         assertEquals(listOf(screen), pushedScreens)
         verify(exactly = 1) {
-            router.setOnceResultListener(RESULT_CONTENT_CHANGED, listener)
+            router.setOnceResultListener(RESULT_CONTENT_CHANGED, owner = screen, listener = listener)
         }
+    }
+
+    @Test
+    fun removedScreens_reportsScreensThatLeftTheStack_byIdentity() {
+        val first = mockk<PuberScreen>()
+        val second = mockk<PuberScreen>()
+
+        assertEquals(listOf<Screen>(second), removedScreens(previous = listOf(first, second), current = listOf(first)))
+        assertEquals(emptyList<Screen>(), removedScreens(previous = listOf(first), current = listOf(first, second)))
+        assertEquals(listOf<Screen>(first), removedScreens(previous = listOf(first), current = emptyList()))
     }
 }

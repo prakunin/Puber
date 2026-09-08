@@ -22,8 +22,10 @@ class AppRouter(
         val command: Command,
     )
 
+    private class ResultListener(val owner: PuberScreen?, val listener: OnResult<Any>)
+
     private val sharedFlow = MutableSharedFlow<SessionCommand>(extraBufferCapacity = 0, replay = 1)
-    private val onceListeners = HashMap<Int, ArrayDeque<OnResult<Any>>>()
+    private val onceListeners = HashMap<Int, ArrayDeque<ResultListener>>()
     private val backDispatchersStack = ArrayDeque<BackButtonDispatcher>()
     private val sessionId = AtomicLong()
 
@@ -44,9 +46,25 @@ class AppRouter(
         runCommand(Command.NavigateForResult(screen, requestCode, listener as OnResult<Any>))
     }
 
+    /**
+     * @param owner the screen that will deliver the result. When it leaves the stack without one —
+     * a Voyager pop that never reached [back] — [dropResultListeners] takes the listener with it,
+     * so the router does not keep the caller's view model alive, and a later result for the same
+     * code cannot land on a listener that belongs to a screen already gone.
+     */
     @Suppress("UNCHECKED_CAST")
-    fun <T : Any> setOnceResultListener(resultCode: Int, listener: OnResult<T>) {
-        onceListeners.getOrPut(resultCode) { ArrayDeque() }.addLast(listener as OnResult<Any>)
+    fun <T : Any> setOnceResultListener(resultCode: Int, owner: PuberScreen? = null, listener: OnResult<T>) {
+        onceListeners.getOrPut(resultCode) { ArrayDeque() }
+            .addLast(ResultListener(owner, listener as OnResult<Any>))
+    }
+
+    fun dropResultListeners(owner: PuberScreen) {
+        val codes = onceListeners.entries.iterator()
+        while (codes.hasNext()) {
+            val entry = codes.next()
+            entry.value.removeIf { it.owner === owner }
+            if (entry.value.isEmpty()) codes.remove()
+        }
     }
 
     fun newRootScreen(vararg screen: PuberScreen) {
@@ -114,7 +132,7 @@ class AppRouter(
     private fun dispatchResult(resultCode: Int, result: Any?) {
         val resultListeners = onceListeners[resultCode] ?: return
         val resultListener = resultListeners.pollLast() ?: return
-        resultListener.invoke(result)
+        resultListener.listener.invoke(result)
         if (resultListeners.isEmpty()) {
             onceListeners.remove(resultCode)
         }

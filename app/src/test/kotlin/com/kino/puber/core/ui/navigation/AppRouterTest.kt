@@ -80,6 +80,35 @@ class AppRouterTest {
         assertTrue(results.isEmpty())
     }
 
+    @Test
+    fun droppingAnOwnersListeners_leavesOtherOwnersInPlace() = runTest {
+        val router = createRouter()
+        val outerScreen = mockk<PuberScreen>()
+        val innerScreen = mockk<PuberScreen>()
+        val outerResults = mutableListOf<String?>()
+        val innerResults = mutableListOf<String?>()
+        router.setOnceResultListener<String>(RESULT_CONTENT_CHANGED, owner = outerScreen) { outerResults += it }
+        router.setOnceResultListener<String>(RESULT_CONTENT_CHANGED, owner = innerScreen) { innerResults += it }
+
+        router.dropResultListeners(innerScreen)
+        router.back(RESULT_CONTENT_CHANGED, "outer")
+
+        assertEquals(emptyList<String?>(), innerResults)
+        assertEquals(listOf("outer"), outerResults)
+    }
+
+    @Test
+    fun droppingAnUnknownOwner_changesNothing() = runTest {
+        val router = createRouter()
+        val results = mutableListOf<String?>()
+        router.setOnceResultListener<String>(RESULT_CONTENT_CHANGED, owner = mockk<PuberScreen>()) { results += it }
+
+        router.dropResultListeners(mockk<PuberScreen>())
+        router.back(RESULT_CONTENT_CHANGED, "kept")
+
+        assertEquals(listOf("kept"), results)
+    }
+
     private fun createRouter(): AppRouter {
         return AppRouter(
             screens = mockk(relaxed = true),

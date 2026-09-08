@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -159,6 +161,7 @@ private fun FlowNavigator(
             onBeforeNavigate = { rootAnchorCaptureRegistry.capture(currentScreenKey) },
             rootAnchorCaptureRegistry = rootAnchorCaptureRegistry,
         )
+        DropResultListenersOnPop(navigator = navigator, router = router)
         RootFlowReturnEffect(
             stackSize = navigator.items.size,
             currentScreenKey = currentScreenKey,
@@ -175,6 +178,27 @@ private fun onBackPressed(router: AppRouter): Boolean {
     // Return true when NOT dispatched: let Voyager pop the screen itself.
     return !dispatched
 }
+
+/**
+ * Voyager pops a screen itself when no back dispatcher claimed the press, and that path never
+ * reaches [AppRouter.back]. Whatever result listener that screen was meant to serve would stay in
+ * the router for the life of the flow, holding the caller's view model.
+ */
+@Composable
+internal fun DropResultListenersOnPop(navigator: Navigator, router: AppRouter) {
+    LaunchedEffect(navigator, router) {
+        var previous: List<Screen> = navigator.items.toList()
+        snapshotFlow { navigator.items.toList() }.collect { current ->
+            removedScreens(previous, current).forEach { screen ->
+                if (screen is PuberScreen) router.dropResultListeners(screen)
+            }
+            previous = current
+        }
+    }
+}
+
+internal fun removedScreens(previous: List<Screen>, current: List<Screen>): List<Screen> =
+    previous.filter { screen -> current.none { it === screen } }
 
 @Composable
 private fun FlowCommandRunner(
@@ -204,7 +228,7 @@ private fun FlowCommandRunner(
                     is Command.NavigateForResult -> {
                         onBeforeNavigate()
                         contentFocusRequester.saveFocusedChild()
-                        router.setOnceResultListener(event.requestCode, event.listener)
+                        router.setOnceResultListener(event.requestCode, owner = event.screen, listener = event.listener)
                         navigator.puberPush(event.screen)
                     }
 
@@ -571,6 +595,7 @@ private fun TabFlowNavigator(
                 rootAnchorCaptureRegistry?.capture(currentScreenKey)
             },
         )
+        DropResultListenersOnPop(navigator = navigator, router = tabRouter)
 
         RestoreTabContentFocusEffect(
             stackSize = navigator.items.size,
@@ -729,7 +754,7 @@ internal fun onTabNavigateForResult(
         )
 
         TabResultNavigationTarget.Tab -> {
-            router.setOnceResultListener(event.requestCode, event.listener)
+            router.setOnceResultListener(event.requestCode, owner = event.screen, listener = event.listener)
             pushScreen(event.screen)
         }
     }
