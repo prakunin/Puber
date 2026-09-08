@@ -1798,6 +1798,9 @@ internal class PlayerVM(
     private fun exitPlayer() {
         if (closeJob != null) return
         closing = true
+        // Stop the decoder now. The writes below can take a request timeout on a slow network, and
+        // nothing the viewer sees justifies keeping video and audio running for that long.
+        playbackController.pause()
         mediaGeneration += 1
         progressTracker.stopSync()
         positionUpdateJob?.cancel()

@@ -87,6 +87,23 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun backPressed_pausesPlaybackBeforeTheFinalSaveDrains() {
+        // The decoder and the audio track must not keep running for the length of a slow request
+        // after the viewer has already left.
+        val releaseSave = CompletableDeferred<Unit>()
+        coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers {
+            releaseSave.await()
+        }
+        val vm = startedVM()
+
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        verify(exactly = 1) { playbackController.pause() }
+        verify(exactly = 0) { router.back(any(), any()) }
+        releaseSave.complete(Unit)
+    }
+
+    @Test
     fun repeatedBackWhileFinalProgressSavePending_staysInterceptedAndReturnsOnce() {
         val releaseSave = CompletableDeferred<Unit>()
         coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers {
