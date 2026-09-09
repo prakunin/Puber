@@ -4,6 +4,7 @@
 **/keystore.properties
 **/release.jks
 .idea/
+.claude/
 .kotlin/
 .DS_Store
 .mcp.json
