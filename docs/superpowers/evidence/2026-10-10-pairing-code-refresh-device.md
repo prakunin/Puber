@@ -61,3 +61,48 @@ Steps:
    pid, crash buffer empty. PASS.
 
 No logout, data clear or uninstall was done.
+
+## Re-check after round 1 (head 11cc1a82)
+
+Changes since the first pass: 22f475aa (poll interval floored, injectable clock
+`nowMillis`, Koin binding changed to an explicit `single<IKinoPubRepository> { ... }`)
+and 625008e1 (tests). Build: dev debug 1.9.69-dev, sha256 6e405abf...9690, built
+from the worktree. Device: emulator-5554, lease taken and released (status: unlocked).
+
+### Static gate
+
+- `:app:compileDevDebugKotlin`, `:app:detektAll`, `:app:lintDevDebug`: green.
+- `KinoPubRepositoryAuthStateTest`: 12 tests, 0 failures. `AuthVMTest`: 5 tests, 0 failures.
+- `:app:testDevDebugUnitTest --rerun`, one full run: 1373 tests, 1 failed:
+  `HistoryVMDeletionSchedulingTest > deleteSelectionDuringRefresh_isQueuedOnceAndRetainsSemanticFocus`
+  (the known flaky class, board row unit-suite-flaky). No other failure.
+
+### DI resolution (code review)
+
+Grep of `app/src` for `KinoPubRepository`: the only injection site is
+`AuthInteractor(private val repository: IKinoPubRepository)`, reached through
+`IAuthInteractor` in `AuthVM`. Nothing injects the concrete `KinoPubRepository`
+and the only construction is the new binding (`client = get(), cryptoPreferenceRepository = get()`),
+the same two dependencies the removed `singleOf` resolved; `nowMillis` has a default.
+The binding is `single<IKinoPubRepository>`, which satisfies `IKinoPubRepository`.
+The old `bind<IKinoPubRepository>()` also exposed the concrete type; no consumer used it. PASS.
+
+### Device smoke
+
+1. install-preserve (apksigner on PATH): outcome `installed`, `compatible_replace`,
+   `adb_install_replace_preserve`, same signer, `destructive_action: false`. PASS.
+2. Force-stop, clear logcat, `am start MainActivity`, wait 15 s. Expected: signed-in Home.
+   Observed: pid alive, Home with hero, Continue watching and My bookmarks rows (screenshot
+   viewed, not stored: account content). PASS.
+3. Remote only: DPAD_LEFT, 4x DPAD_DOWN, DPAD_CENTER opened the Movies catalogue.
+   Expected: content loaded from the API. Observed: "New releases" row with posters and
+   metadata. PASS.
+4. App-pid log: 0 lines matching `FATAL EXCEPTION`, `ANR in`, Koin definition-not-found. PASS.
+
+Limit: the repository is used only on the pairing/auth path, which a signed-in
+session does not enter, so the device run shows the app starts and the Koin module
+loads without error but does not resolve `IKinoPubRepository` itself. The resolution
+claim rests on the code review above and the unit tests. AC-7 stays NOT CHECKED
+(user decision: emulator-5554 must stay signed in).
+
+No logout, data clear or uninstall was done.
