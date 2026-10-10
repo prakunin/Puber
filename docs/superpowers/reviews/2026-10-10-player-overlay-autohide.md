@@ -22,13 +22,13 @@ rejected (<why>), or deferred (<board row>). Nothing stays open silently. -->
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
-| 1 | major | PlayerVMOverlayAutoHideTest.kt | AC-11: no VM test for Episodes open when a non-last episode ends; `markPlaybackEnded()` could sit only in the last-episode branch and every test would pass | to fix (round 1) |
-| 2 | major | PlayerVMOverlayAutoHideTest.kt | D13 side effect untested: Settings/About open at the end, viewer closes it, controls must stay and Back must exit | to fix (round 1) |
-| 3 | major | PlayerVMOverlayAutoHideTest.kt | AC-13 half covered: no test of the debug preference on through the Episodes timeout path | to fix (round 1) |
-| 4 | minor | PlayerVMOverlayAutoHideTest.kt `controlsTimerDuringExit_changesNothing` | Never opens Episodes nor asserts no next-episode countdown on the panel-close branch (D9) | to fix (round 1) |
-| 5 | minor | PlayerVMOverlayAutoHideTest.kt `pausing_setsIsPlayingFalse_andResumingSetsItTrue` | End-of-media step cannot fail (isPlaying already false) | to fix (round 1) |
-| 6 | minor | PlayerVideoSurfaceTest.kt | Tests the helper, not the call sites; `minimalContent()` duplicates the fixture's `testContentState` | to fix (round 1): reuse the fixture; call-site coverage stays with device AC-15 |
-| 7 | minor | PlayerVMOverlayAutoHideTest.kt | No VM case for `ResetControlsTimer` while held, nor for reopening Episodes after a timeout | to fix (round 1) |
+| 1 | major | PlayerVMOverlayAutoHideTest.kt | AC-11: no VM test for Episodes open when a non-last episode ends; `markPlaybackEnded()` could sit only in the last-episode branch and every test would pass | fixed (14a916b0) |
+| 2 | major | PlayerVMOverlayAutoHideTest.kt | D13 side effect untested: Settings/About open at the end, viewer closes it, controls must stay and Back must exit | fixed (14a916b0) |
+| 3 | major | PlayerVMOverlayAutoHideTest.kt | AC-13 half covered: no test of the debug preference on through the Episodes timeout path | fixed (14a916b0) |
+| 4 | minor | PlayerVMOverlayAutoHideTest.kt `controlsTimerDuringExit_changesNothing` | Never opens Episodes nor asserts no next-episode countdown on the panel-close branch (D9) | fixed (14a916b0) |
+| 5 | minor | PlayerVMOverlayAutoHideTest.kt `pausing_setsIsPlayingFalse_andResumingSetsItTrue` | End-of-media step cannot fail (isPlaying already false) | fixed (14a916b0) |
+| 6 | minor | PlayerVideoSurfaceTest.kt | Tests the helper, not the call sites; `minimalContent()` duplicates the fixture's `testContentState` | fixed (14a916b0): reuses the fixture; call-site coverage stays with device AC-15 |
+| 7 | minor | PlayerVMOverlayAutoHideTest.kt | No VM case for `ResetControlsTimer` while held, nor for reopening Episodes after a timeout | fixed (14a916b0) |
 | 8 | minor | PlayerSettingsPanels.kt | Key hook and hold lambdas have no JVM test | rejected: accepted residual risk in the design (no Compose UI test harness for this path); covered by device checks D3/D4, both PASS |
 
 ### codex-reviewer
