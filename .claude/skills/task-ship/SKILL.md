@@ -23,7 +23,10 @@ why no device was needed). Otherwise run `/task-verify` first.
    if wanted, is opened by the user.
 4. **Board**: move the row to Done with the merge commit and date. Tick or strike
    the plan's remaining checkboxes so the plan reflects reality.
-5. **Clean up** with the user's OK: `orca worktree rm <slug>`.
+5. **Clean up** with the user's OK: `orca worktree rm --worktree branch:<slug>`
+   It deletes the checkout in the background and usually the branch with it;
+   confirm with `git worktree list` and `git branch --list <slug>`, and remove
+   a leftover merged branch with `git branch -d <slug>`.
 
 A release is a separate step: `docs/release.md`. Creating or pushing a tag needs
 its own explicit approval; the guard hook asks before `git tag` and tag pushes.
