@@ -44,8 +44,8 @@ sealed class ApiError(
 
     /**
      * An OAuth device-flow refusal, carrying the protocol's own error code so callers can branch on
-     * it. `authorization_pending` is the polling loop's normal answer; every other code is terminal
-     * and means the loop has to stop instead of running out the clock.
+     * it. `authorization_pending` is the polling loop's normal answer; an expired-code error asks for a
+     * fresh code; every other code is terminal and means the loop has to stop.
      */
     class OAuth(
         val error: String,
@@ -54,8 +54,12 @@ sealed class ApiError(
 
         val isAuthorizationPending: Boolean get() = error.equals(AUTHORIZATION_PENDING, ignoreCase = true)
 
+        /** The device code ran out on the server; a fresh code can be requested. */
+        val isCodeExpired: Boolean get() = EXPIRED_CODES.any { error.equals(it, ignoreCase = true) }
+
         companion object {
             const val AUTHORIZATION_PENDING = "authorization_pending"
+            private val EXPIRED_CODES = setOf("expired_token", "authorization_expired", "code_expired")
         }
     }
 }
