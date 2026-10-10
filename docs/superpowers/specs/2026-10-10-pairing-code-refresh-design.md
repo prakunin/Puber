@@ -143,3 +143,20 @@ n/a, not a perf task.
    `code_expired`; `access_denied` and any other refusal stay terminal.
 2. AC-7 is not run on a device: emulator-5554 stays signed in. It goes to the
    gate as `NOT VERIFIED`, which makes the decision at best `CONCERNS`.
+
+## Implementation record
+
+Commits: see `git log` on the branch (renew on expired code; AuthVM renewal test; extract the poll loop for detekt; this record).
+
+Done: `ApiError.OAuth.isCodeExpired` (whitelist `expired_token`, `authorization_expired`, `code_expired`); `KinoPubRepository.getAuthState` renews the code on an expired refusal through a private `CodeExpiredException` and a new `pollUntilExpired` helper; other non-pending refusals still throw. Tests: `KinoPubRepositoryAuthStateTest` (P0 and P1 per the traceability table; the existing terminal-refusal test now uses `access_denied`), `AuthVMTest.secondCode_replacesShownCodeAndRestartsCountdown_whenRenewed`.
+
+Deviations:
+- The "per accepted string" P1 test is a loop over the three strings in one test, not parameterised: `junit-jupiter-params` is not a dependency.
+- Extra guard: if `expiresIn <= 0` the inner loop never ran and the renew loop would have spun without delay, so `pollUntilExpired` waits one `interval` in that case (AC-5).
+- Failing-first was not observed on master: the first test run hit a compile error in my test, and the fix followed before a clean red run.
+
+Notes for reviewers:
+- A full `testDevDebugUnitTest` run failed once, and twice in a row, on `HomeVMIncrementalPublishTest.aFailedRefreshOfOneSectionKeepsTheContentItAlreadyPublished`; it passes alone and passed in the final full run. It touches nothing in this change; treat it as a flaky test.
+- AC-7 is `NOT VERIFIED` (emulator stays signed in, per the user's answer). The real server expiry string is still unconfirmed.
+
+Gate: `./tools/agentw --continue testDevDebugUnitTest :app:detektAll :app:lintDevDebug` -> `BUILD SUCCESSFUL in 2m 4s`.

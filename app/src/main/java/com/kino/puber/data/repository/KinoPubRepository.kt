@@ -31,33 +31,37 @@ class KinoPubRepository(
             val deviceCode = codeResult.getOrThrow().deviceCode
             send(AuthState.Code(deviceCode.userCode, deviceCode.verificationUri, deviceCode.expiresIn))
 
-            val deadline = System.currentTimeMillis() + deviceCode.expiresIn * 1000L
-            var authenticated = false
-            var waited = false
-
-            while (System.currentTimeMillis() < deadline) {
-                delay(deviceCode.interval * 1000L)
-                waited = true
-                val token = try {
-                    pollForToken(deviceCode)
-                } catch (_: CodeExpiredException) {
-                    break
-                }
-                if (token != null) {
-                    cryptoPreferenceRepository.saveAccessToken(token.accessToken)
-                    cryptoPreferenceRepository.saveRefreshToken(token.refreshToken)
-                    authenticated = true
-                    break
-                }
-            }
-
-            if (authenticated) {
+            val token = pollUntilExpired(deviceCode)
+            if (token != null) {
+                cryptoPreferenceRepository.saveAccessToken(token.accessToken)
+                cryptoPreferenceRepository.saveRefreshToken(token.refreshToken)
                 send(AuthState.Success)
                 return@channelFlow
             }
-            // Code expired → loop restarts with new device code, never sooner than one interval
-            if (!waited) delay(deviceCode.interval * 1000L)
+            // Code expired → loop restarts with new device code
         }
+    }
+
+    /**
+     * Polls every `interval` until a token arrives, the client deadline passes, or the server
+     * reports the code expired. Null means the code is spent. A pass always waits at least one
+     * interval, so renewals are never closer together than that.
+     */
+    private suspend fun pollUntilExpired(deviceCode: DeviceCodeResponse): TokenResponse? {
+        val deadline = System.currentTimeMillis() + deviceCode.expiresIn * 1000L
+        var waited = false
+        while (System.currentTimeMillis() < deadline) {
+            delay(deviceCode.interval * 1000L)
+            waited = true
+            val token = try {
+                pollForToken(deviceCode)
+            } catch (_: CodeExpiredException) {
+                return null
+            }
+            if (token != null) return token
+        }
+        if (!waited) delay(deviceCode.interval * 1000L)
+        return null
     }
 
     /**
