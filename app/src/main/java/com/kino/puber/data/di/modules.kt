@@ -83,7 +83,7 @@ val repositoryModule = module {
     singleOf(::AppUpdatePreferencesRepository)
     singleOf(::AppUpdateInstaller)
     singleOf(::AppUpdateDownloader)
-    singleOf(::KinoPubRepository) { bind<IKinoPubRepository>() }
+    single<IKinoPubRepository> { KinoPubRepository(client = get(), cryptoPreferenceRepository = get()) }
     singleOf(::CryptoPreferenceRepository) { bind<ICryptoPreferenceRepository>() }
     singleOf(::DeviceInfoRepository) { bind<IDeviceInfoRepository>() }
     singleOf(::DeviceSettingsRepository) { bind<IDeviceSettingsRepository>() }

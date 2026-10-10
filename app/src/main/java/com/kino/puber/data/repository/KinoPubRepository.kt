@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.firstOrNull
 class KinoPubRepository(
     private val client: KinoPubApiClient,
     private val cryptoPreferenceRepository: ICryptoPreferenceRepository,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : IKinoPubRepository {
 
     override fun isAuthenticated(): Boolean = client.isAuthenticated()
@@ -48,10 +49,11 @@ class KinoPubRepository(
      * interval, so renewals are never closer together than that.
      */
     private suspend fun pollUntilExpired(deviceCode: DeviceCodeResponse): TokenResponse? {
-        val deadline = System.currentTimeMillis() + deviceCode.expiresIn * 1000L
+        val intervalMillis = deviceCode.interval.coerceAtLeast(1) * 1000L
+        val deadline = nowMillis() + deviceCode.expiresIn * 1000L
         var waited = false
-        while (System.currentTimeMillis() < deadline) {
-            delay(deviceCode.interval * 1000L)
+        while (nowMillis() < deadline) {
+            delay(intervalMillis)
             waited = true
             val token = try {
                 pollForToken(deviceCode)
@@ -60,7 +62,7 @@ class KinoPubRepository(
             }
             if (token != null) return token
         }
-        if (!waited) delay(deviceCode.interval * 1000L)
+        if (!waited) delay(intervalMillis)
         return null
     }
 
