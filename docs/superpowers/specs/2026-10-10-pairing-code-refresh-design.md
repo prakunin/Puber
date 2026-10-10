@@ -72,20 +72,57 @@ risks. Not on the quick route. -->
 
 ## Test design
 
-<!-- test-designer.
+Tests live in `KinoPubRepositoryAuthStateTest` (mocked `KinoPubApiClient`, `runTest`, virtual `delay`; the deadline uses `System.currentTimeMillis`, so deadline cases use a tiny `expiresIn` such as 0/1 with `interval` 1 and `take(n)` on the flow so a spinning loop cannot hang the run) and `AuthVMTest` (existing `createVM`, `MainDispatcherExtension`, `FakeResourceProvider`).
+
 ### Risks
+
 | Risk | P | I | Score | Mitigation |
 |---|---|---|---|---|
+| Expired refusal still throws, flow ends, dead code stays (the bug) | 3 | 3 | 9 | `expiredRefusal_emitsSecondCode_...` (fails on master) |
+| Renewal broadens too far: `access_denied` or an unknown refusal silently renews and hides a real denial | 2 | 3 | 6 | AC-4 test with `access_denied`; the changed existing test |
+| Wrong expiry string (Open question 1): real server string not in the renew set, bug persists on device | 2 | 3 | 6 | Unit test per accepted string (`expired_token`, `authorization_expired`, `code_expired`); residual risk stays open until a real string is captured (device, user) |
+| Renew loop spins (new-code request fails, or expiresIn <= 0 skips the `delay`), hammering the API | 2 | 3 | 6 | AC-5 tests: failure of `getDeviceLoginCode` surfaces and stops; consecutive `Code`s are at least `interval` apart in virtual time |
+| Old `code` polled after renewal | 1 | 2 | 2 | AC-6 verify; accepted otherwise |
+| AuthVM does not restart countdown / replace code on a second `Code` | 2 | 2 | 4 | AC-3 VM test (below 6, but cheap, P1) |
+| Late poll past deadline with expiry kills the flow | 2 | 3 | 6 | AC-2 late-poll test |
+| Existing test still asserts old behaviour (encodes the defect) | 3 | 2 | 6 | Edit it (see Bug route) |
+
+Highest score 9.
 
 ### Traceability
+
 | AC | Level | Priority | Test | Proves |
 |---|---|---|---|---|
+| AC-1 | unit | P0 | `KinoPubRepositoryAuthStateTest.anExpiredCodeRefusalRenewsTheCodeInsteadOfThrowing` (poll answers `OAuth("expired_token")`, then second code request returns a new `userCode`; collect `take(2)`) | `getAuthState` emits two `AuthState.Code`, second with the new code, no exception |
+| AC-1 | unit | P1 | same test parameterised over `expired_token`, `authorization_expired`, `code_expired` | every string in the renew set renews (resolution of Open question 1 changes this set only) |
+| AC-2 | unit | P0 | `...aPollPastTheDeadlineThatIsRefusedAsExpiredRenews` (`expiresIn` tiny, poll after the deadline gets expired refusal) | late poll renews; the root cause path |
+| AC-2 | unit | P1 | `...codeRunningOutOnPendingAnswersRequestsANewCode` (only empty flows from `getDeviceLoginStatus`, `take(2)` Codes) | existing deadline renewal kept |
+| AC-3 | unit | P1 | `AuthVMTest.secondCode_replacesShownCodeAndRestartsCountdown_whenRenewed` (fake interactor flow emits Code A then Code B; advance virtual time with `StandardTestDispatcher`; assert state shows B and remaining seconds equals B's `expiresIn` minus elapsed since B, not A's) | VM state replaces code and restarts the timer |
+| AC-4 | unit | P0 | `...aDeniedRefusalStillStopsThePoll` (the existing `aTerminalOAuthRefusalStopsThePollInsteadOfRunningOutTheCode`, switched to `access_denied`); also assert code was requested once (`verify(exactly = 1) { client.getDeviceLoginCode() }`) | non-expiry OAuth refusal throws, no renewal |
+| AC-5 | unit | P0 | `...aFailingNewCodeRequestSurfacesAndStopsTheLoop` (first code, expired refusal, second `getDeviceLoginCode` returns failure; `assertThrows`, request count == 2) | renewal failure propagates, no spin |
+| AC-5 | unit | P0 | `...renewalsAreNeverCloserThanTheInterval` (virtual time via `currentTime` in `runTest`; record time of each `getDeviceLoginCode` call after an immediate expired refusal; difference >= `interval*1000`) | the `interval` delay is kept between renewals |
+| AC-6 | unit | P1 | `...afterRenewalPollsUseTheNewCode` (capture `getDeviceLoginStatus` args; after the renewal every arg has the new `code`, none the old) | no poll with the old code |
+| AC-7 | device | P1 | Device check 1 | on-screen new code and running countdown |
+
+AC-7 stays unproven by automation. What unit/VM tests cover instead: the repository emits a second `Code` on expiry (AC-1, AC-2); `AuthVM` replaces the shown code and restarts the countdown on it (AC-3). Not covered by any test: the real server's expiry string, the actual Compose rendering, TV focus staying put when the code changes, and end-to-end timing on a signed-out device. `emulator-5554` is paired and must not be signed out, so AC-7 is run by the user or a dedicated signed-out device, and the gate must record it as "not verified by us" otherwise.
+
+### Bug route
+
+Failing-first test: `KinoPubRepositoryAuthStateTest.anExpiredCodeRefusalRenewsTheCodeInsteadOfThrowing`. On master `getAuthState` throws `ApiError.OAuth("expired_token")` after the first `Code`, so the second `Code` never arrives and the test fails; after the fix it passes. Written first.
+
+Existing test to change: `aTerminalOAuthRefusalStopsThePollInsteadOfRunningOutTheCode` currently expects `expired_token` to throw. That encodes the defect. Change its refusal to `access_denied` (assert `error == "access_denied"`), keeping it as the AC-4 test. It must not stay with `expired_token`: it would fail after the fix.
 
 ### Device checks
-1. …
+
+Run only on a signed-out device that is not `emulator-5554` (or by the user); lease via `tools/emulator-resource-lock.sh`, exact serial on every adb call, install with `tools/android-apk-install-preserve`.
+1. Open the pairing screen, note code A and the countdown. Do nothing and watch the countdown reach 00:00, then wait up to one minute. Expected: a different code B appears and the countdown restarts from the full duration and runs. Must not happen: code A stays on screen, countdown stuck at 00:00, only a snackbar, a crash.
+2. While code B is shown, press D-pad keys (for example DPAD_DOWN, DPAD_CENTER on the focused control, then BACK is not pressed). Expected: focus stays on the same control through the renewal. Must not happen: focus lost or moved to nothing when the code changes.
+3. Leave it through two more expiries. Expected: each renewal produces a fresh code, no faster than the polling interval, no log spam of requests. Must not happen: rapid repeated code requests.
+4. (If the real string is captured) record the logged refusal string in evidence without raw logcat. Closes Open question 1.
 
 ### Baseline (perf route)
--->
+
+n/a, not a perf task.
 
 ## Plan
 
