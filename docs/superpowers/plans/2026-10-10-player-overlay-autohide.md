@@ -302,9 +302,9 @@ Steps:
 **Produces:** `PlayerContentState.shouldKeepScreenOn(): Boolean`.
 
 Steps:
-- [ ] Write the VS test against the extension (it fails to compile until the extension exists). Then make the change, the comment edit and the VM test.
-- [ ] Full gate: `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest :app:detektAll :app:assembleDevDebug`.
-- [ ] Commit: `Pin the keep-screen-on rule and correct the trailer delay comment`
+- [x] Write the VS test against the extension (it fails to compile until the extension exists). Then make the change, the comment edit and the VM test.
+- [x] Full gate: `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest :app:detektAll :app:assembleDevDebug`.
+- [x] Commit: `Pin the keep-screen-on rule and correct the trailer delay comment`
 
 **Done when:** the full gate is green. `git log --oneline master..HEAD` shows the four task commits (on top of the dossier commits), with no `Co-Authored-By` in any message (`git log master..HEAD --format=%B | grep -c Co-Authored-By` prints `0`).
 

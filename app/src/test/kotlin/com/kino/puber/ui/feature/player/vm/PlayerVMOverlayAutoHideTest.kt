@@ -348,4 +348,19 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
 
             assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
         }
+
+    @Test
+    fun pausing_setsIsPlayingFalse_andResumingSetsItTrue() =
+        vmTest { vm ->
+            every { playbackController.isPlaying } returns true
+            vm.onAction(PlayerAction.TogglePlayPause)
+            assertFalse(contentState(vm).isPlaying)
+
+            callbackSlot.captured.onPlaybackStateChanged(true, false, 0L, 2_400_000L, 0L)
+            assertTrue(contentState(vm).isPlaying)
+
+            callbackSlot.captured.onPlaybackStateChanged(false, false, 0L, 2_400_000L, 0L)
+            callbackSlot.captured.onPlaybackEnded()
+            assertFalse(contentState(vm).isPlaying)
+        }
 }
