@@ -347,6 +347,8 @@ Steps:
 
 **Blocked:** none.
 
+**QA Defect 1 (Up from Episodes: no focus ring on the bar, OK does not open Episodes):** not caused by this branch, no code change. On master the same path runs unchanged: `ControlsStateMachine.closePanel` sets `controlsVisible = true, focusTarget = lastPanelOpener` (master `ControlsStateMachine.kt:59-66`; the branch only adds a no-op guard when no panel is open, which does not apply after Up), and the focus request is the `LaunchedEffect` in `PlayerScreenContent.kt:84-88` (identical on master), whose `requestFocus()` is wrapped in `runCatching` (`:97`) and fires in the same frame the bar's `AnimatedVisibility` composes, so the `episodesButton` requester can still be unattached and the request is swallowed. The branch's Compose hook in `PlayerSettingsPanels` only dispatches `ResetControlsTimer` (never consumes, no state change), and `ResetControlsTimer` on master was already sent by `ControlsScrim` on every key. Not done: a device run on master to confirm. To defer to its own board row.
+
 ## Readiness
 
 <!-- final-judge, readiness mode: READY | NOT READY and why. -->
