@@ -1,6 +1,6 @@
 # Pairing code renews when it expires
 
-Status: draft
+Status: approved
 Date: 2026-10-10
 Slug: pairing-code-refresh
 Kind: bug
@@ -136,3 +136,10 @@ n/a, not a perf task.
 ## Open questions
 
 1. Which error string does KinoPub return for an expired device code (`expired_token`, `authorization_expired`, `code_expired`, other)? It is not documented in the repo, and it cannot be observed on emulator-5554 without unpairing. Proposed default: renew on any of those three, and treat `access_denied` and anything else as terminal. Alternatively, invert it: renew on every non-pending refusal except `access_denied`. Which does the user prefer, or can the user capture the real string from a signed-out device (the user must supply that)?
+
+**Answered by the user on 2026-10-10 (gate 1):**
+
+1. Whitelist: renew only on `expired_token`, `authorization_expired`,
+   `code_expired`; `access_denied` and any other refusal stay terminal.
+2. AC-7 is not run on a device: emulator-5554 stays signed in. It goes to the
+   gate as `NOT VERIFIED`, which makes the decision at best `CONCERNS`.
