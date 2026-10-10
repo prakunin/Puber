@@ -62,11 +62,11 @@ Steps:
 
 No logout, data clear or uninstall was done.
 
-## Re-check after round 1 (head 11cc1a82)
+## Re-check after round 1 (head 0e509dbd)
 
-Changes since the first pass: 22f475aa (poll interval floored, injectable clock
+Changes since the first pass: 1b52bc6a (poll interval floored, injectable clock
 `nowMillis`, Koin binding changed to an explicit `single<IKinoPubRepository> { ... }`)
-and 625008e1 (tests). Build: dev debug 1.9.69-dev, sha256 6e405abf...9690, built
+and 7af04f20 (tests). Build: dev debug 1.9.69-dev, sha256 6e405abf...9690, built
 from the worktree. Device: emulator-5554, lease taken and released (status: unlocked).
 
 ### Static gate

@@ -26,7 +26,7 @@ empty, so each status below comes from commits and code, not from the plans.
 
 | Slug | Plan | Landed | Evidence | Notes |
 |---|---|---|---|---|
-| pairing-code-refresh | specs/2026-10-10-pairing-code-refresh-design.md (quick route, plan in the spec) | 850f5d68 (2026-10-10) | evidence/2026-10-10-pairing-code-refresh-device.md, reviews/2026-10-10-pairing-code-refresh.md | First task run by task-run. Gate CONCERNS: AC-7 (renewed code on a signed-out TV) not verified by decision; the expiry-string whitelist is unverified against the real server. Follow-ups: pairing-renewal-retry, unit-suite-flaky. |
+| pairing-code-refresh | specs/2026-10-10-pairing-code-refresh-design.md (quick route, plan in the spec) | 6c9a2a80 (2026-10-10) | evidence/2026-10-10-pairing-code-refresh-device.md, reviews/2026-10-10-pairing-code-refresh.md | First task run by task-run. Gate CONCERNS: AC-7 (renewed code on a signed-out TV) not verified by decision; the expiry-string whitelist is unverified against the real server. Follow-ups: pairing-renewal-retry, unit-suite-flaky. |
 | host-android-sdk | - | 2026-10-10 | - | `~/Android/Sdk` (platform 37, build-tools 36/37, emulator, `android-36/android-tv/x86_64`). AVD `puber_tv_36` = `emulator-5554`, paired, snapshot in `.auth/`. install-preserve needs `cmdline-tools/latest/bin` on PATH for apkanalyzer. |
 | persistent-content-cache | plans/2026-08-13-persistent-content-cache.md | 03c2ca31, d051c873, e9b16920 | - | Device pass pending: see device-verification-debt. |
 | side-rail-focus-handoff | plans/2026-08-16-side-rail-focus-handoff.md | 04915c81, 016dde35 | - | Device pass pending. |
