@@ -33,10 +33,16 @@ class KinoPubRepository(
 
             val deadline = System.currentTimeMillis() + deviceCode.expiresIn * 1000L
             var authenticated = false
+            var waited = false
 
             while (System.currentTimeMillis() < deadline) {
                 delay(deviceCode.interval * 1000L)
-                val token = pollForToken(deviceCode)
+                waited = true
+                val token = try {
+                    pollForToken(deviceCode)
+                } catch (_: CodeExpiredException) {
+                    break
+                }
                 if (token != null) {
                     cryptoPreferenceRepository.saveAccessToken(token.accessToken)
                     cryptoPreferenceRepository.saveRefreshToken(token.refreshToken)
@@ -49,7 +55,8 @@ class KinoPubRepository(
                 send(AuthState.Success)
                 return@channelFlow
             }
-            // Code expired → loop restarts with new device code
+            // Code expired → loop restarts with new device code, never sooner than one interval
+            if (!waited) delay(deviceCode.interval * 1000L)
         }
     }
 
@@ -57,9 +64,9 @@ class KinoPubRepository(
      * One poll of the device flow. Null means "ask again": either the user has not confirmed the
      * code yet, or the attempt never reached the server.
      *
-     * A refusal the OAuth protocol itself pronounced — the code expired, or the user denied it — is
-     * final, and is thrown so the screen says so. Waiting out the deadline instead, which is what
-     * swallowing every failure amounted to, left the user watching a code that could never work.
+     * An expired code is signalled with [CodeExpiredException] so the caller asks for a fresh one.
+     * Any other refusal the OAuth protocol pronounced, such as the user denying the code, is final
+     * and is thrown so the screen says so.
      * Cancellation stays cancellation: it must stop the poll rather than count as a failed attempt.
      */
     private suspend fun pollForToken(deviceCode: DeviceCodeResponse): TokenResponse? {
@@ -67,6 +74,7 @@ class KinoPubRepository(
         val emission = polled.onFailure(::logPollFailure).getOrNull() ?: return null
         val failure = emission.exceptionOrNull() ?: return emission.getOrNull()?.token
 
+        if (failure is ApiError.OAuth && failure.isCodeExpired) throw CodeExpiredException()
         if (failure is ApiError.OAuth && !failure.isAuthorizationPending) throw failure
 
         logPollFailure(failure)
@@ -76,4 +84,6 @@ class KinoPubRepository(
     private fun logPollFailure(error: Throwable) {
         log(error, "Device login poll failed")
     }
+
+    private class CodeExpiredException : RuntimeException()
 }
