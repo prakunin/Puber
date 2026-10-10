@@ -253,4 +253,33 @@ class ControlsStateMachineTest {
         assertEquals(before, machine.state)
         assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
     }
+
+    @Test
+    fun `onHideTimeout_episodesOpenAfterPlaybackEnded_landsOnEndedControls`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.markPlaybackEnded()
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(listOf(ControlsStateMachine.Effect.PanelClosed), effects)
+        assertTrue(machine.state.controlsVisible)
+        assertEquals(FocusTarget.EpisodesButton, machine.state.focusTarget)
+        assertTrue(machine.state.playbackEnded)
+
+        val again = machine.onHideTimeout()
+
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), again)
+        assertTrue(machine.state.controlsVisible)
+    }
+
+    @Test
+    fun `isEpisodesPanelAwaitingTimeout_onlyForAnOpenEpisodesPanel`() {
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.Settings)
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.About)
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.Episodes)
+        assertTrue(machine.isEpisodesPanelAwaitingTimeout())
+    }
 }

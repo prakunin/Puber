@@ -247,4 +247,76 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
             releaseSave.complete(Unit)
         }
     }
+
+    private suspend fun TestScope.bufferingBlip(playingAfter: Boolean = true) {
+        callbackSlot.captured.onPlaybackStateChanged(false, true, 0L, 2_400_000L, 0L)
+        advanceTimeBy(1_000)
+        callbackSlot.captured.onPlaybackStateChanged(playingAfter, false, 0L, 2_400_000L, 0L)
+    }
+
+    @Test
+    fun episodesPanel_stillClosesAfterBufferingBlip() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            advanceTimeBy(2_000)
+            bufferingBlip()
+
+            advanceTimeBy(5_900)
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+
+            advanceTimeBy(200)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+        }
+
+    @Test
+    fun lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
+            testContentState.copy(hasNextEpisode = false)
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            callbackSlot.captured.onPlaybackEnded()
+            verify(exactly = 0) { router.back(any(), any()) }
+
+            advanceTimeBy(6_100)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+            assertTrue(contentState(vm).controlsVisible)
+            assertEquals(FocusTarget.EpisodesButton, contentState(vm).controlsFocusTarget)
+            verify(exactly = 0) { router.back(any(), any()) }
+
+            advanceTimeBy(60_000)
+            assertTrue(contentState(vm).controlsVisible)
+            verify(exactly = 0) { router.back(any(), any()) }
+
+            vm.onAction(PlayerAction.OnBackPressed)
+            verify(exactly = 1) { router.back(RESULT_CONTENT_CHANGED, any()) }
+        }
+    }
+
+    @Test
+    fun settingsPanel_staysOpenAcrossBufferingStartAndEnd() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenSettingsPanel)
+            bufferingBlip()
+
+            advanceTimeBy(60_000)
+
+            assertEquals(ActivePanel.Settings, contentState(vm).activePanel)
+        }
+
+    @Test
+    fun endedControls_stayUpAfterBufferingEndAndAfterAKeyAndTime() =
+        vmTest { vm ->
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            callbackSlot.captured.onPlaybackEnded()
+            assertTrue(contentState(vm).controlsVisible)
+
+            bufferingBlip(playingAfter = false)
+            vm.onAction(PlayerAction.ResetControlsTimer)
+            advanceTimeBy(60_000)
+            assertTrue(contentState(vm).controlsVisible)
+
+            vm.onAction(PlayerAction.OnBackPressed)
+            verify(exactly = 1) { router.back(any(), any()) }
+        }
 }

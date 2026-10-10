@@ -201,7 +201,7 @@ internal class PlayerVM(
                 if (wasBuffering) {
                     updateContent { copy(isBuffering = false) }
                     val controlsVisible = (stateValue as? PlayerViewState.Content)?.content?.controlsVisible == true
-                    if (controlsVisible) {
+                    if (controlsVisible || controlsStateMachine.isEpisodesPanelAwaitingTimeout()) {
                         scheduleControlsHide()
                     }
                 }
@@ -1238,6 +1238,7 @@ internal class PlayerVM(
         autoMarkCurrentAsWatched()
         val state = stateValue as? PlayerViewState.Content ?: return
         val content = state.content
+        if (content.activePanel != ActivePanel.None) controlsStateMachine.markPlaybackEnded()
         // A film, or the last episode of a series: there is nothing behind this closing frame, so
         // the player hands the viewer back to the screen they started it from instead of leaving
         // them on a still picture with nothing to press.

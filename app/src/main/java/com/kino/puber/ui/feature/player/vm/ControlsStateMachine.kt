@@ -142,4 +142,16 @@ internal class ControlsStateMachine {
             }
         }
     }
+
+    /** Only the Episodes row runs on the idle timer among the panels, and not while it is held. */
+    fun isEpisodesPanelAwaitingTimeout(): Boolean =
+        state.activePanel == ActivePanel.Episodes && !state.episodesPanelHeld
+
+    /**
+     * The media ran out while a panel had the screen. Nothing changes on screen now; the panel
+     * closes onto the end-of-media controls, and those stay until Back.
+     */
+    fun markPlaybackEnded() {
+        state = state.copy(playbackEnded = true)
+    }
 }

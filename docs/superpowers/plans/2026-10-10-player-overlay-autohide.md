@@ -187,22 +187,22 @@ Steps:
 **Produces:** `isEpisodesPanelAwaitingTimeout()`, `markPlaybackEnded()`.
 
 Steps:
-- [ ] **Failing first.** Write `episodesPanel_stillClosesAfterBufferingBlip` (R8): open Episodes; `advanceTimeBy(2_000)`; `bufferingBlip()`; `advanceTimeBy(5_900)`, still `Episodes`; `advanceTimeBy(200)`, `None`. Run it: it fails after Task 1. Record that.
-- [ ] Write `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays`. It replaces the test designer's `lastEpisode_episodesTimeout_exitsThePlayer`, per spec R4 and question 9.
+- [x] **Failing first.** Write `episodesPanel_stillClosesAfterBufferingBlip` (R8): open Episodes; `advanceTimeBy(2_000)`; `bufferingBlip()`; `advanceTimeBy(5_900)`, still `Episodes`; `advanceTimeBy(200)`, `None`. Run it: it fails after Task 1. Record that.
+- [x] Write `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays`. It replaces the test designer's `lastEpisode_episodesTimeout_exitsThePlayer`, per spec R4 and question 9.
   - Factory returns `testContentState.copy(hasNextEpisode = false)`.
   - `startedVM()`; `OpenEpisodesPanel`; `callbackSlot.captured.onPlaybackEnded()`; `verify(exactly = 0) { router.back(any(), any()) }`.
   - `advanceTimeBy(6_100)`: `activePanel == None`, `controlsVisible`, `controlsFocusTarget == FocusTarget.EpisodesButton`, no `router.back`.
   - `advanceTimeBy(60_000)`: still `controlsVisible`, no `router.back`.
   - Send `OnBackPressed` once: `verify(exactly = 1) { router.back(RESULT_CONTENT_CHANGED, any()) }`.
   - Run it: it fails, because the timeout lands on a clean video.
-- [ ] Make the production changes above.
-- [ ] Add these VM tests:
+- [x] Make the production changes above.
+- [x] Add these VM tests:
   - `settingsPanel_staysOpenAcrossBufferingStartAndEnd` (AC-7): open Settings; `bufferingBlip()`; `advanceTimeBy(60_000)`; still `Settings`.
   - `endedControls_stayUpAfterBufferingEndAndAfterAKeyAndTime` (AC-11): use the default factory (a non-last episode).
     - `onPlaybackEnded()` starts the countdown; `CancelNextEpisodeCountdown`; `onPlaybackEnded()` again brings up the ended controls. [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:1243]
     - `bufferingBlip(playingAfter = false)`; `ResetControlsTimer`; `advanceTimeBy(60_000)`: `controlsVisible`.
     - `OnBackPressed`: `router.back` called once.
-- [ ] Run the player test package; commit: `Keep the Episodes timer through buffering and land on the ended controls`
+- [x] Run the player test package; commit: `Keep the Episodes timer through buffering and land on the ended controls`
 
 **Done when:** `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest --tests 'com.kino.puber.ui.feature.player.*'` is green, including the existing end-of-media tests. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:496] [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMEpisodeFlowTest.kt:70]
 
