@@ -53,6 +53,17 @@ Not run: no Compose layout change (the diff adds a non-consuming key modifier an
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
 
+## Round 2
+
+Re-ran only test-reviewer (the code-reviewer and codex findings were deferred or rejected, with no code change). Verdict: adequate; #1–#3, #6, #7 resolved, #8 accepted residual risk.
+
+### test-reviewer
+
+| # | Severity | Where | Finding | Disposition |
+|---|---|---|---|---|
+| 1 | minor | PlayerVMOverlayAutoHideTest.kt `episodesTimerDuringExit_startsNoCountdownAndChangesNothing` | Cannot fail on the `closing` guard (Episodes plus `closing` is unreachable); name overclaims | fixed (7d7aa09c): renamed `lastEpisode_backOutOfEpisodesAfterEnd_exitsOnce_andLaterTimeChangesNothing`; the bar-only guard stays pinned by `controlsTimerDuringExit_changesNothing` |
+| 2 | minor | PlayerVMOverlayAutoHideTest.kt `playbackEnd_setsIsPlayingFalse_withoutAPauseBefore` | `onPlaybackEnded` never sets `isPlaying`; the test pins the state callback | fixed (7d7aa09c): renamed `playbackStateChange_toNotPlaying_setsIsPlayingFalse_withoutAPauseBefore`, `onPlaybackEnded()` dropped |
+
 ## Gate
 
 <!-- final-judge, gate mode. -->
