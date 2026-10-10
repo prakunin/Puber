@@ -429,3 +429,7 @@ Every P0 test in the Test design appears in a task, including the R8 test `episo
 - #5 pausing test split: `pausing_setsIsPlayingFalse_andResumingSetsItTrue` no longer has the end step; `playbackEnd_setsIsPlayingFalse_withoutAPauseBefore` starts from `isPlaying == true` and goes straight to ended.
 - #6 `PlayerVideoSurfaceTest` takes `testContentState` through an anonymous `PlayerVMTestFixture` subclass (the member is `protected`; construction does not run the `@BeforeEach` setup). `minimalContent()` still exists as a one-line accessor.
 - #7 `resetControlsTimer_whileEpisodesPanelHeld_doesNotCloseIt` (seen red with the held check removed from `onHideTimeout`) and `reopeningEpisodesAfterTimeout_armsTheTimerAgain`.
+
+**Review round 2 (test-reviewer minors), tests only:**
+- `episodesTimerDuringExit_startsNoCountdownAndChangesNothing` renamed `lastEpisode_backOutOfEpisodesAfterEnd_exitsOnce_andLaterTimeChangesNothing`: it cannot fail on the `closing` guard (unreachable with Episodes open), and now says what it checks.
+- `playbackEnd_setsIsPlayingFalse_withoutAPauseBefore` renamed `playbackStateChange_toNotPlaying_setsIsPlayingFalse_withoutAPauseBefore`; the `onPlaybackEnded()` call is dropped, since only the state callback touches `isPlaying`.

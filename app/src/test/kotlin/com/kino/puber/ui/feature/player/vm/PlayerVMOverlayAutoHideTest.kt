@@ -270,7 +270,7 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
     }
 
     @Test
-    fun episodesTimerDuringExit_startsNoCountdownAndChangesNothing() {
+    fun lastEpisode_backOutOfEpisodesAfterEnd_exitsOnce_andLaterTimeChangesNothing() {
         coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
             testContentState.copy(hasNextEpisode = false)
         val releaseSave = CompletableDeferred<Unit>()
@@ -479,12 +479,11 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
         }
 
     @Test
-    fun playbackEnd_setsIsPlayingFalse_withoutAPauseBefore() =
+    fun playbackStateChange_toNotPlaying_setsIsPlayingFalse_withoutAPauseBefore() =
         vmTest { vm ->
             assertTrue(contentState(vm).isPlaying)
 
             callbackSlot.captured.onPlaybackStateChanged(false, false, 0L, 2_400_000L, 0L)
-            callbackSlot.captured.onPlaybackEnded()
 
             assertFalse(contentState(vm).isPlaying)
         }
