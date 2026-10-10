@@ -126,10 +126,34 @@ class KinoPubRepositoryAuthStateTest {
             Result.failure(ApiError.OAuth("invalid_grant")),
         )
 
-        val error = assertThrows<ApiError.OAuth> { subject.getAuthState().toList() }
+        // Bounded, so an implementation that renews on this refusal ends the flow instead of hanging.
+        val error = runCatching { subject.getAuthState().take(3).toList() }.exceptionOrNull()
 
-        assertEquals("invalid_grant", error.error)
+        assertInstanceOf(ApiError.OAuth::class.java, error)
+        assertEquals("invalid_grant", (error as ApiError.OAuth).error)
         verify(exactly = 1) { client.getDeviceLoginCode() }
+    }
+
+    @Test
+    fun aTokenThatLandsAfterTheDeadlineIsStillAccepted() = test {
+        every { client.isAuthenticated() } returns false
+        every { client.getDeviceLoginCode() } returns flowOf(
+            Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 1, interval = 2), token = null)),
+        )
+        val pollTimes = mutableListOf<Long>()
+        every { client.getDeviceLoginStatus(any()) } answers {
+            pollTimes += testScheduler.currentTime
+            flowOf(Result.success(DeviceFlowResult(DEVICE_CODE, TOKEN)))
+        }
+
+        val states = subject.getAuthState().toList()
+
+        // The only poll lands at 2 s, a second after the 1 s deadline, and still carries the token.
+        assertEquals(listOf(2000L), pollTimes)
+        assertInstanceOf(AuthState.Success::class.java, states.last())
+        verify(exactly = 1) { client.getDeviceLoginCode() }
+        verify { preferences.saveAccessToken("access") }
+        verify { preferences.saveRefreshToken("refresh") }
     }
 
     @Test
