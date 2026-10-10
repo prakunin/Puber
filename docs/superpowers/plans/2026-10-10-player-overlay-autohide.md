@@ -325,14 +325,27 @@ Steps:
 <!-- implementer -->
 
 **Commits:**
+- 7644d557 Close the Episodes panel and the controls after six idle seconds
+- 1f0d218e Keep the Episodes timer through buffering and land on the ended controls
+- b23c1f39 Hold the Episodes panel while its context menu is open and restart it on keys
+- 8aa844ba Pin the keep-screen-on rule and correct the trailer delay comment
 
 **Deviations from the plan:**
+- `PlayerVMOverlayAutoHideTest` has a private `vmTest { vm -> ... }` helper that starts the VM, runs the body and cancels the VM scope in a `finally`. A failed assertion otherwise leaves the position loop running and `runTest` idles into an OutOfMemoryError (JVM crash). Same pattern as the plan, only made failure-safe.
+- Failing-first evidence, Task 1: on master `openEpisodesPanel_closesItself_after6s` failed with `expected: <None> but was: <Episodes>` and `controlsBar_staysAt5900ms_hidesAfter6000ms` with `expected: <true> but was: <false>`. `ControlsStateMachineTest` failed to compile (`Unresolved reference 'onHideTimeout'`). Task 2: `episodesPanel_stillClosesAfterBufferingBlip` (`expected: <None> but was: <Episodes>`) and `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays` (controls not visible) failed before the change. Tasks 3 and 4: tests written first; main code did not compile without the new action and extension.
+- Renamed tests as the plan says: `controlsTimerDuringExit_changesNothing` replaces `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown`; `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays` replaces `lastEpisode_episodesTimeout_exitsThePlayer`.
+- Task 3 "compile" was covered by the test compile (`compileDevDebugKotlin` is a dependency of the unit-test task); the final gate also ran `assembleDevDebug`.
 
-**Files touched outside the plan:**
+**Files touched outside the plan:** none (the plan file itself: checkboxes and this record).
 
 **For the reviewers:**
+- Final gate: `:app:testDevDebugUnitTest :app:detektAll :app:assembleDevDebug` BUILD SUCCESSFUL, then `:app:lintDevDebug` BUILD SUCCESSFUL. No flaky test failed in the full run.
+- Detekt prints "There were 83 / 7 compiler errors found during analysis" for `detektDevDebug` / `detektDevDebugUnitTest` (type-resolution noise), yet the task succeeds; not investigated, not caused by this branch's diff as far as I can tell.
+- The sandbox JVM crashes intermittently with SIGSEGV or a JPLIS assertion on mockk-based test runs; reruns fixed it. Core and `hs_err` files were removed, nothing is committed.
+- The Compose hooks in `PlayerSettingsPanels` have no JVM test (device checks D3, D4).
+- `episodesPanelHeld` is reset by `openPanel`, `closePanel` and `onHideTimeout`; `initialize` (from `subtitle-player-fixes`) does not exist here yet.
 
-**Blocked:**
+**Blocked:** none.
 
 ## Readiness
 
