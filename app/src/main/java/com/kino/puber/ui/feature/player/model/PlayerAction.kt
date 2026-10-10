@@ -29,6 +29,9 @@ internal sealed interface PlayerAction : UIAction {
     data object OpenAboutPanel : PlayerAction
     data object ClosePanel : PlayerAction
 
+    /** The episode context menu opened over the Episodes row (true) or went away (false). */
+    data class SetEpisodesPanelHeld(val held: Boolean) : PlayerAction
+
     // Audio & Subtitles selection
     data class SelectAudioTrack(val index: Int) : PlayerAction
     data class SelectSubtitle(val index: Int) : PlayerAction

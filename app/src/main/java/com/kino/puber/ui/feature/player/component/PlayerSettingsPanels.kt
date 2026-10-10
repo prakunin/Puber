@@ -1,10 +1,13 @@
 package com.kino.puber.ui.feature.player.component
 
+import android.view.KeyEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.EpisodeContextMenuDialog
 import com.kino.puber.core.ui.uikit.model.UIAction
@@ -32,19 +35,36 @@ internal fun PlayerSettingsPanels(
         about = content.about,
     )
 
+    // Any key in the row is the viewer still choosing: restart the idle timer. Never consumes.
+    val episodesKeyActivity = remember(onAction) {
+        Modifier.onPreviewKeyEvent { event ->
+            if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                onAction(PlayerAction.ResetControlsTimer)
+            }
+            false
+        }
+    }
+
     PlayerEpisodesPanel(
+        modifier = episodesKeyActivity,
         visible = content.activePanel == ActivePanel.Episodes,
         episodes = content.episodes,
         initialFocusedItemId = content.currentEpisodeId,
         onEpisodeSelected = { item -> onAction(PlayerAction.SelectEpisodeById(item.id)) },
-        onEpisodeContextMenu = { episodeContextMenuItem = it },
+        onEpisodeContextMenu = {
+            episodeContextMenuItem = it
+            onAction(PlayerAction.SetEpisodesPanelHeld(true))
+        },
         onDismiss = rememberAction(onAction, PlayerAction.ClosePanel),
         allowFocusExit = episodeContextMenuItem != null,
     )
 
     EpisodeContextMenuDialog(
         episode = episodeContextMenuItem,
-        onDismiss = { episodeContextMenuItem = null },
+        onDismiss = {
+            episodeContextMenuItem = null
+            onAction(PlayerAction.SetEpisodesPanelHeld(false))
+        },
         onPlay = { onAction(PlayerAction.SelectEpisodeById(it.id)) },
         onMarkEpisodeWatched = { item, watched -> onAction(PlayerAction.EpisodeWatchedChanged(item, watched)) },
         onMarkSeasonWatched = { item, watched -> onAction(PlayerAction.SeasonWatchedChanged(item, watched)) },

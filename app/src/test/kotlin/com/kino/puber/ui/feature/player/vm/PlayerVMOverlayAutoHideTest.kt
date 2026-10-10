@@ -319,4 +319,33 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
             vm.onAction(PlayerAction.OnBackPressed)
             verify(exactly = 1) { router.back(any(), any()) }
         }
+
+    @Test
+    fun episodesPanelHeldByContextMenu_staysFor30s_thenClosesSixSecondsAfterRelease() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            vm.onAction(PlayerAction.SetEpisodesPanelHeld(true))
+
+            advanceTimeBy(30_000)
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+
+            vm.onAction(PlayerAction.SetEpisodesPanelHeld(false))
+            advanceTimeBy(5_900)
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+
+            advanceTimeBy(200)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+        }
+
+    @Test
+    fun heldEpisodesPanel_staysThroughBufferingBlip() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            vm.onAction(PlayerAction.SetEpisodesPanelHeld(true))
+            bufferingBlip()
+
+            advanceTimeBy(30_000)
+
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+        }
 }

@@ -282,4 +282,59 @@ class ControlsStateMachineTest {
         machine.openPanel(ActivePanel.Episodes)
         assertTrue(machine.isEpisodesPanelAwaitingTimeout())
     }
+
+    @Test
+    fun `holdEpisodesPanel_true_cancelsHideAndTimeoutKeepsPanel`() {
+        machine.openPanel(ActivePanel.Episodes)
+
+        val held = machine.holdEpisodesPanel(true)
+        val timeout = machine.onHideTimeout()
+
+        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), held)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), timeout)
+        assertEquals(ActivePanel.Episodes, machine.state.activePanel)
+    }
+
+    @Test
+    fun `holdEpisodesPanel_false_schedulesHide`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+
+        val effects = machine.holdEpisodesPanel(false)
+
+        assertEquals(listOf(ControlsStateMachine.Effect.ScheduleHide), effects)
+        assertFalse(machine.state.episodesPanelHeld)
+    }
+
+    @Test
+    fun `holdEpisodesPanel_withOtherPanelOrNone_isNoOp`() {
+        val none = machine.state
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), machine.holdEpisodesPanel(true))
+        assertEquals(none, machine.state)
+
+        machine.openPanel(ActivePanel.Settings)
+        val settings = machine.state
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), machine.holdEpisodesPanel(true))
+        assertEquals(settings, machine.state)
+    }
+
+    @Test
+    fun `openPanel_and_closePanel_clearTheHeldFlag`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+        machine.openPanel(ActivePanel.Episodes)
+        assertFalse(machine.state.episodesPanelHeld)
+
+        machine.holdEpisodesPanel(true)
+        machine.closePanel()
+        assertFalse(machine.state.episodesPanelHeld)
+    }
+
+    @Test
+    fun `isEpisodesPanelAwaitingTimeout_isFalseWhileHeld`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+    }
 }

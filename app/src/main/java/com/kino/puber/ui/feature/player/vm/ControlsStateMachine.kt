@@ -154,4 +154,11 @@ internal class ControlsStateMachine {
     fun markPlaybackEnded() {
         state = state.copy(playbackEnded = true)
     }
+
+    /** A dialog opened from the Episodes row keeps the row up; releasing it restarts the 6 s. */
+    fun holdEpisodesPanel(held: Boolean): List<Effect> {
+        if (state.activePanel != ActivePanel.Episodes) return emptyList()
+        state = state.copy(episodesPanelHeld = held)
+        return listOf(if (held) Effect.CancelHide else Effect.ScheduleHide)
+    }
 }

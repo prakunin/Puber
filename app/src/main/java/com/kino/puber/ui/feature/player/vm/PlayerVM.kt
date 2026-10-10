@@ -560,6 +560,7 @@ internal class PlayerVM(
             is PlayerAction.OpenEpisodesPanel -> openPanel(ActivePanel.Episodes)
             is PlayerAction.OpenAboutPanel -> openPanel(ActivePanel.About)
             is PlayerAction.ClosePanel -> closePanel()
+            is PlayerAction.SetEpisodesPanelHeld -> holdEpisodesPanel(action.held)
             is PlayerAction.SelectAudioTrack -> applyAudioTrackSelection(action.index)
             is PlayerAction.SelectSubtitle -> applySubtitleSelection(action.index)
             is PlayerAction.SelectSoundMode -> selectSoundMode(action.index)
@@ -731,6 +732,12 @@ internal class PlayerVM(
 
     private fun closePanel() {
         val effects = controlsStateMachine.closePanel()
+        applyControlsState()
+        processEffects(effects)
+    }
+
+    private fun holdEpisodesPanel(held: Boolean) {
+        val effects = controlsStateMachine.holdEpisodesPanel(held)
         applyControlsState()
         processEffects(effects)
     }

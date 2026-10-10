@@ -269,9 +269,9 @@ Steps:
 **Produces:** `PlayerAction.SetEpisodesPanelHeld(held: Boolean)`, `ControlsStateMachine.holdEpisodesPanel(held: Boolean): List<Effect>`.
 
 Steps:
-- [ ] Write the state machine and VM tests above (they do not compile until the action exists, which counts as the failing step). Then make the production changes.
-- [ ] `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:compileDevDebugKotlin` and run the player test package.
-- [ ] Commit: `Hold the Episodes panel while its context menu is open and restart it on keys`
+- [x] Write the state machine and VM tests above (they do not compile until the action exists, which counts as the failing step). Then make the production changes.
+- [x] `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:compileDevDebugKotlin` and run the player test package.
+- [x] Commit: `Hold the Episodes panel while its context menu is open and restart it on keys`
 
 **Done when:** the player test package is green and `:app:compileDevDebugKotlin` passes. The Compose hook has no JVM test, so device checks D3 and D4 in the spec cover it (owned by qa).
 
