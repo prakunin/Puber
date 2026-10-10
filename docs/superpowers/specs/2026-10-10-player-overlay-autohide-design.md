@@ -1,6 +1,6 @@
 # Player overlays: auto-hide transient, keep opened
 
-Status: draft
+Status: approved (2026-10-10; the user delegated questions 8 and 9 and will adjust after testing the build)
 Date: 2026-10-10
 Slug: player-overlay-autohide
 Kind: bug
@@ -188,20 +188,108 @@ risks. Not on the quick route. -->
 
 ## Test design
 
-<!-- test-designer.
 ### Risks
+
+Scored from the Problem and the architect's R1-R7, plus one gap found while reading the buffering callback (R8).
+
 | Risk | P | I | Score | Mitigation |
 |---|---|---|---|---|
+| R1 Focus stuck in the Episodes row after auto-close (Left would not seek) | 2 | 3 | 6 | Not unit-testable (real Compose focus plus exit animation). Device check D2; `PlayerFocusEffects` input is pinned by a VM test (`activePanel == None`, `controlsVisible == false` after the timeout). |
+| R2 Timer races a key (stale `ClosePanel` reopens the bar) | 2 | 2 | 4 | State machine test for the `closePanel` no-op (D6) plus a VM test with a stale `ClosePanel` after the timeout. |
+| R3 Timer outlives the player (`closing`, `onCleared`) | 1 | 2 | 2 | One VM test for `closing` (D9); accepted otherwise. |
+| R4 Last episode ends with Episodes open and 6 s later the player exits | 2 | 2 | 4 | VM test pins the chosen behaviour (open question 9); the device check does not cover it. |
+| R5 Merge with `subtitle-player-fixes` | 2 | 2 | 4 | New tests appended at the end of the file; `initialize` reset covered by a test that is added after that merge (P2). |
+| R6 Hold never released | 1 | 2 | 2 | Accepted; `openPanel`/`closePanel` clearing the flag is covered in the state machine tests. |
+| R7 Merge with `player-overlays-port` | 1 | 2 | 2 | Accepted; no shared file. |
+| R8 Buffering start cancels `controlsHideJob`; buffering end reschedules only when `controlsVisible`. With Episodes open `controlsVisible` is false, so after any buffering blip the Episodes panel never times out (AC-3/AC-4 broken in the field, and a stuck panel is the original bug) | 3 | 3 | 9 | P0 VM test `episodesPanel_stillClosesAfterBufferingBlip`. The test is expected to FAIL on the design as written; the architect/implementer must make the buffering-end branch reschedule when Episodes is open and not held (for example `controlsVisible \|\| activePanel == Episodes`). Settings stays unscheduled (AC-7): covered by a paired test. |
+| R9 Hold lost across buffering: buffering end reschedules while the context menu is open and closes the panel under the menu | 2 | 3 | 6 | State machine guards it (`onHideTimeout` refuses a held panel); P0 VM test with hold plus buffering plus 30 s. |
+| R10 `shouldKeepScreenOn` regresses to include buffering and blocks the screensaver | 1 | 2 | 2 | P1 pure test; accepted at that level. |
+
+Highest score 9 (R8).
+
+### Existing tests that change meaning
+
+In `app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/ControlsStateMachineTest.kt`:
+- `openPanel_episodes_keepsPlaybackRunning` currently asserts `[CancelHide]`. It is edited to expect `[ScheduleHide]` (D3), and the name should stay the same so history is readable. Add an assertion that `controlsVisible` is still false.
+- `applyControlsVisibility_false_withOpenPanel_doesNotHide` and `applyControlsVisibility_false_noPanel_hides` call a function that is removed. Rewrite them against `onHideTimeout()`: keep the Settings case (state untouched, `[]`) and the no-panel case (`controlsVisible == false`, `focusTarget == null`, `[]`). Rename them `onHideTimeout_withSettingsOpen_doesNotHide` and `onHideTimeout_noPanel_hidesControls`.
+- No other existing test is touched. `PlayerVMTest`-family tests that rely on 4.5 s (grep `4_500`, `4500`, `CONTROLS_HIDE_DELAY_MS` in `app/src/test`) must be re-checked by the implementer; none was found at design time.
+
+New tests in `ControlsStateMachineTest` are appended at the very end of the class (after the last test), never near `setUp`, so the merge with `subtitle-player-fixes` (which edits the area after line 19) stays clean. VM-level tests go in a new file `PlayerVMOverlayAutoHideTest.kt` (same package, extends `PlayerVMTestFixture`, `@RegisterExtension MainDispatcherExtension`, `runTest(mainDispatcher.dispatcher.scheduler)` with `advanceTimeBy`, ending with `vm.testCancelScope()`, the pattern of `PlayerVMPromptDismissalTest`). A new file cannot collide with anyone. Pure rule tests go into `PlayerVideoSurfaceTest`.
+
+Virtual time: boundaries are asserted at 5_900 ms (still up) and 6_000 ms+1 (gone). Use `advanceTimeBy(5_900)` then `advanceTimeBy(200)`.
 
 ### Traceability
+
+SM = `ControlsStateMachineTest`; VM = `PlayerVMOverlayAutoHideTest`; VS = `PlayerVideoSurfaceTest`.
+
 | AC | Level | Priority | Test | Proves |
 |---|---|---|---|---|
+| AC-1 | unit | P0 | VM `controlsBar_staysAt5900ms_hidesAfter6000ms` | Delay is 6 s, not 4.5 s (fails on master: bar gone at 5.9 s). |
+| AC-1 | unit | P0 | SM `onHideTimeout_noPanel_hidesControls` (rewritten) | Timeout hides the bar and clears focus target. |
+| AC-2 | unit | P0 | VM `resetControlsTimer_at4s_restartsTheSixSeconds` | A key at 4 s keeps the bar up at 9.9 s, gone at 10.1 s. |
+| AC-3 | unit | P0 | VM `openEpisodesPanel_closesItself_after6s` (**failing first**) | Panel open, `activePanel == None`, `controlsVisible == false`, `controlsFocusTarget == null` after 6 s; open at 5.9 s. |
+| AC-3 | unit | P0 | SM `onHideTimeout_episodesOpen_closesToCleanVideoAndReportsPanelClosed` | State: panel None, controls hidden, focus null, effects `[PanelClosed]` only (no `ScheduleHide`, no controls bar). |
+| AC-3 | unit | P0 | SM `openPanel_episodes_keepsPlaybackRunning` (edited) | Episodes arms the timer (`[ScheduleHide]`). |
+| AC-3 | unit | P1 | VM `downFromButtons_viaOpenEpisodesPanel_isTheSamePathAsTheButton` | Skipped: `shouldOpenEpisodesFromButtons` is already covered in `PlayerButtonRowTest`; the VM only sees `OpenEpisodesPanel`. Not written (note only). |
+| AC-4 | unit | P0 | VM `resetControlsTimer_withEpisodesOpen_restartsTheSixSeconds` | `ResetControlsTimer` at 5 s keeps the panel at 10.9 s and closes it at 11.1 s. |
+| AC-4 | device | P1 | Device check D3 | The key hook on the row fires for real D-pad moves and auto-repeat (the Compose hook itself has no JVM test). |
+| AC-5 | unit | P0 | SM `holdEpisodesPanel_true_cancelsHideAndTimeoutKeepsPanel` | Held: `[CancelHide]`; `onHideTimeout` returns `[]`, panel stays. |
+| AC-5 | unit | P0 | SM `holdEpisodesPanel_false_schedulesHide` | Release: `[ScheduleHide]`, flag cleared. |
+| AC-5 | unit | P0 | VM `episodesPanelHeldByContextMenu_staysFor30s_thenClosesSixSecondsAfterRelease` | `SetEpisodesPanelHeld(true)`, 30 s later still open; `false`, open at 5.9 s, closed at 6.1 s. |
+| AC-5 | unit | P0 | VM `heldEpisodesPanel_staysThroughBufferingBlip` | R9: buffering start and end with the hold on do not close the panel. |
+| AC-5 | unit | P1 | SM `holdEpisodesPanel_withOtherPanelOrNone_isNoOp` | Hold with Settings open or no panel: `[]`, state unchanged (no stray flag). |
+| AC-5 | unit | P1 | SM `openPanel_and_closePanel_clearTheHeldFlag` | R6: flag does not survive a panel change. |
+| AC-6 | unit | P0 | VM `openEpisodesPanel_closesItself_after6s` | Same test: `OpenEpisodesPanel` is the one action used by Down and the button. |
+| AC-7 | unit | P0 | VM `settingsPanel_staysOpenFor60s` | `OpenSettingsPanel` (or the existing settings action; use the info page variant too): still open at 60 s. |
+| AC-7 | unit | P0 | VM `settingsPanel_staysOpenAcrossBufferingStartAndEnd` | Buffering start (advance 1 s past the 800 ms debounce) and end, then 60 s: still open. Guards the R8 fix from widening to Settings. |
+| AC-7 | unit | P0 | VM `aboutPanel_staysOpenFor60s` | Same for About. |
+| AC-7 | unit | P0 | SM `onHideTimeout_withSettingsOpen_doesNotHide` and `onHideTimeout_withAboutOpen_returnsNoEffects` | State untouched, `[]`. |
+| AC-8 | unit | P0 | VM `closingSettingsPanel_bringsBackControlsThatHideAfter6s` | `ClosePanel` -> bar visible; 5.9 s up; 6.1 s hidden. |
+| AC-8 | unit | P1 | SM existing `closePanel_afterEpisodes_schedulesControlsHideAndReportsThePanelClosed` | Unchanged and must stay green. |
+| AC-9 | unit | P0 | SM `closePanel_withNoPanel_returnsNoEffectsAndLeavesStateAlone` | D6: stale Up cannot reopen the bar. |
+| AC-9 | unit | P0 | VM `staleClosePanelAfterEpisodesTimeout_doesNotReshowControls` | After the timeout, `ClosePanel` leaves `controlsVisible == false`, panel None. |
+| AC-9 | unit | P0 | VM `backAfterEpisodesTimeout_exitsOnTheFirstPress` | After the timeout, `BackPressed` runs save-and-exit once (router back), not a swallow. Assert through the router mock as the existing Back tests do. |
+| AC-9 | unit | P1 | VM `staleResetControlsTimerAfterEpisodesTimeout_doesNotReopenAnything` | R2: a late `ResetControlsTimer` plus 6 s leaves bare video. |
+| AC-9 | device | P0 | Device check D2 | Focus lands on the video: Left seeks right after the auto-close (R1). |
+| AC-10 | unit | P0 | VM `resumeDialog_noHideTimerRunsWhileItIsUp` | With the resume dialog up, 60 s later it is still up; answering it starts the 6 s (reuse the existing resume fixture/factory in `PlayerVMPlaybackFlowTest`/`PlayerStartModeTest`). If the fixture cannot build the dialog cheaply, downgrade to P1 and cover on the device (D6). |
+| AC-11 | unit | P0 | SM `onHideTimeout_afterPlaybackEnded_keepsControlsUp` | D7: state untouched, `[]`. |
+| AC-11 | unit | P0 | VM `endedControls_stayUpAfterBufferingEndAndAfterAKeyAndTime` | Drive end-of-media, buffering start/end, `ResetControlsTimer`, 60 s: controls still visible; `BackPressed` leaves. |
+| AC-12 | unit | P0 | VM `controlsHideAfter6s_whilePaused` | `isPlaying = false` through the callback, show controls, 6.1 s: hidden (unchanged behaviour pinned). |
+| AC-13 | unit | P1 | VM `debugReadings_dropWhenEpisodesPanelTimesOut` | With `debugOverlayEnabled = false`, the readings are cleared on timeout (shows `PanelClosed` runs `onPanelClosed`). |
+| AC-13 | unit | P2 | VM `debugOverlay_followsControlsWhenEnabled` | With the preference on, the overlay follows `controlsVisible` after the 6 s hide. Only if the fixture exposes the field cheaply. |
+| AC-14 | device | P0 | D1 | The end-to-end of AC-3 and AC-7 on the TV. |
+| AC-15 | unit | P0 | VS `shouldKeepScreenOn_isFalse_whenPausedOrEnded_andTrueWhenPlaying` | The rule on `PlayerContentState.isPlaying`; build content with `isPlaying=false` and `isBuffering=true` and assert false (R10), then `isPlaying=true` and assert true. Use the existing `testContentState` builder style from the fixture. |
+| AC-15 | unit | P1 | VM `pausing_setsIsPlayingFalse_andResuming_setsItTrue` | Callback with `isPlaying=false` and `OkPressed` pause make the content state `isPlaying == false`; end of media too. |
+| AC-16 | device | P0 | D5 | System screensaver starts after a long pause and a key returns to the paused player (user judges). |
+| (design) | unit | P1 | VM `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown` | D9: begin exit, advance 10 s: no countdown, no `checkEarlyNextEpisode` side effects. |
+| (design) | unit | P1 | VM `lastEpisode_episodesTimeout_exitsThePlayer` | R4/open question 9. Write it only when the user answers yes to question 9; otherwise replace by the opposite assertion. |
+| (design) | unit | P2 | VM `afterInitialize_episodesPanelHeldIsReset` | R5: add after `subtitle-player-fixes` merges (`initialize` exists only there). |
+
+Priority counts: P0 and P1 are listed per row; the Compose key hook and the dialog hold lambdas (`PlayerSettingsPanels`) have no JVM test (the project has no Compose UI unit harness for this screen), so they are covered only by D3 and D4 and are the main residual risk.
+
+### Bug route
+
+Failing first (fails on master today, passes after the fix): VM `openEpisodesPanel_closesItself_after6s`. It is runnable on master unchanged (uses `PlayerAction.OpenEpisodesPanel` and the state fields only), `advanceTimeBy(6_100)` then asserts `activePanel == None`; on master the panel stays forever. Second reproduction: VM `controlsBar_staysAt5900ms_hidesAfter6000ms` fails on master (hidden at 4.5 s). Write both before any production change and watch them fail. Also write `episodesPanel_stillClosesAfterBufferingBlip` (R8) first; it fails on the design as written, not only on master.
 
 ### Device checks
-1. …
+
+Device: emulator-5554 (lease first via `tools/emulator-resource-lock.sh`; every adb call with `-s emulator-5554`; install the worktree dev APK with `tools/android-apk-install-preserve`, never uninstall or clear data). Use a series with at least 2 episodes. Observe: the video area, the focus ring on the bottom button row, and the seek indicator (R1).
+
+D1 (AC-14, AC-3, AC-6, AC-7). Start a series. Press Down on the video (controls bar appears with focus on the buttons). Press Down again; the episode cards row appears. Do not touch the remote for 7 s. Expected: row gone, no bar, video clean. Must not: the row or the bar still showing, the bar flashing back, a crash. Repeat with OK on the Episodes button instead of Down. Then open Settings > stream info, wait 30 s: still there. Press Back: closes, bar returns and hides after 6 s. Repeat for About.
+
+D2 (R1, AC-9). After the Episodes row auto-closes in D1, immediately press Left once. Expected: a seek indicator appears and the position moves back by the seek step. Press Down: the bar comes back with focus on the buttons. Must not: Left doing nothing, focus stuck on an invisible card (the row's exit animation), Back needing two presses. Then repeat once, press Back right after the close: the player leaves on the first press (it is a bare video). If Left fails, the architect's fix is to let focus exit when `!visible` in `PlayerEpisodesPanel`, done after `player-overlays-port` merges.
+
+D3 (AC-4, hold). Open the row; every 4 s press Right (move between cards) for 20 s. Expected: the row stays throughout; it closes 6 s after the last press. Hold Right (auto-repeat) for 8 s: stays. Must not: closing mid-scroll. Long-press OK on a card to open the context menu, wait 20 s: panel and menu both stay. Press Back (menu closes): the row stays and closes about 6 s later. Must not: the row vanishing while the menu is open, or staying forever after the menu is dismissed.
+
+D4 (AC-9 stale key). Open the row, wait until about 5.5 s, press Up exactly around the close. Expected: either the row closes through the timeout and the video is clean, or Up closes the panel and the bar appears and hides after 6 s. Must not: bar and row both on screen, or a bar that never hides.
+
+D5 (AC-15, AC-16). Needs a screensaver. Check first: `adb -s emulator-5554 shell settings get secure screensaver_enabled` and `... screensaver_components`. To set it without touching app data, either D-pad through Settings > Device Preferences > Screen saver (pick a saver, set "When to start" to the shortest), or via adb: `settings put secure screensaver_enabled 1`, `settings put secure screensaver_components <installed dream component>` (list with `adb -s emulator-5554 shell cmd package query-services -a android.service.dreams.DreamService`), and shorten the idle time (`settings put system screen_off_timeout 60000`; on TV builds the "When to start" option uses the same sleep/dream timeout, so confirm by reading the value back). Record the original values and restore them afterwards. If the emulator image has no dream component installed, record "not testable on this device" and ask the user for a real TV; do not install anything or clear data. Steps: play, press OK to pause (the bar hides after 6 s), do not touch the remote for longer than the timeout. Expected: the screensaver starts (`adb -s emulator-5554 shell dumpsys dreams` shows it is dreaming, or the screen shows it). Press one D-pad key: back on the paused player, still paused, video frame visible. Also confirm that while playing, the saver does not start across the same wait. Must not: playback resuming by itself, the app crashing or restarting on wake, the saver starting during playback.
+
+D6 (AC-10, only if the unit test is downgraded). Re-open a half-watched title; the resume dialog stays up 30 s; answer it; the bar hides 6 s later.
 
 ### Baseline (perf route)
--->
+
+Not a perf task; none.
 
 ## Plan
 
@@ -218,3 +306,5 @@ Answered by the user:
 5. Episodes panel timeout: 6 s, the same as the controls, reset on every key.
 6. Episodes panel timeout lands on the clean video, not the controls bar.
 7. Pause screensaver: option (a), the system screensaver. No in-app screensaver; this task only verifies on a device that a long pause lets the system screensaver start.
+8. Trailer overlay: delegated by the user to the conductor ("look the answers up, I will test the result and we will adjust"). Decision: leave the trailer's 4.5 s as it is (it is a passive preview, not the player; common defaults sit between 3 s, Leanback, and 5 s, Media3 `PlayerControlView`) and only correct its comment so it no longer claims to match `PlayerVM.CONTROLS_HIDE_DELAY_MS`. Revisit after the user's test.
+9. Episodes panel open across the end of the last episode: delegated the same way. Decision: the player never exits on its own because of a timeout. When the Episodes timer fires after playback has ended, the panel closes to the end-of-media controls, which stay until Back (AC-11), the way post-play screens wait for the viewer. This replaces the design's "close and exit" answer to R4. Revisit after the user's test.
