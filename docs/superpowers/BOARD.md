@@ -14,7 +14,6 @@ empty, so each status below comes from commits and code, not from the plans.
 
 | Slug | Stage | Branch / worktree | Since | Goal | Notes |
 |---|---|---|---|---|---|
-| pairing-code-refresh | review | `pairing-code-refresh` (Orca) | 2026-10-10 | The device-pairing code must renew itself when its timer runs out | Seen on emulator-5554 with the dev build 1.9.69-dev: the countdown reached 00:00 and the code stayed the same until the app was restarted. Gate: CONCERNS (dcf94565): AC-1..6 PASS, AC-7 NOT VERIFIED by decision, expiry strings unverified against the server. Next: merge go-ahead (task-ship). |
 | pairing-renewal-retry | idea | - | 2026-10-10 | A failed request for a new pairing code must not leave a dead code on screen | Deferred from the pairing-code-refresh review (code #2): a network failure at renewal ends the auth flow and `AuthVM` only shows a snackbar, so the expired code and 00:00 stay until a restart. Needs a retry or a visible "get a new code" action. |
 | unit-suite-flaky | idea | - | 2026-10-10 | Make the full unit-test run deterministic | Seen during pairing-code-refresh: 2 of 4 full `testDevDebugUnitTest` runs failed on tests the branch does not touch (`HistoryVMDeletionSchedulingTest.deleteSelectionDuringAutomaticPagination_isQueuedOnceAndRetainsSemanticFocus`, earlier `HomeVMIncrementalPublishTest.aFailedRefreshOfOneSectionKeepsTheContentItAlreadyPublished`); each passes alone. |
 | player-overlays-port | impl | `player-overlays-port` (Orca) | 2026-09-26 | Put every player overlay on one ruler (`docs/design/player-overlays/`) | Moved out of the main checkout as 92a9441d. Error, resume, episode row and chips are ported. Side panel, seek, pause and buffering are not agreed yet. Not yet run on a TV. `PlayerGlass.kt` is expected to become unused. |
@@ -27,6 +26,7 @@ empty, so each status below comes from commits and code, not from the plans.
 
 | Slug | Plan | Landed | Evidence | Notes |
 |---|---|---|---|---|
+| pairing-code-refresh | specs/2026-10-10-pairing-code-refresh-design.md (quick route, plan in the spec) | 850f5d68 (2026-10-10) | evidence/2026-10-10-pairing-code-refresh-device.md, reviews/2026-10-10-pairing-code-refresh.md | First task run by task-run. Gate CONCERNS: AC-7 (renewed code on a signed-out TV) not verified by decision; the expiry-string whitelist is unverified against the real server. Follow-ups: pairing-renewal-retry, unit-suite-flaky. |
 | host-android-sdk | - | 2026-10-10 | - | `~/Android/Sdk` (platform 37, build-tools 36/37, emulator, `android-36/android-tv/x86_64`). AVD `puber_tv_36` = `emulator-5554`, paired, snapshot in `.auth/`. install-preserve needs `cmdline-tools/latest/bin` on PATH for apkanalyzer. |
 | persistent-content-cache | plans/2026-08-13-persistent-content-cache.md | 03c2ca31, d051c873, e9b16920 | - | Device pass pending: see device-verification-debt. |
 | side-rail-focus-handoff | plans/2026-08-16-side-rail-focus-handoff.md | 04915c81, 016dde35 | - | Device pass pending. |
