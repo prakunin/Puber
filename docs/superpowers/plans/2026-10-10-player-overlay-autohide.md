@@ -115,7 +115,13 @@ Steps:
 - [ ] **Failing first (bug route).** Before touching production code, write these two in `PlayerVMOverlayAutoHideTest`, run them, and record that both fail:
   - `openEpisodesPanel_closesItself_after6s`: `startedVM()`; `OpenEpisodesPanel`; `advanceTimeBy(5_900)`, panel is `Episodes`; `advanceTimeBy(200)`, `activePanel == None`, `controlsVisible == false`, `controlsFocusTarget == null`.
   - `controlsBar_staysAt5900ms_hidesAfter6000ms`: `startedVM()`; `advanceTimeBy(5_900)`, `controlsVisible`; `advanceTimeBy(200)`, `!controlsVisible`.
-- [ ] Make the production changes above, then the state-machine test edits.
+- [ ] **Failing first (state machine).** Still before any production change, make the `ControlsStateMachineTest` edits listed under **Files** above:
+  - the edited `openPanel_episodes_keepsPlaybackRunning`;
+  - the two renamed `onHideTimeout_withSettingsOpen_doesNotHide` and `onHideTimeout_noPanel_hidesControls`;
+  - the four appended tests (`onHideTimeout_episodesOpen_closesToCleanVideoAndReportsPanelClosed`, `onHideTimeout_withAboutOpen_returnsNoEffects`, `onHideTimeout_afterPlaybackEnded_keepsControlsUp`, `closePanel_withNoPanel_returnsNoEffectsAndLeavesStateAlone`).
+
+  Run `--tests 'com.kino.puber.ui.feature.player.vm.ControlsStateMachineTest'` and record the failure. It is a compile failure, because `onHideTimeout` does not exist yet, and that counts as the failing step. Write the two VM tests above before these, so that they could still compile and be seen failing on their own.
+- [ ] Now make the production changes in `ControlsStateMachine.kt` and `PlayerVM.kt` listed above. Run `ControlsStateMachineTest` and `PlayerVMOverlayAutoHideTest`: both green.
 - [ ] Add these VM tests to the same file (all `runTest` + `testCancelScope`):
   - `resetControlsTimer_at4s_restartsTheSixSeconds` (AC-2): at 4_000 send `ResetControlsTimer`. Still visible at 9_900, hidden at 10_100.
   - `resetControlsTimer_withEpisodesOpen_restartsTheSixSeconds` (AC-4): open Episodes, then `ResetControlsTimer` at 5_000. Open at 10_900, closed at 11_100.
@@ -125,7 +131,8 @@ Steps:
   - `staleResetControlsTimerAfterEpisodesTimeout_doesNotReopenAnything` (AC-9, P1): after the timeout, send `ResetControlsTimer` and `advanceTimeBy(6_100)`. Panel `None`, `!controlsVisible`.
   - `backAfterEpisodesTimeout_exitsOnTheFirstPress` (AC-9): after the timeout, send `OnBackPressed` once. Then `verify(exactly = 1) { router.back(RESULT_CONTENT_CHANGED, any()) }` (import `com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED`, the way `PlayerVMPlaybackFlowTest` does). [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:5]
   - `resumeDialog_noHideTimerRunsWhileItIsUp` (AC-10):
-    - Set up the factory: `coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(resumeDialog = ResumeDialogState(savedPosition = 60_000L, formattedTime = "1:00"))`. [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIModels.kt:89]
+    - Stub the media: `every { interactor.resolveMedia(any(), any(), any(), any()) } returns testResolvedMedia.copy(watchingTime = 1_200)`. `preparePlayback` decides whether to schedule the hide from its own local `resumeDialog`, built from `resolved.watchingTime`, not from what the factory returns, and the fixture's `testResolvedMedia` has no watching time. This copies `resumeDialog_offeredForAPositionWithMediaLeftBehindIt`. [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:335] [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:357] [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMTestFixture.kt:212] [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:435]
+    - Also stub the factory, which publishes the dialog: `coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns testContentState.copy(resumeDialog = ResumeDialogState(savedPosition = 60_000L, formattedTime = "1:00"))`. [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIModels.kt:89]
     - `advanceTimeBy(60_000)`: `resumeDialog != null` and `controlsVisible` (the value the factory published).
     - Send `ResumeFromPosition`. Still visible at 5_900, hidden at 6_100.
   - `controlsHideAfter6s_whilePaused` (AC-12): call `onPlaybackStateChanged(false, false, 0L, 2_400_000L, 0L)` and stub `every { playbackController.isPlaying } returns false`. Then `ShowControls(FocusTarget.Buttons)`, `advanceTimeBy(6_100)`, `!controlsVisible`.
@@ -133,7 +140,7 @@ Steps:
     - Stub `getDebugInfo()` to return a `PlaybackControl.DebugInfo`. Build it like `testDebugInfo` in `PlayerControlsInteractionTest`. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerControlsInteractionTest.kt:211]
     - `OpenSettingsPanel` (fills the readings), then `OpenEpisodesPanel`, then `advanceTimeBy(6_100)`: `debugInfo == null`.
     - This works because the position loop does not rewrite `debugInfo` while Episodes is open and the bar is hidden. [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:1384]
-  - `controlsTimerDuringExit_changesNothing` (D9, P1):
+  - `controlsTimerDuringExit_changesNothing` (D9, P1). This replaces the Test design's `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown`: no action path reaches `exitPlayer()` with Episodes open, so the guard is proven on the bar's timer instead. Without the guard, the timeout would write `controlsVisible = false`. Record the rename in the Implementation record.
     - Hold the final save open with `coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers { releaseSave.await() }`, the way the existing pending-save tests do. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:77]
     - `startedVM()`, `OnBackPressed` (the player starts closing), `advanceTimeBy(6_100)`: `controlsVisible` is still `true` (the job returned early).
     - `releaseSave.complete(Unit)`.
@@ -308,6 +315,10 @@ Steps:
 - Device checks D1-D6 (AC-14, AC-16, focus R1): qa runs them with the lease. If D2 shows focus stuck after the auto-close, the fix lives in `EpisodesPanel.kt` and waits for `player-overlays-port` to merge (spec R1).
 - `afterInitialize_episodesPanelHeldIsReset` (P2): add it only after `subtitle-player-fixes` merges and `initialize` exists.
 - `downFromButtons_viaOpenEpisodesPanel_isTheSamePathAsTheButton`: not written. The Test design marks it as a note only.
+- `debugOverlay_followsControlsWhenEnabled` (P2, optional in the Test design): not planned. The overlay's visibility is the Compose condition `controlsVisible && debugInfo != null`, which this task does not change, and Task 1 already pins the 6 s hide of `controlsVisible`. [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerOverlayLayers.kt:138]
+- Renamed tests, so the reviewers can map them to the Test design:
+  - `lastEpisode_episodesTimeout_exitsThePlayer` is replaced by `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays` (Task 2, open question 9).
+  - `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown` is replaced by `controlsTimerDuringExit_changesNothing` (Task 1).
 
 ## Implementation record
 
