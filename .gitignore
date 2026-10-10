@@ -8,6 +8,7 @@
 !.claude/settings.json
 !.claude/hooks/
 !.claude/skills/
+!.claude/agents/
 .kotlin/
 .DS_Store
 .mcp.json

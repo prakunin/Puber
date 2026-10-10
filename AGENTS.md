@@ -18,15 +18,24 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
 ## Project Flow
 
 - `docs/superpowers/BOARD.md` is the single record of what is in flight and at
-  which stage (`idea / spec / plan / impl / needs-device / review / done`).
-  Plans hold the steps; the board holds the status.
+  which stage (`idea / triage / spec / plan / impl / verify / review / done`,
+  with `needs-device` as a blocker). Plans hold the steps; the board holds the
+  status.
 - The main checkout conducts: it owns the board, opens worktrees, reviews and
   merges. Task code is written in the task's Orca worktree.
 - Skills in `.claude/skills/` carry the flow: `task-start` (board row and
   worktree), `task-verify` (checks, device decision, lease, evidence),
   `task-ship` (review, merge, board), `status` (where things stand).
+- `task-run` conducts a task end to end through the role agents in
+  `.claude/agents/`: `analyst`, `architect`, `ux-designer`, `test-designer`,
+  `implementer`, `qa`, `code-reviewer`, `test-reviewer`, `final-judge`. Each
+  role owns one section of the task's dossier (spec, plan, evidence, review;
+  templates in `docs/superpowers/templates/`); the user approves the spec and
+  the merge. Subagents start in the main checkout and work in the worktree
+  through `cd <wt> &&`.
 - `.claude/hooks/guard-bash.sh` enforces the hard rules below: it refuses
-  `./gradlew` in a worktree, `git worktree add`, `connected*AndroidTest`, adb
+  `./gradlew` in a worktree (also reached through `cd <wt>` or `<wt>/gradlew`),
+  `git worktree add`, `connected*AndroidTest`, adb
   without `-s`, uninstall/clear/downgrade, and asks before tagging or force push.
 
 ## Build And Worktrees

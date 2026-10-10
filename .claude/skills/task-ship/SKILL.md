@@ -8,7 +8,10 @@ description: Use when a verified Puber task should land on master — review, me
 Precondition: the board row is at `review` with evidence (or a recorded reason
 why no device was needed). Otherwise run `/task-verify` first.
 
-1. **Review the branch** against master: `/code-review` on `master...<branch>`.
+1. **Review the branch** against master. If `task-run` already wrote
+   `docs/superpowers/reviews/<date>-<slug>.md` with a gate of `PASS` or
+   `CONCERNS` at the branch head, that is the review: show it and skip to
+   step 2. Otherwise `/code-review` on `master...<branch>`.
    Visual changes are also judged on looks (sizes, spacing, materials,
    consistency), not only behaviour. Fixes go back into the worktree; re-verify
    what they touch.

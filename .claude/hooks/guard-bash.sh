@@ -33,6 +33,17 @@ in_worktree() {
   [[ "$git_dir" != "$common" ]]
 }
 
+# Subagents start in the main checkout and reach a worktree with `cd <wt> &&`
+# or call `<wt>/gradlew` directly: judge the directory gradlew would run in.
+gradlew_dir="$(grep -oE '(^|[[:space:];&|])[^[:space:];&|]*/gradlew([[:space:]]|$)' <<<"$bare" | head -n1 | sed -E 's/^[[:space:];&|]*//; s#/gradlew[[:space:]]*$##' || true)"
+cd_dir="$(grep -oE '(^|[[:space:];&|])cd[[:space:]]+[^[:space:];&|]+' <<<"$bare" | tail -n1 | awk '{print $NF}' || true)"
+for d in "$cd_dir" "$gradlew_dir"; do
+  [[ -n "$d" && "$d" != "." ]] || continue
+  d="${d/#\~/$HOME}"
+  [[ "$d" = /* ]] || d="${cwd:-$PWD}/$d"
+  if [[ -d "$d" ]]; then cwd="$d"; fi
+done
+
 if grep -Eq '(^|[[:space:];&|/])gradlew([[:space:]]|$)' <<<"$bare" && in_worktree; then
   deny "This is a worktree: build with ./tools/agentw <task>, never ./gradlew (AGENTS.md, Build And Worktrees)."
 fi

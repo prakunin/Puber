@@ -36,3 +36,6 @@ carries task code. Each task gets its own Orca worktree and session.
    so the worktree and every other session see it.
 
 Report the slug, worktree path, and the stage you set.
+
+To have role agents carry the task from triage to the merge go-ahead, use
+`task-run` instead; it calls this skill for the row and the worktree.

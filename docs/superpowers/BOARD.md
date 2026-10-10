@@ -4,7 +4,8 @@ The single record of what is in flight and where it stands. Plans hold the
 steps; this file holds the status. Skills: `task-start`, `task-verify`,
 `task-ship`, `status` (see AGENTS.md, Project Flow).
 
-Stages: `idea` → `spec` → `plan` → `impl` → `needs-device` → `review` → `done`.
+Stages: `idea` → `triage` → `spec` → `plan` → `impl` → `verify` → `review` → `done`;
+`needs-device` is a blocker that can interrupt `triage`, `verify` or `review`.
 
 Reconciled against the code on 2026-10-10: every plan's checkboxes were still
 empty, so each status below comes from commits and code, not from the plans.
