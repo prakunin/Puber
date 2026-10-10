@@ -707,8 +707,13 @@ internal class PlayerVM(
         controlsHideJob?.cancel()
         controlsHideJob = launch {
             delay(CONTROLS_HIDE_DELAY_MS)
-            controlsStateMachine.applyControlsVisibility(false)
+            // Leaving already: a panel closing now would re-run the next-episode check on the way out.
+            if (closing) return@launch
+            val effects = controlsStateMachine.onHideTimeout()
+            // A timeout never takes the viewer out of the player; only Back does.
+            if (ControlsStateMachine.Effect.PanelClosed in effects) exitWhenPanelCloses = false
             applyControlsState()
+            processEffects(effects)
         }
     }
 
@@ -1831,7 +1836,8 @@ internal class PlayerVM(
     }
 
     private companion object {
-        const val CONTROLS_HIDE_DELAY_MS = 4_500L
+        /** Idle time before the controls bar or the Episodes row goes away. */
+        const val CONTROLS_HIDE_DELAY_MS = 6_000L
         const val SEEK_INDICATOR_HIDE_DELAY_MS = 1500L
         const val PROGRESS_SYNC_INTERVAL_MS = 30_000L
         const val POSITION_UPDATE_INTERVAL_MS = 500L

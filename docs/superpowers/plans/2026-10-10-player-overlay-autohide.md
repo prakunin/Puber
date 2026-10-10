@@ -112,17 +112,17 @@ AC-12, AC-13, design D1, D2 (playing case), D3, D6, D7, D8, D9
 - `State.episodesPanelHeld`, as a field only: nothing sets it yet. It stays `false` until Task 3, but every reset point (`openPanel`, `closePanel`, `onHideTimeout`) already clears it.
 
 Steps:
-- [ ] **Failing first (bug route).** Before touching production code, write these two in `PlayerVMOverlayAutoHideTest`, run them, and record that both fail:
+- [x] **Failing first (bug route).** Before touching production code, write these two in `PlayerVMOverlayAutoHideTest`, run them, and record that both fail:
   - `openEpisodesPanel_closesItself_after6s`: `startedVM()`; `OpenEpisodesPanel`; `advanceTimeBy(5_900)`, panel is `Episodes`; `advanceTimeBy(200)`, `activePanel == None`, `controlsVisible == false`, `controlsFocusTarget == null`.
   - `controlsBar_staysAt5900ms_hidesAfter6000ms`: `startedVM()`; `advanceTimeBy(5_900)`, `controlsVisible`; `advanceTimeBy(200)`, `!controlsVisible`.
-- [ ] **Failing first (state machine).** Still before any production change, make the `ControlsStateMachineTest` edits listed under **Files** above:
+- [x] **Failing first (state machine).** Still before any production change, make the `ControlsStateMachineTest` edits listed under **Files** above:
   - the edited `openPanel_episodes_keepsPlaybackRunning`;
   - the two renamed `onHideTimeout_withSettingsOpen_doesNotHide` and `onHideTimeout_noPanel_hidesControls`;
   - the four appended tests (`onHideTimeout_episodesOpen_closesToCleanVideoAndReportsPanelClosed`, `onHideTimeout_withAboutOpen_returnsNoEffects`, `onHideTimeout_afterPlaybackEnded_keepsControlsUp`, `closePanel_withNoPanel_returnsNoEffectsAndLeavesStateAlone`).
 
   Run `--tests 'com.kino.puber.ui.feature.player.vm.ControlsStateMachineTest'` and record the failure. It is a compile failure, because `onHideTimeout` does not exist yet, and that counts as the failing step. Write the two VM tests above before these, so that they could still compile and be seen failing on their own.
-- [ ] Now make the production changes in `ControlsStateMachine.kt` and `PlayerVM.kt` listed above. Run `ControlsStateMachineTest` and `PlayerVMOverlayAutoHideTest`: both green.
-- [ ] Add these VM tests to the same file (all `runTest` + `testCancelScope`):
+- [x] Now make the production changes in `ControlsStateMachine.kt` and `PlayerVM.kt` listed above. Run `ControlsStateMachineTest` and `PlayerVMOverlayAutoHideTest`: both green.
+- [x] Add these VM tests to the same file (all `runTest` + `testCancelScope`):
   - `resetControlsTimer_at4s_restartsTheSixSeconds` (AC-2): at 4_000 send `ResetControlsTimer`. Still visible at 9_900, hidden at 10_100.
   - `resetControlsTimer_withEpisodesOpen_restartsTheSixSeconds` (AC-4): open Episodes, then `ResetControlsTimer` at 5_000. Open at 10_900, closed at 11_100.
   - `settingsPanel_staysOpenFor60s` and `aboutPanel_staysOpenFor60s` (AC-7): open the panel, `advanceTimeBy(60_000)`, the panel is still active.
@@ -144,10 +144,10 @@ Steps:
     - Hold the final save open with `coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers { releaseSave.await() }`, the way the existing pending-save tests do. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:77]
     - `startedVM()`, `OnBackPressed` (the player starts closing), `advanceTimeBy(6_100)`: `controlsVisible` is still `true` (the job returned early).
     - `releaseSave.complete(Unit)`.
-- [ ] Re-check the existing player tests:
+- [x] Re-check the existing player tests:
   `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest --tests 'com.kino.puber.ui.feature.player.*'`.
   None depends on 4.5 s (checked: no `4_500` or `CONTROLS_HIDE_DELAY_MS` in `app/src/test`). If one fails because a test idles past 6 s with Episodes open, fix the test's timing, not the code, and note it in the Implementation record.
-- [ ] Commit: `Close the Episodes panel and the controls after six idle seconds`
+- [x] Commit: `Close the Episodes panel and the controls after six idle seconds`
 
 **Done when:** `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest --tests 'com.kino.puber.ui.feature.player.*'` is green. The two failing-first tests were seen failing before the change.
 

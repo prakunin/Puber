@@ -73,7 +73,8 @@ class ControlsStateMachineTest {
     fun `openPanel_episodes_keepsPlaybackRunning`() {
         val effects = machine.openPanel(ActivePanel.Episodes)
 
-        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), effects)
+        assertEquals(listOf(ControlsStateMachine.Effect.ScheduleHide), effects)
+        assertFalse(machine.state.controlsVisible)
     }
 
     // ------------------------------------------------------------------
@@ -184,28 +185,72 @@ class ControlsStateMachineTest {
     }
 
     // ------------------------------------------------------------------
-    // applyControlsVisibility
+    // onHideTimeout
     // ------------------------------------------------------------------
 
     @Test
-    fun `applyControlsVisibility_false_withOpenPanel_doesNotHide`() {
+    fun `onHideTimeout_withSettingsOpen_doesNotHide`() {
         machine.showControls(FocusTarget.Buttons)
         machine.openPanel(ActivePanel.Settings)
-        // After openPanel, controlsVisible is already false; set it manually via
-        // a fresh showControls call is not possible while panel is open, so we
-        // verify the guard: calling applyControlsVisibility(false) when panel is
-        // open must leave activePanel intact and not crash.
-        machine.applyControlsVisibility(false)
+        val before = machine.state
 
-        assertEquals(ActivePanel.Settings, machine.state.activePanel)
+        val effects = machine.onHideTimeout()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
     }
 
     @Test
-    fun `applyControlsVisibility_false_noPanel_hides`() {
+    fun `onHideTimeout_noPanel_hidesControls`() {
         machine.showControls(FocusTarget.Buttons)
 
-        machine.applyControlsVisibility(false)
+        val effects = machine.onHideTimeout()
 
         assertFalse(machine.state.controlsVisible)
+        assertEquals(null, machine.state.focusTarget)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_episodesOpen_closesToCleanVideoAndReportsPanelClosed`() {
+        machine.openPanel(ActivePanel.Episodes)
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(ActivePanel.None, machine.state.activePanel)
+        assertFalse(machine.state.controlsVisible)
+        assertEquals(null, machine.state.focusTarget)
+        assertEquals(listOf(ControlsStateMachine.Effect.PanelClosed), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_withAboutOpen_returnsNoEffects`() {
+        machine.openPanel(ActivePanel.About)
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(ActivePanel.About, machine.state.activePanel)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_afterPlaybackEnded_keepsControlsUp`() {
+        machine.showControlsForEndedPlayback()
+        val before = machine.state
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `closePanel_withNoPanel_returnsNoEffectsAndLeavesStateAlone`() {
+        val before = machine.state
+
+        val effects = machine.closePanel()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
     }
 }
