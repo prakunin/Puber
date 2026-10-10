@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -25,10 +26,17 @@ class KinoPubRepositoryAuthStateTest {
 
     private val client = mockk<KinoPubApiClient>()
     private val preferences = mockk<ICryptoPreferenceRepository>(relaxed = true)
-    private val subject = KinoPubRepository(client, preferences)
+    private var now: () -> Long = { 0L }
+    private val subject = KinoPubRepository(client, preferences) { now() }
+
+    /** Runs on virtual time and lets the repository's deadline read the same clock as `delay`. */
+    private fun test(block: suspend TestScope.() -> Unit) = runTest {
+        now = { testScheduler.currentTime }
+        block()
+    }
 
     @Test
-    fun aDeniedRefusalStillStopsThePoll() = runTest {
+    fun aDeniedRefusalStillStopsThePoll() = test {
         givenSignedOutWithACode()
         every { client.getDeviceLoginStatus(any()) } returns flowOf(
             Result.failure(ApiError.OAuth("access_denied")),
@@ -41,7 +49,7 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
-    fun anExpiredCodeRefusalRenewsTheCodeInsteadOfThrowing() = runTest {
+    fun anExpiredCodeRefusalRenewsTheCodeInsteadOfThrowing() = test {
         givenSignedOutWithACode()
         every { client.getDeviceLoginStatus(any()) } returns flowOf(
             Result.failure(ApiError.OAuth("expired_token")),
@@ -54,8 +62,8 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
-    fun everyExpiredStringRenewsWithTheNewCode() = runTest {
-        listOf("expired_token", "authorization_expired", "code_expired").forEach { assertRenews(it) }
+    fun everyExpiredStringRenewsWithTheNewCode() = test {
+        listOf("expired_token", "authorization_expired", "code_expired", "EXPIRED_Token").forEach { assertRenews(it) }
     }
 
     private suspend fun assertRenews(refusal: String) {
@@ -73,35 +81,88 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
-    fun aPollPastTheDeadlineThatIsRefusedAsExpiredRenews() = runTest {
+    fun aPollPastTheDeadlineThatIsRefusedAsExpiredRenews() = test {
         every { client.isAuthenticated() } returns false
-        every { client.getDeviceLoginCode() } returns flowOf(
-            Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 1, interval = 1), token = null)),
-        )
-        every { client.getDeviceLoginStatus(any()) } returns flowOf(
-            Result.failure(ApiError.OAuth("expired_token")),
-        )
+        val requestTimes = mutableListOf<Long>()
+        every { client.getDeviceLoginCode() } answers {
+            requestTimes += testScheduler.currentTime
+            flowOf(Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 1, interval = 2), token = null)))
+        }
+        val pollTimes = mutableListOf<Long>()
+        every { client.getDeviceLoginStatus(any()) } answers {
+            pollTimes += testScheduler.currentTime
+            flowOf(Result.failure(ApiError.OAuth("expired_token")))
+        }
 
         val codes = subject.getAuthState().take(2).toList()
 
         assertEquals(2, codes.size)
+        // The only poll lands at 2 s, a second after the 1 s deadline, and is refused as expired.
+        assertEquals(listOf(2000L), pollTimes.take(1))
+        assertEquals(listOf(0L, 2000L), requestTimes)
     }
 
     @Test
-    fun codeRunningOutOnPendingAnswersRequestsANewCode() = runTest {
+    fun codeRunningOutOnPendingAnswersRequestsANewCode() = test {
         every { client.isAuthenticated() } returns false
-        every { client.getDeviceLoginCode() } returns flowOf(
-            Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 1, interval = 1), token = null)),
-        )
+        val requestTimes = mutableListOf<Long>()
+        every { client.getDeviceLoginCode() } answers {
+            requestTimes += testScheduler.currentTime
+            flowOf(Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 10, interval = 3), token = null)))
+        }
         every { client.getDeviceLoginStatus(any()) } returns emptyFlow()
 
         val codes = subject.getAuthState().take(2).toList()
 
         assertEquals(2, codes.size)
+        // Polls at 3, 6, 9 and 12 s; the 12 s round is the first one past the 10 s deadline.
+        assertEquals(listOf(0L, 12_000L), requestTimes)
     }
 
     @Test
-    fun aFailingNewCodeRequestSurfacesAndStopsTheLoop() = runTest {
+    fun anUnlistedRefusalStillStopsThePollInsteadOfRenewing() = test {
+        givenSignedOutWithACode()
+        every { client.getDeviceLoginStatus(any()) } returns flowOf(
+            Result.failure(ApiError.OAuth("invalid_grant")),
+        )
+
+        val error = assertThrows<ApiError.OAuth> { subject.getAuthState().toList() }
+
+        assertEquals("invalid_grant", error.error)
+        verify(exactly = 1) { client.getDeviceLoginCode() }
+    }
+
+    @Test
+    fun aCodeThatIsAlreadyExpiredStillWaitsAnIntervalBeforeRenewing() = test {
+        assertRenewalGapAtLeast(expiresIn = 0, interval = 5, minGapMillis = 5000L)
+    }
+
+    @Test
+    fun aZeroIntervalIsFlooredToOneSecond() = test {
+        assertRenewalGapAtLeast(expiresIn = 0, interval = 0, minGapMillis = 1000L)
+    }
+
+    private suspend fun TestScope.assertRenewalGapAtLeast(expiresIn: Int, interval: Int, minGapMillis: Long) {
+        every { client.isAuthenticated() } returns false
+        val requestTimes = mutableListOf<Long>()
+        every { client.getDeviceLoginCode() } answers {
+            requestTimes += testScheduler.currentTime
+            flowOf(
+                Result.success(
+                    DeviceFlowResult(DEVICE_CODE.copy(expiresIn = expiresIn, interval = interval), token = null),
+                ),
+            )
+        }
+        every { client.getDeviceLoginStatus(any()) } returns emptyFlow()
+
+        subject.getAuthState().take(3).toList()
+
+        assertEquals(3, requestTimes.size)
+        requestTimes.zipWithNext().forEach { (a, b) -> assertTrue(b - a >= minGapMillis) }
+    }
+
+    @Test
+    fun aFailingNewCodeRequestSurfacesAndStopsTheLoop() = test {
         every { client.isAuthenticated() } returns false
         var requests = 0
         every { client.getDeviceLoginCode() } answers {
@@ -122,7 +183,7 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
-    fun renewalsAreNeverCloserThanTheInterval() = runTest {
+    fun renewalsAreNeverCloserThanTheInterval() = test {
         every { client.isAuthenticated() } returns false
         val requestTimes = mutableListOf<Long>()
         every { client.getDeviceLoginCode() } answers {
@@ -135,13 +196,14 @@ class KinoPubRepositoryAuthStateTest {
 
         subject.getAuthState().take(3).toList()
 
+        assertEquals(3, requestTimes.size)
         requestTimes.zipWithNext().forEach { (a, b) ->
             assertTrue(b - a >= DEVICE_CODE.interval * 1000L)
         }
     }
 
     @Test
-    fun afterRenewalPollsUseTheNewCode() = runTest {
+    fun afterRenewalPollsUseTheNewCode() = test {
         every { client.isAuthenticated() } returns false
         var requests = 0
         every { client.getDeviceLoginCode() } answers {
@@ -164,7 +226,7 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
-    fun aPollThatNeverReachedTheServerKeepsWaitingForTheUser() = runTest {
+    fun aPollThatNeverReachedTheServerKeepsWaitingForTheUser() = test {
         givenSignedOutWithACode()
         var attempt = 0
         every { client.getDeviceLoginStatus(any()) } answers {
