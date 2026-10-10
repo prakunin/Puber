@@ -160,3 +160,9 @@ Notes for reviewers:
 - AC-7 is `NOT VERIFIED` (emulator stays signed in, per the user's answer). The real server expiry string is still unconfirmed.
 
 Gate: `./tools/agentw --continue testDevDebugUnitTest :app:detektAll :app:lintDevDebug` -> `BUILD SUCCESSFUL in 2m 4s`.
+
+### Review round 1 fixes
+
+- `22f475aa`: `interval` floored to one second (`coerceAtLeast(1)`) for every `delay` in the renew/poll loop; `KinoPubRepository` takes `nowMillis: () -> Long` (default `System::currentTimeMillis`, no project clock abstraction existed). `singleOf(::KinoPubRepository)` became an explicit `single<IKinoPubRepository> { KinoPubRepository(client = get(), cryptoPreferenceRepository = get()) }` in `data/di/modules.kt`, because `singleOf` would try to resolve the function-typed parameter. `AuthVMTest` imports reordered.
+- `625008e1`: tests run the deadline and `delay` on `testScheduler.currentTime`; the late-poll and pending tests now assert virtual times (poll at 2 s past a 1 s deadline; renewal at 12 s for a 10 s code polled every 3 s); added the unlisted `invalid_grant` test, the `expiresIn <= 0` gap test, the zero-interval floor test, the `requestTimes.size` assertion, and a mixed-case expiry string.
+- Gate: `testDevDebugUnitTest` failed only on `HistoryVMDeletionSchedulingTest.deleteSelectionDuringAutomaticPaginationIsQueuedOnceAndRetainsSemanticFocus` (unrelated, board row unit-suite-flaky); detektAll and lintDevDebug passed.

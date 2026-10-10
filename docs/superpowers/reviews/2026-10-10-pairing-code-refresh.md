@@ -15,7 +15,7 @@ rejected (<why>), or deferred (<board row>). Nothing stays open silently. -->
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
-| 1 | minor | `KinoPubRepository.kt:54,63` | `interval` is not floored: `interval = 0` with an immediate expiry renews and polls with `delay(0)`, hammering the API | open: fix in round 1 |
+| 1 | minor | `KinoPubRepository.kt:54,63` | `interval` is not floored: `interval = 0` with an immediate expiry renews and polls with `delay(0)`, hammering the API | fixed (22f475aa) |
 | 2 | minor | `KinoPubRepository.kt:30-31` | A failed renewal request ends the flow; in `LoginRequired` the VM only shows a snackbar, so one network blip at renewal leaves the dead code at 00:00 — the original symptom. AC-5 chose this | deferred: board row `pairing-renewal-retry` |
 | 3 | minor | `KinoPubRepositoryAuthStateTest.kt:78` | `aPollPastTheDeadline…` never polls past the deadline (wall-clock deadline, virtual `delay`) | duplicate of test #2 |
 
@@ -23,12 +23,12 @@ rejected (<why>), or deferred (<board row>). Nothing stays open silently. -->
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
-| 1 | major | `KinoPubRepositoryAuthStateTest.kt` | No test that an unlisted OAuth string (e.g. `invalid_grant`) still throws; the user's whitelist is unguarded | open: fix in round 1 |
-| 2 | major | `KinoPubRepositoryAuthStateTest.kt` `aPollPastTheDeadlineThatIsRefusedAsExpiredRenews` | Does not simulate a late poll; the AC-2 root-cause path is untested. Same clock mix costs ~1 s real time in `codeRunningOutOnPendingAnswersRequestsANewCode` | open: fix in round 1 (injectable clock) |
-| 3 | minor | `pollUntilExpired` guard | The `expiresIn <= 0` delay guard has no test | open: fix in round 1 |
-| 4 | minor | `renewalsAreNeverCloserThanTheInterval` | No assertion on `requestTimes.size` | open: fix in round 1 |
-| 5 | minor | `everyExpiredStringRenewsWithTheNewCode` | Case-insensitive match untested | open: fix in round 1 |
-| 6 | minor | `AuthVMTest.kt:~33` | Import order | open: fix in round 1 |
+| 1 | major | `KinoPubRepositoryAuthStateTest.kt` | No test that an unlisted OAuth string (e.g. `invalid_grant`) still throws; the user's whitelist is unguarded | fixed (625008e1) |
+| 2 | major | `KinoPubRepositoryAuthStateTest.kt` `aPollPastTheDeadlineThatIsRefusedAsExpiredRenews` | Does not simulate a late poll; the AC-2 root-cause path is untested. Same clock mix costs ~1 s real time in `codeRunningOutOnPendingAnswersRequestsANewCode` | fixed (625008e1) |
+| 3 | minor | `pollUntilExpired` guard | The `expiresIn <= 0` delay guard has no test | fixed (625008e1) |
+| 4 | minor | `renewalsAreNeverCloserThanTheInterval` | No assertion on `requestTimes.size` | fixed (625008e1) |
+| 5 | minor | `everyExpiredStringRenewsWithTheNewCode` | Case-insensitive match untested | fixed (625008e1) |
+| 6 | minor | `AuthVMTest.kt:~33` | Import order | fixed (22f475aa) |
 
 ### codex-reviewer
 
