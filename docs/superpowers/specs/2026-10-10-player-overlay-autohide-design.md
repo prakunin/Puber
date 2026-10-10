@@ -134,7 +134,6 @@ Answered by the user:
 3. Controls timeout: 6 s instead of 4.5 s.
 4. Debug overlay: keeps following the controls.
 
-Open for the architect or user:
-7. Pause screensaver: is the system screensaver (option (a), already enabled by releasing keep-screen-on while paused) enough, or do you want an in-app screensaver (option (b))? If (b): after how many minutes of pause, and what does it show (dim, backdrop art, clock)? Recommended: (a) here, (b) as a separate row.
-5. Should the Episodes panel use the same 6 s, or longer (browsing a row of cards may want more)? The spec assumes 6 s, reset on every key.
-6. When the Episodes panel times out, should the screen go to the clean video (assumed) or back to the controls bar?
+5. Episodes panel timeout: 6 s, the same as the controls, reset on every key.
+6. Episodes panel timeout lands on the clean video, not the controls bar.
+7. Pause screensaver: option (a), the system screensaver. No in-app screensaver; this task only verifies on a device that a long pause lets the system screensaver start.
