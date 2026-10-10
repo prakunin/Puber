@@ -201,7 +201,7 @@ internal class PlayerVM(
                 if (wasBuffering) {
                     updateContent { copy(isBuffering = false) }
                     val controlsVisible = (stateValue as? PlayerViewState.Content)?.content?.controlsVisible == true
-                    if (controlsVisible) {
+                    if (controlsVisible || controlsStateMachine.isEpisodesPanelAwaitingTimeout()) {
                         scheduleControlsHide()
                     }
                 }
@@ -560,6 +560,7 @@ internal class PlayerVM(
             is PlayerAction.OpenEpisodesPanel -> openPanel(ActivePanel.Episodes)
             is PlayerAction.OpenAboutPanel -> openPanel(ActivePanel.About)
             is PlayerAction.ClosePanel -> closePanel()
+            is PlayerAction.SetEpisodesPanelHeld -> holdEpisodesPanel(action.held)
             is PlayerAction.SelectAudioTrack -> applyAudioTrackSelection(action.index)
             is PlayerAction.SelectSubtitle -> applySubtitleSelection(action.index)
             is PlayerAction.SelectSoundMode -> selectSoundMode(action.index)
@@ -707,8 +708,13 @@ internal class PlayerVM(
         controlsHideJob?.cancel()
         controlsHideJob = launch {
             delay(CONTROLS_HIDE_DELAY_MS)
-            controlsStateMachine.applyControlsVisibility(false)
+            // Leaving already: a panel closing now would re-run the next-episode check on the way out.
+            if (closing) return@launch
+            val effects = controlsStateMachine.onHideTimeout()
+            // A timeout never takes the viewer out of the player; only Back does.
+            if (ControlsStateMachine.Effect.PanelClosed in effects) exitWhenPanelCloses = false
             applyControlsState()
+            processEffects(effects)
         }
     }
 
@@ -726,6 +732,12 @@ internal class PlayerVM(
 
     private fun closePanel() {
         val effects = controlsStateMachine.closePanel()
+        applyControlsState()
+        processEffects(effects)
+    }
+
+    private fun holdEpisodesPanel(held: Boolean) {
+        val effects = controlsStateMachine.holdEpisodesPanel(held)
         applyControlsState()
         processEffects(effects)
     }
@@ -1233,6 +1245,7 @@ internal class PlayerVM(
         autoMarkCurrentAsWatched()
         val state = stateValue as? PlayerViewState.Content ?: return
         val content = state.content
+        if (content.activePanel != ActivePanel.None) controlsStateMachine.markPlaybackEnded()
         // A film, or the last episode of a series: there is nothing behind this closing frame, so
         // the player hands the viewer back to the screen they started it from instead of leaving
         // them on a still picture with nothing to press.
@@ -1831,7 +1844,8 @@ internal class PlayerVM(
     }
 
     private companion object {
-        const val CONTROLS_HIDE_DELAY_MS = 4_500L
+        /** Idle time before the controls bar or the Episodes row goes away. */
+        const val CONTROLS_HIDE_DELAY_MS = 6_000L
         const val SEEK_INDICATOR_HIDE_DELAY_MS = 1500L
         const val PROGRESS_SYNC_INTERVAL_MS = 30_000L
         const val POSITION_UPDATE_INTERVAL_MS = 500L

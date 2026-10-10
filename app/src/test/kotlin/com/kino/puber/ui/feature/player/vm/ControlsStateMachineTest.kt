@@ -73,7 +73,8 @@ class ControlsStateMachineTest {
     fun `openPanel_episodes_keepsPlaybackRunning`() {
         val effects = machine.openPanel(ActivePanel.Episodes)
 
-        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), effects)
+        assertEquals(listOf(ControlsStateMachine.Effect.ScheduleHide), effects)
+        assertFalse(machine.state.controlsVisible)
     }
 
     // ------------------------------------------------------------------
@@ -184,28 +185,156 @@ class ControlsStateMachineTest {
     }
 
     // ------------------------------------------------------------------
-    // applyControlsVisibility
+    // onHideTimeout
     // ------------------------------------------------------------------
 
     @Test
-    fun `applyControlsVisibility_false_withOpenPanel_doesNotHide`() {
+    fun `onHideTimeout_withSettingsOpen_doesNotHide`() {
         machine.showControls(FocusTarget.Buttons)
         machine.openPanel(ActivePanel.Settings)
-        // After openPanel, controlsVisible is already false; set it manually via
-        // a fresh showControls call is not possible while panel is open, so we
-        // verify the guard: calling applyControlsVisibility(false) when panel is
-        // open must leave activePanel intact and not crash.
-        machine.applyControlsVisibility(false)
+        val before = machine.state
 
-        assertEquals(ActivePanel.Settings, machine.state.activePanel)
+        val effects = machine.onHideTimeout()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
     }
 
     @Test
-    fun `applyControlsVisibility_false_noPanel_hides`() {
+    fun `onHideTimeout_noPanel_hidesControls`() {
         machine.showControls(FocusTarget.Buttons)
 
-        machine.applyControlsVisibility(false)
+        val effects = machine.onHideTimeout()
 
         assertFalse(machine.state.controlsVisible)
+        assertEquals(null, machine.state.focusTarget)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_episodesOpen_closesToCleanVideoAndReportsPanelClosed`() {
+        machine.openPanel(ActivePanel.Episodes)
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(ActivePanel.None, machine.state.activePanel)
+        assertFalse(machine.state.controlsVisible)
+        assertEquals(null, machine.state.focusTarget)
+        assertEquals(listOf(ControlsStateMachine.Effect.PanelClosed), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_withAboutOpen_returnsNoEffects`() {
+        machine.openPanel(ActivePanel.About)
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(ActivePanel.About, machine.state.activePanel)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_afterPlaybackEnded_keepsControlsUp`() {
+        machine.showControlsForEndedPlayback()
+        val before = machine.state
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `closePanel_withNoPanel_returnsNoEffectsAndLeavesStateAlone`() {
+        val before = machine.state
+
+        val effects = machine.closePanel()
+
+        assertEquals(before, machine.state)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), effects)
+    }
+
+    @Test
+    fun `onHideTimeout_episodesOpenAfterPlaybackEnded_landsOnEndedControls`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.markPlaybackEnded()
+
+        val effects = machine.onHideTimeout()
+
+        assertEquals(listOf(ControlsStateMachine.Effect.PanelClosed), effects)
+        assertTrue(machine.state.controlsVisible)
+        assertEquals(FocusTarget.EpisodesButton, machine.state.focusTarget)
+        assertTrue(machine.state.playbackEnded)
+
+        val again = machine.onHideTimeout()
+
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), again)
+        assertTrue(machine.state.controlsVisible)
+    }
+
+    @Test
+    fun `isEpisodesPanelAwaitingTimeout_onlyForAnOpenEpisodesPanel`() {
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.Settings)
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.About)
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
+        machine.openPanel(ActivePanel.Episodes)
+        assertTrue(machine.isEpisodesPanelAwaitingTimeout())
+    }
+
+    @Test
+    fun `holdEpisodesPanel_true_cancelsHideAndTimeoutKeepsPanel`() {
+        machine.openPanel(ActivePanel.Episodes)
+
+        val held = machine.holdEpisodesPanel(true)
+        val timeout = machine.onHideTimeout()
+
+        assertEquals(listOf(ControlsStateMachine.Effect.CancelHide), held)
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), timeout)
+        assertEquals(ActivePanel.Episodes, machine.state.activePanel)
+    }
+
+    @Test
+    fun `holdEpisodesPanel_false_schedulesHide`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+
+        val effects = machine.holdEpisodesPanel(false)
+
+        assertEquals(listOf(ControlsStateMachine.Effect.ScheduleHide), effects)
+        assertFalse(machine.state.episodesPanelHeld)
+    }
+
+    @Test
+    fun `holdEpisodesPanel_withOtherPanelOrNone_isNoOp`() {
+        val none = machine.state
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), machine.holdEpisodesPanel(true))
+        assertEquals(none, machine.state)
+
+        machine.openPanel(ActivePanel.Settings)
+        val settings = machine.state
+        assertEquals(emptyList<ControlsStateMachine.Effect>(), machine.holdEpisodesPanel(true))
+        assertEquals(settings, machine.state)
+    }
+
+    @Test
+    fun `openPanel_and_closePanel_clearTheHeldFlag`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+        machine.openPanel(ActivePanel.Episodes)
+        assertFalse(machine.state.episodesPanelHeld)
+
+        machine.holdEpisodesPanel(true)
+        machine.closePanel()
+        assertFalse(machine.state.episodesPanelHeld)
+    }
+
+    @Test
+    fun `isEpisodesPanelAwaitingTimeout_isFalseWhileHeld`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+
+        assertFalse(machine.isEpisodesPanelAwaitingTimeout())
     }
 }

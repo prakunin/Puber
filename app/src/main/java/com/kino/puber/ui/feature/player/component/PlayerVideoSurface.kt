@@ -42,7 +42,7 @@ internal fun PlayerVideoSurface(
             playerViewFactory(context).apply {
                 useController = false
                 updateKeepScreenOn(
-                    shouldKeepScreenOn = content.isPlaying,
+                    shouldKeepScreenOn = content.shouldKeepScreenOn(),
                     window = context.findActivity()?.window,
                     windowBinding = windowKeepScreenOnBinding,
                 )
@@ -51,7 +51,7 @@ internal fun PlayerVideoSurface(
         },
         update = { view ->
             view.updateKeepScreenOn(
-                shouldKeepScreenOn = content.isPlaying,
+                shouldKeepScreenOn = content.shouldKeepScreenOn(),
                 window = view.context.findActivity()?.window,
                 windowBinding = windowKeepScreenOnBinding,
             )
@@ -62,7 +62,7 @@ internal fun PlayerVideoSurface(
             currentPlayer?.let { view.resizeMode = content.resizeMode() }
             // Android TV, Fire TV in particular, starts its screen saver after a period without
             // remote input; playback alone does not count as user activity.
-            view.keepScreenOn = content.isPlaying
+            view.keepScreenOn = content.shouldKeepScreenOn()
         },
         onRelease = { view ->
             view.keepScreenOn = false
@@ -226,6 +226,9 @@ internal fun playerActionForKeyCode(keyCode: Int): PlayerAction? {
         else -> null
     }
 }
+
+/** Only actual playback holds the screen on; paused, ended or stalled lets the screensaver in. */
+internal fun PlayerContentState.shouldKeepScreenOn(): Boolean = isPlaying
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun PlayerContentState.resizeMode(): Int {

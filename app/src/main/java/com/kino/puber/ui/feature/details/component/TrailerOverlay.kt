@@ -44,7 +44,7 @@ import com.kino.puber.ui.feature.player.component.PlayerTitle
 import com.kino.puber.ui.feature.player.model.PlayPauseIndicatorState
 import kotlinx.coroutines.delay
 
-/** Matches `PlayerVM.CONTROLS_HIDE_DELAY_MS`, so the trailer settles like the player does. */
+/** The trailer's own idle delay; the player waits longer (6 s) because it carries more controls. */
 private const val CONTROLS_HIDE_DELAY_MS = 4_500L
 
 /** Matches `PlayerVM.PLAY_PAUSE_INDICATOR_HIDE_DELAY_MS`. */

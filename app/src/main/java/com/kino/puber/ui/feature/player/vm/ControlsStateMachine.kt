@@ -15,6 +15,7 @@ internal class ControlsStateMachine {
          * them left to watch.
          */
         val playbackEnded: Boolean = false,
+        val episodesPanelHeld: Boolean = false,
     )
 
     sealed interface Effect {
@@ -52,15 +53,26 @@ internal class ControlsStateMachine {
             ActivePanel.None -> FocusTarget.Buttons
         }
 
-        state = state.copy(activePanel = panel, controlsVisible = false, focusTarget = null)
-        return listOf(Effect.CancelHide)
+        state = state.copy(
+            activePanel = panel,
+            controlsVisible = false,
+            focusTarget = null,
+            episodesPanelHeld = false,
+        )
+        return if (panel == ActivePanel.Episodes) {
+            listOf(Effect.ScheduleHide)
+        } else {
+            listOf(Effect.CancelHide)
+        }
     }
 
     fun closePanel(): List<Effect> {
+        if (state.activePanel == ActivePanel.None) return emptyList()
         state = state.copy(
             activePanel = ActivePanel.None,
             controlsVisible = true,
             focusTarget = lastPanelOpener,
+            episodesPanelHeld = false,
         )
         return listOf(Effect.ScheduleHide, Effect.PanelClosed)
     }
@@ -96,9 +108,57 @@ internal class ControlsStateMachine {
         }
     }
 
-    fun applyControlsVisibility(visible: Boolean) {
-        if (!visible && state.activePanel == ActivePanel.None) {
-            state = state.copy(controlsVisible = false, focusTarget = null)
+    /**
+     * The 6 s without a key ran out. The bar hides; the Episodes row closes to the clean video,
+     * or to the end-of-media controls once the media has run out; anything opened on purpose
+     * (Settings, About, a held Episodes row, the ended controls) stays.
+     */
+    fun onHideTimeout(): List<Effect> {
+        val panel = state.activePanel
+        return when {
+            panel == ActivePanel.Episodes && !state.episodesPanelHeld -> {
+                state = if (state.playbackEnded) {
+                    state.copy(
+                        activePanel = ActivePanel.None,
+                        controlsVisible = true,
+                        focusTarget = lastPanelOpener,
+                        episodesPanelHeld = false,
+                    )
+                } else {
+                    state.copy(
+                        activePanel = ActivePanel.None,
+                        controlsVisible = false,
+                        focusTarget = null,
+                        episodesPanelHeld = false,
+                    )
+                }
+                listOf(Effect.PanelClosed)
+            }
+            panel != ActivePanel.None -> emptyList()
+            state.playbackEnded -> emptyList()
+            else -> {
+                state = state.copy(controlsVisible = false, focusTarget = null)
+                emptyList()
+            }
         }
+    }
+
+    /** Only the Episodes row runs on the idle timer among the panels, and not while it is held. */
+    fun isEpisodesPanelAwaitingTimeout(): Boolean =
+        state.activePanel == ActivePanel.Episodes && !state.episodesPanelHeld
+
+    /**
+     * The media ran out while a panel had the screen. Nothing changes on screen now; the panel
+     * closes onto the end-of-media controls, and those stay until Back.
+     */
+    fun markPlaybackEnded() {
+        state = state.copy(playbackEnded = true)
+    }
+
+    /** A dialog opened from the Episodes row keeps the row up; releasing it restarts the 6 s. */
+    fun holdEpisodesPanel(held: Boolean): List<Effect> {
+        if (state.activePanel != ActivePanel.Episodes) return emptyList()
+        state = state.copy(episodesPanelHeld = held)
+        return listOf(if (held) Effect.CancelHide else Effect.ScheduleHide)
     }
 }
