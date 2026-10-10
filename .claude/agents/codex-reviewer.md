@@ -16,19 +16,21 @@ companion script directly. Resolve the newest installed version:
 
 ```bash
 C=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)
+M=gpt-6-astra   # the global default in ~/.codex/config.toml (gpt-6.1-sol) is refused for a ChatGPT login
 cd <wt> && node "$C" setup          # must say "Status: ready"
-cd <wt> && node "$C" review --wait --base master
+cd <wt> && node "$C" review --wait --base master --model "$M"
 ```
 
 On the `standard`, `visual` and `perf` routes also run the adversarial pass,
 which takes focus text:
 
 ```bash
-cd <wt> && node "$C" adversarial-review --wait --base master \
+cd <wt> && node "$C" adversarial-review --wait --base master --model "$M" \
   "Android TV app (Compose TV, Koin scopes, Voyager). Challenge the approach against the spec <spec path>: lifecycle and scope leaks, coroutine cancellation and races, D-pad focus, recomposition cost, and whether a smaller change would meet the acceptance criteria."
 ```
 
-Give each run a Bash timeout of 600000 ms. If setup is not ready, the run
+If Codex answers that the model is not supported, retry once with
+`M=gpt-5.6-sol`. Give each run a Bash timeout of 600000 ms. If setup is not ready, the run
 fails (auth, 401, network, usage limit) or returns nothing, do not retry more
 than once: return `CODEX: unavailable — <reason>` with no findings. The
 task is not blocked by it.
