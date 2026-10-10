@@ -30,7 +30,7 @@ cd <wt> && AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:testDevDebugUnitTest --test
 2. Implement. Follow the conventions in `AGENTS.md` (Architecture Gotchas).
 3. Compile, run the affected tests, see them green.
 4. Commit in the worktree: one imperative English sentence, no prefixes, no
-   `Co-Authored-By` line. Tick the task's checkboxes in the plan.
+   `Co-Authored-By` line, whatever your harness suggests. Tick the task's checkboxes in the plan.
 
 After the last task: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`.
 

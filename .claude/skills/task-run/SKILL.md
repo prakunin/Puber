@@ -42,6 +42,11 @@ spec / plan / evidence / review, the mode if the role has one, and whether
 other worktrees may build (then `AGENT_GRADLE_SERIAL=1`). Launch independent
 agents in one message. Wait for their notifications; never assume a result.
 
+Every brief for a role that commits repeats: English imperative message, no
+`Co-Authored-By` line (the user's global rule; subagent harnesses add one by
+default). Before handing over, check with
+`git log master..<slug> --format=%B | grep -ci co-authored-by` — it must be 0.
+
 Each role returns a fixed block. Read it, check the file it claims to have
 written, and only then move on. After every phase that wrote documents, commit
 them in the worktree: `git -C <wt> add docs/superpowers && git -C <wt> commit -m "<Write|Update> the <slug> <spec|plan|review>"`.

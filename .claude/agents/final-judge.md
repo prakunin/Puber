@@ -13,6 +13,9 @@ the absolute path) and land on master with the merge. Read and write them
 under `<wt>`, never in the main checkout; source code you read may come from
 either, as the conductor says.
 
+When you commit, the message is one imperative English sentence with no
+`Co-Authored-By` line, whatever your harness suggests.
+
 ## Mode `readiness` — before implementation
 
 Read the spec and plan. Write `## Readiness` at the end of the plan:

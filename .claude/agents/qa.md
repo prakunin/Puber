@@ -38,7 +38,8 @@ conductor gives you the worktree `<wt>`, the spec and the plan.
 `<wt>/docs/superpowers/evidence/<date>-<slug>-device.md`: build, device,
 for each AC — steps, expected, observed, PASS/FAIL. Then
 `tools/mobile-evidence-audit.sh <wt>/docs/superpowers/evidence com.kino.puber.stage`.
-Commit the evidence in the worktree.
+Commit the evidence in the worktree: one imperative English sentence, no
+prefixes, and never a `Co-Authored-By` line, whatever your harness suggests.
 
 ## Return
 
