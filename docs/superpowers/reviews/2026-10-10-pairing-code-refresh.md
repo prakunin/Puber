@@ -60,9 +60,9 @@ Round-1 #1–#6 resolved.
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
-| 7 | minor | `KinoPubRepositoryAuthStateTest.kt` `anUnlistedRefusalStillStopsThePollInsteadOfRenewing` | Against the rejected "renew on everything but access_denied" it fails only by hanging until the 60 s `runTest` timeout | open: fix in round 2 |
+| 7 | minor | `KinoPubRepositoryAuthStateTest.kt` `anUnlistedRefusalStillStopsThePollInsteadOfRenewing` | Against the rejected "renew on everything but access_denied" it fails only by hanging until the 60 s `runTest` timeout | fixed (46c25bc0) |
 | 8 | minor | `KinoPubRepositoryAuthStateTest.kt` `assertRenewalGapAtLeast` | Checks a lower bound only; waiting two intervals would pass | rejected: the requirement is a lower bound |
-| 9 | minor | `KinoPubRepositoryAuthStateTest.kt` | No test that a token arriving on the post-deadline poll is still accepted | open: fix in round 2 |
+| 9 | minor | `KinoPubRepositoryAuthStateTest.kt` | No test that a token arriving on the post-deadline poll is still accepted | fixed (46c25bc0) |
 
 ### codex-reviewer
 
