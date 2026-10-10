@@ -32,7 +32,8 @@ at runtime. Docs, prompts, repo metadata and test-only changes do not.
 ## 3. On device (when needed)
 
 ```bash
-export PATH="$HOME/Android/Sdk/cmdline-tools/latest/bin:$PATH"  # install-preserve needs apkanalyzer
+export PATH="$HOME/Android/Sdk/cmdline-tools/latest/bin:$(ls -d $HOME/Android/Sdk/build-tools/* | sort -V | tail -1):$PATH"
+# install-preserve needs apkanalyzer (cmdline-tools) and apksigner (build-tools)
 tools/emulator-resource-lock.sh adb-emulators tv       # what exists
 tools/emulator-resource-lock.sh acquire <serial> 600   # prints a token: keep it
 ./tools/agentw :app:assembleDevDebug
