@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
+import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
@@ -203,24 +204,26 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
         }
     }
 
+    private val debugInfo = PlaybackControl.DebugInfo(
+        videoResolution = "1920x1080",
+        videoCodec = "avc1",
+        videoBitrate = "8.0 Mbps",
+        videoFrameRate = "24 fps",
+        audioCodec = "mp4a",
+        audioChannels = "stereo",
+        droppedFrames = "0",
+        bufferedDuration = "12.0s",
+        bufferedBytes = "38.0 / 64 MB",
+        streamSource = "MSK01",
+        renderRate = "24.0 / 24 fps",
+        frameDrops = "0 (keyframe 0, run 0)",
+        frameReleaseOffset = "+0.0 ms",
+        videoSwitch = "—",
+    )
+
     @Test
     fun debugReadings_dropWhenEpisodesPanelTimesOut() {
-        every { playbackController.getDebugInfo() } returns PlaybackControl.DebugInfo(
-            videoResolution = "1920x1080",
-            videoCodec = "avc1",
-            videoBitrate = "8.0 Mbps",
-            videoFrameRate = "24 fps",
-            audioCodec = "mp4a",
-            audioChannels = "stereo",
-            droppedFrames = "0",
-            bufferedDuration = "12.0s",
-            bufferedBytes = "38.0 / 64 MB",
-            streamSource = "MSK01",
-            renderRate = "24.0 / 24 fps",
-            frameDrops = "0 (keyframe 0, run 0)",
-            frameReleaseOffset = "+0.0 ms",
-            videoSwitch = "—",
-        )
+        every { playbackController.getDebugInfo() } returns debugInfo
         vmTest { vm ->
             vm.onAction(PlayerAction.OpenSettingsPanel)
             assertNotNull(contentState(vm).debugInfo)
@@ -229,6 +232,24 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
             advanceTimeBy(6_100)
 
             assertNull(contentState(vm).debugInfo)
+        }
+    }
+
+    @Test
+    fun debugReadings_stayWhenEpisodesPanelTimesOut_withDebugOverlayEnabled() {
+        every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
+            debugOverlayEnabled = true,
+            okTogglesPlayPause = false,
+        )
+        every { playbackController.getDebugInfo() } returns debugInfo
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenSettingsPanel)
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+
+            advanceTimeBy(6_100)
+
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+            assertEquals(debugInfo, contentState(vm).debugInfo)
         }
     }
 
@@ -244,6 +265,29 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
             advanceTimeBy(6_100)
 
             assertTrue(contentState(vm).controlsVisible)
+            releaseSave.complete(Unit)
+        }
+    }
+
+    @Test
+    fun episodesTimerDuringExit_startsNoCountdownAndChangesNothing() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
+            testContentState.copy(hasNextEpisode = false)
+        val releaseSave = CompletableDeferred<Unit>()
+        coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers {
+            releaseSave.await()
+        }
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.OnBackPressed)
+            val before = contentState(vm)
+
+            advanceTimeBy(6_100)
+
+            assertEquals(before, contentState(vm))
+            assertNull(contentState(vm).nextEpisodeCountdown)
+            verify(exactly = 0) { router.back(any(), any()) }
             releaseSave.complete(Unit)
         }
     }
@@ -350,6 +394,80 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
         }
 
     @Test
+    fun nonLastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+            advanceTimeBy(6_100)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+            assertTrue(contentState(vm).controlsVisible)
+            assertEquals(FocusTarget.EpisodesButton, contentState(vm).controlsFocusTarget)
+
+            advanceTimeBy(60_000)
+            assertTrue(contentState(vm).controlsVisible)
+            verify(exactly = 0) { router.back(any(), any()) }
+
+            vm.onAction(PlayerAction.OnBackPressed)
+            verify(exactly = 1) { router.back(RESULT_CONTENT_CHANGED, any()) }
+        }
+
+    private fun endedUnderPanel_closedByViewer_keepsControlsUntilBack(panel: PlayerAction) =
+        vmTest { vm ->
+            vm.onAction(panel)
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+            vm.onAction(PlayerAction.ClosePanel)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+            assertTrue(contentState(vm).controlsVisible)
+
+            advanceTimeBy(60_000)
+            assertTrue(contentState(vm).controlsVisible)
+            verify(exactly = 0) { router.back(any(), any()) }
+
+            vm.onAction(PlayerAction.OnBackPressed)
+            verify(exactly = 1) { router.back(RESULT_CONTENT_CHANGED, any()) }
+        }
+
+    @Test
+    fun settingsClosedAfterEnd_keepsControlsUp_andBackExitsOnce() =
+        endedUnderPanel_closedByViewer_keepsControlsUntilBack(PlayerAction.OpenSettingsPanel)
+
+    @Test
+    fun aboutClosedAfterEnd_keepsControlsUp_andBackExitsOnce() =
+        endedUnderPanel_closedByViewer_keepsControlsUntilBack(PlayerAction.OpenAboutPanel)
+
+    @Test
+    fun resetControlsTimer_whileEpisodesPanelHeld_doesNotCloseIt() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            vm.onAction(PlayerAction.SetEpisodesPanelHeld(true))
+            advanceTimeBy(5_000)
+
+            vm.onAction(PlayerAction.ResetControlsTimer)
+            advanceTimeBy(30_000)
+
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+        }
+
+    @Test
+    fun reopeningEpisodesAfterTimeout_armsTheTimerAgain() =
+        vmTest { vm ->
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            advanceTimeBy(6_100)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            advanceTimeBy(5_900)
+            assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+
+            advanceTimeBy(200)
+            assertEquals(ActivePanel.None, contentState(vm).activePanel)
+        }
+
+    @Test
     fun pausing_setsIsPlayingFalse_andResumingSetsItTrue() =
         vmTest { vm ->
             every { playbackController.isPlaying } returns true
@@ -358,9 +476,16 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
 
             callbackSlot.captured.onPlaybackStateChanged(true, false, 0L, 2_400_000L, 0L)
             assertTrue(contentState(vm).isPlaying)
+        }
+
+    @Test
+    fun playbackEnd_setsIsPlayingFalse_withoutAPauseBefore() =
+        vmTest { vm ->
+            assertTrue(contentState(vm).isPlaying)
 
             callbackSlot.captured.onPlaybackStateChanged(false, false, 0L, 2_400_000L, 0L)
             callbackSlot.captured.onPlaybackEnded()
+
             assertFalse(contentState(vm).isPlaying)
         }
 }

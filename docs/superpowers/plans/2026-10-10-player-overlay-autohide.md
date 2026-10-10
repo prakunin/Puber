@@ -420,3 +420,12 @@ Every P0 test in the Test design appears in a task, including the R8 test `episo
 **Notes (not blocking):**
 - Task 1's `controlsTimerDuringExit_changesNothing` stands in for the Test design's P1 `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown`. It still proves the `closing` guard: the machine believes the controls are hidden, so a timeout that is not guarded would write `false`. Record the rename in the Implementation record.
 - The P2 `debugOverlay_followsControlsWhenEnabled` is neither planned nor listed under "Not in this plan". Add one line there.
+
+**Review round 1 (test-reviewer #1-#7), tests only, no production change:**
+- #1 `nonLastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays`: seen red with `markPlaybackEnded()` moved into the film/last-episode branch only.
+- #2 `settingsClosedAfterEnd_keepsControlsUp_andBackExitsOnce` and `aboutClosedAfterEnd_...` (non-last episode; on the last episode the close exits at once by design).
+- #3 `debugReadings_stayWhenEpisodesPanelTimesOut_withDebugOverlayEnabled`: seen red with the preference check forced off. The debug-info fixture is now a shared private `debugInfo` in the test class.
+- #4 `episodesTimerDuringExit_startsNoCountdownAndChangesNothing` added next to `controlsTimerDuringExit_changesNothing`. Limit: no action path keeps Episodes open once `closing` is set (Back closes the panel and the exit starts with the panel already `None`), so the `closing` guard stays pinned by the bar variant; the new test pins that nothing changes and no countdown or second `back` appears when the pending Episodes timer fires during the drain.
+- #5 pausing test split: `pausing_setsIsPlayingFalse_andResumingSetsItTrue` no longer has the end step; `playbackEnd_setsIsPlayingFalse_withoutAPauseBefore` starts from `isPlaying == true` and goes straight to ended.
+- #6 `PlayerVideoSurfaceTest` takes `testContentState` through an anonymous `PlayerVMTestFixture` subclass (the member is `protected`; construction does not run the `@BeforeEach` setup). `minimalContent()` still exists as a one-line accessor.
+- #7 `resetControlsTimer_whileEpisodesPanelHeld_doesNotCloseIt` (seen red with the held check removed from `onHideTimeout`) and `reopeningEpisodesAfterTimeout_armsTheTimerAgain`.
