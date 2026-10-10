@@ -32,6 +32,7 @@ at runtime. Docs, prompts, repo metadata and test-only changes do not.
 ## 3. On device (when needed)
 
 ```bash
+export PATH="$HOME/Android/Sdk/cmdline-tools/latest/bin:$PATH"  # install-preserve needs apkanalyzer
 tools/emulator-resource-lock.sh adb-emulators tv       # what exists
 tools/emulator-resource-lock.sh acquire <serial> 600   # prints a token: keep it
 ./tools/agentw :app:assembleDevDebug
@@ -40,7 +41,11 @@ tools/android-apk-install-preserve install-preserve --serial <serial> \
 adb -s <serial> shell am start -n com.kino.puber.stage/com.kino.puber.MainActivity
 ```
 
-- Install this worktree's own APK, never a main-checkout build.
+- Install this worktree's own APK, never a main-checkout build. Don't pipe
+  install-preserve into `tail`/`grep`: that hides its exit code. Read its JSON
+  `outcome`.
+- The host emulator is AVD `puber_tv_36` (`emulator-5554`), paired; if its login
+  is lost while the app is still installed, `make DEVICE=emulator-5554 auth-restore`.
 - Instrumented tests only via `make DEVICE=<serial> itest [TESTS=<fqcn>]`.
 - A failed install blocks the task. It is never a reason to uninstall, clear
   data, allow a downgrade or swap the signer — those need the user's explicit say.

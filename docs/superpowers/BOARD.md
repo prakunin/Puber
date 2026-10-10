@@ -13,7 +13,7 @@ empty, so each status below comes from commits and code, not from the plans.
 
 | Slug | Stage | Branch / worktree | Since | Goal | Notes |
 |---|---|---|---|---|---|
-| host-android-sdk | impl | - | 2026-10-10 | Make this Linux host build and run the app | `~/Android/Sdk` holds cmdline-tools, platform 37, build-tools 36/37, the emulator and `system-images;android-36;android-tv;x86_64`; `sdk.dir` points there in the main checkout and the worktrees. AVD `puber_tv_36` runs as `emulator-5554`. Left: pair KinoPub once from a main-checkout build, then `make DEVICE=emulator-5554 auth-save`. |
+| pairing-code-refresh | idea | - | 2026-10-10 | The device-pairing code must renew itself when its timer runs out | Seen on emulator-5554 with the dev build 1.9.69-dev: the countdown reached 00:00 and the code stayed the same until the app was restarted. Reproduce, then fix. |
 | player-overlays-port | impl | `player-overlays-port` (Orca) | 2026-09-26 | Put every player overlay on one ruler (`docs/design/player-overlays/`) | Moved out of the main checkout as 92a9441d. Error, resume, episode row and chips are ported. Side panel, seek, pause and buffering are not agreed yet. Not yet run on a TV. `PlayerGlass.kt` is expected to become unused. |
 | subtitle-upstream-port | needs-device | `subtitle-player-fixes` (Orca, uncommitted) | 2026-10-10 | Bring upstream's subtitle fixes into this fork | First batch written: subtitles Off by default (6123fdbc), no positional HLS subtitle match, language names / AI / forced labels, `ControlsStateMachine.initialize` (f3eb3533, Back on fresh media hides the controls first). Static gate green (1373 unit tests, detekt, lint: no new issues). Installed and launched on emulator-5554 without a crash, but the app is unpaired there, so the player was never reached. Needs a paired device: subtitle Off on an HLS series, picker labels, Back at start. Later candidates: side-load API subtitles on HLS (003d4c55), the full merge model. |
 | device-verification-debt | needs-device | - | 2026-10-10 | Record the device passes four plans never got | persistent-content-cache (Task 11), side-rail-focus-handoff (Task 7), content-list-swr-cache (Task 5, measurement), memory-and-performance-fixes (Task 8). Waits on host-android-sdk. |
@@ -24,6 +24,7 @@ empty, so each status below comes from commits and code, not from the plans.
 
 | Slug | Plan | Landed | Evidence | Notes |
 |---|---|---|---|---|
+| host-android-sdk | - | 2026-10-10 | - | `~/Android/Sdk` (platform 37, build-tools 36/37, emulator, `android-36/android-tv/x86_64`). AVD `puber_tv_36` = `emulator-5554`, paired, snapshot in `.auth/`. install-preserve needs `cmdline-tools/latest/bin` on PATH for apkanalyzer. |
 | persistent-content-cache | plans/2026-08-13-persistent-content-cache.md | 03c2ca31, d051c873, e9b16920 | - | Device pass pending: see device-verification-debt. |
 | side-rail-focus-handoff | plans/2026-08-16-side-rail-focus-handoff.md | 04915c81, 016dde35 | - | Device pass pending. |
 | content-list-swr-cache | plans/2026-08-17-content-list-swr-cache.md | d3112173 | - | Folded into `ContentCacheRepository` (d8682b3c). Device measurement pending. |
