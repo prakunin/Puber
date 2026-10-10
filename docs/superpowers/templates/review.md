@@ -21,6 +21,17 @@ rejected (<why>), or deferred (<board row>). Nothing stays open silently. -->
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
 
+### codex-reviewer
+
+Ran: review[, adversarial] | skipped — <reason>
+
+| # | Severity | Where | Finding | Disposition |
+|---|---|---|---|---|
+
+Rejected Codex claims:
+
+- 
+
 ### ux-designer (visual changes)
 
 | # | Severity | Where | Finding | Disposition |

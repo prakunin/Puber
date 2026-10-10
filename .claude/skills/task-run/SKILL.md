@@ -29,7 +29,7 @@ The analyst picks one; the user may override it at gate 1.
 
 | Route | When | Phases |
 |---|---|---|
-| quick | S bug or S refactor | 1 → 2q → 4 → 5 → 6 (code + test reviewer) → 7 |
+| quick | S bug or S refactor | 1 → 2q → 4 → 5 → 6 (code, test and codex reviewers) → 7 |
 | standard | feature, M/L bug | 1 → 2 → 3 → 4 → 5 → 6 → 7 |
 | visual | how a screen looks | 1 → 2v → 3 → 4 → 5 → 6 (+ ux-designer) → 7 |
 | perf | a measured number is the goal | 1 → 2 + baseline → 3 → 4 → 5 (re-measure) → 6 → 7 |
@@ -101,9 +101,17 @@ Stage → `review`.
 
 ### 6. Review — in parallel
 
-`code-reviewer` and `test-reviewer` (and `ux-designer` mode `review` on the
-visual route, and when the diff touches Compose layout). Create the review
-file from the template and record each finding as a row.
+`code-reviewer`, `test-reviewer` and `codex-reviewer` (and `ux-designer`
+mode `review` on the visual route, and when the diff touches Compose layout).
+Tell `codex-reviewer` the route: it adds Codex's adversarial pass except on
+`quick`. Create the review file from the template and record each finding as
+a row; Codex's rejected claims go in their own list, so the user can see what
+was turned down. `CODEX: unavailable` is recorded as skipped with the reason
+and does not block the task.
+
+`codex-reviewer` sends the branch diff and surrounding code to OpenAI through
+the `codex@openai-codex` plugin (user scope); the user approved that on
+2026-10-10.
 
 - Every blocker and major: implementer fixes it, or you reject it with a
   reason the user could check, or defer it to a new board row.

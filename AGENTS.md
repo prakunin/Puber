@@ -28,11 +28,15 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
   `task-ship` (review, merge, board), `status` (where things stand).
 - `task-run` conducts a task end to end through the role agents in
   `.claude/agents/`: `analyst`, `architect`, `ux-designer`, `test-designer`,
-  `implementer`, `qa`, `code-reviewer`, `test-reviewer`, `final-judge`. Each
+  `implementer`, `qa`, `code-reviewer`, `test-reviewer`, `codex-reviewer`,
+  `final-judge`. Each
   role owns one section of the task's dossier (spec, plan, evidence, review;
   templates in `docs/superpowers/templates/`); the user approves the spec and
   the merge. Subagents start in the main checkout and work in the worktree
-  through `cd <wt> &&`.
+  through `cd <wt> &&`. `codex-reviewer` gets an alternative review from OpenAI
+  Codex through the official `codex@openai-codex` Claude Code plugin
+  (`claude plugin marketplace add openai/codex-plugin-cc`,
+  `claude plugin install codex@openai-codex`; `codex login` once).
 - `.claude/hooks/guard-bash.sh` enforces the hard rules below: it refuses
   `./gradlew` in a worktree (also reached through `cd <wt>` or `<wt>/gradlew`),
   `git worktree add`, `connected*AndroidTest`, adb

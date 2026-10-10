@@ -37,7 +37,8 @@ Fill the `## Gate` section of the review file:
 1. **Done as asked** — the diff does what the spec says, nothing it excluded.
 2. **Traceability** — AC → test / device check → evidence → PASS. An AC with
    no evidence is `NOT VERIFIED`, never assumed.
-3. **Findings** — every blocker/major from the review rounds is fixed (commit)
+3. **Findings** — every blocker/major from the review rounds (Codex's
+   confirmed ones included) is fixed (commit)
    or explicitly deferred with a board row; none silently dropped.
 4. **NFR**:
    - *Performance*: recomposition scope, main-thread work, allocation in hot
