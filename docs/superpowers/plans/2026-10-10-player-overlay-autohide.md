@@ -338,7 +338,20 @@ Steps:
 
 <!-- final-judge, readiness mode: READY | NOT READY and why. -->
 
-**Verdict: NOT READY** (2026-10-10, final-judge). Two fixes, both small. Everything else checked out.
+**Verdict: READY** (2026-10-10, final-judge, re-check after commit aec0c13c).
+
+Both must-fix items and both notes from the first pass are resolved. I checked them against the diff `ac67ab29..aec0c13c`:
+1. **AC-10 setup.** The test now stubs `interactor.resolveMedia` with `testResolvedMedia.copy(watchingTime = 1_200)` and keeps the factory stub. With that setup, `preparePlayback` builds a local dialog and does not schedule the hide, so the test pins the real behaviour. The new citations hold: `PlayerVM.kt:335`, `PlayerVMTestFixture.kt:212`, `PlayerVMPlaybackFlowTest.kt:435`.
+2. **Test-first in Task 1.** The order is now:
+   - the two bug-route VM tests, which still compile on master and are seen failing;
+   - the state-machine test edits, recorded as a compile failure;
+   - then the production changes.
+3. **The D9 rename** is explained in Task 1 and listed under "Not in this plan". The reasoning holds: Back with a panel open closes the panel and does not exit.
+4. **The P2 `debugOverlay_followsControlsWhenEnabled`** is now listed as not planned. The cited condition is correct: `PlayerOverlayLayers.kt:138` reads `controlsVisible && debugInfo != null`.
+
+The first-pass findings below still apply, except the verdict and the must-fix list, which are now closed.
+
+**First pass:** NOT READY. Two fixes, both small. Everything else checked out.
 
 **AC coverage.** Every AC maps to a task and a Test design row:
 - AC-1, AC-2, AC-3, AC-6, AC-8, AC-12, AC-13 → Task 1.
