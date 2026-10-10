@@ -22,12 +22,15 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import java.io.IOException
 
 class AuthVMTest {
@@ -132,5 +135,30 @@ class AuthVMTest {
         val message = vm.testMessageValue as SnackbarMessage.Short
         assertEquals("string_${R.string.error_generic}", message.message)
         assertTrue(message.message.contains(transportDetails).not())
+    }
+
+    @Test
+    fun secondCode_replacesShownCodeAndRestartsCountdown_whenRenewed() {
+        every { authInteractor.isAuthenticated() } returns false
+        every { authInteractor.getAuthState() } returns flow {
+            emit(AuthState.Code(code = "AAA", url = "https://example.com", expireTimeSeconds = 120))
+            delay(5_000)
+            emit(AuthState.Code(code = "BBB", url = "https://example.com", expireTimeSeconds = 600))
+        }
+        val vm = createVM()
+        val scheduler = mainDispatcher.dispatcher.scheduler
+
+        vm.testOnStart()
+        scheduler.advanceTimeBy(5_500)
+        scheduler.runCurrent()
+
+        val renewed = vm.testStateValue as AuthViewState.Content
+        assertEquals("BBB", renewed.code)
+        assertEquals("10:00", renewed.timeLeft)
+
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+
+        assertEquals("09:57", (vm.testStateValue as AuthViewState.Content).timeLeft)
     }
 }
