@@ -326,3 +326,58 @@ Steps:
 ## Readiness
 
 <!-- final-judge, readiness mode: READY | NOT READY and why. -->
+
+**Verdict: NOT READY** (2026-10-10, final-judge). Two fixes, both small. Everything else checked out.
+
+**AC coverage.** Every AC maps to a task and a Test design row:
+- AC-1, AC-2, AC-3, AC-6, AC-8, AC-12, AC-13 → Task 1.
+- AC-4 → Task 1 for the VM part, Task 3 for the key hook, device D3.
+- AC-5 → Task 3.
+- AC-7 → Task 1, plus Task 2 for buffering.
+- AC-9 → Task 1, device D2.
+- AC-10 → Task 1.
+- AC-11 → Task 1 (SM) and Task 2 (VM).
+- AC-15 → Task 4.
+- AC-14 and AC-16 → device D1 and D5, handed to qa under "Not in this plan".
+
+Every P0 test in the Test design appears in a task, including the R8 test `episodesPanel_stillClosesAfterBufferingBlip`. The D13 replacement test `lastEpisode_episodesTimeoutAfterEnd_landsOnEndedControlsAndStays` is in Task 2. I traced it against `onPlaybackEnded`, `onHideTimeout` and `handleBack`, and it holds.
+
+**Sources sampled (all resolve):**
+- `ControlsStateMachine.kt`: lines 17, 36, 47, 59, 93, 99.
+- `PlayerVM.kt`: lines 159, 170, 191, 204, 357, 543/558/562, 592, 706, 715, 727, 748, 759, 1235, 1243, 1384, 1834, 1840.
+- `PlaybackController.kt:59`, `PuberVM.kt:131`.
+- `PlayerVMTestFixture.kt`: lines 41, 75, 82, 110, 155, 157, 240.
+- `PlayerVMPlaybackFlowTest.kt`: lines 5, 77, 496.
+- `PlayerVMEpisodeFlowTest.kt`: lines 29, 70.
+- `PlayerControlsInteractionTest.kt:211`.
+- `PlayerVideoSurface.kt`: lines 45, 54, 65.
+- `EpisodesPanel.kt`: lines 137, 148, 274.
+- `PlayerSettingsPanels.kt`: lines 35, 40, 47.
+- `TvContextMenu.kt:117`, `PlayerControlsOverlay.kt:146`, `TrailerOverlay.kt:47`.
+- `PlayerAction.kt`: lines 9, 24, 26, 27.
+- `PlayerViewState.kt:17`, `PlayerUIModels.kt:89`, `PlayerScreenContent.kt:77`.
+
+**Build order.** The build stays green after every task:
+- Task 1 deletes `applyControlsVisibility` and rewrites its two tests in the same commit.
+- Task 3 adds the action before anything uses it.
+- The dependency order is 1 → 2 → 3 → 4.
+
+**Scope, questions, rules.**
+- Scope stays inside Out of scope. There is no visual change, and the trailer gets a comment change only.
+- Open questions 1-9 are answered.
+- Builds go through `agentw`, never `./gradlew`.
+- No commit message carries `Co-Authored-By`.
+
+**Must fix:**
+1. **Task 1, `resumeDialog_noHideTimerRunsWhileItIsUp`: the setup is wrong, so the test fails for the wrong reason.**
+   - `preparePlayback` decides whether to schedule the hide from its own local `resumeDialog`, which `buildResumeDialog(resolved.watchingTime, …)` builds. It does not read what the factory returns. [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:335] [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:357]
+   - The fixture's `testResolvedMedia` has `watchingTime = null`. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMTestFixture.kt:216] So stubbing only the factory still schedules the hide at start, and after 6 s `controlsVisible` is false. The planned assertion "at 60 s `controlsVisible`" then fails, and that would push the implementer toward changing production code.
+   - Fix: also stub `every { interactor.resolveMedia(any(), any(), any(), any()) } returns testResolvedMedia.copy(watchingTime = 1_200)`, as `resumeDialog_offeredForAPositionWithMediaLeftBehindIt` does. [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMPlaybackFlowTest.kt:435] Keep the factory stub, which publishes the dialog.
+2. **Task 1 step order is not test-first for the state machine.** The plan says "make the production changes above, then the state-machine test edits". Write these first, watch them fail to compile or fail, and only then change `ControlsStateMachine`:
+   - the edited `openPanel_episodes_keepsPlaybackRunning`;
+   - the two renamed `onHideTimeout_*` tests;
+   - the four appended SM tests.
+
+**Notes (not blocking):**
+- Task 1's `controlsTimerDuringExit_changesNothing` stands in for the Test design's P1 `episodesTimeoutDuringExit_doesNotStartANextEpisodeCountdown`. It still proves the `closing` guard: the machine believes the controls are hidden, so a timeout that is not guarded would write `false`. Record the rename in the Implementation record.
+- The P2 `debugOverlay_followsControlsWhenEnabled` is neither planned nor listed under "Not in this plan". Add one line there.
