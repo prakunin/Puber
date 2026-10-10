@@ -43,6 +43,31 @@ Rejected Codex claims: none.
 
 Not run: no layout change.
 
+## Round 2
+
+Scope `6617ae99..11cc1a82`. qa re-checked after the DI change: evidence
+`3a1dbbb1` (static gate green, smoke on emulator-5554 signed in, DI resolved
+for its only consumer `AuthInteractor`; device run does not enter the auth path).
+
+### code-reviewer
+
+Clean. Round-1 #1 fixed; injected clock matches the codebase's `clock`/`nowMillis`
+pattern; the Koin change drops only the unused concrete-type binding.
+
+### test-reviewer
+
+Round-1 #1–#6 resolved.
+
+| # | Severity | Where | Finding | Disposition |
+|---|---|---|---|---|
+| 7 | minor | `KinoPubRepositoryAuthStateTest.kt` `anUnlistedRefusalStillStopsThePollInsteadOfRenewing` | Against the rejected "renew on everything but access_denied" it fails only by hanging until the 60 s `runTest` timeout | open: fix in round 2 |
+| 8 | minor | `KinoPubRepositoryAuthStateTest.kt` `assertRenewalGapAtLeast` | Checks a lower bound only; waiting two intervals would pass | rejected: the requirement is a lower bound |
+| 9 | minor | `KinoPubRepositoryAuthStateTest.kt` | No test that a token arriving on the post-deadline poll is still accepted | open: fix in round 2 |
+
+### codex-reviewer
+
+Not re-run: no findings in round 1.
+
 ## Gate
 
 <!-- final-judge, gate mode. -->
