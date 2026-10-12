@@ -228,7 +228,7 @@ test red, then change production code, then green, then one commit.
     ```
     It throws and is not wrapped; wrapping happens once, in each public method
     (never a `Result` inside a `Result`, `docs/architecture/api.md:66-67`).
-- [ ] Run the touched tests: all `TmdbApiClientTest` (8 tests) and
+- [ ] Run the touched tests: all `TmdbApiClientTest` (9 tests) and
       `SkipSegmentServiceTest` (4 tests) green.
       If `findLookups_wrapErrorsIntoFailure` stays red after the change because
       Ktor delivers the `Error` to an uncaught-exception path instead of the
@@ -243,7 +243,7 @@ test red, then change production code, then green, then one commit.
   ```
 - [ ] Run the fast gate; commit, e.g. "Route both TMDB find lookups through one request that fails on any HTTP error".
 
-**Done when:** the touched-tests command reports `TmdbApiClientTest` 8 tests and
+**Done when:** the touched-tests command reports `TmdbApiClientTest` 9 tests and
 `SkipSegmentServiceTest` 4 tests with 0 failures, the four greps print exactly
 `(nothing)`, `4`, `1`, `(nothing)`, and the fast gate is green.
 
