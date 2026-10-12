@@ -48,10 +48,10 @@ Survey (triage only, not findings):
   [Source: docs/superpowers/BOARD.md:28]. Detekt config exists
   [Source: config/detekt/detekt.yml] with a baseline.
 
-Deliverable of this task: a prioritised, sourced audit report, not code
-changes. Each fixing theme becomes its own follow-up board row, because the
-fixes are separate, device-affecting refactors.
-
+Deliverable of this task: a prioritised, sourced audit report plus a small set
+of safe, behaviour-preserving fixes applied in this branch (user decision,
+Q1). Everything risky, behaviour-changing, or adding a dependency becomes a
+follow-up board row.
 
 ## Acceptance criteria
 
@@ -60,18 +60,23 @@ fixes are separate, device-affecting refactors.
 - **AC-3** Given the "Reinvented wheels" section, when read, then it states a verdict (replace / keep / defer) with a reason for each of `Paginator`, `TypedTtlCache`, `CachedFeed`/`ContentCacheRepository`, `ContentUriCodec`, `IdGenerator` and `SessionEventBus`, and names a replacement only if it is, or can be, added through `gradle/libs.versions.toml`.
 - **AC-4** Given the 8 files over 700 lines named in Problem, when the SOLID section is read, then each has either a finding (which responsibility to split out) or an explicit "acceptable" with a reason.
 - **AC-5** Given the Performance section, when compared with the 2026-09-08 audit and `perf-deferred`, then no finding repeats an item already fixed or deferred there; overlaps are cross-referenced by ID instead. Any finding not backed by a measurement is marked "static reading, unmeasured".
-- **AC-6** Given the report, when its summary table is read, then findings are ordered by severity then effort, and proposed follow-up board rows (slug, one-line scope, kind, size, dimension) group them so each row is one reviewable change.
-- **AC-7** Given the task branch diff against master, when listed, then it touches only files under `docs/superpowers/` (no production code, no `libs.versions.toml` change), and no device lease is taken.
-- **AC-8** Given the report, when the detekt run is cited, then it records the result of `./tools/agentw` detekt on the audited commit (counts per rule family) or states why it was not run.
+- **AC-6** Given the report, when its summary table is read, then findings are grouped in the order libraries (reinvented wheels), SOLID, performance (best practices after them), within each group by severity then effort, and proposed follow-up board rows (slug, one-line scope, kind, size, dimension) group them so each row is one reviewable change.
+- **AC-7** Given the task branch diff against master, when listed, then production code changes only for fixes the report marks "fixed in this task"; each such fix cites its finding ID, is behaviour-preserving, has its own commit, and `gradle/libs.versions.toml` and `build.gradle.kts` dependencies are unchanged (library replacements stay follow-up rows).
+- **AC-8** Given the report, when the detekt result is read, then it records the `./tools/agentw` detekt run on the audited commit (counts per rule family) and the count after the fixes.
+- **AC-9** Given the final branch, when the static gate runs through `./tools/agentw` (compile `:app:compileDevDebugKotlin`, unit tests, detekt), then compile and tests pass and detekt reports no more findings than the baseline on master.
+- **AC-10** Given the fixes touch runtime code, when qa runs the smoke paths those files reach (named per fix in the evidence) on a leased emulator, then app launch and those paths behave as on master with no crash, and the evidence file records them; if no fix touches runtime code, the evidence states that and no device is used.
+- **AC-11** Given any "dependency recommended" finding, when read, then its reason covers TV focus behaviour and the paging model (`docs/architecture/paging-and-filters.md`), and states that adding it is a follow-up decision.
 
 
 ## Out of scope
 
-- Any production-code fix, dependency change, or formatting sweep. Even "safe"
-  fixes wait for the follow-up rows, so this branch stays docs-only.
+- Risky or behaviour-changing refactors; they become follow-up rows.
+- Adding or upgrading dependencies (recommendations only).
+- Splitting the large classes (PlayerVM, KinoPubApiClient, etc.); follow-up rows.
+- Formatting sweeps and mass renames.
 - Re-auditing memory and performance items already covered by
   `memory-and-performance-fixes` and `perf-deferred`.
-- On-device measurement (profiling, frame stats); findings stay static unless a
+- Profiling or frame-stat measurement; perf findings stay static unless a
   follow-up perf row measures them.
 - Test-suite quality, UI look and consistency, security/credential review.
 - Upstream-sync triage (its own row).
