@@ -354,10 +354,10 @@ touches only the three production files and the new test.
   - Leave the audited-commit `[Source: …]` citations as they are: they refer
     to `36cda915`, where those lines exist (AC-2).
 
-- [ ] Get hashes: `git log --oneline master..HEAD`.
-- [ ] Edit the report.
-- [ ] `grep -n "fix in this task" <report>` → no remaining unmarked entry for F1-F4.
-- [ ] Commit: `Mark the code-quality-audit findings fixed on this branch`.
+- [x] Get hashes: `git log --oneline master..HEAD`.
+- [x] Edit the report.
+- [x] `grep -n "fix in this task" <report>` → no remaining unmarked entry for F1-F4.
+- [x] Commit: `Mark the code-quality-audit findings fixed on this branch`.
 
 **Done when:** every F1-F4 finding and summary row in the report reads "fixed
 in this task" with a commit hash that `git cat-file -e <hash>` accepts.
@@ -380,13 +380,42 @@ implementer does not install or touch a device.
 
 **Commits:**
 
+- `72a2da6d` Add characterisation tests for the playback clock and the API-domain dialog state (Task 1)
+- `00769aee` Record the detekt count before the code-quality-audit fixes (Task 2)
+- `ee4da3ce` Delete the unused IdGenerator (RW-5, STR-4) (F1)
+- `2342ea57` Delete the unused TMDB cast and configuration endpoints (BP-2) (F2)
+- `93a06ca2` Share one ApiDomainState to dialog-state mapper across the three view models (SOLID-10) (F3)
+- `c07d807d` Share one playback clock formatter between the progress bar and the player mapper (RW-7) (F4)
+- `1003aa31` Record the detekt count after the code-quality-audit fixes (Task 7)
+- Task 8 commit: `Mark the code-quality-audit findings fixed on this branch`
+
 **Deviations from the plan:**
 
-**Files touched outside the plan:**
+- T5 (readiness note 4): `HomeVMTest` asserts through `HomeAction.OpenApiDomainDialog` from the
+  `Loading` state, not through the error-state path the spec names. Both go through the same
+  `openApiDomainDialog()` and the same `toDialogState()` copy.
+- Task 2: swap was ~90 % used (plan says do not start above ~50 %), but the conductor's brief
+  allowed the run. It completed in the worktree (54 s), so the main-checkout fallback was not used.
+  Detekt prints "83 / 7 compiler errors found during analysis" (accuracy caveat) in both before and
+  after runs; the finding count is 0 in both.
+- The plan checkbox ticks for Task 1 and Task 2 landed in the Task 2 commit, and each later
+  task's tick sits in that task's commit (so commits also touch the plan file).
+- Report line numbers after Task 2 shifted (the Detekt section grew); Task 8 edits were located by
+  content, not by the plan's line numbers. The legend sentence at report line 20 keeps its
+  "`fix in this task`" wording on purpose.
+
+**Files touched outside the plan:** none (plan file and report only, as intended).
 
 **For the reviewers:**
 
-**Blocked:**
+- Detekt before/after: `devDebug` 0 / 0, `devDebugUnitTest` 0 / 0 (before at `72a2da6d`, after at
+  `c07d807d`). Static gate: compile, full unit suite (163 result files, 0 failures/errors),
+  `:app:detektAll`, `:app:lintDevDebug` all BUILD SUCCESSFUL.
+- Scope: `git diff --stat master...HEAD -- app/src/main` lists exactly the 11 planned files; the
+  diff for `gradle/libs.versions.toml`, `*.gradle.kts`, `config/detekt/` is empty.
+- No device work was done (qa owns D1-D4).
+
+**Blocked:** none.
 
 ## Readiness
 
