@@ -34,7 +34,18 @@ QA checks before the run (own lease, released at the end):
 | D4 resume dialog (F4) | play, seek forward (~22 min, and ~2 min with a 45 s wait), BACK, reopen the title with DPAD_CENTER | resume dialog with the stopped position | No resume dialog appeared on either attempt; playback restarted at `0:02` to `0:04`, and the title's detail page showed no saved progress ("Up next - season 1, episode 1"). The resume dialog was therefore never rendered, and its time string was not read. No crash. Whether master saves progress in this environment is unknown, so this is not recorded as a regression. | NOT CHECKED |
 
 Crash check at the end: `logcat -b crash` empty, no `AndroidRuntime` entry for the package.
-Playback progress was written to the test account by D3/D4 (spec-approved paths); nothing else was mutated.
+Account mutation: D3/D4 played and seeked in a title on the test account (spec-approved
+paths), so the player may have sent playback progress to the account. That is inferred
+from the playback, not observed: QA did not inspect any request or server-side state.
+What was observed is the opposite on the client side: after the ~22 min seek, BACK and
+reopening, the details page showed no saved progress and no resume dialog appeared (D4).
+The two are not reconciled by this run: either progress was not saved, or it was saved
+and not read back. Which one is unknown. This save/resume anomaly is deferred to board
+row `resume-progress-anomaly` and was not compared with master. Nothing else was mutated.
+
+Unit coverage added in review round 1 for the resume-dialog time string (unit tests, not
+device evidence; D4 stays NOT CHECKED): `PlayerStartModeTest.resumeDialogFormatsSavedPositionWithRealMapper`
+(f3c0437e) and `FormatRemainingTimeTest` (cae60189).
 
 ## Static gate (QA, `./tools/agentw`, `AGENT_GRADLE_SERIAL=1`)
 

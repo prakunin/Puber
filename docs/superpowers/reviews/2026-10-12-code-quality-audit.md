@@ -27,7 +27,7 @@ Verdict: changes needed (report and evidence corrections only).
 | C4 | minor | report.md, Structure/SOLID | Missed: `TmdbApiClient.apiResult` (`TmdbApiClient.kt:70`) duplicates `runCatchingCancellable` (`CoroutinesErrorHandler.kt:37`) and catches only `Exception`; `findTvByImdbId`/`findByImdbId` hit the same endpoint with different failure handling. | fixed (39a735b4) |
 | C5 | minor | report.md:68, spec:96 | "byte-identical" formatters were `Int` vs `Long` constants; equivalent only by widening. Say "semantically identical". | fixed (39a735b4) |
 | C6 | minor | report.md, SOLID | `DetailsVM` (698 lines, `@Suppress("LargeClass")`) has no finding or "acceptable" verdict. | fixed (39a735b4) |
-| C7 | minor | device.md:34,37 | AC-10 only partly verified (D4 NOT CHECKED, D2 only no-custom-domain). Evidence contradicts itself: progress reportedly written, yet no saved progress and no resume dialog after a ~22-min seek; never compared with master. | D4 carried to the gate as NOT CHECKED; the save/resume anomaly deferred to new board row `resume-progress-anomaly` (F1–F4 do not touch the save path); qa to reconcile the two evidence lines (open) |
+| C7 | minor | device.md:34,37 | AC-10 only partly verified (D4 NOT CHECKED, D2 only no-custom-domain). Evidence contradicts itself: progress reportedly written, yet no saved progress and no resume dialog after a ~22-min seek; never compared with master. | D4 carried to the gate as NOT CHECKED; the save/resume anomaly deferred to new board row `resume-progress-anomaly` (F1–F4 do not touch the save path); evidence contradiction reconciled by qa (see commit below) |
 
 ### test-reviewer
 
