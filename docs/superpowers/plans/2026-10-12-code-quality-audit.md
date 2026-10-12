@@ -391,3 +391,78 @@ implementer does not install or touch a device.
 ## Readiness
 
 <!-- final-judge, readiness mode: READY | NOT READY and why. -->
+
+**Verdict: READY** (final-judge, 2026-10-12, plan at `1a512109`).
+
+**AC coverage.**
+
+| AC | Plan task / check | Test design row |
+|---|---|---|
+| AC-1..AC-6, AC-11 | Already delivered by the report from the design phase (sections at report lines 31, 45, 73, 92, 105, 177, 233 confirmed). Task 8 keeps AC-2/AC-6 consistent. qa runs the script and review checks. | AC-1..AC-6, AC-11 rows |
+| AC-7 | Tasks 1, 3-6 (one commit per fix, with its ID), Task 7 scope checks, Task 8 (report marked "fixed") | AC-7 script + unit (T1, T2, T4-T7) |
+| AC-8 | Task 2 (before, with the Q5 fallback), Task 7 (after) | AC-8 tooling |
+| AC-9 | Task 7 (COMPILE, FULLTEST, DETEKT) | AC-9 tooling + unit |
+| AC-10 | "Out of this plan": qa runs D1-D4 on a leased emulator using the worktree's own APK | AC-10 device |
+
+**Sources sampled (all resolve).** `IdGenerator.kt:8` (`object IdGenerator`).
+`navigation.md:61` (the sentence). `TmdbApiClient.kt:4,27,29,84,105,113,121`
+(imports, regex, helper, the four endpoints). `TmdbApiClientTest.kt:135` (the
+cast test; six others remain). `EpisodeScheduleRepository.kt:55`
+(`findTvByImdbId`). `SkipSegmentService.kt:62` (`findByImdbId`).
+`ApiDomainDialogState.kt:6`. `ApiDomainInteractor.kt:18` (`ApiDomainState`).
+`HomeVM.kt:34,527,535,673`, `AuthVM.kt:13,40,219,228,291`,
+`DeviceSettingsVM.kt:10,18,64,444,505`. `PlayerUIMapper.kt:14,16,215`,
+`PlayerProgressBar.kt:43,59,325,337,355`. `PlayerVMTestFixture.kt:122`,
+`PlayerVM.kt:377,640`. `DetailsPrefetchSurfaceState.kt:9`. `app/build.gradle.kts:338`
+(`detektAll`). `DeviceSettingsVMMenuSectionsTest.kt:107`. Report line anchors
+used by Tasks 2 and 8 (119, 174, 43, 61, 68, 89, 110, 184, 185, 200, 204, 217,
+224) match.
+
+**Behaviour preservation (verified on the code).**
+- F1/F2: every symbol grepped in `app/src`, `baselineprofile` and `docs/architecture`
+  has no reference outside the files being changed. The cast test is the only test
+  user. `IOException` stays used by `TmdbApiException`. The kept endpoints are the
+  ones the repositories call.
+- F3: the three private copies are byte-identical. The planned import removals are exact:
+  Home and Auth still use `ApiDomainDialogState`, while Settings uses neither import
+  once its copy is gone. Every call site resolves to the top-level import once the member
+  extension is deleted. `core/ui` already imports `domain`.
+- F4: the bodies are identical. The `Int` constants in the progress bar widen to
+  `Long`, so the output is the same. `formatTime` keeps its signature (mocked in
+  VM tests). The same constant names in `player/vm/PlaybackDebugFormat.kt` are
+  private, in another package, and left alone. They are not a collision.
+- T4-T6 can be reached without heavy setup: each `OpenApiDomainDialog` action is
+  routed in `onAction` (Auth:150, Home:192, Settings:163), and `testStateValue`
+  exists. Unit tests do not run in parallel (no `maxParallelForks` or JUnit parallel
+  config), so `Locale.setDefault` in T1/T2 is safe. The precedent is
+  `EpisodeScheduleUIMapperTest`. The new tests trip no detekt rule:
+  `MagicNumber`, `LongMethod` and `TooManyFunctions` exclude `**/test/**`.
+
+**Build order and compliance.** Every task ends compiled and green. The order is
+tests, then the before count, then F1, F2, F3, F4, then the after count, then the
+report. All worktree builds run as `AGENT_GRADLE_SERIAL=1 ./tools/agentw`. The plan
+forbids `--stop` and killing foreign daemons, which **overrides** spec Detekt gate
+plan step 1 ("`./tools/agentw --stop` if present"): the plan wins. The one
+`./gradlew` is the main-checkout fallback that Q5 authorises for the before count only.
+`libs.versions.toml`, `*.gradle.kts` and `detekt-baseline.xml` stay untouched. No
+task goes beyond F1-F4 or into Out of scope. The files owned by in-flight branches
+are excluded.
+
+**Open questions.** Q1-Q5 are answered.
+
+**Notes for the implementer and qa (not blocking):**
+1. Task 7 scope check: use the three-dot form `git diff --stat master...HEAD -- app/src/main`
+   (and three-dot for the build-file diff). `upstream-sync-triage` is in impl. If it
+   merges first, the two-dot form also shows master's own changes, reversed, and looks
+   like a false scope breach. `git log master..HEAD` is correct as written.
+2. Task 2 fallback: if `git diff --stat 36cda915 HEAD -- app/src/main` in the main
+   checkout is **not** empty (some branch merged), the main-checkout count is not the
+   audited-commit count. Record "not obtained" and tell the conductor; do not use it.
+3. Known host instability (Q5, report Detekt section): five JVM crashes, with swap at
+   about 90 %. The "after" count has no fallback. If it cannot run, AC-9 is
+   **unverified**, not passed, and the gate will mark it `NOT VERIFIED`. The
+   report records that an earlier attempt used `--stop` once on the shared
+   `~/.gradle-agents`. This must not happen again.
+4. T5 asserts through `OpenApiDomainDialog` from `Loading`, not through the
+   error-state path the spec names. Both go through the same `openApiDomainDialog()`.
+   This is acceptable, but record it under "Deviations".
