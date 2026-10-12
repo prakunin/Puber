@@ -1,6 +1,6 @@
 # Code quality audit
 
-Status: draft | approved
+Status: approved
 Date: 2026-10-12
 Slug: code-quality-audit
 Kind: refactor
@@ -284,3 +284,6 @@ Answers (user, 2026-10-12):
 - Q4 → answered: yes, run detekt through `./tools/agentw` in the worktree with `AGENT_GRADLE_SERIAL=1`.
 
 5. (architect, 2026-10-12) The detekt "before" count for AC-8 could not be taken: five runs crashed the JVM on this host (report, Detekt). Should qa re-run it once the host is stable (reboot, or memory and swap freed), or may it be taken from the main checkout with `./gradlew :app:detektAll`, since master's `app/` is identical? Not blocking for plan; blocking for verify.
+- Q5 → answered (user, 2026-10-12): if the worktree run crashes again, take the detekt "before" count from the main checkout with `./gradlew :app:detektAll` (master `app/` is identical to the audited commit). The "after" count still comes from the branch.
+
+Gate 1: spec approved by the user on 2026-10-12 (report + safe fixes F1–F4).
