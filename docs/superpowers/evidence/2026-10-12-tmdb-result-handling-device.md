@@ -22,3 +22,29 @@ Known limitation (owner decision Q3): empty TMDB token in a worktree build.
 
 The crash comes from the corrupted on-device file, not from a source difference; the corruption
 is not attributed to the change under test.
+
+# Round 2 (device smoke)
+
+Build: same worktree dev debug APK, sha256 4270beef...472851c, installed by the conductor; the on-device
+base.apk sha256 was re-read and equals the build. Device: emulator-5554 (puber_tv_36), leased and released.
+No install, uninstall or data clear by QA. Limitation (owner decision Q3): empty TMDB token, live TMDB
+success is not exercised on device.
+
+## M1 episode schedule screen: PASS
+Steps: launch; Home > Continue watching > Outlander (series details) > calendar button (D-pad, center).
+Expected: defined missing-credentials state, no crash. Observed: screen "No schedule available / TMDB access
+isn't set up. / Data and images come from TMDB; dates may change." Process alive, crash buffer empty.
+Back returned to the series details screen. Observation: focus after Back is on the primary play button, not
+on the calendar button that opened the screen (the spec does not require restoring it to that button).
+
+## M2 player: PARTIAL
+Steps: details > play (Up next, season 2 episode 3) > "Resume from 14:52?" > Continue; watched ~15 s.
+Observed: playback started and ran, no crash, no stall, crash buffer empty; resume dialog worked.
+Not observed: an IntroDB.app skip prompt. The playhead was mid-episode (about 15:00), away from the intro
+and credits windows, and seeking or restarting would change the account's watch progress, so it was not
+done. Skip-prompt display therefore NOT CHECKED on device; unit tests (SkipSegmentServiceTest) cover the
+fallback logic. Side effect: a short resumed playback was reported to the account's watch progress.
+
+| AC | Status |
+|----|--------|
+| AC-10 | PARTIAL: M1 PASS; M2 starts and plays without crash, skip prompt NOT CHECKED |
