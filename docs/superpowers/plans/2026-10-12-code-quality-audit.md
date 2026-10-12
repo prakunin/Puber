@@ -292,16 +292,16 @@ commit touches only the four production files and the new test.
 
 **Consumes:** nothing new. **Produces:** `internal fun formatPlaybackClock(positionMs: Long): String` in `com.kino.puber.ui.feature.player.model`.
 
-- [ ] **T2** `PlaybackClockTest`: `formatPlaybackClock_matchesPlaybackClockTable` with
+- [x] **T2** `PlaybackClockTest`: `formatPlaybackClock_matchesPlaybackClockTable` with
   the same ten pairs as T1, and `formatPlaybackClock_keepsAsciiDigitsUnderArabicDefaultLocale`
   with the same locale set/restore as T1. The tables must be identical to T1.
-- [ ] Apply the production changes.
-- [ ] Greps (detekt may not run, spec Detekt gate plan step 5):
+- [x] Apply the production changes.
+- [x] Greps (detekt may not run, spec Detekt gate plan step 5):
   `grep -rn "formatTimeMs" app/src` → empty;
   `grep -n "Locale\|MILLIS_PER_SECOND\|SECONDS_PER" app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIMapper.kt` → empty.
-- [ ] COMPILE, then TEST `com.kino.puber.ui.feature.player.model.*`
+- [x] COMPILE, then TEST `com.kino.puber.ui.feature.player.model.*`
   `com.kino.puber.ui.feature.player.vm.*` — green, with `PlayerUIMapperTest` unedited in this commit.
-- [ ] Commit: `Share one playback clock formatter between the progress bar and the player mapper (RW-7)`.
+- [x] Commit: `Share one playback clock formatter between the progress bar and the player mapper (RW-7)`.
 
 **Done when:** the TEST command passes, the greps are empty, and the commit
 touches only the three production files and the new test.
