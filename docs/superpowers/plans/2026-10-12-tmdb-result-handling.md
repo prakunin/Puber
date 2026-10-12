@@ -63,9 +63,9 @@ first so Task 2 runs against it.
 (`TmdbApiClient.kt:59`), unchanged signature.
 **Produces:** test `skipsPrimaryAndAsksFallback_whenTmdbLookupFails`.
 
-- [ ] Add `import com.kino.puber.data.api.TmdbApiException` (keep the import
+- [x] Add `import com.kino.puber.data.api.TmdbApiException` (keep the import
       block sorted; it goes after `TmdbApiClient` at `:5`).
-- [ ] Add the test, mirroring the file's `coEvery` style (mockk accepts
+- [x] Add the test, mirroring the file's `coEvery` style (mockk accepts
       `coEvery`/`coVerify` on non-suspend functions, as `:35` already does):
   ```kotlin
   @Test
@@ -88,10 +88,10 @@ first so Task 2 runs against it.
   The later `coEvery` for `getTmdbId(IMDB_ID)` overrides the `@BeforeEach`
   stub (mockk: last matching stub wins). `saveTmdbId` stays unstubbed on
   purpose: a call would throw `MockKException` and also fail the test.
-- [ ] Run the touched tests (command in Global constraints): all
+- [x] Run the touched tests (command in Global constraints): all
       `SkipSegmentServiceTest` cases green on base. If the new case is red on
       base, stop: the characterisation is wrong; record under Blocked.
-- [ ] Run the fast gate; commit, e.g. "Pin the skip-segment outcome when the TMDB lookup fails".
+- [x] Run the fast gate; commit, e.g. "Pin the skip-segment outcome when the TMDB lookup fails".
 
 **Done when:** `--tests '*SkipSegmentServiceTest'` reports 4 tests, 0 failures,
 and the fast gate is green.
@@ -137,7 +137,7 @@ test red, then change production code, then green, then one commit.
 `getTvDetails(Int): Result<TmdbTvDetailsResponse>`,
 `getTvSeasonDetails(Int, Int): Result<TmdbSeasonDetailsResponse>`.
 
-- [ ] Rewrite `:113-132` as `findByImdbId_prefersTvThenMovieAndFailsOnHttpError`
+- [x] Rewrite `:113-132` as `findByImdbId_prefersTvThenMovieAndFailsOnHttpError`
       (primary failing-first test, AC-5, AC-6). Responses in order:
       `{"tv_results":[{"id":101}],"movie_results":[{"id":202}]}` 200,
       `{"tv_results":[],"movie_results":[{"id":202}]}` 200,
@@ -152,17 +152,17 @@ test red, then change production code, then green, then one commit.
   ```
   The `success(null)`-on-502 pin is replaced deliberately (contract change,
   spec Design "Contract change").
-- [ ] Add `findTvByImdbId_returnsFailureForHttpErrors` (AC-4): an `ArrayDeque`
+- [x] Add `findTvByImdbId_returnsFailureForHttpErrors` (AC-4): an `ArrayDeque`
       of `"{}" to HttpStatusCode.TooManyRequests`, `"{}" to HttpStatusCode.BadGateway`
       served by `client { val (body, status) = responses.removeFirst(); respondJson(body, status) }`;
       for each of 429 then 502, call `api.findTvByImdbId("tt123")` and assert
       `isFailure` and `assertInstanceOf(TmdbApiException::class.java, ...).statusCode`
       equals that code. Expected green on base (characterisation, not
       failing-first).
-- [ ] Add `findByImdbId_rethrowsCancellation` (AC-2): a copy of `:134-149`
+- [x] Add `findByImdbId_rethrowsCancellation` (AC-2): a copy of `:134-149`
       calling `api.findByImdbId("tt123")` instead of `getTvDetails(101)`.
       Expected green on base (regression guard).
-- [ ] Add `findLookups_wrapErrorsIntoFailure` (AC-3, secondary failing-first):
+- [x] Add `findLookups_wrapErrorsIntoFailure` (AC-3, secondary failing-first):
   ```kotlin
   @Test
   fun findLookups_wrapErrorsIntoFailure() = runTest {
@@ -180,7 +180,7 @@ test red, then change production code, then green, then one commit.
   with `private companion object { const val MAX_CAUSE_DEPTH = 10 }` (the
   class has no companion yet; detekt `MagicNumber` excludes `**/test/**`,
   `config/detekt/detekt.yml:680-682`, so this is for readability only).
-- [ ] Run the touched tests on base. Expected: red in
+- [x] Run the touched tests on base. Expected: red in
       `findByImdbId_prefersTvThenMovieAndFailsOnHttpError` (502 gives
       `success(null)` via the early return at `TmdbApiClient.kt:63-65`) and red
       in `findLookups_wrapErrorsIntoFailure` (`apiResult` catches `Exception`
@@ -188,7 +188,7 @@ test red, then change production code, then green, then one commit.
       Implementation record. If `findLookups_wrapErrorsIntoFailure` is green on
       base (Ktor turned the `Error` into an `Exception`), record that and keep
       it as a pin; it does not block.
-- [ ] Change `TmdbApiClient.kt`:
+- [x] Change `TmdbApiClient.kt`:
   - Remove `import kotlinx.coroutines.CancellationException` (`:19`); add
     `import com.kino.puber.core.coroutine.runCatchingCancellable` directly after
     `import com.kino.puber.BuildConfig` (`:3`). `isSuccess` and `HttpResponse`
@@ -228,20 +228,20 @@ test red, then change production code, then green, then one commit.
     ```
     It throws and is not wrapped; wrapping happens once, in each public method
     (never a `Result` inside a `Result`, `docs/architecture/api.md:66-67`).
-- [ ] Run the touched tests: all `TmdbApiClientTest` (9 tests) and
+- [x] Run the touched tests: all `TmdbApiClientTest` (9 tests) and
       `SkipSegmentServiceTest` (4 tests) green.
       If `findLookups_wrapErrorsIntoFailure` stays red after the change because
       Ktor delivers the `Error` to an uncaught-exception path instead of the
       call (design Risk 2), do not weaken the assertion: record the observed
       behaviour under Blocked and stop.
-- [ ] Static check for AC-1 and AC-7, from the worktree root:
+- [x] Static check for AC-1 and AC-7, from the worktree root:
   ```bash
   grep -nE 'apiResult|kotlinx\.coroutines\.CancellationException' app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt   # no output
   grep -c '= runCatchingCancellable {' app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt                               # 4
   grep -c 'find/' app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt                                                   # 1
   grep -nE 'log\(|Timber\.|println\(|bodyAsText' app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt                     # no output
   ```
-- [ ] Run the fast gate; commit, e.g. "Route both TMDB find lookups through one request that fails on any HTTP error".
+- [x] Run the fast gate; commit, e.g. "Route both TMDB find lookups through one request that fails on any HTTP error".
 
 **Done when:** the touched-tests command reports `TmdbApiClientTest` 9 tests and
 `SkipSegmentServiceTest` 4 tests with 0 failures, the four greps print exactly
@@ -267,13 +267,13 @@ test red, then change production code, then green, then one commit.
 **Consumes:** Task 2's `TmdbApiClient`.
 **Produces:** nothing code-facing.
 
-- [ ] Edit `docs/architecture/api.md` as above; no other doc changes.
-- [ ] Run the full gate:
+- [x] Edit `docs/architecture/api.md` as above; no other doc changes.
+- [x] Run the full gate:
       `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`.
-- [ ] Confirm the privacy guards are untouched:
+- [x] Confirm the privacy guards are untouched:
       `git diff --stat e569e055 -- '*SkipSegmentPrivacyTest.kt' '*EpisodeSchedulePrivacyTest.kt'`
       prints nothing, and both classes appear as passed in the test report.
-- [ ] Run the fast gate; commit, e.g. "Document how the small API clients report failures".
+- [x] Run the fast gate; commit, e.g. "Document how the small API clients report failures".
 
 **Done when:** the full gate exits 0, the `git diff --stat` above is empty, and
 `git diff e569e055 --stat` lists only `TmdbApiClient.kt`,
@@ -291,14 +291,31 @@ dev APK installed through `tools/android-apk-install-preserve`.
 <!-- owner: implementer -->
 
 **Commits:**
+- `2e4a127a` Pin the skip-segment outcome when the TMDB lookup fails (Task 1)
+- `78ecad0d` Route both TMDB find lookups through one request that fails on any HTTP error (Task 2)
+- Task 3: "Document how the small API clients report failures" (docs/architecture/api.md and this record)
 
-**Deviations from the plan:**
+**Commands and results:**
+- Task 1, touched tests on base: `SkipSegmentServiceTest` 4 tests, 0 failures (BUILD SUCCESSFUL).
+- Task 2, touched tests before the production change (red on base):
+  `13 tests completed, 2 failed`:
+  `TmdbApiClientTest > findByImdbId_prefersTvThenMovieAndFailsOnHttpError() FAILED  org.opentest4j.AssertionFailedError at TmdbApiClientTest.kt:114`;
+  `TmdbApiClientTest > findLookups_wrapErrorsIntoFailure() FAILED  java.lang.NoClassDefFoundError at TmdbApiClientTest.kt:180`.
+  Both failed for the planned reasons (502 gave `success(null)`; `Error` escaped `apiResult`).
+- Task 2, after the change: `TmdbApiClientTest` 9 tests, `SkipSegmentServiceTest` 4 tests, 0 failures.
+  Greps: `apiResult|kotlinx.coroutines.CancellationException` none; `= runCatchingCancellable {` 4; `find/` 1; log/Timber/println/bodyAsText none.
+- Task 3, full gate `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`: BUILD SUCCESSFUL in 3m 22s, exit 0.
+  `git diff --stat e569e055` on the two privacy tests prints nothing; `SkipSegmentPrivacyTest` 3/0 failures, `EpisodeSchedulePrivacyTest` 1/0 failures.
 
-**Files touched outside the plan:**
+**Deviations from the plan:** none.
+
+**Files touched outside the plan:** none.
 
 **For the reviewers:**
+- Contract change: `findByImdbId` now fails on non-2xx (was `success(null)`); `SkipSegmentService` treats failure like a miss, pinned by Task 1 test.
+- detekt printed "compiler errors found during analysis" notices (83 and 7) but exited 0; not investigated, not caused by this diff's content as far as the gate shows.
 
-**Blocked:**
+**Blocked:** none.
 
 ## Readiness
 
