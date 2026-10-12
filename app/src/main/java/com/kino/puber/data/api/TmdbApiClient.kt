@@ -1,12 +1,7 @@
 package com.kino.puber.data.api
 
 import com.kino.puber.BuildConfig
-import com.kino.puber.data.api.models.TmdbAggregateCreditsResponse
-import com.kino.puber.data.api.models.TmdbConfigurationResponse
-import com.kino.puber.data.api.models.TmdbCreditsResponse
 import com.kino.puber.data.api.models.TmdbFindResponse
-import com.kino.puber.data.api.models.TmdbMediaKind
-import com.kino.puber.data.api.models.TmdbMediaRef
 import com.kino.puber.data.api.models.TmdbSeasonDetailsResponse
 import com.kino.puber.data.api.models.TmdbTvDetailsResponse
 import io.ktor.client.HttpClient
@@ -23,15 +18,6 @@ import okhttp3.OkHttpClient
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
-
-private val IMDB_TITLE_ID_REGEX = Regex("(?:tt)?([0-9]{7,})", RegexOption.IGNORE_CASE)
-
-internal fun String.normalizedImdbTitleIdOrNull(): String? =
-    IMDB_TITLE_ID_REGEX
-        .matchEntire(trim())
-        ?.groupValues
-        ?.get(1)
-        ?.let { digits -> "tt$digits" }
 
 class TmdbApiClient private constructor(
     private val httpClient: HttpClient,
@@ -79,49 +65,6 @@ class TmdbApiClient private constructor(
         }
         val body = response.body<TmdbFindResponse>()
         body.tvResults?.firstOrNull()?.id ?: body.movieResults?.firstOrNull()?.id
-    }
-
-    suspend fun findMediaByImdbId(imdbId: String): Result<TmdbMediaRef?> {
-        val formattedId = imdbId.normalizedImdbTitleIdOrNull()
-        if (!isConfigured || formattedId == null) {
-            return Result.success(null)
-        }
-        return apiResult {
-            val response = httpClient.get("${BASE_URL}find/$formattedId") {
-                parameter("external_source", "imdb_id")
-            }
-            if (!response.status.isSuccess()) {
-                return@apiResult null
-            }
-            val body = response.body<TmdbFindResponse>()
-            body.tvResults?.firstOrNull()?.id?.let { id ->
-                TmdbMediaRef(id = id, kind = TmdbMediaKind.TV)
-            } ?: body.movieResults?.firstOrNull()?.id?.let { id ->
-                TmdbMediaRef(id = id, kind = TmdbMediaKind.MOVIE)
-            }
-        }
-    }
-
-    suspend fun getMovieCredits(tmdbId: Int): Result<TmdbCreditsResponse> = apiResult {
-        val response = httpClient.get("${BASE_URL}movie/$tmdbId/credits") {
-            parameter("language", "ru-RU")
-        }
-        check(response.status.isSuccess())
-        response.body()
-    }
-
-    suspend fun getTvAggregateCredits(tmdbId: Int): Result<TmdbAggregateCreditsResponse> = apiResult {
-        val response = httpClient.get("${BASE_URL}tv/$tmdbId/aggregate_credits") {
-            parameter("language", "ru-RU")
-        }
-        check(response.status.isSuccess())
-        response.body()
-    }
-
-    suspend fun getConfiguration(): Result<TmdbConfigurationResponse> = apiResult {
-        val response = httpClient.get("${BASE_URL}configuration")
-        check(response.status.isSuccess())
-        response.body()
     }
 
     private suspend fun <T> apiResult(block: suspend () -> T): Result<T> = try {

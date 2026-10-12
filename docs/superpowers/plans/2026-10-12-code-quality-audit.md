@@ -195,15 +195,15 @@ shows no stray logs.
 
 **Consumes:** nothing. **Produces:** nothing.
 
-- [ ] Pre-check: for each of `TmdbMediaRef TmdbMediaKind TmdbCastMember TmdbCastCredit TmdbCreditsResponse TmdbAggregateCreditsResponse TmdbConfigurationResponse TmdbImageConfiguration TmdbImageConfig normalizedImdbTitleIdOrNull findMediaByImdbId getMovieCredits getTvAggregateCredits`,
+- [x] Pre-check: for each of `TmdbMediaRef TmdbMediaKind TmdbCastMember TmdbCastCredit TmdbCreditsResponse TmdbAggregateCreditsResponse TmdbConfigurationResponse TmdbImageConfiguration TmdbImageConfig normalizedImdbTitleIdOrNull findMediaByImdbId getMovieCredits getTvAggregateCredits`,
   `grep -rlw <name> app/src baselineprofile` lists only the files being changed (R4).
   (`getConfiguration` hits in `app/src/main/generated/baselineProfiles/*.txt` are
   `AndroidComposeView`/`Json`/Voyager methods, not TMDB; leave the profile alone.)
-- [ ] Apply the deletions.
-- [ ] COMPILE, then TEST `com.kino.puber.data.api.TmdbApiClientTest` — the six
+- [x] Apply the deletions.
+- [x] COMPILE, then TEST `com.kino.puber.data.api.TmdbApiClientTest` — the six
   remaining tests pass.
-- [ ] Re-run the grep: no hits.
-- [ ] Commit: `Delete the unused TMDB cast and configuration endpoints (BP-2)`.
+- [x] Re-run the grep: no hits.
+- [x] Commit: `Delete the unused TMDB cast and configuration endpoints (BP-2)`.
 
 **Done when:** COMPILE and `TmdbApiClientTest` pass; the grep is empty.
 
