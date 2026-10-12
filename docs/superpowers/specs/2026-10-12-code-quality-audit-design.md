@@ -112,3 +112,9 @@ risks. Not on the quick route. -->
 2. Which dimension matters most, so findings are ordered and follow-up rows opened in that order: structure/SOLID, replacing hand-written code with libraries, or performance? Proposed: libraries first, then SOLID of the 8 big files, then performance.
 3. Is adding a dependency (for example `androidx.paging` in place of the 604-line `Paginator`) acceptable to recommend, given the project's TV focus and paging model in `docs/architecture/paging-and-filters.md`?
 4. May the audit run detekt through `./tools/agentw` in the worktree (shared Gradle home, `AGENT_GRADLE_SERIAL=1`), or should it rely on static reading only?
+
+Answers (user, 2026-10-12):
+- Q1 → answered: report **plus** a small set of safe, behaviour-preserving fixes in this branch (so device verification and code review apply).
+- Q2 → answered: order is libraries (reinvented wheels) → SOLID of the big files → performance.
+- Q3 → answered: yes, the report may recommend new dependencies through `gradle/libs.versions.toml`, with a reason that covers TV focus and the paging model; the decision to add one belongs to the follow-up row.
+- Q4 → answered: yes, run detekt through `./tools/agentw` in the worktree with `AGENT_GRADLE_SERIAL=1`.
