@@ -1,0 +1,32 @@
+---
+slug: vm-mutation-queue
+title: "One tested `MutationQueue` (serialisation opt-in, `onCreated` hook) replacing the three `launchMutation`/`awaitPendingMutations` variants in `DetailsVM`, `PlayerVM`, `CollectionDetailVM`"
+stage: idea
+size: S
+tracks: []
+kind: refactor
+branch:
+worktree:
+base:
+spec:
+plan:
+rounds: {verify: 0, review: 0, judge: 0}
+blocked_by: []
+created: 2026-10-12
+updated: 2026-10-12
+---
+
+## Next
+From the code-quality-audit report (full scope there): SOLID-12; refactor, S, SOLID. Device: yes (close after a bookmark or watched toggle); `PlayerVM` part after `player-overlays-port`
+
+## Open questions
+| ID | Question | Blocks | Status | Answer |
+|----|----------|--------|--------|--------|
+
+## Decisions
+| Date | Decision | By |
+|------|----------|----|
+
+## Log
+- 2026-10-12 created on the board (stage idea)
+- 2026-10-12 migrated from the former board file (board stage `idea` -> `idea`); the board row Notes are copied verbatim into ## Next
