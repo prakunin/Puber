@@ -1,6 +1,7 @@
 package com.kino.puber.data.api
 
 import com.kino.puber.BuildConfig
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.data.api.models.TmdbFindResponse
 import com.kino.puber.data.api.models.TmdbSeasonDetailsResponse
 import com.kino.puber.data.api.models.TmdbTvDetailsResponse
@@ -16,7 +17,6 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import okhttp3.OkHttpClient
 import java.io.IOException
-import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 class TmdbApiClient private constructor(
@@ -33,15 +33,15 @@ class TmdbApiClient private constructor(
     val isConfigured: Boolean
         get() = BuildConfig.TMDB_READ_ACCESS_TOKEN.isNotBlank()
 
-    suspend fun findTvByImdbId(imdbId: String): Result<Int?> = apiResult {
-        val response = httpClient.get("${BASE_URL}find/${imdbId.withTmdbPrefix()}") {
-            parameter("external_source", "imdb_id")
-        }
-        response.requireSuccess()
-        response.body<TmdbFindResponse>().tvResults?.firstOrNull()?.id
+    /**
+     * TV id for [imdbId]. null = TMDB has no TV match; failure = the request failed
+     * (non-2xx, network, decoding).
+     */
+    suspend fun findTvByImdbId(imdbId: String): Result<Int?> = runCatchingCancellable {
+        find(imdbId).tvResults?.firstOrNull()?.id
     }
 
-    suspend fun getTvDetails(seriesId: Int): Result<TmdbTvDetailsResponse> = apiResult {
+    suspend fun getTvDetails(seriesId: Int): Result<TmdbTvDetailsResponse> = runCatchingCancellable {
         httpClient.get("${BASE_URL}tv/$seriesId")
             .also { it.requireSuccess() }
             .body()
@@ -50,30 +50,26 @@ class TmdbApiClient private constructor(
     suspend fun getTvSeasonDetails(
         seriesId: Int,
         seasonNumber: Int,
-    ): Result<TmdbSeasonDetailsResponse> = apiResult {
+    ): Result<TmdbSeasonDetailsResponse> = runCatchingCancellable {
         httpClient.get("${BASE_URL}tv/$seriesId/season/$seasonNumber")
             .also { it.requireSuccess() }
             .body()
     }
 
-    suspend fun findByImdbId(imdbId: String): Result<Int?> = apiResult {
-        val response = httpClient.get("${BASE_URL}find/${imdbId.withTmdbPrefix()}") {
-            parameter("external_source", "imdb_id")
-        }
-        if (!response.status.isSuccess()) {
-            return@apiResult null
-        }
-        val body = response.body<TmdbFindResponse>()
-        body.tvResults?.firstOrNull()?.id ?: body.movieResults?.firstOrNull()?.id
+    /**
+     * TV id, else movie id, for [imdbId]. null = TMDB has no match; failure = the request
+     * failed (non-2xx, network, decoding).
+     */
+    suspend fun findByImdbId(imdbId: String): Result<Int?> = runCatchingCancellable {
+        find(imdbId).let { it.tvResults?.firstOrNull()?.id ?: it.movieResults?.firstOrNull()?.id }
     }
 
-    private suspend fun <T> apiResult(block: suspend () -> T): Result<T> = try {
-        Result.success(block())
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    private suspend fun find(imdbId: String): TmdbFindResponse =
+        httpClient.get("${BASE_URL}find/${imdbId.withTmdbPrefix()}") {
+            parameter("external_source", "imdb_id")
+        }
+            .also { it.requireSuccess() }
+            .body()
 
     private fun String.withTmdbPrefix(): String =
         if (startsWith("tt", ignoreCase = true)) this else "tt$this"
