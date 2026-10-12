@@ -66,7 +66,7 @@ Shared commands (referred to by name below):
 
 **Produces:** the clock table and the dialog-state assertions Tasks 5 and 6 must keep green with no edit.
 
-- [ ] **T1** in `PlayerUIMapperTest` add:
+- [x] **T1** in `PlayerUIMapperTest` add:
   - `formatTime_matchesPlaybackClockTable`: for each pair assert
     `assertEquals(expected, mapper.formatTime(ms), "ms=$ms")`:
     `0L→"0:00"`, `999L→"0:00"`, `1_000L→"0:01"`, `59_999L→"0:59"`,
@@ -77,7 +77,7 @@ Shared commands (referred to by name below):
     (do not use the deprecated `Locale(String)` constructor), assert
     `mapper.formatTime(3_661_000L) == "1:01:01"` and `mapper.formatTime(65_000L) == "1:05"`,
     restore the saved default in `finally`. Add `import java.util.Locale`.
-- [ ] **T4** in `AuthVMTest` add two tests. In each: `val vm = createVM()`, then
+- [x] **T4** in `AuthVMTest` add two tests. In each: `val vm = createVM()`, then
   re-stub **after** `createVM()` (it stubs `getState()` itself)
   `every { apiDomainInteractor.getState() } returns ApiDomainState(...)`, then
   `vm.onAction(AuthAction.OpenApiDomainDialog)` without `testOnStart()`, then
@@ -88,7 +88,7 @@ Shared commands (referred to by name below):
     `ApiDomainDialogState("api.example", null, false)` and `initialInput == ""`.
   Imports to add: `com.kino.puber.ui.feature.auth.model.AuthAction`,
   `com.kino.puber.core.ui.uikit.model.ApiDomainDialogState`.
-- [ ] **T5** in `HomeVMTest` add the same two shapes as
+- [x] **T5** in `HomeVMTest` add the same two shapes as
   `openApiDomainDialog_exposesCurrentAndCustomDomain` and
   `openApiDomainDialog_leavesCustomDomainEmpty_whenNoneIsSet`: stub
   `every { apiDomainInteractor.getState() } returns ApiDomainState(...)`,
@@ -98,7 +98,7 @@ Shared commands (referred to by name below):
   `org.junit.jupiter.api.Assertions.assertEquals`,
   `com.kino.puber.ui.feature.home.model.HomeAction`,
   `com.kino.puber.core.ui.uikit.model.ApiDomainDialogState`.
-- [ ] **T6** in `DeviceSettingsVMMenuSectionsTest`: give `createVM` a second
+- [x] **T6** in `DeviceSettingsVMMenuSectionsTest`: give `createVM` a second
   parameter `apiDomainState: ApiDomainState = ApiDomainState(domain = "service-kp.com", customDomain = null)`
   and use it in the existing `getState()` stub (existing callers unchanged).
   Add `apiDomain_mapsCurrentAndCustomDomain` (`ApiDomainState("api.example", "custom.example")`)
@@ -107,14 +107,14 @@ Shared commands (referred to by name below):
   then `vm.onAction(DeviceSettingsActions.OpenApiDomainDialog)` and asserts
   `apiDomain` again plus `isApiDomainDialogOpen == true` (open path). Add the
   `ApiDomainDialogState` import.
-- [ ] If any of T4-T6 cannot reach the dialog state without heavy setup, drop
+- [x] If any of T4-T6 cannot reach the dialog state without heavy setup, drop
   that one, keep T7 (Task 5) plus device row D2, and record it under
   "Deviations" (spec Test design).
-- [ ] COMPILE, then TEST `com.kino.puber.ui.feature.player.model.PlayerUIMapperTest`
+- [x] COMPILE, then TEST `com.kino.puber.ui.feature.player.model.PlayerUIMapperTest`
   `com.kino.puber.ui.feature.auth.vm.AuthVMTest` `com.kino.puber.ui.feature.home.vm.HomeVMTest`
   `com.kino.puber.ui.feature.device.settings.vm.DeviceSettingsVMMenuSectionsTest`. All green
   on unchanged production code. `git diff --stat` shows only the four test files.
-- [ ] Commit: `Add characterisation tests for the playback clock and the API-domain dialog state`.
+- [x] Commit: `Add characterisation tests for the playback clock and the API-domain dialog state`.
 
 **Done when:** the TEST command above passes and `git show --stat HEAD` lists
 only those four files under `app/src/test`.
@@ -128,13 +128,13 @@ only those four files under `app/src/test`.
 - Modify: `docs/superpowers/evidence/2026-10-12-code-quality-audit-report.md`
   — "Detekt" section table row "Before" and the "Status" line (section starts at line 119; table at line 174).
 
-- [ ] Host precondition: `free -m`. If swap use is above about 50 %, do not
+- [x] Host precondition: `free -m`. If swap use is above about 50 %, do not
   start: report it to the conductor and wait. Do not run `--stop` and do not
   kill daemons that are not yours.
-- [ ] Run DETEKT in the worktree, log to a file outside `<wt>`. Production code
+- [x] Run DETEKT in the worktree, log to a file outside `<wt>`. Production code
   is unchanged at this point (only Task 1 tests were added), so `devDebug` is
   the audited-commit count.
-- [ ] If the JVM crashes again (SIGSEGV / hang, no `app/build/reports/detekt/*.md`):
+- [x] If the JVM crashes again (SIGSEGV / hang, no `app/build/reports/detekt/*.md`):
   1. Check the main checkout is clean and its `app/src/main` equals the audited commit:
      `git -C /mnt/data/projects/PetProjets/Puber status --short` (empty) and
      `git -C /mnt/data/projects/PetProjets/Puber diff --stat 36cda915 HEAD -- app/src/main` (empty).
@@ -142,15 +142,15 @@ only those four files under `app/src/test`.
      (allowed for the "before" count only, user answer Q5).
   3. Read the counts from the main checkout's `app/build/reports/detekt/`.
   Move any `hs_err_pid*.log` out of both checkouts; never commit one.
-- [ ] Record in the report table: commit actually analysed (worktree `HEAD`, or
+- [x] Record in the report table: commit actually analysed (worktree `HEAD`, or
   main `master` hash), where it ran (worktree / main checkout per Q5),
   `devDebug` total, `devDebugUnitTest` total, and counts per rule set. Note
   that a worktree `devDebugUnitTest` count includes the Task 1 tests. Update the
   "Status" line. Do not edit `config/detekt/detekt-baseline.xml`.
-- [ ] If neither run completes: write "not obtained, host fault" with the
+- [x] If neither run completes: write "not obtained, host fault" with the
   attempt, tell the conductor (AC-8/AC-9 stay open; the rest of the plan
   proceeds, spec Detekt gate plan step 4).
-- [ ] Commit: `Record the detekt count before the code-quality-audit fixes`.
+- [x] Commit: `Record the detekt count before the code-quality-audit fixes`.
 
 **Done when:** the report's "Before" row holds two numbers and a per-rule-set
 breakdown (or the explicit "not obtained, host fault" entry), and `git status`
