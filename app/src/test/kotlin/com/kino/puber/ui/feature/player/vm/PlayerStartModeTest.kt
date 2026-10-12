@@ -29,7 +29,6 @@ import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -173,7 +172,10 @@ internal class PlayerStartModeTest {
     @Test
     fun resumeDialogFormatsSavedPositionWithRealMapper() {
         mapper = PlayerUIMapper(mockk<Context>(relaxed = true))
-        every { interactor.resolveMedia(item, 1, 1, null) } returns savedMedia.copy(watchingTime = 3_661, duration = 7_200)
+        every { interactor.resolveMedia(item, 1, 1, null) } returns savedMedia.copy(
+            watchingTime = 3_661,
+            duration = 7_200,
+        )
         val resumeDialog = slot<ResumeDialogState>()
         every {
             contentStateFactory.build(any(), any(), capture(resumeDialog), any(), any(), any())
@@ -181,8 +183,7 @@ internal class PlayerStartModeTest {
 
         createVM(PlayerStartMode.ResumeIfAvailable).testOnStart()
 
-        assertNotNull(resumeDialog.captured)
-        assertEquals("1:01:01", resumeDialog.captured?.formattedTime)
+        assertEquals("1:01:01", resumeDialog.captured.formattedTime)
     }
 
     @Test
