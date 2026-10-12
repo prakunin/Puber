@@ -83,8 +83,88 @@ follow-up board row.
 
 ## Design
 
-<!-- architect. Decisions table, changes by layer, alternatives rejected,
-risks. Not on the quick route. -->
+The deliverable is the report
+`docs/superpowers/evidence/2026-10-12-code-quality-audit-report.md` (AC-1..AC-6,
+AC-8 baseline, AC-11), written on audited commit `36cda915`. Its `app/` is
+identical to master `4e18338e`. This section covers only the in-branch fixes
+(AC-7, AC-9, AC-10). Finding IDs refer to the report.
+
+### Decisions
+
+| Question | Decision | Why |
+|---|---|---|
+| Which findings are fixed on this branch? | Four, one commit each, in this order: **F1** RW-5 (+ STR-4 `IdGenerator` sentence), **F2** BP-2, **F3** SOLID-10, **F4** RW-7. | Each is S effort, adds no dependency, splits no class and changes no observable output. F1 and F2 delete code with zero production callers. F3 and F4 merge byte-identical copies. |
+| Why not more? | Every other finding changes behaviour (BP-3, BP-7, PERF-5), needs a product decision (BP-1), touches a build file (BP-4, AC-7), is a split (SOLID-*), or lacks a test net (BP-6 / PERF-2: `PaginatorReducerTest` does not cover the page merges). | Spec Out of scope; keeps the review small. |
+| `PagingListState`/`PagingColumn` and `PanelFocusRequester.kt` are dead too. Delete them here? | No. | `upstream-sync-triage` (`b5bd1cca`) and `player-overlays-port` already delete them. Doing it twice only produces merge conflicts. |
+| `ContentFilter` is dead, and `paging-and-filters.md` documents it as the filter model. Fix here? | No. Report STR-4, follow-up `dead-code-sweep`. | Deleting it means rewriting an architecture section and possibly overruling a planned filter feature. The user should choose. |
+| Where does the shared clock formatter live? | New `ui/feature/player/model/PlaybackClock.kt`: `internal fun formatPlaybackClock(positionMs: Long): String`. `PlayerUIMapper.formatTime` keeps its signature and delegates to it. | VM tests mock `mapper.formatTime` [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMTestFixture.kt:122], so the mapper API must stay. The component already imports from `player/model`. |
+| Where does the shared `toDialogState()` live? | `core/ui/uikit/model/ApiDomainDialogState.kt`, as `internal fun ApiDomainState.toDialogState(): ApiDomainDialogState`. | Next to the type it builds. `core/ui` already imports `domain` [Source: app/src/main/java/com/kino/puber/core/ui/uikit/component/moviesList/DetailsPrefetchSurfaceState.kt:9]. Both types are `internal` in `:app`. |
+| Recommend a new dependency? | No (AC-11 then has no finding to apply to). | RW-1..RW-4 were checked against Paging 3, LruCache, Caffeine/Guava, Store5 and `android.net.Uri`. Each loses on TV focus, the paging model or deep-link strictness (report, Reinvented wheels). |
+| Detekt baseline file | Leave `config/detekt/detekt-baseline.xml` untouched (it is empty). | AC-9 compares counts. Deleting code can only lower them, and a rewritten baseline would hide new issues. |
+| Device verification | Required (AC-10): F3 and F4 reach runtime UI. F1 and F2 have no runtime reach and are covered by app launch. | AGENTS.md: ViewModel state and TV UI changes need the device. |
+
+### Changes by layer
+
+**API / data (F2).**
+- `data/api/TmdbApiClient.kt`: delete `IMDB_TITLE_ID_REGEX` and `normalizedImdbTitleIdOrNull` [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:27], plus `findMediaByImdbId` [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:84], `getMovieCredits` [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:105], `getTvAggregateCredits` [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:113] and `getConfiguration` [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:121]. Also delete the five model imports they used [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:4].
+- These stay, because `EpisodeScheduleRepository` [Source: app/src/main/java/com/kino/puber/data/repository/EpisodeScheduleRepository.kt:55] and `SkipSegmentService` [Source: app/src/main/java/com/kino/puber/data/repository/SkipSegmentService.kt:62] use them: `findTvByImdbId`, `getTvDetails`, `getTvSeasonDetails`, `findByImdbId` and `withTmdbPrefix`.
+- Delete `data/api/models/TmdbCastModels.kt` [Source: app/src/main/java/com/kino/puber/data/api/models/TmdbCastModels.kt:1] and `data/api/config/TmdbImageConfig.kt` [Source: app/src/main/java/com/kino/puber/data/api/config/TmdbImageConfig.kt:3].
+- Test: delete `castAndConfigurationEndpoints_preservePathsLocalizationAndDecoding` [Source: app/src/test/kotlin/com/kino/puber/data/api/TmdbApiClientTest.kt:135]. The other tests in that file stay and still cover the kept endpoints.
+
+**Repository.** None.
+
+**Core (F1, F3).**
+- Delete `core/system/IdGenerator.kt` [Source: app/src/main/java/com/kino/puber/core/system/IdGenerator.kt:8].
+- Add the `toDialogState()` extension to `core/ui/uikit/model/ApiDomainDialogState.kt` [Source: app/src/main/java/com/kino/puber/core/ui/uikit/model/ApiDomainDialogState.kt:6]. It maps `domain → currentDomain` and `customDomain → customDomain`, and leaves `isDetecting` at its default `false`, exactly as the three copies do today.
+
+**ViewModel state and actions (F3).** In each VM, delete the private copy and import the shared extension. No state shape, action or call site changes.
+- `HomeVM` [Source: app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt:673]
+- `AuthVM` [Source: app/src/main/java/com/kino/puber/ui/feature/auth/vm/AuthVM.kt:291]
+- `DeviceSettingsVM` [Source: app/src/main/java/com/kino/puber/ui/feature/device/settings/vm/DeviceSettingsVM.kt:505]
+
+**Screen and DI module.** None. None of the deleted classes is registered in Koin [Source: app/src/main/java/com/kino/puber/data/di/modules.kt:52], and no screen `buildModule` changes.
+
+**Compose content and model (F4).**
+- New `ui/feature/player/model/PlaybackClock.kt` holding the body of `PlayerUIMapper.formatTime` [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIMapper.kt:215]: `Locale.ROOT`, `%d:%02d:%02d` when hours > 0, otherwise `%d:%02d`. The time constants are named (no `MagicNumber`).
+- `PlayerUIMapper.formatTime` becomes `= formatPlaybackClock(positionMs)`. Its file-private time constants then have no use and go [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIMapper.kt:16].
+- `PlayerProgressBar.kt`: delete `formatTimeMs` [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:325] and its three constants [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:355]. The two `remember` call sites [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:59] and `formatRemainingTime` [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:337] call `formatPlaybackClock` instead.
+- The `Int` constants in the component and the `Long` constants in the mapper give the same result for every `Long` input, because the `Int` divisor is widened.
+
+**Resources.** None.
+
+**Docs (F1).** Delete the `IdGenerator` sentence from `docs/architecture/navigation.md` [Source: docs/architecture/navigation.md:61].
+
+**Tests the test-designer should consider.** Pin `formatPlaybackClock` at 0, 59 999, 60 000, 3 599 999, 3 600 000 and 36 000 000 ms. Pin `ApiDomainState.toDialogState()` with and without `customDomain`. Run the existing `PlayerUIMapperTest` [Source: app/src/test/kotlin/com/kino/puber/ui/feature/player/model/PlayerUIMapperTest.kt:1] and the VM suites unchanged.
+
+### Device verification per fix (AC-10)
+
+| Fix | Smoke path on a leased emulator | Expected (as on master) |
+|---|---|---|
+| F1 | App launch to Home | no crash. Nothing else reaches the deleted class. |
+| F2 | App launch. The episode schedule screen cannot be exercised from a worktree build (no TMDB token, see AGENTS.md); record that. | no crash |
+| F3 | Settings → Network → open the API-domain dialog, check the current domain and the prefilled custom domain, close with Back. Auth and the Home error state use the same function; a unit test covers them. | same text and prefill as master |
+| F4 | Play any title, show controls: elapsed (`m:ss` / `h:mm:ss`) and remaining (`-m:ss`) times. Seek forward once and read the seek indicator time. Reopen the title and read the resume dialog time. | same strings as master |
+
+### Alternatives rejected
+
+- Replace `Paginator` with `androidx.paging`: Paging 3 cannot mutate items in place without invalidating and reloading, which moves TV focus. `PagingData` also cannot express the ten-state model (report RW-1).
+- Replace `CachedFeed` with Store5: its invalidation model loses the documented per-key epoch races (report RW-3).
+- Use `DateUtils.formatElapsedTime` for F4: it changes visible text (`05:07` instead of `5:07`, and locale digits).
+- Delete all 36 dead `KinoPubApiClient` endpoints now: this needs a product decision about which to keep (BP-1).
+- Collapse the duplicate `Paginator` branches now: there is no test net for those merges, and every paged list is affected (BP-6).
+- Regenerate the detekt baseline: it would hide findings instead of counting them.
+
+### Risks
+
+1. **Detekt gate cannot run on this host today (tooling, highest; blocks AC-8 and AC-9).** Five `./tools/agentw :app:detektAll` attempts lost the Gradle daemon to JVM faults in unrelated internals: C2, `SymbolTable::grow` twice, a VM-thread hang, and a G1 worker. This happened on both OpenJDK 21.0.12 and JBR 21.0.6, including a run with conservative flags. That points at the host (swap was ~90 % used), not the project. The same task gave 0 findings in neighbouring worktrees on 2026-10-10/11. The report's Detekt section lists every attempt and leaves the "Before" row open. qa must take the before count on an unchanged `app/` before F1 is committed, and the after count once F4 is done.
+2. **Merge conflicts with in-flight branches (low).** `player-overlays-port` and `upstream-sync-triage` change other files. The fixes avoid `PagingListState.kt`, `PanelFocusRequester.kt`, `PlayerScreenContent.kt` and `PuberApp.kt` on purpose.
+3. **Formatter drift (low).** A typo in the moved format string would change on-screen times. The pinned unit test and the F4 device row cover it.
+4. **Focus and D-pad (none).** No focus requester, modifier or key handler changes.
+5. **Koin scope lifetime (none).** No module, scope or VM registration changes.
+6. **Recomposition (none).** `formatPlaybackClock` is a pure top-level function called inside the same `remember(currentPosition)` blocks; nothing new is read in composition.
+7. **Main-thread work and memory (none).** The arithmetic is identical. Deleted code was never loaded.
+8. **Cache invalidation (none).** No cache code changes.
+9. **Baseline profile (low).** None of the deleted symbols appears in `app/src/main/generated/baselineProfiles/*.txt` (grep: 0). The new `PlaybackClockKt` class is not in the profile until the next regeneration, which is a negligible cold-path cost on first player open.
 
 ## Visual
 
@@ -123,3 +203,5 @@ Answers (user, 2026-10-12):
 - Q2 → answered: order is libraries (reinvented wheels) → SOLID of the big files → performance.
 - Q3 → answered: yes, the report may recommend new dependencies through `gradle/libs.versions.toml`, with a reason that covers TV focus and the paging model; the decision to add one belongs to the follow-up row.
 - Q4 → answered: yes, run detekt through `./tools/agentw` in the worktree with `AGENT_GRADLE_SERIAL=1`.
+
+5. (architect, 2026-10-12) The detekt "before" count for AC-8 could not be taken: five runs crashed the JVM on this host (report, Detekt). Should qa re-run it once the host is stable (reboot, or memory and swap freed), or may it be taken from the main checkout with `./gradlew :app:detektAll`, since master's `app/` is identical? Not blocking for plan; blocking for verify.
