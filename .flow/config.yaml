@@ -1,0 +1,31 @@
+# .flow/config.yaml - the project contract for the shared `task` plugin.
+owner_language: ru
+context: [AGENTS.md]
+code_repo: .
+base_branch: master
+branch: "{slug}"
+worktree:
+  tool: orca
+docs_dir: docs/superpowers
+check:
+  # Run inside the task worktree. A worktree never uses ./gradlew (guard hook).
+  fast: "./tools/agentw :app:compileDevDebugKotlin"
+  full: "./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug"
+codex: optional
+# Fallback gpt-5.6-sol and the reason for the pin: .flow/roles/codex-reviewer.md
+codex_model: gpt-6-astra
+delivery: merge
+commit_style: "One imperative English sentence, no prefixes; no Co-Authored-By line"
+roles:
+  qa: qa-device
+  design_extra:
+    - agent: ux-designer
+      when: "track ui: the change alters how a screen looks"
+  review_extra:
+    - agent: ux-designer
+      when: "track ui, or the diff touches Compose layout"
+escalate_also:
+  - "the work needs a physical TV (adb-physical-devices), an uninstall, a data clear, a downgrade or a replaced signer"
+  - "an install fails: it blocks the change and is never a reason to uninstall or clear data"
+  - "ux-designer reports that no docs/design stand governs the screen: run the designing-a-screen skill with the owner before planning (sliders need the owner, not a subagent)"
+  - "creating or pushing a release tag (docs/release.md); the merge is not that approval"

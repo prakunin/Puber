@@ -12,5 +12,16 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "agent-flow": {
+      "source": {
+        "source": "directory",
+        "path": "/mnt/data/projects/agent-flow"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "task@agent-flow": true
   }
 }
