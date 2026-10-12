@@ -7,6 +7,12 @@ Task: `code-quality-audit`. Spec:
   `gradle/` and `build.gradle.kts` are byte-identical to master `4e18338e`
   (`git diff --stat master -- app gradle build.gradle.kts` is empty), so every
   `[Source: path:line]` below holds on master too.
+- **Line numbers are on the audited commit.** Every `[Source: path:line]` refers
+  to `36cda915`, including findings that touch files the in-branch fixes
+  F1-F4 changed. Those lines have moved on the branch head. The main case is
+  `TmdbApiClient.kt`, which F2 shortened: `apiResult` is at `:127` on
+  `36cda915` and at `:70` on the branch (BP-2, SOLID-13). Read such sources with
+  `git show 36cda915:<path>`.
 - **Method:** static reading of `app/src/main` (386 files, ~51k lines), checked
   against `gradle/libs.versions.toml`, the platform and kotlinx, plus one detekt
   run (see [Detekt](#detekt)). Every "duplicate" verdict was made after reading
@@ -59,16 +65,17 @@ that flag. Where a library was considered, the reason it loses is given.
 | RW-3 | `CachedFeed` (607) + `ContentCacheRepository` (634) | **defer** | Closest library is Store5 (`org.mobilenativefoundation.store:store5`): fetcher + source of truth (Room) + memory cache + a stale-while-revalidate stream. On paper it covers `CachedFeed.load`. It does not cover the invalidation model: per-key epochs, destroy-vs-overwrite tickets and the store-generation wipe on logout or domain switch. That model exists because of concrete races documented in the class (a bookmark toggled during a background revalidation). It also does not cover `ContentCacheRepository`'s sparse item merge. A port would re-open those races for no user-visible gain. TV focus would not change, because emission order (cached value first, fresh value second) is what keeps focus in place, and Store5 preserves it. The paging model is unaffected, since paging stays in `Paginator`. Revisit only if the cache keeps producing race bugs. The OkHttp HTTP cache is already installed for the API client and is not a substitute: it has no offline-first read and no item merge. | [Source: app/src/main/java/com/kino/puber/data/cache/CachedFeed.kt:168] [Source: app/src/main/java/com/kino/puber/data/cache/CachedFeed.kt:95] [Source: app/src/main/java/com/kino/puber/data/cache/ContentCacheRepository.kt:511] [Source: app/src/main/java/com/kino/puber/data/api/KinoPubApiClient.kt:134] | low | - | n/a (defer) |
 | RW-4 | `ContentUriCodec` (178) | **keep** | The platform alternative is `android.net.Uri` (`getPathSegments`, `getQueryParameter`). It decodes percent-escapes silently and tolerates duplicate or unknown keys, ports and user-info. This codec exists to *reject* those, because it validates deep links that can start playback (`SENSITIVE_WEB_QUERY_KEYS`, `strictQueryOrNull`). `java.net.URI` also keeps the codec a plain JVM class that `ContentUriCodecTest` runs without Robolectric. | [Source: app/src/main/java/com/kino/puber/core/contentlink/ContentUriCodec.kt:110] [Source: app/src/main/java/com/kino/puber/core/contentlink/ContentUriCodec.kt:119] | low | - | n/a (keep) |
 | RW-5 | `IdGenerator` | **replace → delete** | A verbatim copy of the platform's `View.generateViewId()` (API 17; minSdk is 24), with zero callers in `app/`, `baselineprofile/` and tests. It is not replaced by the platform call: it is removed, and the doc sentence that mentions it is dropped. | [Source: app/src/main/java/com/kino/puber/core/system/IdGenerator.kt:8] [Source: docs/architecture/navigation.md:61] | low | S | **fixed in this task** (`ee4da3ce`) |
-| RW-6 | `SessionEventBus` | **keep** | Ten lines over kotlinx `MutableSharedFlow`, which is the library. `tryEmit` with `extraBufferCapacity = 1` can drop an event when the buffer is full. That is acceptable because `Unauthorized` is idempotent. | [Source: app/src/main/java/com/kino/puber/core/session/SessionEventBus.kt:11] | low | - | n/a (keep) |
+| RW-6 | `SessionEventBus` | **keep the library, fix the delivery** | As a wheel it is fine: ten lines over kotlinx `MutableSharedFlow`, which is the library. The configuration has a defect, though. `MutableSharedFlow(extraBufferCapacity = 1)` has no replay, and `tryEmit` on a shared flow with **no subscriber** returns at once and the event is gone. The only subscriber is the composable `SessionExpiredHandler`, inside the root `FlowComponent` content, which collects from a `LaunchedEffect`. There is therefore no subscriber before the root content's first composition, between Activity teardown and the next composition, and at any time the process is alive without an Activity. The 401 path (`onSessionExpired`) clears both tokens *before* it emits. A dropped `Unauthorized` therefore still sends the user to auth on the next start, because `AuthVM` sees no token. What does not happen are the session clears, which run only in that handler: TV-home programs, the watch-state index, the content cache and the prefetcher are not cleared. One account's history and cached catalogue then outlive its session, possibly into another account's login. No other code path clears them on expiry: the domain switch clears only the cache. Static reading, unmeasured. When `Unauthorized` is merely repeated, the drop is harmless because the event is idempotent. The defect is only the no-subscriber case. Approach: the smallest fix is a `Channel(Channel.CONFLATED)` exposed through `receiveAsFlow()`. It holds one pending event until the collector takes it, and the handler's own comment already says it is the only subscriber. The fuller fix comes with SOLID-11: collect in a `SessionTerminator` on an application-lifetime scope (BP-5), so that a subscriber exists from `Application.onCreate` and the UI only navigates. Either way, add a unit test that emits before anyone subscribes. | [Source: app/src/main/java/com/kino/puber/core/session/SessionEventBus.kt:12] [Source: app/src/main/java/com/kino/puber/core/session/SessionEventBus.kt:16] [Source: app/src/main/java/com/kino/puber/data/api/KinoPubApiClient.kt:232] [Source: app/src/main/java/com/kino/puber/ui/feature/root/component/App.kt:63] [Source: app/src/main/java/com/kino/puber/ui/feature/root/component/App.kt:167] [Source: app/src/main/java/com/kino/puber/ui/feature/auth/vm/AuthVM.kt:56] | medium | S | follow-up `session-expiry-delivery` |
 
 ### Other candidates found
 
 | ID | Candidate | Verdict | Reason | Source | Sev | Effort | Fix |
 |---|---|---|---|---|---|---|---|
-| RW-7 | Playback clock `H:MM:SS` formatter written twice, byte-identical, in `PlayerProgressBar.formatTimeMs` and `PlayerUIMapper.formatTime` (a third variant in `PlaybackDebugFormat` always prints hours and is left alone) | **keep in-house, consolidate** | Platform `DateUtils.formatElapsedTime` prints `MM:SS` with a leading zero and locale digits, which would change visible text, so it is not used. The two copies become one internal function. | [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:325] [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIMapper.kt:215] [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackDebugFormat.kt:126] | low | S | **fixed in this task** (`c07d807d`) |
+| RW-7 | Playback clock `H:MM:SS` formatter written twice, semantically identical (Int vs Long constants, equivalent by widening), in `PlayerProgressBar.formatTimeMs` and `PlayerUIMapper.formatTime` (a third variant in `PlaybackDebugFormat` always prints hours and is left alone) | **keep in-house, consolidate** | Platform `DateUtils.formatElapsedTime` prints `MM:SS` with a leading zero and locale digits, which would change visible text, so it is not used. The two copies become one internal function. | [Source: app/src/main/java/com/kino/puber/ui/feature/player/component/PlayerProgressBar.kt:325] [Source: app/src/main/java/com/kino/puber/ui/feature/player/model/PlayerUIMapper.kt:215] [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackDebugFormat.kt:126] | low | S | **fixed in this task** (`c07d807d`) |
 | RW-8 | `CryptoPreferenceRepository`: hand-rolled AES-GCM with an AndroidKeyStore key | **keep** | The library alternative, `androidx.security:security-crypto`, is deprecated upstream, and the app's own catalogue entry for it is unused (BP-4). Tink would be a new dependency for the same two calls. The hand-rolled version is small and auditable. | [Source: app/src/main/java/com/kino/puber/data/repository/CryptoPreferenceRepository.kt:135] | low | - | n/a (keep) |
 | RW-9 | `CurlLogger` Ktor plugin vs `ktor-client-logging` | **keep** | It prints curl commands through `SensitiveRequestLogPolicy` redaction, which the stock `Logging` plugin does not do. The stock plugin's dependency is therefore dead (BP-4). | [Source: app/src/main/java/com/kino/puber/data/api/KtorPlugins.kt:58] | low | - | n/a (keep) |
 | RW-10 | Retry, JSON, debounce, date and time | **no wheel** | Retry uses Ktor `HttpRequestRetry` (`retryOnlyRepeatableRequests`). JSON is kotlinx.serialization throughout, with no hand parsing. Search debounce is `delay()` inside the cancellable `searchJob`, by documented design (`paging-and-filters.md`, "Search is not paged"). Dates use `java.time` (desugared) for localized formatting and kotlinx-datetime for the model. | [Source: app/src/main/java/com/kino/puber/data/api/ApiRetryPolicy.kt:33] [Source: app/src/main/java/com/kino/puber/ui/feature/episodeschedule/model/EpisodeScheduleUIMapper.kt:90] | - | - | n/a |
+| RW-11 | `AppUpdateChecksum`: hand-written hex encoder (`ByteArray.toHexString()` over a `HEX_CHARS` table) and hex validator (`isSha256`, a char-range loop), plus a manual `MessageDigest` read loop | **replace with stdlib** | The catalogue pins Kotlin `2.4.10`, where the stdlib's `ByteArray.toHexString()` and `kotlin.text.HexFormat` are stable (they have not been `@ExperimentalStdlibApi` since 2.2). They cover the encoder exactly (lowercase by default). The validator becomes `value.length == 64 && runCatching { value.hexToByteArray() }.isSuccess`, or a `HexFormat`-based check. `parseSha256` lowercases first, so the accepted alphabet does not change. `java.util.HexFormat` is **not** an option: it is API 34 and minSdk is 24. Okio is the alternative: `HashingSource.sha256(file.source())` drained into `blackholeSink()`, then `.hash.hex()`, with `decodeHex()` for parsing. Okio is already on the classpath through OkHttp and imported directly (`BoundedDownload`), but it has no catalogue entry of its own, so the stdlib wins on "no new direct dependency". The private `toHexString` also shadows the stdlib member of the same name, which a reader can mistake for it. `AppUpdateDownloadTest` covers `parseSha256` and the digest, so the swap has a test net. | [Source: app/src/main/java/com/kino/puber/data/repository/AppUpdateDownload.kt:125] [Source: app/src/main/java/com/kino/puber/data/repository/AppUpdateDownload.kt:142] [Source: app/src/main/java/com/kino/puber/data/repository/AppUpdateDownload.kt:148] [Source: gradle/libs.versions.toml:3] [Source: app/src/main/java/com/kino/puber/data/api/network/diagnostics/BoundedDownload.kt:9] [Source: app/src/test/kotlin/com/kino/puber/data/repository/AppUpdateDownloadTest.kt:17] | low | S | follow-up `api-client-split` (same update-download code) |
 
 ## SOLID
 
@@ -88,6 +95,8 @@ findings.
 | SOLID-9 | `HomeVM.kt` (705) | **Split one concern.** About 70 lines run the API-domain dialog (open, save, detect, reset). The same block is repeated in `AuthVM` and `DeviceSettingsVM`, three copies of one feature. | [Source: app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt:527] [Source: app/src/main/java/com/kino/puber/ui/feature/auth/vm/AuthVM.kt:219] [Source: app/src/main/java/com/kino/puber/ui/feature/device/settings/vm/DeviceSettingsVM.kt:444] | medium | M | One `ApiDomainDialogController` (state flow + actions + a screen-specific `onDomainChanged` hook) composed into the three VMs. | follow-up `api-domain-dialog-delegate` |
 | SOLID-10 | `HomeVM`, `AuthVM`, `DeviceSettingsVM` | The private mapper `ApiDomainState.toDialogState()` is byte-identical in three VMs. This is the part of SOLID-9 that can move safely now. | [Source: app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt:673] [Source: app/src/main/java/com/kino/puber/ui/feature/auth/vm/AuthVM.kt:291] [Source: app/src/main/java/com/kino/puber/ui/feature/device/settings/vm/DeviceSettingsVM.kt:505] | low | S | One `internal fun ApiDomainState.toDialogState()` next to `ApiDomainDialogState`. | **fixed in this task** (`93a06ca2`) |
 | SOLID-11 | `App.kt` `SessionExpiredHandler` | A composable orchestrates logout: it pulls six singletons through `getKoin().get()` (service locator, re-resolved on every recomposition) and sequences their clears. That is domain policy in the UI layer, and it cannot be unit-tested. The same `getKoin().get()` pattern appears in `WarmContentLaunchHandler` and `MainActivity`. | [Source: app/src/main/java/com/kino/puber/ui/feature/root/component/App.kt:63] [Source: app/src/main/java/com/kino/puber/ui/feature/root/component/App.kt:114] [Source: app/src/main/java/com/kino/puber/MainActivity.kt:85] | medium | S | A `SessionTerminator` interactor (global `single`) that owns the ordered best-effort clears, unit-tested. The composable keeps only `collect` and navigation, and resolves through `koinInject()`. | follow-up `session-logout-interactor` |
+| SOLID-12 | `DetailsVM.kt` (698, `@Suppress("LargeClass")`) | **Acceptable, with one shared extraction.** It is two lines under the spec's 700-line cut, which is why AC-4's list does not name it. On reading, its 40 functions serve one screen: load and render, the watchlist, bookmark and watched mutations with their refresh, the episode and season selection, the trailer request and preview jobs (~60 lines), and close-after-mutations navigation. None of these is a separate engine the way PlayerVM's skip-segment or stream-fallback logic is (SOLID-1), and none is shared with another screen except one piece. That piece is the pending-mutation queue (`launchMutation` + `awaitPendingMutations`, ~25 lines: a `Mutex`-serialised job set that `closeDetails` drains before `router.back`). It is copied, near-verbatim, in `PlayerVM` and `CollectionDetailVM`. Splitting the trailer jobs out would move lines, not responsibilities, so it is not proposed. The `LargeClass` suppression stays justified once the queue moves out. | [Source: app/src/main/java/com/kino/puber/ui/feature/details/vm/DetailsVM.kt:44] [Source: app/src/main/java/com/kino/puber/ui/feature/details/vm/DetailsVM.kt:577] [Source: app/src/main/java/com/kino/puber/ui/feature/details/vm/DetailsVM.kt:593] [Source: app/src/main/java/com/kino/puber/ui/feature/details/vm/DetailsVM.kt:601] [Source: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:1785] [Source: app/src/main/java/com/kino/puber/ui/feature/collections/detail/vm/CollectionDetailVM.kt:154] | low | S | One `MutationQueue` class (VM scope in, `launch` / `awaitIdle` out) in `core/`, unit-tested, used by the three VMs. Close-after-mutation timing changes are visible on the device. | follow-up `vm-mutation-queue` |
+| SOLID-13 | `TmdbApiClient.kt` (on `36cda915`) | **Duplicated error wrapper, two failure policies for one endpoint.** (1) The private `apiResult` re-implements `runCatchingCancellable` (rethrow `CancellationException`, wrap the rest in `Result`). The only difference is that it catches `Exception` where the shared helper catches `Throwable`, so an `Error` (for example a `NoClassDefFoundError` from an API missing on an old TV box) escapes TMDB calls, while every other caller of the helper gets it wrapped in a failed `Result`. The helper has 15 call sites in `app/src/main`. (2) `findTvByImdbId` and `findByImdbId` call the same `find/{imdb_id}` endpoint with the same parameters. The first turns a non-2xx response into a failed `Result` (`TmdbApiException`), which `EpisodeScheduleRepository` surfaces with `getOrThrow()`. The second turns it into `Result.success(null)`, which reads as "no TMDB match", and it also falls back from TV to movie results, for `SkipSegmentService`. An expired TMDB token or a 429 is therefore an error on the schedule screen and a silent "no skip segments" in the player. No miss is cached (only a hit is saved), so the impact is diagnostics, not stale data. | [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:127] [Source: app/src/main/java/com/kino/puber/core/coroutine/CoroutinesErrorHandler.kt:37] [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:50] [Source: app/src/main/java/com/kino/puber/data/api/TmdbApiClient.kt:73] [Source: app/src/main/java/com/kino/puber/data/repository/EpisodeScheduleRepository.kt:55] [Source: app/src/main/java/com/kino/puber/data/repository/SkipSegmentService.kt:62] | low | S | Replace `apiResult` with `runCatchingCancellable`. Keep one private `find(imdbId)` that returns the raw `TmdbFindResponse` with one failure policy (fail on non-2xx), and two thin projections (TV only; TV then movie). `SkipSegmentService` keeps its `getOrNull()`, so a failure still means "no segments", but it is now logged as a failure, not a miss. Pin both behaviours in `TmdbApiClientTest` first. | follow-up `tmdb-result-handling` |
 
 ## Performance
 
@@ -113,7 +122,7 @@ All findings are **static reading, unmeasured**. None repeats an item from the
 | BP-5 | Four application-lifetime scopes are created ad hoc as `CoroutineScope(SupervisorJob() + Dispatchers.X)` with no `CoroutineExceptionHandler`. An exception escaping a `launch` in any of them crashes the process, and none of them can be swapped in tests through DI. | [Source: app/src/main/java/com/kino/puber/PuberApp.kt:48] [Source: app/src/main/java/com/kino/puber/domain/interactor/watchstate/WatchStateSyncInteractor.kt:51] [Source: app/src/main/java/com/kino/puber/domain/interactor/prefetch/DetailsPrefetcher.kt:40] [Source: app/src/main/java/com/kino/puber/data/repository/WatchStateRepository.kt:46] | medium | S | One Koin `single<ApplicationScope>` built with `DefaultExceptionHandler` (already in `core/coroutine`), injected where the four scopes are made today. | follow-up `app-coroutine-scope` |
 | BP-6 | `Paginator.Store` crosses threads without synchronisation. `state` and `render` are plain `var`s, written on the store's `Dispatchers.Default.limitedParallelism(1)` coroutine and assigned and read (`render` setter calls `value(state)`) from the VM on Main. The window is the `init` call, so this is latent rather than observed. | [Source: app/src/main/java/com/kino/puber/core/paginator/Paginator.kt:542] [Source: app/src/main/java/com/kino/puber/core/paginator/Paginator.kt:545] [Source: app/src/main/java/com/kino/puber/core/paginator/PagingVM.kt:36] | low | S | Mark both `@Volatile`, or send `render` assignment through the action channel. In the same change, collapse the identical branch pairs in `executeNextPageAction`, `executePrevPageAction`, `executeErrorAction` and `executePageErrorAction` (PERF-2 edits the same code), with characterization tests first, because `PaginatorReducerTest` does not cover those merges today. | follow-up `paginator-hardening` |
 | BP-7 | The API client's `Json` has `prettyPrint = true`, and it is also the `ContentNegotiation` encoder, so every JSON request body is sent indented. Seven separate `Json { }` configurations exist across the data layer. | [Source: app/src/main/java/com/kino/puber/data/api/KinoPubApiClient.kt:122] [Source: app/src/main/java/com/kino/puber/data/cache/CachedFeed.kt:593] [Source: app/src/main/java/com/kino/puber/data/api/ApiFailures.kt:18] | low | S | One shared `Json` for API decoding without `prettyPrint`. This changes request bytes, so it is a follow-up. | follow-up `dead-code-sweep` (same review of `data/api`) |
-| BP-8 | Home and Device Settings render private `ErrorView` / `LoadingView` composables instead of the shared `FullScreenError` / `FullScreenProgressIndicator`, as `screens-and-di.md` already notes. | [Source: app/src/main/java/com/kino/puber/ui/feature/home/component/HomeScreenContent.kt:128] [Source: app/src/main/java/com/kino/puber/ui/feature/device/settings/DeviceSettingsContent.kt:127] [Source: app/src/main/java/com/kino/puber/core/ui/uikit/component/Errors.kt:59] | low | S | Use the shared components, extending them with a secondary action (the API-domain button) if needed. This is a visual change and needs the ux-designer. | follow-up `screen-error-states` |
+| BP-8 | Home and Device Settings render private `ErrorView` / `LoadingView` composables instead of the shared `FullScreenError` / `FullScreenProgressIndicator`, as `screens-and-di.md` already notes. | [Source: app/src/main/java/com/kino/puber/ui/feature/home/component/HomeScreenContent.kt:128] [Source: app/src/main/java/com/kino/puber/ui/feature/device/settings/DeviceSettingsContent.kt:127] [Source: app/src/main/java/com/kino/puber/core/ui/uikit/component/Errors.kt:25] [Source: app/src/main/java/com/kino/puber/core/ui/uikit/component/Loading.kt:11] | low | S | Use the shared components, extending them with a secondary action (the API-domain button) if needed. This is a visual change and needs the ux-designer. | follow-up `screen-error-states` |
 | BP-9 | The pairing-code countdown ticks with `delay(1000)` per second, so the displayed time drifts behind the real expiry by the loop's own work (state copy, recomposition) on every tick. | [Source: app/src/main/java/com/kino/puber/ui/feature/auth/vm/AuthVM.kt:199] | low | S | Compute the remaining time from a deadline (`SystemClock.elapsedRealtime()`) on each tick. | follow-up `screen-error-states` (same small-UI review), or drop |
 
 ## Detekt
@@ -167,7 +176,7 @@ Static facts that do not need the run:
   (`Paginator`), `SuspendFunSwallowedCancellation` 7 (each with a reason
   comment), `MagicNumber` 6, `DEPRECATION` 5, `TooGenericExceptionCaught` 3,
   `LargeClass` 3 (`PlayerVM`, `KinoPubApiClient`, `DetailsVM`: SOLID-1,
-  SOLID-3), `LongParameterList` 2, `CyclomaticComplexMethod` 2, and one each
+  SOLID-3, SOLID-12), `LongParameterList` 2, `CyclomaticComplexMethod` 2, and one each
   of `UNUSED_PARAMETER`, `TooManyFunctions`, `FunctionName`.
 
 To complete AC-8 and AC-9: re-run the command above when the host is stable
@@ -188,45 +197,48 @@ practices, AC-6), then severity, then effort.
 
 | # | ID | Group | Sev | Effort | Fix |
 |---|---|---|---|---|---|
-| 1 | RW-5 | Libraries | low | S | fixed in this task (`ee4da3ce`) |
-| 2 | RW-7 | Libraries | low | S | fixed in this task (`c07d807d`) |
-| 3 | RW-1 | Libraries | low | - | keep |
-| 4 | RW-2 | Libraries | low | - | keep |
-| 5 | RW-3 | Libraries | low | - | defer |
-| 6 | RW-4 | Libraries | low | - | keep |
-| 7 | RW-6 | Libraries | low | - | keep |
-| 8 | RW-8 | Libraries | low | - | keep |
-| 9 | RW-9 | Libraries | low | - | keep |
-| 10 | RW-10 | Libraries | - | - | no wheel |
-| 11 | SOLID-11 | SOLID | medium | S | follow-up `session-logout-interactor` |
-| 12 | SOLID-3 | SOLID | medium | M | follow-up `api-client-split` |
-| 13 | SOLID-8 | SOLID | medium | M | follow-up `flow-component-split` |
-| 14 | SOLID-9 | SOLID | medium | M | follow-up `api-domain-dialog-delegate` |
-| 15 | STR-1 | Structure | medium | M | follow-up `layer-deps-cleanup` |
-| 16 | SOLID-1 | SOLID | medium | L | follow-up `player-vm-split` |
-| 17 | SOLID-10 | SOLID | low | S | fixed in this task (`93a06ca2`) |
-| 18 | SOLID-2 | SOLID | low | S | follow-up `player-vm-split` |
-| 19 | STR-2 | Structure | low | S | follow-up `layer-deps-cleanup` |
-| 20 | STR-3 | Structure | low | S | follow-up `playback-controller-split` |
-| 21 | STR-4 | Structure | low | S | RW-5 part: fixed in this task (`ee4da3ce`); rest: follow-up `dead-code-sweep` |
-| 22 | SOLID-5 | SOLID | low | S | acceptable |
-| 23 | SOLID-4 | SOLID | low | M | follow-up `playback-controller-split` |
-| 24 | SOLID-7 | SOLID | low | M | follow-up `history-vm-split` |
-| 25 | SOLID-6 | SOLID | low | - | acceptable |
-| 26 | PERF-5 | Performance | medium | S | follow-up `coil-shared-http` |
-| 27 | PERF-1 | Performance | medium | M | follow-up `player-position-state` |
-| 28 | PERF-2 | Performance | low | S | follow-up `paginator-hardening` |
-| 29 | PERF-3 | Performance | low | S | follow-up `paginator-hardening` |
-| 30 | PERF-4 | Performance | low | M | follow-up `cached-feed-key-maps` |
-| 31 | BP-5 | Best practices | medium | S | follow-up `app-coroutine-scope` |
-| 32 | BP-1 | Best practices | medium | M | follow-up `dead-code-sweep` |
-| 33 | BP-3 | Best practices | medium | M | follow-up `focus-request-helper` |
-| 34 | BP-2 | Best practices | low | S | fixed in this task (`2342ea57`) |
-| 35 | BP-4 | Best practices | low | S | follow-up `dependency-prune` |
-| 36 | BP-6 | Best practices | low | S | follow-up `paginator-hardening` |
-| 37 | BP-7 | Best practices | low | S | follow-up `dead-code-sweep` |
-| 38 | BP-8 | Best practices | low | S | follow-up `screen-error-states` |
-| 39 | BP-9 | Best practices | low | S | follow-up `screen-error-states` |
+| 1 | RW-6 | Libraries | medium | S | follow-up `session-expiry-delivery` |
+| 2 | RW-5 | Libraries | low | S | fixed in this task (`ee4da3ce`) |
+| 3 | RW-7 | Libraries | low | S | fixed in this task (`c07d807d`) |
+| 4 | RW-11 | Libraries | low | S | follow-up `api-client-split` |
+| 5 | RW-1 | Libraries | low | - | keep |
+| 6 | RW-2 | Libraries | low | - | keep |
+| 7 | RW-3 | Libraries | low | - | defer |
+| 8 | RW-4 | Libraries | low | - | keep |
+| 9 | RW-8 | Libraries | low | - | keep |
+| 10 | RW-9 | Libraries | low | - | keep |
+| 11 | RW-10 | Libraries | - | - | no wheel |
+| 12 | SOLID-11 | SOLID | medium | S | follow-up `session-logout-interactor` |
+| 13 | SOLID-3 | SOLID | medium | M | follow-up `api-client-split` |
+| 14 | SOLID-8 | SOLID | medium | M | follow-up `flow-component-split` |
+| 15 | SOLID-9 | SOLID | medium | M | follow-up `api-domain-dialog-delegate` |
+| 16 | STR-1 | Structure | medium | M | follow-up `layer-deps-cleanup` |
+| 17 | SOLID-1 | SOLID | medium | L | follow-up `player-vm-split` |
+| 18 | SOLID-10 | SOLID | low | S | fixed in this task (`93a06ca2`) |
+| 19 | SOLID-2 | SOLID | low | S | follow-up `player-vm-split` |
+| 20 | SOLID-13 | SOLID | low | S | follow-up `tmdb-result-handling` |
+| 21 | SOLID-12 | SOLID | low | S | acceptable; queue extraction: follow-up `vm-mutation-queue` |
+| 22 | STR-2 | Structure | low | S | follow-up `layer-deps-cleanup` |
+| 23 | STR-3 | Structure | low | S | follow-up `playback-controller-split` |
+| 24 | STR-4 | Structure | low | S | RW-5 part: fixed in this task (`ee4da3ce`); rest: follow-up `dead-code-sweep` |
+| 25 | SOLID-5 | SOLID | low | S | acceptable |
+| 26 | SOLID-4 | SOLID | low | M | follow-up `playback-controller-split` |
+| 27 | SOLID-7 | SOLID | low | M | follow-up `history-vm-split` |
+| 28 | SOLID-6 | SOLID | low | - | acceptable |
+| 29 | PERF-5 | Performance | medium | S | follow-up `coil-shared-http` |
+| 30 | PERF-1 | Performance | medium | M | follow-up `player-position-state` |
+| 31 | PERF-2 | Performance | low | S | follow-up `paginator-hardening` |
+| 32 | PERF-3 | Performance | low | S | follow-up `paginator-hardening` |
+| 33 | PERF-4 | Performance | low | M | follow-up `cached-feed-key-maps` |
+| 34 | BP-5 | Best practices | medium | S | follow-up `app-coroutine-scope` |
+| 35 | BP-1 | Best practices | medium | M | follow-up `dead-code-sweep` |
+| 36 | BP-3 | Best practices | medium | M | follow-up `focus-request-helper` |
+| 37 | BP-2 | Best practices | low | S | fixed in this task (`2342ea57`) |
+| 38 | BP-4 | Best practices | low | S | follow-up `dependency-prune` |
+| 39 | BP-6 | Best practices | low | S | follow-up `paginator-hardening` |
+| 40 | BP-7 | Best practices | low | S | follow-up `dead-code-sweep` |
+| 41 | BP-8 | Best practices | low | S | follow-up `screen-error-states` |
+| 42 | BP-9 | Best practices | low | S | follow-up `screen-error-states` |
 
 ### Fixed in this task
 
@@ -245,12 +257,15 @@ spec vocabulary; dimension is the audit section it comes from.
 
 | Slug | Scope (one line) | Findings | Kind | Size | Dimension | Device |
 |---|---|---|---|---|---|---|
+| `session-expiry-delivery` | Deliver `Unauthorized` when no UI subscriber is composed (conflated `Channel`, or collect on the application scope with `session-logout-interactor`), so the session clears always run; test emit-before-subscribe | RW-6 | bug | S | libraries | yes (401 with the Activity gone, then relaunch); land with or before `session-logout-interactor`, same handler |
 | `session-logout-interactor` | Move logout orchestration from `SessionExpiredHandler` into a tested `SessionTerminator`; `koinInject` instead of `getKoin().get` | SOLID-11 | refactor | S | SOLID | yes (logout path) |
 | `api-domain-dialog-delegate` | One API-domain dialog controller shared by Home, Auth and Settings VMs | SOLID-9 | refactor | M | SOLID | yes |
-| `api-client-split` | Move update download and the device flow out of `KinoPubApiClient` | SOLID-3 | refactor | M | SOLID | yes (update check, pairing) |
+| `api-client-split` | Move update download and the device flow out of `KinoPubApiClient`; stdlib hex in `AppUpdateChecksum` | SOLID-3, RW-11 | refactor | M | SOLID | yes (update check, pairing) |
 | `player-vm-split` | Extract skip-segment, watched-mutation, stream-fallback and progress-save coordinators; surface accessor on `PlaybackControl` | SOLID-1, SOLID-2 | refactor | L | SOLID | yes; after `player-overlays-port` |
 | `flow-component-split` | Split `FlowComponent.kt` into flow / tab flow / anchor restore files; one command interpreter | SOLID-8 | refactor | M | SOLID | yes (navigation, focus) |
 | `layer-deps-cleanup` | Move `SectionConfig`/`AnimeFilterMode` to `domain/model`; move the list scroller helper to core | STR-1, STR-2 | refactor | M | structure | compile + smoke |
+| `tmdb-result-handling` | `runCatchingCancellable` instead of `apiResult`; one `find` call with one failure policy behind the TV-only and TV-then-movie lookups | SOLID-13 | refactor | S | SOLID | smoke (episode schedule, skip segments) |
+| `vm-mutation-queue` | One tested `MutationQueue` replacing the copied `launchMutation`/`awaitPendingMutations` in `DetailsVM`, `PlayerVM`, `CollectionDetailVM` | SOLID-12 | refactor | S | SOLID | yes (close after a bookmark or watched toggle); `PlayerVM` part after `player-overlays-port` |
 | `history-vm-split` | Extract the deletion queue and reconciliation from `HistoryVM` | SOLID-7 | refactor | M | SOLID | yes |
 | `playback-controller-split` | Extract text-track matching and debug info from `PlaybackController`; move engine classes out of `vm/` | SOLID-4, STR-3 | refactor | M | SOLID | yes (playback) |
 | `coil-shared-http` | Give Coil the shared OkHttp/DoH client | PERF-5 | perf | S | performance | yes (posters on DoH-only network) |
