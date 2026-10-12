@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.device.settings.vm
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.ui.navigation.AppRouter
+import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.data.preferences.AppLanguageRepository
 import com.kino.puber.data.api.models.DeviceResponse
 import com.kino.puber.data.preferences.ContentPreferences
@@ -100,19 +101,48 @@ internal class DeviceSettingsVMMenuSectionsTest {
         assertTrue(vm.successState().menuSections.single { it.tab == TabType.Movies }.visible)
     }
 
+    @Test
+    fun apiDomain_mapsCurrentAndCustomDomain() {
+        val vm = createVM(apiDomainState = ApiDomainState("api.example", "custom.example"))
+        val expected = ApiDomainDialogState(
+            currentDomain = "api.example",
+            customDomain = "custom.example",
+            isDetecting = false,
+        )
+
+        assertEquals(expected, vm.testStateValue.apiDomain)
+        vm.onAction(DeviceSettingsActions.OpenApiDomainDialog)
+
+        assertEquals(expected, vm.testStateValue.apiDomain)
+        assertTrue(vm.testStateValue.isApiDomainDialogOpen)
+    }
+
+    @Test
+    fun apiDomain_leavesCustomDomainEmpty_whenNoneIsSet() {
+        val vm = createVM(apiDomainState = ApiDomainState("api.example", customDomain = null))
+        val expected = ApiDomainDialogState("api.example", null, false)
+
+        assertEquals(expected, vm.testStateValue.apiDomain)
+        assertEquals("", vm.testStateValue.apiDomain.initialInput)
+        vm.onAction(DeviceSettingsActions.OpenApiDomainDialog)
+
+        assertEquals(expected, vm.testStateValue.apiDomain)
+        assertTrue(vm.testStateValue.isApiDomainDialogOpen)
+    }
+
     private fun DeviceSettingsVM.successState(): DeviceSettingsState.Success {
         return testStateValue.state as DeviceSettingsState.Success
     }
 
-    private fun createVM(startupTab: TabType = TabType.Home): DeviceSettingsVM {
+    private fun createVM(
+        startupTab: TabType = TabType.Home,
+        apiDomainState: ApiDomainState = ApiDomainState(domain = "service-kp.com", customDomain = null),
+    ): DeviceSettingsVM {
         val deviceSettingInteractor = mockk<IDeviceSettingInteractor>(relaxed = true)
         every { deviceSettingInteractor.getCurrentDeviceSettings() } returns
             flowOf(Result.success(mockk<DeviceResponse>(relaxed = true)))
         val apiDomainInteractor = mockk<ApiDomainInteractor>(relaxed = true)
-        every { apiDomainInteractor.getState() } returns ApiDomainState(
-            domain = "service-kp.com",
-            customDomain = null,
-        )
+        every { apiDomainInteractor.getState() } returns apiDomainState
         every { navigationPreferencesRepository.contentPreferences } returns MutableStateFlow(
             ContentPreferences(showAnime = true, hideWatched = false, showWatchedIndicators = true)
         )
