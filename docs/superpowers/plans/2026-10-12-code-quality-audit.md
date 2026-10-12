@@ -495,3 +495,9 @@ are excluded.
 4. T5 asserts through `OpenApiDomainDialog` from `Loading`, not through the
    error-state path the spec names. Both go through the same `openApiDomainDialog()`.
    This is acceptable, but record it under "Deviations".
+
+### Review round 1 fixes
+
+- T1 (cae60189): `formatRemainingTime` made `internal` (body unchanged); new `FormatRemainingTimeTest` pins minus prefix, zero duration (`-0:00`), position past duration (clamped `-0:00`) and a remaining time over one hour (`-1:06:40`).
+- T2 (f3c0437e): `PlayerStartModeTest.resumeDialogFormatsSavedPositionWithRealMapper` uses a real `PlayerUIMapper` (relaxed mock `Context`) and asserts `formattedTime == "1:01:01"` for a saved position of 3_661 s. Media duration is set to 7_200 s, otherwise the position counts as finished and no dialog is built. No production change.
+- Gate: `:app:testDevDebugUnitTest :app:detektAll :app:compileDevDebugKotlin` BUILD SUCCESSFUL.
