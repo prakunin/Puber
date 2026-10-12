@@ -49,7 +49,7 @@ if grep -Eq '(^|[[:space:];&|/])gradlew([[:space:]]|$)' <<<"$bare" && in_worktre
 fi
 
 if grep -Eq 'git[[:space:]]+worktree[[:space:]]+add' <<<"$bare"; then
-  deny "Worktrees are Orca-managed: use 'orca worktree create --name <slug>' (or the /task-start skill), not git worktree add."
+  deny "Worktrees are Orca-managed: use 'orca worktree create --name <slug>' (`/task:run` creates the worktree for a run), not git worktree add."
 fi
 
 if grep -Eq 'connected[A-Za-z]*AndroidTest' <<<"$bare"; then

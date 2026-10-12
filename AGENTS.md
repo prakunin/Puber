@@ -9,7 +9,8 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
   navigation, paging and filters, API, UI and Compose, testing. Written from the
   code, each claim naming the file it came from. Load the one document your step
   touches.
-- Plans, specs, and evidence for in-flight work: `docs/superpowers/`.
+- Plans, specs, reviews and evidence: `docs/superpowers/`. Run state and the
+  task-flow config: `.flow/` (see Project Flow).
 - Release procedure: `docs/release.md`.
 - Repository tooling lives in `tools/`: `agentw`, `configure-worktree-sdk`,
   `emulator-resource-lock.sh`, `android-apk-install-preserve`,
@@ -17,30 +18,47 @@ profile generation is in `:baselineprofile`. Package: `com.kino.puber`.
 
 ## Project Flow
 
-- `docs/superpowers/BOARD.md` is the single record of what is in flight and at
-  which stage (`idea / triage / spec / plan / impl / verify / review / done`,
-  with `needs-device` as a blocker). Plans hold the steps; the board holds the
-  status.
-- The main checkout conducts: it owns the board, opens worktrees, reviews and
-  merges. Task code is written in the task's Orca worktree.
-- Skills in `.claude/skills/` carry the flow: `task-start` (board row and
-  worktree), `task-verify` (checks, device decision, lease, evidence),
-  `task-ship` (review, merge, board), `status` (where things stand).
-- `task-run` conducts a task end to end through the role agents in
-  `.claude/agents/`: `analyst`, `architect`, `ux-designer`, `test-designer`,
-  `implementer`, `qa`, `code-reviewer`, `test-reviewer`, `codex-reviewer`,
-  `final-judge`. Each
-  role owns one section of the task's dossier (spec, plan, evidence, review;
-  templates in `docs/superpowers/templates/`); the user approves the spec and
-  the merge. Subagents start in the main checkout and work in the worktree
-  through `cd <wt> &&`. `codex-reviewer` gets an alternative review from OpenAI
-  Codex through the official `codex@openai-codex` Claude Code plugin
-  (`claude plugin marketplace add openai/codex-plugin-cc`,
-  `claude plugin install codex@openai-codex`; `codex login` once).
-- `.claude/hooks/guard-bash.sh` enforces the hard rules below: it refuses
-  `./gradlew` in a worktree (also reached through `cd <wt>` or `<wt>/gradlew`),
-  `git worktree add`, `connected*AndroidTest`, adb
-  without `-s`, uninstall/clear/downgrade, and asks before tagging or force push.
+Work is carried by the shared Claude Code plugin `task` (marketplace
+`agent-flow`, enabled in `.claude/settings.json`). The only orchestration
+commands, identical across projects:
+
+- `/task:new <description>` captures an idea as a run in stage `idea`.
+- `/task:run <slug | description>` carries a run through triage, design, plan,
+  implementation, verification, review and the final gate; re-run with the slug
+  to resume. The owner approves the spec (gate 1) and the result (gate 2).
+- `/task:status` shows blocked, in-flight and drifting runs.
+- `/task:ship <slug>` lands a run after gate 2. It never pushes or tags.
+
+State lives in `.flow/` of the main checkout: `config.yaml` (commands, branch,
+delivery, project roles), `roles/<role>.md` (Puber knowledge for each plugin
+role) and `runs/<slug>/` (one folder per run: `state.md`, brief, reviews,
+verdicts). Specs, plans, evidence and reviews stay in `docs/superpowers/` and
+merge with the code. Task code is written in the run's Orca worktree; the main
+checkout conducts. Subagents start in the main checkout and work in the
+worktree through `cd <wt> &&`.
+
+Project agents in `.claude/agents/`: `qa-device` (replaces the plugin's `qa`:
+static gate, device decision, emulator lease, install-preserve, evidence) and
+`ux-designer` (track `ui`: design delta before, visual review after).
+`designing-a-screen` in `.claude/skills/` is a design tool, not a task command.
+The plugin's `codex-reviewer` gets an alternative review from OpenAI Codex
+through the official `codex@openai-codex` plugin
+(`claude plugin marketplace add openai/codex-plugin-cc`,
+`claude plugin install codex@openai-codex`; `codex login` once).
+
+Hard rules that stay project rules (details below and in `.flow/roles/`):
+
+- `.claude/hooks/guard-bash.sh` enforces them: it refuses `./gradlew` in a
+  worktree (also reached through `cd <wt>` or `<wt>/gradlew`), `git worktree
+  add`, `connected*AndroidTest`, adb without `-s`, uninstall/clear/downgrade,
+  and asks before tagging or force push.
+- Builds in a worktree go through `./tools/agentw`; set `AGENT_GRADLE_SERIAL=1`
+  when another worktree may build.
+- Device work needs a lease (`tools/emulator-resource-lock.sh`), `adb -s
+  <serial>`, the worktree's own APK installed with
+  `tools/android-apk-install-preserve`, and at most one leasing agent at a time.
+- Uninstall, data clear, downgrade, a replaced signer or a physical TV need the
+  owner's explicit authorization for that exact action.
 
 ## Build And Worktrees
 
