@@ -6,11 +6,11 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
+import com.kino.puber.core.ui.uikit.model.toDialogState
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
-import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
 import com.kino.puber.domain.model.AuthState
@@ -286,13 +286,6 @@ internal class AuthVM(
             is AuthViewState.Content -> state.apiDomainDialog
             is AuthViewState.Loading -> state.apiDomainDialog
         }
-    }
-
-    private fun ApiDomainState.toDialogState(): ApiDomainDialogState {
-        return ApiDomainDialogState(
-            currentDomain = domain,
-            customDomain = customDomain,
-        )
     }
 
     private fun AuthStartupMode.loadingStatusMessage(): String? {

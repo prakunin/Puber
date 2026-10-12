@@ -231,19 +231,19 @@ shows no stray logs.
 **Consumes:** `ApiDomainState` [Source: app/src/main/java/com/kino/puber/domain/interactor/api/ApiDomainInteractor.kt:18].
 **Produces:** `internal fun ApiDomainState.toDialogState(): ApiDomainDialogState` in package `com.kino.puber.core.ui.uikit.model`.
 
-- [ ] **T7** `ApiDomainDialogStateTest` (plain JUnit 5, no dispatcher needed):
+- [x] **T7** `ApiDomainDialogStateTest` (plain JUnit 5, no dispatcher needed):
   - `toDialogState_mapsDomainAndCustomDomain`: `ApiDomainState("api.example", "custom.example").toDialogState()` ==
     `ApiDomainDialogState("api.example", "custom.example", isDetecting = false)` and `initialInput == "custom.example"`.
   - `toDialogState_leavesInitialInputEmpty_whenNoCustomDomain`: `customDomain = null` → `customDomain == null`, `initialInput == ""`.
   - `toDialogState_isNeverDetecting`: `isDetecting == false` for both shapes.
-- [ ] Apply the production changes. Call sites stay textually the same
+- [x] Apply the production changes. Call sites stay textually the same
   (`getState().toDialogState()`, `result.state.toDialogState()`, `state.toDialogState()`).
-- [ ] `cd <wt> && grep -rn "fun ApiDomainState.toDialogState" app/src/main` → exactly one hit, in `ApiDomainDialogState.kt`.
-- [ ] COMPILE, then TEST `com.kino.puber.core.ui.uikit.model.ApiDomainDialogStateTest`
+- [x] `cd <wt> && grep -rn "fun ApiDomainState.toDialogState" app/src/main` → exactly one hit, in `ApiDomainDialogState.kt`.
+- [x] COMPILE, then TEST `com.kino.puber.core.ui.uikit.model.ApiDomainDialogStateTest`
   `com.kino.puber.ui.feature.auth.vm.AuthVMTest` `com.kino.puber.ui.feature.home.vm.HomeVMTest`
   `com.kino.puber.ui.feature.device.settings.vm.*` — green, with T4-T6 unedited
   (`git diff HEAD~1 -- <those three test files>` empty after the commit, i.e. this commit does not touch them).
-- [ ] Commit: `Share one ApiDomainState to dialog-state mapper across the three view models (SOLID-10)`.
+- [x] Commit: `Share one ApiDomainState to dialog-state mapper across the three view models (SOLID-10)`.
 
 **Done when:** the TEST command passes, the grep returns one line, and the
 commit touches only the four production files and the new test.
