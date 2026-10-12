@@ -170,11 +170,11 @@ shows no stray logs.
 
 **Consumes:** nothing. **Produces:** nothing.
 
-- [ ] Pre-check: `cd <wt> && grep -rn IdGenerator app/src baselineprofile docs/architecture`
+- [x] Pre-check: `cd <wt> && grep -rn IdGenerator app/src baselineprofile docs/architecture`
   shows only the two places above (R5).
-- [ ] Delete the file, edit the doc.
-- [ ] COMPILE. Re-run the grep: no hits in `app/src`, `baselineprofile`, `docs/architecture`.
-- [ ] Commit: `Delete the unused IdGenerator (RW-5, STR-4)`.
+- [x] Delete the file, edit the doc.
+- [x] COMPILE. Re-run the grep: no hits in `app/src`, `baselineprofile`, `docs/architecture`.
+- [x] Commit: `Delete the unused IdGenerator (RW-5, STR-4)`.
 
 **Done when:** COMPILE passes and the grep is empty.
 
