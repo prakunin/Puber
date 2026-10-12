@@ -73,10 +73,10 @@ Verdict: changes needed (report text only). C1, C3, C5 confirmed; fix commits ca
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
-| C8 | minor | report.md:98 (SOLID-12) | Only `DetailsVM` serialises mutations with a `Mutex`; `PlayerVM.kt:1785` and `CollectionDetailVM.kt:154` do not (PlayerVM also has an `onCreated` hook). A shared serialising queue would slow player toggles and collection mutations. Mark serialisation optional per caller. | to fix (architect) |
-| C9 | minor | report.md:99 (SOLID-13) | `SkipSegmentService.kt:62` only calls `.getOrNull()`, so nothing logs the failure; the row must say the log has to be added. Call-site count is 12, not 15. | to fix (architect) |
-| C10 | minor | report.md:68 (RW-6) | The redirect to auth is `LauncherVM.kt:35-50`, not `AuthVM.kt:56`; the domain switch also clears the prefetcher (`ApiDomainInteractor.kt:161-169`). The conclusion holds. | to fix (architect) |
-| C11 | minor | report.md:68, :260 (RW-6, `session-expiry-delivery`) | The proposed `Channel(CONFLATED)` + `receiveAsFlow()` keeps a stale event until the next composition: after relaunch with no token, `LauncherVM` routes to auth and the handler navigates to auth a second time (possible second device-code request). Say how to suppress it, or prefer the application-scope collector. | to fix (architect) |
+| C8 | minor | report.md:98 (SOLID-12) | Only `DetailsVM` serialises mutations with a `Mutex`; `PlayerVM.kt:1785` and `CollectionDetailVM.kt:154` do not (PlayerVM also has an `onCreated` hook). A shared serialising queue would slow player toggles and collection mutations. Mark serialisation optional per caller. | fixed (2f246f31) |
+| C9 | minor | report.md:99 (SOLID-13) | `SkipSegmentService.kt:62` only calls `.getOrNull()`, so nothing logs the failure; the row must say the log has to be added. Call-site count is 12, not 15. | fixed (2f246f31) |
+| C10 | minor | report.md:68 (RW-6) | The redirect to auth is `LauncherVM.kt:35-50`, not `AuthVM.kt:56`; the domain switch also clears the prefetcher (`ApiDomainInteractor.kt:161-169`). The conclusion holds. | fixed (2f246f31) |
+| C11 | minor | report.md:68, :260 (RW-6, `session-expiry-delivery`) | The proposed `Channel(CONFLATED)` + `receiveAsFlow()` keeps a stale event until the next composition: after relaunch with no token, `LauncherVM` routes to auth and the handler navigates to auth a second time (possible second device-code request). Say how to suppress it, or prefer the application-scope collector. | fixed (2f246f31) |
 
 ### test-reviewer
 
