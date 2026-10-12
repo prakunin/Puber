@@ -7,7 +7,7 @@ import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
-import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
+import com.kino.puber.core.ui.uikit.model.toDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.repository.WatchState
@@ -15,7 +15,6 @@ import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
-import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.model.DeviceSettingType
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
@@ -501,14 +500,6 @@ internal class DeviceSettingsVM(
             )
         }
     }
-
-    private fun ApiDomainState.toDialogState(): ApiDomainDialogState {
-        return ApiDomainDialogState(
-            currentDomain = domain,
-            customDomain = customDomain,
-        )
-    }
-
 }
 
 internal fun buildWatchIndexUiState(

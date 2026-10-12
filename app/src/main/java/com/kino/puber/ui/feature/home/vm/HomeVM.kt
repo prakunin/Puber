@@ -23,6 +23,7 @@ import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
+import com.kino.puber.core.ui.uikit.model.toDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.Item
@@ -31,7 +32,6 @@ import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainDetectionResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
-import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.api.ApiDomainUpdateResult
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
@@ -668,13 +668,6 @@ internal class HomeVM(
             else -> R.string.video_details_watch_later_removed
         }
         return resources.getString(messageRes)
-    }
-
-    private fun ApiDomainState.toDialogState(): ApiDomainDialogState {
-        return ApiDomainDialogState(
-            currentDomain = domain,
-            customDomain = customDomain,
-        )
     }
 
     private data class HomeRefreshTargets(

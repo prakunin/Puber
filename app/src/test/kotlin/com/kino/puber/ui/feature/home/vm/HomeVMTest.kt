@@ -9,6 +9,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
@@ -18,6 +19,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
+import com.kino.puber.ui.feature.home.model.HomeAction
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
@@ -41,6 +43,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -398,6 +401,41 @@ class HomeVMTest {
 
         advanceUntilIdle()
         assertTrue(vm.testStateValue is HomeViewState.Content)
+    }
+
+    @Test
+    fun openApiDomainDialog_exposesCurrentAndCustomDomain() {
+        every { apiDomainInteractor.getState() } returns ApiDomainState(
+            domain = "api.example",
+            customDomain = "custom.example",
+        )
+        val vm = createVM()
+
+        vm.onAction(HomeAction.OpenApiDomainDialog)
+
+        assertEquals(
+            ApiDomainDialogState(
+                currentDomain = "api.example",
+                customDomain = "custom.example",
+                isDetecting = false,
+            ),
+            vm.testStateValue.apiDomainDialog,
+        )
+    }
+
+    @Test
+    fun openApiDomainDialog_leavesCustomDomainEmpty_whenNoneIsSet() {
+        every { apiDomainInteractor.getState() } returns ApiDomainState(
+            domain = "api.example",
+            customDomain = null,
+        )
+        val vm = createVM()
+
+        vm.onAction(HomeAction.OpenApiDomainDialog)
+
+        val dialog = vm.testStateValue.apiDomainDialog
+        assertEquals(ApiDomainDialogState("api.example", null, false), dialog)
+        assertEquals("", dialog?.initialInput)
     }
 
     private val displayChanges = MutableSharedFlow<Unit>()

@@ -58,8 +58,6 @@ router.navigateForResult<ContentChangeSet>(
 
 The listener fires once. The screen returning the result calls
 `router.back(resultCode = RESULT_CONTENT_CHANGED, result = changes)`.
-`IdGenerator.generateId()` (`core/system/IdGenerator.kt`) exists but is not the
-navigation-result convention.
 
 ## Flows
 

@@ -4,6 +4,7 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
+import android.content.Context
 import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.ResolvedMedia
@@ -24,6 +25,7 @@ import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -165,6 +167,23 @@ internal class PlayerStartModeTest {
                 fastDns = false,
             )
         }
+    }
+
+    @Test
+    fun resumeDialogFormatsSavedPositionWithRealMapper() {
+        mapper = PlayerUIMapper(mockk<Context>(relaxed = true))
+        every { interactor.resolveMedia(item, 1, 1, null) } returns savedMedia.copy(
+            watchingTime = 3_661,
+            duration = 7_200,
+        )
+        val resumeDialog = slot<ResumeDialogState>()
+        every {
+            contentStateFactory.build(any(), any(), capture(resumeDialog), any(), any(), any())
+        } returns contentState
+
+        createVM(PlayerStartMode.ResumeIfAvailable).testOnStart()
+
+        assertEquals("1:01:01", resumeDialog.captured.formattedTime)
     }
 
     @Test

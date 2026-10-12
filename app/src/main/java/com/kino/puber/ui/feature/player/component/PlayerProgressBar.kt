@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
-import java.util.Locale
+import com.kino.puber.ui.feature.player.model.formatPlaybackClock
 
 @Composable
 internal fun PlayerProgressBar(
@@ -56,7 +56,7 @@ internal fun PlayerProgressBar(
 ) {
     val progress = remember(currentPosition, duration) { progressOf(currentPosition, duration) }
     val bufferedProgress = remember(bufferedPosition, duration) { progressOf(bufferedPosition, duration) }
-    val currentTimeText = remember(currentPosition) { formatTimeMs(currentPosition) }
+    val currentTimeText = remember(currentPosition) { formatPlaybackClock(currentPosition) }
     val remainingTimeText = remember(currentPosition, duration) { formatRemainingTime(currentPosition, duration) }
 
     val shimmerProgress = bufferingShimmer(isBuffering)
@@ -322,21 +322,9 @@ private fun progressOf(position: Long, duration: Long): Float {
     }
 }
 
-private fun formatTimeMs(ms: Long): String {
-    val totalSeconds = ms / MILLIS_PER_SECOND
-    val hours = totalSeconds / SECONDS_PER_HOUR
-    val minutes = (totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
-    val seconds = totalSeconds % SECONDS_PER_MINUTE
-    return if (hours > 0) {
-        String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format(Locale.ROOT, "%d:%02d", minutes, seconds)
-    }
-}
-
-private fun formatRemainingTime(currentPosition: Long, duration: Long): String {
+internal fun formatRemainingTime(currentPosition: Long, duration: Long): String {
     return if (duration > 0) {
-        "-${formatTimeMs((duration - currentPosition).coerceAtLeast(0))}"
+        "-${formatPlaybackClock((duration - currentPosition).coerceAtLeast(0))}"
     } else {
         EMPTY_REMAINING_TIME
     }
@@ -352,8 +340,5 @@ private const val BUFFERING_TRACK_ALPHA = 0.3f
 private const val SHIMMER_PEAK_ALPHA = 0.5f
 private const val SHIMMER_BAND_WIDTH_FRACTION = 0.4f
 private const val MIN_THUMB_PROGRESS = 0.001f
-private const val MILLIS_PER_SECOND = 1_000
-private const val SECONDS_PER_MINUTE = 60
-private const val SECONDS_PER_HOUR = 3_600
 
 private val BUFFERING_LABEL_BOTTOM_PADDING = 4.dp

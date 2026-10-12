@@ -11,11 +11,6 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.model.BufferPreset
-import java.util.Locale
-
-private const val MILLIS_PER_SECOND = 1_000L
-private const val SECONDS_PER_HOUR = 3_600L
-private const val SECONDS_PER_MINUTE = 60L
 
 internal class PlayerUIMapper(
     private val context: Context,
@@ -212,17 +207,7 @@ internal class PlayerUIMapper(
         }
     }
 
-    fun formatTime(positionMs: Long): String {
-        val totalSeconds = positionMs / MILLIS_PER_SECOND
-        val hours = totalSeconds / SECONDS_PER_HOUR
-        val minutes = (totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
-        val seconds = totalSeconds % SECONDS_PER_MINUTE
-        return if (hours > 0) {
-            String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            String.format(Locale.ROOT, "%d:%02d", minutes, seconds)
-        }
-    }
+    fun formatTime(positionMs: Long): String = formatPlaybackClock(positionMs)
 
     companion object {
         val SPEEDS = listOf(

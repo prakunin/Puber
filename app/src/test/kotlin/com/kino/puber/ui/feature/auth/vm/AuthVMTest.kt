@@ -7,6 +7,7 @@ import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
+import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.SnackbarMessage
 import com.kino.puber.domain.interactor.api.ApiDomainAutoResolveResult
 import com.kino.puber.domain.interactor.api.ApiDomainInteractor
@@ -14,6 +15,7 @@ import com.kino.puber.domain.interactor.api.ApiDomainState
 import com.kino.puber.domain.interactor.auth.IAuthInteractor
 import com.kino.puber.domain.model.AuthState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
+import com.kino.puber.ui.feature.auth.model.AuthAction
 import com.kino.puber.ui.feature.auth.model.AuthViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
@@ -160,5 +162,40 @@ class AuthVMTest {
         scheduler.runCurrent()
 
         assertEquals("09:57", (vm.testStateValue as AuthViewState.Content).timeLeft)
+    }
+
+    @Test
+    fun apiDomainDialog_exposesCurrentAndCustomDomain() {
+        val vm = createVM()
+        every { apiDomainInteractor.getState() } returns ApiDomainState(
+            domain = "api.example",
+            customDomain = "custom.example",
+        )
+
+        vm.onAction(AuthAction.OpenApiDomainDialog)
+
+        assertEquals(
+            ApiDomainDialogState(
+                currentDomain = "api.example",
+                customDomain = "custom.example",
+                isDetecting = false,
+            ),
+            (vm.testStateValue as AuthViewState.Loading).apiDomainDialog,
+        )
+    }
+
+    @Test
+    fun apiDomainDialog_leavesCustomDomainEmpty_whenNoneIsSet() {
+        val vm = createVM()
+        every { apiDomainInteractor.getState() } returns ApiDomainState(
+            domain = "api.example",
+            customDomain = null,
+        )
+
+        vm.onAction(AuthAction.OpenApiDomainDialog)
+
+        val dialog = (vm.testStateValue as AuthViewState.Loading).apiDomainDialog
+        assertEquals(ApiDomainDialogState("api.example", null, false), dialog)
+        assertEquals("", dialog?.initialInput)
     }
 }
