@@ -63,6 +63,25 @@ Rejected Codex claims:
 
 Not run: the diff changes no Compose layout (F4 replaces a private formatter call in `PlayerProgressBar.kt`).
 
+## Round 2
+
+Re-run: code-reviewer, test-reviewer (codex not re-run: its only finding X1 is the device gap). qa reconciled the evidence contradiction from C7 in 45cb3df1.
+
+### code-reviewer
+
+Verdict: changes needed (report text only). C1, C3, C5 confirmed; fix commits cae60189, f3c0437e, ae4fd9fa clean.
+
+| # | Severity | Where | Finding | Disposition |
+|---|---|---|---|---|
+| C8 | minor | report.md:98 (SOLID-12) | Only `DetailsVM` serialises mutations with a `Mutex`; `PlayerVM.kt:1785` and `CollectionDetailVM.kt:154` do not (PlayerVM also has an `onCreated` hook). A shared serialising queue would slow player toggles and collection mutations. Mark serialisation optional per caller. | to fix (architect) |
+| C9 | minor | report.md:99 (SOLID-13) | `SkipSegmentService.kt:62` only calls `.getOrNull()`, so nothing logs the failure; the row must say the log has to be added. Call-site count is 12, not 15. | to fix (architect) |
+| C10 | minor | report.md:68 (RW-6) | The redirect to auth is `LauncherVM.kt:35-50`, not `AuthVM.kt:56`; the domain switch also clears the prefetcher (`ApiDomainInteractor.kt:161-169`). The conclusion holds. | to fix (architect) |
+| C11 | minor | report.md:68, :260 (RW-6, `session-expiry-delivery`) | The proposed `Channel(CONFLATED)` + `receiveAsFlow()` keeps a stale event until the next composition: after relaunch with no token, `LauncherVM` routes to auth and the handler navigates to auth a second time (possible second device-code request). Say how to suppress it, or prefer the application-scope collector. | to fix (architect) |
+
+### test-reviewer
+
+Verdict: adequate. No findings; T1 and T2 closed, T3–T6 rejections agreed. Accepted minor gap: the seek indicator (`PlayerVM.kt:640`) is covered only through a mocked mapper; the mapper path itself is pinned by T2.
+
 ## Gate
 
 <!-- final-judge, gate mode. -->
