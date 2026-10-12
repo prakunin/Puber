@@ -1,9 +1,10 @@
-# <Title> — review
+# Code quality audit — review
 
-**Spec:** `docs/superpowers/specs/<date>-<slug>-design.md`
-**Plan:** `docs/superpowers/plans/<date>-<slug>.md`
-**Evidence:** `docs/superpowers/evidence/<date>-<slug>-device.md`
-**Branch:** `<slug>` at `<sha>`
+**Spec:** `docs/superpowers/specs/2026-10-12-code-quality-audit-design.md`
+**Plan:** `docs/superpowers/plans/2026-10-12-code-quality-audit.md`
+**Evidence:** `docs/superpowers/evidence/2026-10-12-code-quality-audit-device.md`
+**Report:** `docs/superpowers/evidence/2026-10-12-code-quality-audit-report.md`
+**Branch:** `code-quality-audit` at `115345a9`
 
 <!-- The conductor writes the rounds from the reviewers' returns; the
 final-judge writes the Gate. Each finding gets a disposition: fixed (<sha>),
@@ -11,31 +12,51 @@ rejected (<why>), or deferred (<board row>). Nothing stays open silently. -->
 
 ## Round 1
 
+No defects in the production changes F1–F4 from any reviewer. All findings
+concern the report, the evidence, or test coverage.
+
 ### code-reviewer
+
+Verdict: changes needed (report and evidence corrections only).
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
+| C1 | minor | report.md:116 (BP-8) | Source cites `Errors.kt:59` (`ListItemError`), not the shared component; `FullScreenError` is `Errors.kt:25`, `FullScreenProgressIndicator` is `core/ui/uikit/component/Loading.kt:11`. | to fix (architect, report) |
+| C2 | minor | report.md:62 (RW-6) | "Keep" reasoning for `SessionEventBus` ignores that `tryEmit` without replay drops a 401 when no subscriber is composed (before root composition / between teardown and recompose). | to fix (architect: state the risk and propose a follow-up row) |
+| C3 | minor | report.md, Reinvented wheels | Missed: `AppUpdateDownload.kt:142,148` hand-writes hex encoding and the sha256 check; stdlib `toHexString()`/`HexFormat` (Kotlin 2.4.10) or Okio `ByteString.sha256().hex()` cover it. | to fix (architect: add finding) |
+| C4 | minor | report.md, Structure/SOLID | Missed: `TmdbApiClient.apiResult` (`TmdbApiClient.kt:70`) duplicates `runCatchingCancellable` (`CoroutinesErrorHandler.kt:37`) and catches only `Exception`; `findTvByImdbId`/`findByImdbId` hit the same endpoint with different failure handling. | to fix (architect: add finding) |
+| C5 | minor | report.md:68, spec:96 | "byte-identical" formatters were `Int` vs `Long` constants; equivalent only by widening. Say "semantically identical". | to fix (architect, report and Design) |
+| C6 | minor | report.md, SOLID | `DetailsVM` (698 lines, `@Suppress("LargeClass")`) has no finding or "acceptable" verdict. | to fix (architect: add verdict) |
+| C7 | minor | device.md:34,37 | AC-10 only partly verified (D4 NOT CHECKED, D2 only no-custom-domain). Evidence contradicts itself: progress reportedly written, yet no saved progress and no resume dialog after a ~22-min seek; never compared with master. | D4 carried to the gate as NOT CHECKED; the save/resume anomaly deferred to new board row `resume-progress-anomaly` (F1–F4 do not touch the save path); qa to reconcile the two evidence lines |
 
 ### test-reviewer
 
+Verdict: adequate.
+
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
+| T1 | major (spec-accepted gap) | `PlayerProgressBar.kt:325` | `formatRemainingTime` (minus prefix, `-0:00`, `coerceAtLeast(0)` clamp) is pinned by no unit test; zero-duration case not seen on device. | to fix (implementer: make it `internal`, add a unit test pinning the current output; behaviour unchanged) |
+| T2 | minor | `PlayerVM.kt:377,640` | Resume dialog / seek indicator wiring to the formatter is only indirectly covered; every PlayerVM test mocks `mapper.formatTime`. | to fix (implementer: one PlayerVM test with a real `PlayerUIMapper` asserting the resume dialog time for 3_661 s) |
+| T3 | minor | `PlayerUIMapperTest.kt:62`, `PlaybackClockTest.kt` | `Locale.setDefault` is JVM-global; parallel tests could flake. | rejected: JUnit parallel execution is not enabled (`app/build.gradle.kts` sets `parallel = true` only for detekt; no `junit.jupiter.execution.parallel` config), and both tests restore the locale in `finally` |
+| T4 | minor | `AuthVMTest.kt` | Startup path `AuthVM.kt:85` untested; HomeVM uses the open-dialog action, not the error path. | rejected: every path calls the one shared `toDialogState()`, which T7 tests directly with full-equality assertions; the deviation is recorded in the plan |
+| T5 | minor | `DeviceSettingsVMMenuSectionsTest.kt` | Post-open `apiDomain` assertion repeats the initial one. | rejected: harmless redundancy, `isApiDomainDialogOpen` carries the new information; no correctness impact |
+| T6 | minor | commit `72a2da6d` | T2/T7 not in the characterisation commit. | rejected: matches the plan (T2/T7 are written with F4/F3) |
 
 ### codex-reviewer
 
-Ran: review[, adversarial] | skipped — <reason>
+Ran: review, adversarial
 
 | # | Severity | Where | Finding | Disposition |
 |---|---|---|---|---|
+| X1 | minor | device.md:34 | D4 resume-dialog check NOT CHECKED; AC-10 partial. | same as C7: carried to the gate as NOT CHECKED; T2 adds unit coverage of the resume-dialog wiring |
 
 Rejected Codex claims:
 
-- 
+- None. Codex's plain review found no defects; its check of the report verdicts (keep Paginator, TypedTtlCache, ContentUriCodec, SessionEventBus; no new dependency) raised no conflict.
 
 ### ux-designer (visual changes)
 
-| # | Severity | Where | Finding | Disposition |
-|---|---|---|---|---|
+Not run: the diff changes no Compose layout (F4 replaces a private formatter call in `PlayerProgressBar.kt`).
 
 ## Gate
 
