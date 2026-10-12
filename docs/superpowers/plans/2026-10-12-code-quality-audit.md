@@ -314,17 +314,17 @@ touches only the three production files and the new test.
 **Files:**
 - Modify: `docs/superpowers/evidence/2026-10-12-code-quality-audit-report.md` — "After F1-F4" row and the "Status" line of the Detekt section.
 
-- [ ] Host precondition as in Task 2 (`free -m`; no `--stop`).
-- [ ] COMPILE, FULLTEST, DETEKT in the worktree (the "after" count has no
+- [x] Host precondition as in Task 2 (`free -m`; no `--stop`).
+- [x] COMPILE, FULLTEST, DETEKT in the worktree (the "after" count has no
   main-checkout fallback; spec Detekt gate plan step 3).
-- [ ] Record `HEAD` hash, `devDebug` and `devDebugUnitTest` totals and per
+- [x] Record `HEAD` hash, `devDebug` and `devDebugUnitTest` totals and per
   rule set in the "After F1-F4" row. AC-9 holds when the `devDebug` total is
   no higher than the "Before" one; compare `devDebugUnitTest` too and explain
   any difference by the added/removed tests.
-- [ ] If DETEKT cannot complete: write "not run, host fault" in the row, report
+- [x] If DETEKT cannot complete: write "not run, host fault" in the row, report
   AC-9 as unverified (not passed) to the conductor, and continue; do not touch
   `detekt-baseline.xml`.
-- [ ] AC-7 scope checks (record results in the conductor reply, not in the repo):
+- [x] AC-7 scope checks (record results in the conductor reply, not in the repo):
   - `git diff --stat master..HEAD -- app/src/main` lists only:
     `core/system/IdGenerator.kt`, `data/api/TmdbApiClient.kt`,
     `data/api/models/TmdbCastModels.kt`, `data/api/config/TmdbImageConfig.kt`,
@@ -334,7 +334,7 @@ touches only the three production files and the new test.
     `ui/feature/player/component/PlayerProgressBar.kt`.
   - `git diff master..HEAD -- gradle/libs.versions.toml '*.gradle.kts' config/detekt/` is empty.
   - `git log --oneline master..HEAD` shows one commit per fix, each naming its finding ID.
-- [ ] Commit: `Record the detekt count after the code-quality-audit fixes`.
+- [x] Commit: `Record the detekt count after the code-quality-audit fixes`.
 
 **Done when:** COMPILE and FULLTEST pass, the "After" row is filled (or marked
 "not run, host fault"), and the three scope checks hold.

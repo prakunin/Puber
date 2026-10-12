@@ -118,7 +118,7 @@ All findings are **static reading, unmeasured**. None repeats an item from the
 
 ## Detekt
 
-**Status: "Before" obtained on 2026-10-12 in the worktree (no main-checkout fallback needed): 0 findings in `devDebug` and in `devDebugUnitTest`. The "After" row is open until the F1-F4 fixes are in.**
+**Status: "Before" obtained on 2026-10-12 in the worktree (no main-checkout fallback needed): 0 findings in `devDebug` and in `devDebugUnitTest`. The "After" row: 0 findings in both, so AC-9 holds (no more findings than "Before").**
 
 The sixth attempt (implementation phase, swap still ~90 % used) completed in
 54 s. Detekt printed "83 compiler errors found during analysis" for `devDebug`
@@ -179,7 +179,7 @@ is unchanged). Record the per-rule-set counts from
 | Run | Commit | devDebug findings | devDebugUnitTest findings | Per rule set |
 |---|---|---|---|---|
 | Before | worktree `HEAD` `72a2da6d` (`app/src/main` equal to `36cda915`; `devDebugUnitTest` includes the Task 1 tests) | 0 | 0 | none: 0 findings in every rule set of both reports (run in the worktree via `./tools/agentw`) |
-| After F1-F4 | - | - | - | - |
+| After F1-F4 | worktree `HEAD` `c07d807d` | 0 | 0 | none: 0 findings in every rule set of both reports (worktree, `./tools/agentw :app:detektAll --continue`; same 83 and 7 "compiler errors" notes as before; `devDebugUnitTest` now also includes `ApiDomainDialogStateTest` and `PlaybackClockTest`, and loses the deleted TMDB cast test) |
 
 ## Summary
 
