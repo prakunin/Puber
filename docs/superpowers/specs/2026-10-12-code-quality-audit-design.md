@@ -172,20 +172,99 @@ identical to master `4e18338e`. This section covers only the in-branch fixes
 
 ## Test design
 
-<!-- test-designer.
+Kind is refactor: no defect, so no failing-first test. The substitute is a
+characterisation test written and run green on master before each fix, and kept
+unchanged after it. Tests assert visible output (strings, VM state), not private calls.
+Existing style reused: `PlayerUIMapperTest` (mockk `Context`, plain JUnit 5),
+`AuthVMTest` / `HomeVMTest` / `DeviceSettingsVMMenuSectionsTest` (mocked
+`ApiDomainInteractor.getState()` returning `ApiDomainState`).
+
 ### Risks
+
 | Risk | P | I | Score | Mitigation |
 |---|---|---|---|---|
+| R1 Detekt cannot run (JVM crashes), so AC-8 "before" and AC-9 are unproven | 3 | 3 | 9 | Gate, not a test. See "Detekt gate plan" below. Without a count, AC-9 stays open and verify blocks. |
+| R2 Formatter drift in F4 (typo in format string, Int vs Long constants, delegate wiring) changes on-screen times | 2 | 3 | 6 | Unit: pin `formatTime` before F4 via `PlayerUIMapper`, add `formatPlaybackClock` test after. Device row D3. |
+| R3 F3 shared `toDialogState()` maps a field wrongly (e.g. drops `customDomain`, sets `isDetecting`) in one of 3 VMs | 2 | 3 | 6 | Unit: direct test of the extension; VM-state assertions in Auth, Home and Settings. Device row D2. |
+| R4 F2 deletes a TMDB member still used (compile or runtime break in schedule / skip segments) | 1 | 3 | 3 | Compile gate plus kept `TmdbApiClientTest` cases for the retained endpoints. Runtime unreachable on worktree build (no TMDB token): recorded, accepted. |
+| R5 F1 `IdGenerator` has a hidden caller (reflection, test) | 1 | 2 | 2 | Compile gate plus `grep -rn IdGenerator app/src`. Accepted with that note. |
+| R6 Existing VM tests that mock `mapper.formatTime` break because the signature moved | 1 | 2 | 2 | Signature kept. The VM suites run unchanged. Accepted. |
+| R7 AC-7 breach: dependency or build file touched | 1 | 2 | 2 | `git diff master -- gradle/libs.versions.toml '*.gradle.kts'` must be empty. Checked in qa. |
+| R8 Report claims wrong: `[Source:]` line points at nothing (AC-2) | 2 | 2 | 4 | Scripted check (see AC-2 row), not a unit test. |
+| R9 Focus/D-pad, Koin scope, recomposition | 1 | 2 | 2 | Design: no change in these areas. Accepted. D-pad steps in device checks only confirm no regression. |
+
+Only R1, R2 and R3 reach score 6.
+
+### Characterisation tests (written first, green on master)
+
+Write each on master's code, run it, and commit it before the fix. After the
+fix the same file must pass with no edit to its expectations.
+
+- **T1** `PlayerUIMapperTest.formatTime_*` (extend existing file). Calls `mapper.formatTime(ms)`. Table: 0 -> `0:00`; 999 -> `0:00`; 1_000 -> `0:01`; 59_999 -> `0:59`; 60_000 -> `1:00`; 3_599_999 -> `59:59`; 3_600_000 -> `1:00:00`; 36_000_000 -> `10:00:00`; 3_661_000 -> `1:01:01`; 360_000_000 -> `100:00:00` (hours not capped). Locale check: set `Locale.setDefault(Locale("ar"))` in the test, restore in `finally`, and assert the digits stay ASCII (`Locale.ROOT` guard against the rejected `DateUtils` route).
+- **T2** `PlaybackClockTest.formatPlaybackClock_*` (new, `ui/feature/player/model/`). Same table, calling `formatPlaybackClock` directly. Written together with F4, so it cannot run on master. Equivalence with T1 is the proof: the two tables must be identical, and T1 must still pass with the mapper delegating.
+- **T3** Remaining-time wrapper. `formatRemainingTime` in `PlayerProgressBar.kt` is private. It is not unit-testable without making it internal, which would be a production change outside the spec. Cover it by device row D3 (`-m:ss`, and `-0:00` when duration is 0). Accepted as device-only.
+- **T4** `AuthVMTest`, new test `apiDomainDialog_exposesCurrentAndCustomDomain`. Stub `getState()` with `ApiDomainState("api.example", "custom.example")` and with `customDomain = null`, then assert the state `apiDomainDialog == ApiDomainDialogState(currentDomain = "api.example", customDomain = ..., isDetecting = false)`. Uses the existing `apiDomainInteractor` mock. Which action exposes the dialog (line 194/220 of `AuthVM`) is for the implementer to read; assert only the resulting state.
+- **T5** `HomeVMTest`, same assertion via the error-state path that calls `updateApiDomainDialog(...)` (`HomeVM.kt:528`), with and without `customDomain`.
+- **T6** `DeviceSettingsVMMenuSectionsTest` (or a new `DeviceSettingsVMApiDomainTest`), assert the initial `viewState.apiDomain` for both domain shapes (`DeviceSettingsVM.kt:65`).
+- **T7** `ApiDomainDialogStateTest.toDialogState_*` (new, `core/ui/uikit/model/`), direct test of the shared extension: with custom, without custom (`initialInput == ""`), `isDetecting == false`. Written with F3.
+
+T4-T6 are state-level characterisations: they pass on master (private copies) and
+after F3 (shared one). If one cannot reach the dialog state without heavy setup,
+downgrade it to the T7 test plus device row D2, and note it in the plan.
+
+F1 and F2 need no new test. F2 deletes `castAndConfigurationEndpoints_preservePathsLocalizationAndDecoding` with the code. The remaining `TmdbApiClientTest` cases must stay green.
 
 ### Traceability
+
 | AC | Level | Priority | Test | Proves |
 |---|---|---|---|---|
+| AC-1 | script | P0 | `grep -c '^## ' report` lists Structure, Reinvented wheels, SOLID, Best practices, Performance | five required sections exist |
+| AC-2 | script | P0 | for every finding ID: extract each `[Source: path:line]`, `test -f path` and `line <= wc -l`; check severity and effort fields present | sources exist on the audited commit; fields complete |
+| AC-3 | review | P0 | read "Reinvented wheels": six named items each have replace/keep/defer plus reason; any named library exists in `libs.versions.toml` or is marked "to add" | verdict coverage |
+| AC-4 | review | P1 | check the 8 files (PlayerVM, KinoPubApiClient, PlaybackController, DetailsScreenContent, DeviceSettingsContent, HistoryVM, FlowComponent, HomeVM) each have a finding or "acceptable" plus reason | all 8 covered |
+| AC-5 | review | P1 | cross-check Performance IDs against `2026-09-08-memory-and-performance-audit.md` and `perf-deferred` (P3, M4, P5, P8-P12); each unmeasured finding says "static reading, unmeasured" | no repeats; labelled |
+| AC-6 | review | P1 | summary table order and follow-up rows list (slug, scope, kind, size, dimension) | ordering and row shape |
+| AC-7 | script | P0 | `git diff --stat master..HEAD -- app/src/main`: only files from F1-F4; `git diff master..HEAD -- gradle/libs.versions.toml '*.gradle.kts'` empty; `git log` shows one commit per fix citing its ID | scope, no dependency change, commit shape |
+| AC-7 | unit | P0 | T1 (before F4), T2, T7, T4 (before F3) | the two merges are behaviour-preserving |
+| AC-8 | tooling | P0 | `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:detektAll` before F1 and after F4, counts per rule family recorded in the report | before/after counts exist |
+| AC-9 | tooling | P0 | `AGENT_GRADLE_SERIAL=1 ./tools/agentw :app:compileDevDebugKotlin`, `:app:testDevDebugUnitTest`, `:app:detektAll`; detekt <= baseline on master | static gate green |
+| AC-9 | unit | P0 | full unit suite incl. `PlayerVM*Test`, `PlayerUIMapperTest`, Auth/Home/DeviceSettings VM suites, `TmdbApiClientTest` unchanged except the one deleted case | no regression from F1-F4 |
+| AC-10 | device | P0 | D1-D4 below, recorded in `...-device.md` | launch and paths behave as master |
+| AC-11 | review | P2 | design says no dependency recommended; if the report has any "dependency recommended" finding, check it states TV focus, paging model and "follow-up decision" | wording present or n/a |
+
+Priority totals (table rows): P0 = 9, P1 = 3, P2 = 1. Unit tests: P0 = T1, T2, T4, T7; P1 = T5, T6; T3 is device-only (D3).
+
+### Detekt gate plan (R1, AC-8, AC-9; Q5)
+
+1. Before any production edit, check host memory (`free -m`, swap use). Do not start while swap is above about 50 percent. A reboot, or stopping other Gradle daemons (`./tools/agentw --stop` if present, otherwise ask), is the fix. This is a host precondition, not a project change.
+2. Run with `AGENT_GRADLE_SERIAL=1` so no other worktree builds in parallel. Use a per-run log and keep only counts per rule family in the evidence (AGENTS.md: no raw logs).
+3. If the crash repeats, the fallback in Q5 is the main checkout's `./gradlew :app:detektAll`. It is valid for the "before" count only, because master `app/` is identical to the audited commit. Needs the user's answer to Q5 first. The "after" count must come from the branch, so it has no fallback. If it cannot run, AC-9 is reported as unverified, not passed. Do not edit `detekt-baseline.xml` to get around it.
+4. If neither runs, the compile gate and unit suite still run (they use other tasks). Qa records "detekt: not run, host fault" in the verdict. Merge is a user decision.
+5. New code must avoid known detekt hits by hand: no magic numbers in `PlaybackClock.kt` (named constants), no unused imports left in `PlayerProgressBar.kt`, `PlayerUIMapper.kt` and the three VMs (`Locale`, `ApiDomainState`, `ApiDomainDialogState` imports), no unused private constants after F4. Grep for them before commit, because the gate may not run.
+
+### Order of work
+
+1. Add T1 (and T4, T5, T6 where feasible) on master, run green, commit.
+2. Detekt "before" count (see plan above).
+3. F1, F2 (compile, `TmdbApiClientTest`).
+4. F3 with T7, rerun T4-T6.
+5. F4 with T2, rerun T1.
+6. Detekt "after", full unit suite, device checks.
 
 ### Device checks
-1. …
+
+Leased emulator, dev APK installed through `tools/android-apk-install-preserve`, adb with `-s`. No uninstall or clear. Record the serial and results in `...-device.md`, without raw logs.
+
+1. **D1, app launch (F1, F2).** Cold start the app. Expect Home renders with rows and focus on the first card, DPAD_RIGHT/DPAD_DOWN move focus. Must not happen: crash, ANR, `NoClassDefFoundError` in a filtered crash check, focus lost on start. Record: the episode schedule screen is not exercised (no TMDB token in a worktree build).
+2. **D2, API-domain dialog (F3).** Home, open the Settings tab with DPAD, go to Network, press DPAD_CENTER on the API-domain item. Expect the dialog shows the same current domain and the same prefilled custom value (empty when none) as master. Press BACK. Expect dialog closes and focus returns to the same item. Must not happen: empty or swapped domain text, spinner shown (`isDetecting` true), focus lost, crash. If the account is logged in, the Auth path cannot be reached; T4 covers it.
+3. **D3, player clock (F4).** Open a title and start playback, press DPAD_CENTER to show controls. Expect elapsed time as `m:ss` (or `h:mm:ss` after an hour), remaining as `-m:ss`. Compare to the same title on a master build if one is installed, or against the known title duration. Press DPAD_RIGHT once to seek. Expect the seek indicator shows `m:ss` of the target. Must not happen: `00:05`-style padding of the first field, missing minus sign, `-0:00` while the duration is known, wrong digits.
+4. **D4, resume dialog (F4).** Leave playback mid-title (BACK), reopen the same title. Expect the resume dialog time to match where you stopped, same format as D3. Choose either button with DPAD_CENTER. Expect playback starts without crash. Must not happen: `0:00` when a position was saved, stale value from a previous title.
+
+If an emulator is not available, say so and ask. Compile and unit results do not replace these (AGENTS.md).
 
 ### Baseline (perf route)
--->
+
+n/a. Standard route, no performance claim; all perf findings in the report are static reading.
 
 ## Plan
 
