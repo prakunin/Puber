@@ -13,7 +13,6 @@ plan:
 rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-09-08
-migrated: 2026-10-12
 updated: 2026-10-12
 ---
 
