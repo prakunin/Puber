@@ -5,7 +5,10 @@ are no per-feature API interfaces, no Retrofit, and no generated SDK. Ktor 3.5
 with OkHttp does the transport, `kotlinx.serialization` the parsing.
 
 Other hosts have their own small clients next to it: `TmdbApiClient.kt`,
-`TheIntroDbApiClient.kt`, `IntroDbAppApiClient.kt`.
+`TheIntroDbApiClient.kt`, `IntroDbAppApiClient.kt`. They wrap each call in
+`runCatchingCancellable` (`core/coroutine/CoroutinesErrorHandler.kt`);
+`TmdbApiClient` returns a failure for any non-2xx, while the IntroDB clients treat
+a non-2xx as an empty answer.
 
 ## Endpoint shape
 

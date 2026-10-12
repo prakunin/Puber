@@ -3,6 +3,7 @@ package com.kino.puber.data.repository
 import com.kino.puber.data.api.IntroDbAppApiClient
 import com.kino.puber.data.api.TheIntroDbApiClient
 import com.kino.puber.data.api.TmdbApiClient
+import com.kino.puber.data.api.TmdbApiException
 import com.kino.puber.data.api.models.SkipSegment
 import com.kino.puber.data.api.models.SkipSegmentType
 import io.mockk.coEvery
@@ -80,6 +81,23 @@ class SkipSegmentServiceTest {
         val result = service.getSegments(IMDB_ID, season = 1, episode = 1)
 
         assertEquals(listOf(fallbackIntro, fallbackCredits), result)
+    }
+
+    @Test
+    fun skipsPrimaryAndAsksFallback_whenTmdbLookupFails() = runTest {
+        coEvery { tmdbIdRepository.getTmdbId(IMDB_ID) } returns null
+        coEvery { tmdbApiClient.findByImdbId(IMDB_ID) } returns
+            Result.failure(TmdbApiException(429))
+        coEvery { introDbAppClient.getSegments(IMDB_ID, 1, 1) } returns
+            Result.success(listOf(fallbackIntro, fallbackCredits))
+
+        val result = service.getSegments(IMDB_ID, season = 1, episode = 1)
+
+        // A failed TMDB lookup is not cached and does not reach TheIntroDB;
+        // IntroDB.app still answers, exactly as for a TMDB miss.
+        assertEquals(listOf(fallbackIntro, fallbackCredits), result)
+        coVerify(exactly = 0) { introDbClient.getSegments(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbIdRepository.saveTmdbId(any(), any()) }
     }
 
     private companion object {

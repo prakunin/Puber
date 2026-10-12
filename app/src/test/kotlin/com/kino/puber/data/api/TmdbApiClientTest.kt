@@ -108,14 +108,25 @@ internal class TmdbApiClientTest {
 
         assertTrue(result.isFailure)
         assertEquals(429, assertInstanceOf(TmdbApiException::class.java, result.exceptionOrNull()).statusCode)
+
+        val seasonResult = TmdbApiClient.forTesting(
+            client { respondJson("{}", HttpStatusCode.BadGateway) },
+        ).getTvSeasonDetails(101, 2)
+
+        assertTrue(seasonResult.isFailure)
+        assertEquals(
+            502,
+            assertInstanceOf(TmdbApiException::class.java, seasonResult.exceptionOrNull()).statusCode,
+        )
     }
 
     @Test
-    fun existingFindByImdbId_preservesTvFirstMovieFallbackAndNonSuccessBehavior() = runTest {
+    fun findByImdbId_prefersTvThenMovieAndFailsOnHttpError() = runTest {
         val responses = ArrayDeque(
             listOf(
                 """{"tv_results":[{"id":101}],"movie_results":[{"id":202}]}""" to HttpStatusCode.OK,
                 """{"tv_results":[],"movie_results":[{"id":202}]}""" to HttpStatusCode.OK,
+                """{"tv_results":[],"movie_results":[]}""" to HttpStatusCode.OK,
                 "{}" to HttpStatusCode.BadGateway,
             ),
         )
@@ -129,6 +140,67 @@ internal class TmdbApiClientTest {
         assertEquals(101, api.findByImdbId("tt123").getOrThrow())
         assertEquals(202, api.findByImdbId("123").getOrThrow())
         assertNull(api.findByImdbId("123").getOrThrow())
+        val failed = api.findByImdbId("123")
+        assertTrue(failed.isFailure)
+        assertEquals(502, assertInstanceOf(TmdbApiException::class.java, failed.exceptionOrNull()).statusCode)
+    }
+
+    @Test
+    fun findTvByImdbId_returnsFailureForHttpErrors() = runTest {
+        val responses = ArrayDeque(
+            listOf(
+                "{}" to HttpStatusCode.TooManyRequests,
+                "{}" to HttpStatusCode.BadGateway,
+            ),
+        )
+        val api = TmdbApiClient.forTesting(
+            client {
+                val (body, status) = responses.removeFirst()
+                respondJson(body, status)
+            },
+        )
+
+        listOf(429, 502).forEach { code ->
+            val result = api.findTvByImdbId("tt123")
+
+            assertTrue(result.isFailure)
+            assertEquals(code, assertInstanceOf(TmdbApiException::class.java, result.exceptionOrNull()).statusCode)
+        }
+    }
+
+    @Test
+    fun findByImdbId_rethrowsCancellation() = runTest {
+        val cancellation = kotlinx.coroutines.CancellationException("cancelled")
+        val api = TmdbApiClient.forTesting(
+            client { throw cancellation },
+        )
+
+        val thrown = try {
+            api.findByImdbId("tt123")
+            null
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            error
+        }
+
+        assertEquals(cancellation.message, thrown?.message)
+    }
+
+    @Test
+    fun allCalls_wrapErrorsIntoFailure() = runTest {
+        val error = NoClassDefFoundError("x")
+        val api = TmdbApiClient.forTesting(client { throw error })
+
+        listOf(
+            api.findTvByImdbId("tt123"),
+            api.findByImdbId("tt123"),
+            api.getTvDetails(101),
+            api.getTvSeasonDetails(101, 2),
+        ).forEach { result ->
+            assertTrue(result.isFailure)
+            // Ktor may wrap what the engine throws; the original must be in the cause chain.
+            val chain = generateSequence(result.exceptionOrNull()) { it.cause }.take(MAX_CAUSE_DEPTH)
+            assertTrue(chain.any { it === error })
+        }
     }
 
     @Test
@@ -176,4 +248,8 @@ internal class TmdbApiClientTest {
             ContentType.Application.Json.toString(),
         ),
     )
+
+    private companion object {
+        const val MAX_CAUSE_DEPTH = 10
+    }
 }
