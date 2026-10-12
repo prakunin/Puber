@@ -1,6 +1,6 @@
 # `runCatchingCancellable` instead of `apiResult`
 
-Status: draft
+Status: approved
 Date: 2026-10-12
 Slug: tmdb-result-handling
 Kind: refactor
@@ -243,3 +243,4 @@ Manual: 3 (M1, M2 are AC-10; M3 hygiene).
 | 2026-10-12 | Q2: scope B | owner |
 | 2026-10-12 | Size M (full cycle) | owner |
 | 2026-10-12 | Q3: device smoke without a TMDB token plus unit tests is enough; limitation recorded | owner |
+| 2026-10-12 | Gate 1: spec approved | owner |
