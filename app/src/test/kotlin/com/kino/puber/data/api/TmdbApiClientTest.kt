@@ -108,6 +108,16 @@ internal class TmdbApiClientTest {
 
         assertTrue(result.isFailure)
         assertEquals(429, assertInstanceOf(TmdbApiException::class.java, result.exceptionOrNull()).statusCode)
+
+        val seasonResult = TmdbApiClient.forTesting(
+            client { respondJson("{}", HttpStatusCode.BadGateway) },
+        ).getTvSeasonDetails(101, 2)
+
+        assertTrue(seasonResult.isFailure)
+        assertEquals(
+            502,
+            assertInstanceOf(TmdbApiException::class.java, seasonResult.exceptionOrNull()).statusCode,
+        )
     }
 
     @Test
@@ -176,11 +186,16 @@ internal class TmdbApiClientTest {
     }
 
     @Test
-    fun findLookups_wrapErrorsIntoFailure() = runTest {
+    fun allCalls_wrapErrorsIntoFailure() = runTest {
         val error = NoClassDefFoundError("x")
         val api = TmdbApiClient.forTesting(client { throw error })
 
-        listOf(api.findTvByImdbId("tt123"), api.findByImdbId("tt123")).forEach { result ->
+        listOf(
+            api.findTvByImdbId("tt123"),
+            api.findByImdbId("tt123"),
+            api.getTvDetails(101),
+            api.getTvSeasonDetails(101, 2),
+        ).forEach { result ->
             assertTrue(result.isFailure)
             // Ktor may wrap what the engine throws; the original must be in the cause chain.
             val chain = generateSequence(result.exceptionOrNull()) { it.cause }.take(MAX_CAUSE_DEPTH)

@@ -315,6 +315,8 @@ dev APK installed through `tools/android-apk-install-preserve`.
 - Contract change: `findByImdbId` now fails on non-2xx (was `success(null)`); `SkipSegmentService` treats failure like a miss, pinned by Task 1 test.
 - detekt printed "compiler errors found during analysis" notices (83 and 7) but exited 0; not investigated, not caused by this diff's content as far as the gate shows.
 
+**Review fix round 1:** F1 (review-tests-1): `allCalls_wrapErrorsIntoFailure` now covers all four public methods with the cause-chain assertion; the HTTP-error test also asserts `getTvSeasonDetails` fails with `TmdbApiException` 502. Tests only.
+
 **Blocked:** none.
 
 ## Readiness
