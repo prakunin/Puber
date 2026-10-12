@@ -322,7 +322,7 @@ private fun progressOf(position: Long, duration: Long): Float {
     }
 }
 
-private fun formatRemainingTime(currentPosition: Long, duration: Long): String {
+internal fun formatRemainingTime(currentPosition: Long, duration: Long): String {
     return if (duration > 0) {
         "-${formatPlaybackClock((duration - currentPosition).coerceAtLeast(0))}"
     } else {
