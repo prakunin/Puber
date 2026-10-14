@@ -698,7 +698,8 @@ internal class PlaybackController(
             },
         )
 
-        setWarmUpMediaSource(player, sourceFactory, mediaItemFactory.build(mediaItemFactory.spec(stream, subtitles)), stream.type)
+        val warmUpItem = mediaItemFactory.build(mediaItemFactory.spec(stream, subtitles))
+        setWarmUpMediaSource(player, sourceFactory, warmUpItem, stream.type)
         player.playWhenReady = false
         player.prepare()
         mainHandler.postDelayed(warmUpTimeout, WARM_UP_TIMEOUT_MS)

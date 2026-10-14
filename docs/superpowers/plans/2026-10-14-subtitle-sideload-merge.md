@@ -865,6 +865,15 @@ None.
 - #6 two call-count tests for R5 (after a real pick, after a repeated reordered report); they passed on first run, since the behaviour was already right.
 - Rejected in triage and left alone: #7, #8.
 
+**Fix round 2** (design delta 2: D17-D20; base `a97ee2b1`):
+
+- D17/D19 (`PlayerVM`): the "transient" rule from round 1 (`36da8957`) is gone. A text-less report merges to `[Off]`, is shown, and sends Off once. `intendedSubtitleRow` (VM-owned, null = Off, cleared only in `resetMediaSession`) keeps the viewer's pick and re-applies it when a later report contains the row. The restore is split into `restoreAudioPreference` and `restoreSubtitlePreference`; the subtitle half waits for the first report with text (`subtitleRestoredForCurrentMedia`). `saveTrackPreferences` takes the subtitle from the intent, or passes the saved value through while the restore is pending, so an audio pick no longer persists Off. An explicit subtitle pick marks the restore done.
+- D18: `subtitleReportKind` (new file `SubtitleReportKind.kt`, so detekt `MatchingDeclarationName` stays quiet) decides API_ROWS / NOT_YET / PLAYER_ROWS; `notifyTracksUpdated` returns on NOT_YET.
+- D20: `MediaItemSpec.hasSideLoads`; `build(spec)`; `prepare`, `switchStream` and the warm-up use the spec, `currentItemHasSideLoads = spec.hasSideLoads`.
+- Tests: the delta's section 5 cases in `PlayerVMTrackSelectionTest` (the old textless keep-rows test replaced), `subtitleReportKind_*` in `PlayerTextTracksTest`, `hasSideLoads_*` in `PlaybackMediaItemSpecTest`. The VM cases were red before the VM change (`selectAudio_whileSubtitlesCollapsed...` and `selectOff_whileCollapsed...` passed already under the old code, they pin the new intent rule).
+- Deviation: the P1 test `rebuild_textlessFirstReport_audioPick_doesNotPersistOff` is not written; the fixture has a single buffer preset, so a rebuild cannot be triggered without extending it. The rebuild path resets both flags and is otherwise the same code as the next-media path that is tested.
+- Reviewers: `onTracksUpdated` step order (audio restore runs before the subtitle early return), and `saveTrackPreferences` reading `intendedSubtitleRow`.
+
 ## Readiness
 
 # Readiness - subtitle-sideload-merge, round 1

@@ -331,7 +331,8 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     @Test
     fun tracksUpdated_selectedRowDisappears_goesOffAndDisablesText() {
         val vm = startedVM()
-        report(hlsRowsForFixture() + manifest("en", "subs:English"))
+        val original = hlsRowsForFixture() + manifest("en", "subs:English")
+        report(original)
         vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
         clearMocks(playbackController, answers = false)
 
@@ -340,31 +341,148 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
+
+        // The intent is kept: when the row returns it is shown and sent again, once.
+        clearMocks(playbackController, answers = false)
+        report(original)
+
+        assertEquals("rus.vtt", contentState(vm).let { it.subtitleTracks[it.selectedSubtitleIndex].playerTrackId })
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
     }
 
-    @Test
-    fun tracksUpdated_textlessReportAfterQualitySwitch_keepsRowsAndPick() {
+    private fun collapsedAfterPick(): Pair<PlayerVM, List<SubtitleTrackUIState>> {
         val vm = startedVM()
         val rows = hlsRowsForFixture() + manifest("en", "subs:English")
         report(rows)
         vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
-        val pickedBefore = contentState(vm).subtitleTracks[contentState(vm).selectedSubtitleIndex]
-        val rowsBefore = contentState(vm).subtitleTracks
-        clearMocks(playbackController, answers = false)
+        clearMocks(playbackController, interactor, answers = false)
+        return vm to rows
+    }
 
-        // After switchStream the player briefly reports audio groups and no text groups.
+    @Test
+    fun tracksUpdated_textlessReport_collapsesToOff_sendsOffOnce_doesNotPersist() {
+        val (vm, _) = collapsedAfterPick()
+
+        report(emptyList())
         report(emptyList())
 
-        assertEquals(rowsBefore, contentState(vm).subtitleTracks)
-        assertEquals(pickedBefore, contentState(vm).subtitleTracks[contentState(vm).selectedSubtitleIndex])
-        verify(exactly = 0) { playbackController.selectSubtitle(match { it.isOff }) }
+        assertEquals(listOf(true), contentState(vm).subtitleTracks.map { it.isOff })
+        assertEquals(0, contentState(vm).selectedSubtitleIndex)
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun tracksUpdated_textlessThenRowsReturn_reappliesIntendedRow() {
+        val (vm, rows) = collapsedAfterPick()
+        report(emptyList())
+        report(emptyList())
+        clearMocks(playbackController, answers = false)
 
         report(rows)
 
         val after = contentState(vm)
         assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
-        verify(exactly = 0) { playbackController.selectSubtitle(match { it.isOff }) }
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun selectAudio_whileSubtitlesCollapsed_persistsIntendedSubtitle() {
+        val (vm, _) = collapsedAfterPick()
+        report(emptyList())
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[1].url)
+        }
+    }
+
+    @Test
+    fun selectOff_whileCollapsed_forgetsIntent() {
+        val (vm, rows) = collapsedAfterPick()
+        report(emptyList())
+        clearMocks(playbackController, interactor, answers = false)
+
+        vm.onAction(PlayerAction.SelectSubtitle(0))
+        report(rows)
+
+        assertEquals(0, contentState(vm).selectedSubtitleIndex)
+        verify(exactly = 0) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
+        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), null, null) }
+    }
+
+    @Test
+    fun nextMedia_textlessFirstReport_defersSubtitleRestore_keepsAudioRestore() {
+        val vm = startedVM()
+        vm.onAction(PlayerAction.SelectEpisode(1, 2))
+        every { interactor.getPreferredAudioLang(42) } returns "rus"
+        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
+        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[2].url
+        clearMocks(playbackController, interactor, answers = false)
+
+        report(emptyList())
+
+        verify(exactly = 1) { playbackController.selectAudioTrack(1) }
         verify(exactly = 0) { playbackController.selectSubtitle(any()) }
+        assertEquals(0, contentState(vm).selectedSubtitleIndex)
+
+        report(hlsRowsForFixture())
+
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.url == testSubtitleTracks[2].url }) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun nextMedia_textlessFirstReport_audioPick_keepsSavedSubtitlePreference() {
+        val vm = startedVM()
+        vm.onAction(PlayerAction.SelectEpisode(1, 2))
+        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
+        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[2].url
+        report(emptyList())
+        clearMocks(playbackController, interactor, answers = false)
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[2].url)
+        }
+    }
+
+    @Test
+    fun refreshStreamLinks_textlessThenRows_sendsRefreshedRowOnly() {
+        val expired = StreamCandidate("https://cdn/expired.m3u8", StreamType.HLS)
+        val refreshed = StreamCandidate("https://cdn/refreshed.m3u8", StreamType.HLS)
+        every { interactor.selectStreamCandidates(any(), any()) } returnsMany listOf(
+            listOf(expired),
+            listOf(refreshed),
+        )
+        coEvery { interactor.refreshItemDetails(42) } returns testItem
+        val oldUrl = testSubtitleTracks[1].url
+        val newUrl = "https://new-cdn.test/subtitles/rus.vtt"
+        val vm = startedVM()
+        report(hlsRowsForFixture())
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
+        every { mapper.mapSubtitleTracks(any()) } returns listOf(
+            testSubtitleTracks[0],
+            SubtitleTrackUIState(label = "Russian", language = "rus", url = newUrl),
+        )
+        callbackSlot.captured.onStreamFailure(
+            message = "expired",
+            recovery = PlaybackControl.StreamRecovery.REFRESH_LINKS,
+            streamUrl = expired.url,
+        )
+        clearMocks(playbackController, answers = false)
+
+        report(emptyList())
+        report(listOf(sideLoad("rus", newUrl, 1)))
+
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.url == newUrl }) }
+        verify(exactly = 0) { playbackController.selectSubtitle(match { it.url == oldUrl }) }
     }
 
     @Test
