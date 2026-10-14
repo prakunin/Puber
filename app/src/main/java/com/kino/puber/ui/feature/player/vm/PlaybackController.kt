@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
-import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -168,6 +167,7 @@ internal class PlaybackController(
     private var ac3FallbackApplied = false
     private var useFastDns = true
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
+    private val mediaItemFactory = PlaybackMediaItemFactory()
     private var currentStreamUrl: String? = null
     private var effectiveStreamSource: String? = null
     private val videoRenderDiagnostics = VideoRenderDiagnostics()
@@ -429,7 +429,7 @@ internal class PlaybackController(
         exoPlayer = player
         videoRenderDiagnostics.reset()
 
-        val mediaItem = buildMediaItem(stream.url, subtitles)
+        val mediaItem = mediaItemFactory.build(stream, subtitles)
         setMediaSource(player, mediaItem, stream.type)
         currentStreamUrl = stream.url
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
@@ -497,7 +497,7 @@ internal class PlaybackController(
         val wasPlaying = player.playWhenReady
         val savedTrackParams = player.trackSelectionParameters
 
-        val mediaItem = buildMediaItem(stream.url, subtitles)
+        val mediaItem = mediaItemFactory.build(stream, subtitles)
         setMediaSource(player, mediaItem, stream.type, startPositionMs = savedPosition)
         currentStreamUrl = stream.url
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
@@ -612,37 +612,6 @@ internal class PlaybackController(
         player.playWhenReady = true
     }
 
-    private fun buildMediaItem(streamUrl: String, subtitles: List<SubtitleLink>?): MediaItem {
-        val builder = MediaItem.Builder().setUri(streamUrl)
-        if (!subtitles.isNullOrEmpty()) {
-            val subtitleConfigs = subtitles.map { sub ->
-                val stableKey = sub.url.stableSubtitleKey()
-                MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())
-                    .setMimeType(subtitleMimeType(sub.url))
-                    .setLanguage(sub.lang)
-                    .setSelectionFlags(if (sub.forced == true) C.SELECTION_FLAG_FORCED else 0)
-                    .setLabel(stableKey)
-                    .setId(stableKey)
-                    .build()
-            }
-            builder.setSubtitleConfigurations(subtitleConfigs)
-        }
-        return builder.build()
-    }
-
-    private fun subtitleMimeType(url: String): String {
-        val normalizedUrl = url
-            .substringBefore('?')
-            .substringBefore('#')
-            .lowercase(Locale.ROOT)
-        return when {
-            normalizedUrl.endsWith(".vtt") || normalizedUrl.endsWith(".webvtt") -> MimeTypes.TEXT_VTT
-            normalizedUrl.endsWith(".ass") || normalizedUrl.endsWith(".ssa") -> MimeTypes.TEXT_SSA
-            normalizedUrl.endsWith(".ttml") || normalizedUrl.endsWith(".xml") -> MimeTypes.APPLICATION_TTML
-            else -> MimeTypes.APPLICATION_SUBRIP
-        }
-    }
-
     private fun createDataSourceFactory(): DataSource.Factory {
         val builder = okHttpClient.newBuilder()
             .connectTimeout(
@@ -742,7 +711,7 @@ internal class PlaybackController(
             },
         )
 
-        setWarmUpMediaSource(player, sourceFactory, buildMediaItem(stream.url, subtitles), stream.type)
+        setWarmUpMediaSource(player, sourceFactory, mediaItemFactory.build(stream, subtitles), stream.type)
         player.playWhenReady = false
         player.prepare()
         mainHandler.postDelayed(warmUpTimeout, WARM_UP_TIMEOUT_MS)
