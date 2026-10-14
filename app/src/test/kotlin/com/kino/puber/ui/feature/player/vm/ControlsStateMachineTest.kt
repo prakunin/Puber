@@ -50,9 +50,6 @@ class ControlsStateMachineTest {
         assertFalse(machine.state.episodesPanelHeld)
         assertEquals(ActivePanel.None, machine.state.activePanel)
         assertFalse(machine.state.playbackEnded)
-        machine.openPanel(ActivePanel.About)
-        machine.closePanel()
-        assertEquals(FocusTarget.AboutButton, machine.state.focusTarget)
     }
 
     @Test

@@ -47,7 +47,6 @@ internal class ControlsStateMachine {
             controlsVisible = !resumeDialogVisible,
             focusTarget = FocusTarget.Buttons.takeUnless { resumeDialogVisible },
         )
-        lastPanelOpener = FocusTarget.Buttons
     }
 
     fun showControls(focusTarget: FocusTarget?): List<Effect> {
