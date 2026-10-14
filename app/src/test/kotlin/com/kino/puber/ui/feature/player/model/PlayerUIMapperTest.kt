@@ -113,6 +113,17 @@ internal class PlayerUIMapperTest {
         assertEquals(listOf(resources.getString(R.string.player_subtitles_off), "Английский", "Русский"), labels)
     }
 
+    @Test
+    fun mapSubtitleTracks_carriesForcedAndSourceFile() {
+        val rows = mapper.mapSubtitleTracks(
+            listOf(SubtitleLink(lang = "rus", url = "u1", forced = true, file = "/1/92/x.srt")),
+        )
+
+        assertEquals(true, rows[1].isForced)
+        assertEquals("/1/92/x.srt", rows[1].sourceFile)
+        assertEquals(true, rows[0].isOff)
+    }
+
     private fun subtitleLinks() = listOf(
         SubtitleLink(lang = "rus", url = "u1"),
         SubtitleLink(lang = "ai", url = "u2"),
