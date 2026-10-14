@@ -169,7 +169,7 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
         }
 
     @Test
-    fun resumeDialog_noHideTimerRunsWhileItIsUp() {
+    fun resumeDialog_noHideTimerRunsWhileItIsUp_andResumingLeavesControlsHiddenUntilShown() {
         every { interactor.resolveMedia(any(), any(), any(), any()) } returns
             testResolvedMedia.copy(watchingTime = 1_200)
         coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
@@ -186,6 +186,10 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
             assertNull(contentState(vm).controlsFocusTarget)
 
             vm.onAction(PlayerAction.ResumeFromPosition)
+            assertNull(contentState(vm).resumeDialog)
+            assertFalse(contentState(vm).controlsVisible)
+            assertNull(contentState(vm).controlsFocusTarget)
+
             vm.onAction(PlayerAction.ShowControls(FocusTarget.Buttons))
             advanceTimeBy(5_900)
             assertTrue(contentState(vm).controlsVisible)
