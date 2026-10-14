@@ -43,6 +43,7 @@ import com.kino.puber.ui.feature.player.model.QualityUIState
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 import com.kino.puber.ui.feature.player.model.SeekIndicatorState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
 import com.kino.puber.ui.feature.player.model.subtitleLabeler
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
@@ -530,7 +531,14 @@ internal class PlayerVM(
     ) {
         val previous = (stateValue as? PlayerViewState.Content)?.content
         val previousRow = previous?.subtitleTracks?.getOrNull(previous.selectedSubtitleIndex)
-        val rows = reportedSubtitleTracks?.let(::mergeSubtitleTracks) ?: apiSubtitleTracks
+        // A report without any text group is transient (after switchStream the audio groups
+        // arrive before the text ones): it says nothing about the subtitles, so the rows and the
+        // pick stay as they are until the text groups return.
+        val textlessReport = reportedSubtitleTracks != null && reportedSubtitleTracks.none { !it.isOff }
+        val rows = when {
+            textlessReport -> previous?.subtitleTracks ?: apiSubtitleTracks
+            else -> reportedSubtitleTracks?.let(::mergeSubtitleTracks) ?: apiSubtitleTracks
+        }
         val rowIndex = previousRow
             ?.let { audioTrackPreferenceResolver.findSameSubtitleTrackIndex(rows, it) }
             ?: 0

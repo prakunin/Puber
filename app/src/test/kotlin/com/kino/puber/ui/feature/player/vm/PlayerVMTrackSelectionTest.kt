@@ -343,6 +343,31 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun tracksUpdated_textlessReportAfterQualitySwitch_keepsRowsAndPick() {
+        val vm = startedVM()
+        val rows = hlsRowsForFixture() + manifest("en", "subs:English")
+        report(rows)
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
+        val pickedBefore = contentState(vm).subtitleTracks[contentState(vm).selectedSubtitleIndex]
+        val rowsBefore = contentState(vm).subtitleTracks
+        clearMocks(playbackController, answers = false)
+
+        // After switchStream the player briefly reports audio groups and no text groups.
+        report(emptyList())
+
+        assertEquals(rowsBefore, contentState(vm).subtitleTracks)
+        assertEquals(pickedBefore, contentState(vm).subtitleTracks[contentState(vm).selectedSubtitleIndex])
+        verify(exactly = 0) { playbackController.selectSubtitle(match { it.isOff }) }
+
+        report(rows)
+
+        val after = contentState(vm)
+        assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
+        verify(exactly = 0) { playbackController.selectSubtitle(match { it.isOff }) }
+        verify(exactly = 0) { playbackController.selectSubtitle(any()) }
+    }
+
+    @Test
     fun tracksUpdated_identicalRepeatedReports_sendSingleReSelect() {
         val vm = startedVM()
         val rows = hlsRowsForFixture() + manifest("en", "subs:English")
