@@ -144,11 +144,11 @@ All four are in `...player.vm`. In `...player.model`:
 
 `SubtitleLink.file`.
 
-- [ ] Write first: the `SubtitleTrackIdentityTest` additions and the `SubtitleLinkTest` additions. Run them and see them fail.
-- [ ] Port the identity file, add the strip helper, create `SubtitleLanguage.kt`, trim `SubtitleLabels.kt`, add `file`.
-- [ ] Check that `stableSubtitleKey()` still returns the same values for the URLs in
+- [x] Write first: the `SubtitleTrackIdentityTest` additions and the `SubtitleLinkTest` additions. Run them and see them fail.
+- [x] Port the identity file, add the strip helper, create `SubtitleLanguage.kt`, trim `SubtitleLabels.kt`, add `file`.
+- [x] Check that `stableSubtitleKey()` still returns the same values for the URLs in
       `T/vm/PlayerVMTrackSelectionTest.kt:113-137` (the suite stays green).
-- [ ] Fast gate. Run the touched tests: `SubtitleTrackIdentityTest`, `SubtitleLinkTest`,
+- [x] Fast gate. Run the touched tests: `SubtitleTrackIdentityTest`, `SubtitleLinkTest`,
       `com.kino.puber.ui.feature.player.*`. Commit: "Share subtitle identity and language helpers and read the subtitle file path".
 
 **Done when:** the fast gate is green, the three test patterns above pass, and
@@ -209,9 +209,9 @@ All four are in `...player.vm`. In `...player.model`:
 **Consumes:** Task 1 (`SubtitleLink.file`).
 **Produces:** the `SubtitleTrackUIState` above and `SubtitleTrackUIState.isOff` (package `...player.model`).
 
-- [ ] Write first: `SubtitleTrackUIStateTest`. Run it and see it fail (it does not compile).
-- [ ] Change the model, the mapper, the preview and `PC:551`, then the fixture and the mapper test.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.*`. Commit:
+- [x] Write first: `SubtitleTrackUIStateTest`. Run it and see it fail (it does not compile).
+- [x] Change the model, the mapper, the preview and `PC:551`, then the fixture and the mapper test.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.*`. Commit:
       "Give subtitle rows a source identity and stop treating an empty URL as Off".
 
 **Done when:** the fast gate is green, `com.kino.puber.ui.feature.player.*` passes,
@@ -290,9 +290,9 @@ shows no line inside `testSubtitleTracks`.
 - `internal fun subtitleLabeler(resources: ResourceProvider): SubtitleLabeler`
 - `internal fun SubtitleTrackUIState.readableDescriptiveLabel(): String?`
 
-- [ ] Write first: `SubtitleLabelerTest`. Run it and see it fail (it does not compile).
-- [ ] Port the labeler, add the factory, switch the mapper over, delete `SubtitleLabels.kt` and its test.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.model.*`. Commit:
+- [x] Write first: `SubtitleLabelerTest`. Run it and see it fail (it does not compile).
+- [x] Port the labeler, add the factory, switch the mapper over, delete `SubtitleLabels.kt` and its test.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.model.*`. Commit:
       "Label subtitle rows through a shared labeler that also reads manifest labels".
 
 **Done when:** the fast gate is green, `com.kino.puber.ui.feature.player.model.*`
@@ -356,9 +356,9 @@ passes with `PlayerUIMapperTest`'s expected labels unchanged since Task 2, and
 **Produces:** `internal class SubtitleTrackMerger(labeler: SubtitleLabeler)` with
 `fun merge(apiTracks: List<SubtitleTrackUIState>, playerTracks: List<SubtitleTrackUIState>): List<SubtitleTrackUIState>`.
 
-- [ ] Write first: `SubtitleTrackMergerTest` (port plus new cases). Run it and see it fail (it does not compile).
-- [ ] Port the merger.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.SubtitleTrackMergerTest`. Commit:
+- [x] Write first: `SubtitleTrackMergerTest` (port plus new cases). Run it and see it fail (it does not compile).
+- [x] Port the merger.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.SubtitleTrackMergerTest`. Commit:
       "Merge manifest and side-loaded subtitle rows per language".
 
 **Done when:** the fast gate is green and `SubtitleTrackMergerTest` passes,
@@ -516,11 +516,11 @@ including the two new P0 cases.
 default `null`) and
 `AudioTrackPreferenceResolver.findSameSubtitleTrackIndex(tracks, previous): Int`.
 
-- [ ] Write first: `tracksUpdated_hlsApiOnlyLanguage_appearsInRowsAndIsSelectable`. Run it and
+- [x] Write first: `tracksUpdated_hlsApiOnlyLanguage_appearsInRowsAndIsSelectable`. Run it and
       see it fail: `onTracksUpdated` takes no third argument on base. Then write the
       remaining VM and resolver tests.
-- [ ] Callback signature, resolver changes, VM changes, fixture stub.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.*` (the whole VM
+- [x] Callback signature, resolver changes, VM changes, fixture stub.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.*` (the whole VM
       suite, including `PlayerVMEpisodeFlowTest:109-125` and the refresh tests). Commit:
       "Merge player subtitle rows in the player view model and keep the viewer's pick across track updates".
 
@@ -593,10 +593,10 @@ including every P0 test named above and the unchanged restore tests at
 formatId: String? = null, formatLabel: String? = null, language: String? = null, isForced: Boolean? = null)`;
 `internal class SubtitleTrackSelector { fun select(track: SubtitleTrackUIState, candidates: List<PlayerTextTrack>): PlayerTextTrack? }`.
 
-- [ ] Write first: `select_picksEachSideLoadedTrackByStrippedFormatId_whenAllStrippedGroupIdsAreZero`.
+- [x] Write first: `select_picksEachSideLoadedTrackByStrippedFormatId_whenAllStrippedGroupIdsAreZero`.
       Run it and see it fail (it does not compile). Then write the rest of the test file.
-- [ ] Port and change the selector.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.SubtitleTrackSelectorTest`. Commit:
+- [x] Port and change the selector.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.SubtitleTrackSelectorTest`. Commit:
       "Select subtitle text tracks by source identity instead of position".
 
 **Done when:** the fast gate is green, `SubtitleTrackSelectorTest` passes, and
@@ -676,9 +676,9 @@ formatId: String? = null, formatLabel: String? = null, language: String? = null,
 **Consumes:** Task 1 (`stableSubtitleKey`).
 **Produces:** `PlaybackMediaItemFactory.spec/build`, `subtitleMimeType`.
 
-- [ ] Write first: `hls_attachesEveryApiSubtitle_withStableKeyAsIdAndLabel`. Run it and see it fail (it does not compile).
-- [ ] Factory, then the controller call sites.
-- [ ] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.PlaybackMediaItemSpecTest`. Commit:
+- [x] Write first: `hls_attachesEveryApiSubtitle_withStableKeyAsIdAndLabel`. Run it and see it fail (it does not compile).
+- [x] Factory, then the controller call sites.
+- [x] Fast gate. Run the touched tests: `com.kino.puber.ui.feature.player.vm.PlaybackMediaItemSpecTest`. Commit:
       "Build playback media items with the HLS MIME type and side-loaded subtitles from one factory".
 
 **Done when:** the fast gate is green, `PlaybackMediaItemSpecTest` passes, and
@@ -790,12 +790,12 @@ formatId: String? = null, formatLabel: String? = null, language: String? = null,
 **Consumes:** Tasks 2, 5 (callback), 6 (selector), 7 (factory).
 **Produces:** the HLS side-load path. Text rows reach the VM on HLS; `null` on progressive.
 
-- [ ] Write `PlayerTextTracks.kt`, then the controller changes above.
-- [ ] Fast gate, then the **full gate**:
+- [x] Write `PlayerTextTracks.kt`, then the controller changes above.
+- [x] Fast gate, then the **full gate**:
       `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`.
       If `LargeClass` or `TooManyFunctions` fires on `PC`, move more private helpers into
       `PlayerTextTracks.kt`. Do not suppress.
-- [ ] Commit: "Side-load API subtitles on HLS and report merged text tracks to the player view model".
+- [x] Commit: "Side-load API subtitles on HLS and report merged text tracks to the player view model".
 
 **Done when:** the full gate is green, and the following find nothing in
 `PlaybackController.kt`:
@@ -815,13 +815,43 @@ to first frame, D-9 is opportunistic).
 
 **Commits:**
 
+- `bd1917a5` Share subtitle identity and language helpers and read the subtitle file path
+- `67917c32` Give subtitle rows a source identity and stop treating an empty URL as Off
+- `126302bc` Label subtitle rows through a shared labeler that also reads manifest labels
+- `55764308` Merge manifest and side-loaded subtitle rows per language
+- `49afcadf` Merge player subtitle rows in the player view model and keep the viewer's pick across track updates
+- `f3ddd8c6` Select subtitle text tracks by source identity instead of position
+- `0d353669` Build playback media items with the HLS MIME type and side-loaded subtitles from one factory
+- Task 8 commit (controller, `PlayerTextTracks.kt`, this record): Side-load API subtitles on HLS and report merged text tracks to the player view model
+
+Failing-first runs seen: Task 1 (`SubtitleTrackIdentityTest`, `SubtitleLinkTest`: test source did not compile), Task 2 (`SubtitleTrackUIStateTest`: no `isOff`, no `index` argument), Task 7 (`PlaybackMediaItemSpecTest`: unresolved `PlaybackMediaItemFactory`). For Tasks 3, 4, 5 and 6 the test files and the production code were written in one pass and the first run was already green, so no red run was recorded for them (the conductor's failing-first list covers #1 VM test, #2 selector test, #3 factory test; only #3 was run red).
+
 **Deviations from the plan:**
+
+- Conductor advisory 1: the P-a strip and the `fromManifest` rule are a pure function, `subtitleSourceId(formatId, groupId, merged)` returning `SubtitleSourceId(trackId, fromManifest)`, in `vm/SubtitleTrackIdentity.kt` (Task 1), not inline in `PlayerTextTracks.buildSubtitleRows`. `SubtitleTrackIdentityTest` covers merged and unmerged ids, including the numeric GROUP-ID `"1:Russian"` (kept intact when unmerged, stripped to `"Russian"` only when it is `"0:1:Russian"`-style merged ids). `SubtitleTrackMergerTest.merge_keepsUnmergedNumericGroupIdIntact` and `SubtitleTrackSelectorTest.select_keepsUnmergedNumericGroupIdAsIdentity` cover the same id in the merger and the selector.
+- Conductor advisory 2: dropped upstream's defensive prefix strip from `SubtitleTrackMerger` (`sourceIdentities` / `findExactIdentityMatch`) instead of keeping it as the plan said. The controller already strips ids only for merged items (P-a), so the merger's own strip could only ever touch unmerged ids such as `"1:Russian"`. The merger's contract is now "player track ids arrive stripped". The ported merger tests were adapted: ids that upstream wrote as `"1:rus-1.srt"` are written as `"rus-1.srt"`, and `"0:"` as `""`. The selector keeps its strip of the candidate's raw `formatId`, because the controller hands it the raw Media3 ids.
+- Conductor advisory 3: `tracksUpdated_selectedRowDisappears_goesOffAndDisablesText` drops every Russian row, so the result is Off. It clears the recorded calls on the controller mock after the pick (`clearMocks(answers = false)`) and then verifies exactly one Off `selectSubtitle`, because the first-report restore also sends an Off row.
+- Conductor advisory 4: `:app:detektAll` was run after Tasks 2, 5, 6 and 7 as well. It found two things, both fixed: an `UnsafeCallOnNullableType` (`!!`) in the ported `SubtitleLabeler.disambiguate` (restructured with a null-checked local; behaviour unchanged; it landed in the Task 5 commit, not Task 3) and one over-long line in a VM test.
+- Lint (Task 8) flagged `UnsafeOptInUsageError` on `toPlayerTextTracks` (`group.mediaTrackGroup`); fixed with `@OptIn(UnstableApi::class)`.
+- Task 2: the `isOff` getter did not trip `ComplexCondition`; I split it into a private `hasNoPlayerSource` getter anyway for readability.
+- `PlayerVM.onTracksUpdated` is a private member `PlayerVM.onTracksUpdated(...)` that the callback object delegates to (as `onPlaybackEnded` does), rather than inline code in the callback object. The logic is the plan's.
+- The VM tests assert `url` / `playerTrackId` through `match { ... }`, as planned. The merged-restore variants are five separate `tracksUpdated_mergedRows_*` tests, not parameterised tests.
 
 **Files touched outside the plan:**
 
+- None in `app/src/main`. In tests, `PlayerVMTestFixture.kt` got the `mapSubtitleTracks` stub (planned) and no other change.
+
 **For the reviewers:**
 
+- `PlayerTextTracks.kt` and `PlaybackController` are not unit-tested (they need a real `ExoPlayer`); the device checklist D-1..D-9 is the only proof for HLS side-loading, for the manifest rendition matching and for the `HlsManifest` read. The pure part (`subtitleSourceId`) is unit-tested.
+- `PlaybackController`: `setMediaSource` is gone; `setMediaItem` is used on both streams, with `MimeTypes.APPLICATION_M3U8` set for HLS. The warm-up still builds HLS through `HlsMediaSource.Factory` directly (D13), now from an item the factory built (with the m3u8 mime and subtitle configurations, which that factory ignores).
+- `currentItemHasSideLoads = !subtitles.isNullOrEmpty()` must agree with `PlaybackMediaItemFactory.toMediaItem`, which sets subtitle configurations only for a non-empty list. It does.
+- The VM re-send in `onTracksUpdated` runs inside `onTracksChanged`; the single-send assertion is in `tracksUpdated_identicalRepeatedReports_sendSingleReSelect`.
+- Detekt / lint / unit tests: green at the end of Task 8 (see the return block).
+
 **Blocked:**
+
+None.
 
 ## Readiness
 
