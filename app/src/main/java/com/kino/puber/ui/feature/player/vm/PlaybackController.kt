@@ -45,6 +45,7 @@ import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -548,7 +549,7 @@ internal class PlaybackController(
 
     override fun selectSubtitle(track: SubtitleTrackUIState?) {
         val player = exoPlayer ?: return
-        if (track == null || track.url.isEmpty()) {
+        if (track == null || track.isOff) {
             pendingSubtitleTrack = null
             player.trackSelectionParameters = player.trackSelectionParameters
                 .buildUpon()

@@ -35,7 +35,6 @@ internal class PlayerUIMapper(
     fun mapSubtitleTracks(subtitles: List<SubtitleLink>?): List<SubtitleTrackUIState> {
         val result = mutableListOf(
             SubtitleTrackUIState(
-                index = 0,
                 label = resources.getString(R.string.player_subtitles_off),
                 language = "",
                 url = "",
@@ -55,10 +54,11 @@ internal class PlayerUIMapper(
         links.forEachIndexed { index, sub ->
             result.add(
                 SubtitleTrackUIState(
-                    index = index + 1,
                     label = labels[index],
                     language = sub.lang,
                     url = sub.url,
+                    isForced = sub.forced,
+                    sourceFile = sub.file,
                 )
             )
         }

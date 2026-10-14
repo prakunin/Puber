@@ -227,10 +227,9 @@ internal open class PlayerVMTestFixture {
     )
 
     protected val testSubtitleTracks = listOf(
-        SubtitleTrackUIState(index = 0, label = "Off", language = "", url = ""),
-        SubtitleTrackUIState(index = 1, label = "Russian", language = "rus", url = "https://test/subtitles/rus.vtt"),
+        SubtitleTrackUIState(label = "Off", language = "", url = ""),
+        SubtitleTrackUIState(label = "Russian", language = "rus", url = "https://test/subtitles/rus.vtt"),
         SubtitleTrackUIState(
-            index = 2,
             label = "Russian forced",
             language = "rus",
             url = "https://test/subtitles/rus-forced.vtt",
