@@ -1,0 +1,16 @@
+LENS: edge  ROUND: 3  BASE: a97ee2b1  RANGE: 7ca85b93..f4b311e0
+
+Review-edge-2 F1 is closed in all three cases: (a) a text-less report merges to `[Off]`, Off sent once, intent kept, further reports send nothing; (b) next media: audio restored on the first report, subtitle restore waits for a report with text, an audio pick meanwhile keeps the saved subtitle; (c) after a link refresh a text-less report shows `[Off]`, fresh rows found by identity, only the fresh row sent.
+Also checked: `NOT_YET` only after the guard that drops a report with neither audio nor text; no re-send loop (step 8 sends only on change); `rows[shown]` cannot go out of bounds; collapse and Off-pick paths keep the picker matching what plays.
+
+### F1 [minor] A rebuild drops the viewer's subtitle intent when the current stream lacks that row but has other text
+- Where: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:601-614 (`restoreSubtitlePreference`) with :874 (`applySubtitleSelection` sets `intendedSubtitleRow`)
+- Problem: A buffer preset change or the Fast DNS toggle resets `subtitleRestoredForCurrentMedia`. The first report with text runs the restore. When the saved preference does not resolve, the restore falls back to `applySubtitleSelection(content.selectedSubtitleIndex, persist = false)`; that index is Off whenever the intent is not on this stream, and `applySubtitleSelection` sets `intendedSubtitleRow = null`. The spec table (section 3, "Rebuild (buffer, DNS): Intent kept") and the code comment assume the opposite.
+- Failure scenario: API side-loads `[English]`, `hls4` manifest also has `Russian`. On Auto the viewer picks `Russian` (saved). 720p: rows `[Off, English]`, Off shown and sent, intent stays `Russian` (correct). Toggle Fast DNS: new player reports `[Off, English]`, saved `rus` matches nothing, restore re-sends Off and nulls the intent. Back to Auto: rows contain `Russian`, but intent is null, so the picker stays Off and nothing plays.
+- Fix: in `restoreSubtitlePreference`, when `subtitleIndex < 0`, re-send the displayed row with `playbackController.selectSubtitle(row)` and leave `intendedSubtitleRow` alone; use `applySubtitleSelection` only when a saved row resolves. VM test: pick, collapse, toggle Fast DNS, report other-text rows, report original rows; assert the original row is shown and sent.
+
+### F2 [minor] Nothing tests that a rebuild re-arms the subtitle restore
+- Where: app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:935-936, 947-948
+- Problem: No test sends `SelectBufferPreset` or `ToggleFastDns`. Only the `subtitleRestoredForCurrentMedia = false` reset makes a rebuilt player get its subtitle again; `prepare` clears the controller's pending row and disables text (PlaybackController.kt:387, :406), and after a rebuild the rows are usually identical, so step 8 sends nothing.
+- Failure scenario: someone removes the reset on either rebuild path; all tests pass; on the device the picker shows `Russian` after a buffer preset change while no text renders.
+- Fix: VM tests: rebuild re-sends the pick (SelectBufferPreset with a second preset in the fixture); rebuild with a text-less first report (nothing sent, then exactly one send); the same with `ToggleFastDns`.
