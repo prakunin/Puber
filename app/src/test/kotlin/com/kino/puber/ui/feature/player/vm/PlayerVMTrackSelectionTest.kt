@@ -381,6 +381,38 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun tracksUpdated_repeatedReportsAfterRealPick_sendNoFurtherSelect() {
+        val vm = startedVM()
+        val rows = hlsRowsForFixture() + manifest("en", "subs:English")
+        report(rows)
+        clearMocks(playbackController, answers = false)
+
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
+        report(rows)
+        report(rows)
+
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+    }
+
+    @Test
+    fun tracksUpdated_repeatedReorderedReport_resendsOnlyOnce() {
+        val vm = startedVM()
+        report(hlsRowsForFixture() + manifest("en", "subs:English"))
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.playerTrackId == "rus.vtt" }))
+        clearMocks(playbackController, answers = false)
+        val reordered = listOf(
+            manifest("en", "subs:English"),
+            sideLoad("rus", testSubtitleTracks[1].url, 2),
+            sideLoad("rus", testSubtitleTracks[2].url, 1),
+        )
+
+        report(reordered)
+        report(reordered)
+
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+    }
+
+    @Test
     fun tracksUpdated_restoresSavedUrl_onApiLinkedManifestRow() {
         every { interactor.getPreferredSubtitleLang(42) } returns "rus"
         every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[1].url
