@@ -30,3 +30,4 @@ From the code-quality-audit report (full scope there): SOLID-4, STR-3; refactor,
 ## Log
 - 2026-10-12 created on the board (stage idea)
 - 2026-10-12 migrated from the former board file (board stage `idea` -> `idea`); the board row Notes are copied verbatim into ## Next
+- 2026-10-14 deferred from subtitle-upstream-port review round 1 (triage-1.md #2): text-off default, FORCED flag and the removed positional fallback in PlaybackController have no regression test; cover them when text-track matching is extracted.

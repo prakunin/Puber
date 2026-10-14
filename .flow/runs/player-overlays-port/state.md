@@ -31,3 +31,4 @@ Moved out of the main checkout as 92a9441d. Error, resume, episode row and chips
 ## Log
 - 2026-09-26 created on the board (stage impl)
 - 2026-10-12 migrated from the former board file (board stage `impl` -> `impl`); the board row Notes are copied verbatim into ## Next
+- 2026-10-14 deferred from subtitle-upstream-port review round 1 (triage-1.md #7, ux-designer): the settings side panel with 11 rows (Subtitles page, 9 API languages) reaches 1 dp from the top and bottom edges (PlayerSidePanel.kt:112-124, no safe-area inset); record a vertical inset or max height with scrolling when the side-panel scene is dialled.
