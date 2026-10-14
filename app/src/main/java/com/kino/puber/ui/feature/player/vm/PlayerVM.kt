@@ -544,9 +544,13 @@ internal class PlayerVM(
             preferredLang = subtitleLang,
             preferredUrl = subtitleUrl,
         )
-        if (subtitleIndex >= 0) {
-            applySubtitleSelection(subtitleIndex, persist = false)
-        }
+        // Nothing saved resolves for this media: re-send the picker's own row, so a pick still
+        // pending in the controller from the previous media cannot turn text back on under an
+        // Off picker. On a rebuild the row is the viewer's live pick, so nothing changes.
+        applySubtitleSelection(
+            index = subtitleIndex.takeIf { it >= 0 } ?: content.selectedSubtitleIndex,
+            persist = false,
+        )
     }
 
     override fun onAction(action: UIAction) {
