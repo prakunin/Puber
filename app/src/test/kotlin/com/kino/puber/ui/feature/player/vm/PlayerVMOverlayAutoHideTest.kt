@@ -177,11 +177,16 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
                 resumeDialog = ResumeDialogState(savedPosition = 60_000L, formattedTime = "1:00"),
             )
         vmTest { vm ->
+            assertFalse(contentState(vm).controlsVisible)
+            assertNull(contentState(vm).controlsFocusTarget)
+
             advanceTimeBy(60_000)
             assertNotNull(contentState(vm).resumeDialog)
-            assertTrue(contentState(vm).controlsVisible)
+            assertFalse(contentState(vm).controlsVisible)
+            assertNull(contentState(vm).controlsFocusTarget)
 
             vm.onAction(PlayerAction.ResumeFromPosition)
+            vm.onAction(PlayerAction.ShowControls(FocusTarget.Buttons))
             advanceTimeBy(5_900)
             assertTrue(contentState(vm).controlsVisible)
 
@@ -255,16 +260,23 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
 
     @Test
     fun controlsTimerDuringExit_changesNothing() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
+            testContentState.copy(hasNextEpisode = false)
         val releaseSave = CompletableDeferred<Unit>()
         coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } coAnswers {
             releaseSave.await()
         }
         vmTest { vm ->
-            vm.onAction(PlayerAction.OnBackPressed)
-
-            advanceTimeBy(6_100)
-
             assertTrue(contentState(vm).controlsVisible)
+            advanceTimeBy(3_000)
+            callbackSlot.captured.onPlaybackEnded()
+            val before = contentState(vm)
+
+            advanceTimeBy(3_100)
+
+            assertEquals(before, contentState(vm))
+            assertTrue(contentState(vm).controlsVisible)
+            verify(exactly = 0) { router.back(any(), any()) }
             releaseSave.complete(Unit)
         }
     }
