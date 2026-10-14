@@ -143,6 +143,7 @@ internal class SubtitleTrackMerger(
     ): SubtitleTrackUIState = copy(
         url = apiTrack.url,
         sourceFile = apiTrack.sourceFile,
-        isForced = apiTrack.isForced ?: isForced,
+        // The player's flag is what the selector compares candidates by, so a manifest row keeps it.
+        isForced = if (fromManifest) isForced else apiTrack.isForced ?: isForced,
     )
 }

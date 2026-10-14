@@ -144,6 +144,27 @@ internal class SubtitleTrackMergerTest {
     }
 
     @Test
+    fun merge_keepsPlayersForcedFlag_onManifestRowLinkedToApiRow() {
+        val apiTracks = listOf(
+            offTrack(),
+            apiTrack(
+                "Russian", "rus", url = "https://api.test/subtitles/rus.srt", forced = false,
+            ),
+        )
+        val playerTracks = listOf(
+            playerTrack(
+                "", "rus", "hls-rus", 0, forced = true,
+                uri = "https://cdn.test/subtitles/rus.srt/index.m3u8",
+            ),
+        )
+
+        val result = merger.merge(apiTracks, playerTracks)
+
+        assertEquals("https://api.test/subtitles/rus.srt", result[1].url)
+        assertEquals(true, result[1].isForced)
+    }
+
+    @Test
     fun merge_doesNotPairSameLanguageVariants_withoutExactIdentity() {
         val apiTracks = listOf(
             offTrack(),
@@ -243,6 +264,7 @@ internal class SubtitleTrackMergerTest {
                 language = "ru",
                 id = "subs:Russian #02",
                 groupIndex = 0,
+                forced = true,
                 uri = "https://cdn.test/hls/token/subtitles/b/82/second.srt/index.m3u8?loc=nl",
             ),
             playerTrack(
