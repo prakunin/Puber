@@ -78,17 +78,25 @@ internal class PlayerUIMapperTest {
 
         assertEquals(
             listOf(
-                SubtitleTrackUIState(0, off, "", ""),
-                SubtitleTrackUIState(1, variant("Russian", 1), "rus", "u1"),
-                SubtitleTrackUIState(2, resources.getString(R.string.player_subtitle_ai_generated), "ai", "u2"),
+                SubtitleTrackUIState(label = off, language = "", url = ""),
+                SubtitleTrackUIState(label = variant("Russian", 1), language = "rus", url = "u1"),
                 SubtitleTrackUIState(
-                    3,
-                    "English · ${resources.getString(R.string.player_subtitle_forced)}",
-                    "eng",
-                    "u3",
+                    label = resources.getString(R.string.player_subtitle_ai_generated),
+                    language = "ai",
+                    url = "u2",
                 ),
-                SubtitleTrackUIState(4, resources.getString(R.string.player_subtitle_unknown, 4), " ", "u4"),
-                SubtitleTrackUIState(5, variant("Russian", 2), "rus", "u5"),
+                SubtitleTrackUIState(
+                    label = "English · ${resources.getString(R.string.player_subtitle_forced)}",
+                    language = "eng",
+                    url = "u3",
+                    isForced = true,
+                ),
+                SubtitleTrackUIState(
+                    label = resources.getString(R.string.player_subtitle_unknown, 4),
+                    language = " ",
+                    url = "u4",
+                ),
+                SubtitleTrackUIState(label = variant("Russian", 2), language = "rus", url = "u5"),
             ),
             tracks,
         )
@@ -103,6 +111,27 @@ internal class PlayerUIMapperTest {
         ).map { it.label }
 
         assertEquals(listOf(resources.getString(R.string.player_subtitles_off), "Английский", "Русский"), labels)
+    }
+
+    @Test
+    fun mapSubtitleTracks_carriesForcedAndSourceFile() {
+        val rows = mapper.mapSubtitleTracks(
+            listOf(SubtitleLink(lang = "rus", url = "u1", forced = true, file = "/1/92/x.srt")),
+        )
+
+        assertEquals(true, rows[1].isForced)
+        assertEquals("/1/92/x.srt", rows[1].sourceFile)
+        assertEquals(true, rows[0].isOff)
+    }
+
+    @Test
+    fun mapSubtitleTracks_dropsLinksWithBlankUrl() {
+        val rows = mapper.mapSubtitleTracks(
+            listOf(SubtitleLink(lang = "", url = ""), SubtitleLink(lang = "rus", url = "u1")),
+        )
+
+        assertEquals(listOf("", "u1"), rows.map { it.url })
+        assertEquals(true, rows[0].isOff)
     }
 
     private fun subtitleLinks() = listOf(

@@ -25,11 +25,29 @@ internal data class AudioTrackUIState(
 
 @Immutable
 internal data class SubtitleTrackUIState(
-    val index: Int,
     val label: String,
     val language: String,
     val url: String,
+    val isForced: Boolean? = null,
+    val sourceFile: String? = null,
+    /** Raw manifest/container label, kept to disambiguate same-language variants. */
+    val descriptiveLabel: String? = null,
+    /** Format id with the MergingMediaSource prefix stripped. */
+    val playerTrackId: String? = null,
+    /** Full Media3 `TrackGroup.id`, prefix kept. */
+    val playerTrackGroupId: String? = null,
+    val playerTrackUri: String? = null,
+    val playerTrackIndex: Int? = null,
+    /** True when the track came from the HLS main source rather than a side-load. */
+    val fromManifest: Boolean = false,
 )
+
+private val SubtitleTrackUIState.hasNoPlayerSource: Boolean
+    get() = playerTrackId == null && playerTrackGroupId == null &&
+        playerTrackUri == null && playerTrackIndex == null
+
+internal val SubtitleTrackUIState.isOff: Boolean
+    get() = language.isEmpty() && url.isEmpty() && !fromManifest && hasNoPlayerSource
 
 @Immutable
 internal data class SoundModeUIState(

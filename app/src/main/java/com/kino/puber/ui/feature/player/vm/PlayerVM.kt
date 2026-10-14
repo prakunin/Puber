@@ -42,6 +42,9 @@ import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.ui.feature.player.model.QualityUIState
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 import com.kino.puber.ui.feature.player.model.SeekIndicatorState
+import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
+import com.kino.puber.ui.feature.player.model.subtitleLabeler
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -157,7 +160,9 @@ internal class PlayerVM(
      * what to watch next.
      */
     private var exitWhenPanelCloses = false
+    /** Audio only: the subtitle restore has its own flag, because it waits for a report with text. */
     private var tracksRestoredForCurrentMedia = false
+    private var subtitleRestoredForCurrentMedia = false
     private var episodeSwitchInProgress = false
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
@@ -173,6 +178,13 @@ internal class PlayerVM(
     private val controlsStateMachine = ControlsStateMachine()
     private val progressTracker = ProgressTracker()
     private val audioTrackPreferenceResolver = AudioTrackPreferenceResolver()
+    private var apiSubtitleTracks: List<SubtitleTrackUIState> = emptyList()
+
+    /**
+     * The row the viewer wants, null for Off. It survives a stream without that row, so Auto brings
+     * the subtitles back; it is not view state and is never persisted by itself.
+     */
+    private var intendedSubtitleRow: SubtitleTrackUIState? = null
     private val behaviourPreferences = interactor.getBehaviourPreferences()
 
     private val playbackCallback = object : PlaybackControl.Callback {
@@ -208,17 +220,12 @@ internal class PlayerVM(
             }
         }
 
-        override fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int) {
-            updateContent {
-                copy(
-                    audioTracks = audioTracks,
-                    selectedAudioTrackIndex = selectedIndex,
-                )
-            }
-            if (!tracksRestoredForCurrentMedia) {
-                tracksRestoredForCurrentMedia = true
-                restoreTrackPreferences()
-            }
+        override fun onTracksUpdated(
+            audioTracks: List<AudioTrackUIState>,
+            selectedIndex: Int,
+            subtitleTracks: List<SubtitleTrackUIState>?,
+        ) {
+            this@PlayerVM.onTracksUpdated(audioTracks, selectedIndex, subtitleTracks)
         }
 
         override fun onPlaybackEnded() {
@@ -360,6 +367,7 @@ internal class PlayerVM(
 
     /** Publishes new media with the controls exactly as [controlsStateMachine] now holds them. */
     private fun publishPreparedContent(contentState: PlayerContentState) {
+        apiSubtitleTracks = contentState.subtitleTracks
         controlsHideJob?.cancel()
         controlsStateMachine.initialize(resumeDialogVisible = contentState.resumeDialog != null)
         updateViewState(
@@ -485,6 +493,7 @@ internal class PlayerVM(
                     return@launch
                 }
                 currentMedia = refreshedMedia
+                apiSubtitleTracks = mapper.mapSubtitleTracks(resolved.subtitles)
                 updateViewState(
                     PlayerViewState.Content(
                         latestContent.copy(
@@ -523,11 +532,58 @@ internal class PlayerVM(
         return !closing && currentMedia?.token == token
     }
 
-    private fun restoreTrackPreferences() {
+    private fun onTracksUpdated(
+        reportedAudioTracks: List<AudioTrackUIState>,
+        reportedAudioIndex: Int,
+        reportedSubtitleTracks: List<SubtitleTrackUIState>?,
+    ) {
+        val previous = (stateValue as? PlayerViewState.Content)?.content
+        val previousRow = previous?.subtitleTracks?.getOrNull(previous.selectedSubtitleIndex)
+        // A report without text groups is final: the stream has no subtitles, so the rows merge to Off.
+        val rows = reportedSubtitleTracks?.let(::mergeSubtitleTracks) ?: apiSubtitleTracks
+        val offIndex = rows.indexOfFirst { it.isOff }.coerceAtLeast(0)
+        val shown = intendedSubtitleRow
+            ?.let { audioTrackPreferenceResolver.findSameSubtitleTrackIndex(rows, it) }
+            ?: offIndex
+        if (shown != offIndex) {
+            intendedSubtitleRow = rows[shown]
+        }
+        updateContent {
+            copy(
+                audioTracks = reportedAudioTracks.ifEmpty { audioTracks },
+                selectedAudioTrackIndex = if (reportedAudioTracks.isEmpty()) {
+                    selectedAudioTrackIndex
+                } else {
+                    reportedAudioIndex
+                },
+                subtitleTracks = rows,
+                selectedSubtitleIndex = shown,
+            )
+        }
+        if (!tracksRestoredForCurrentMedia) {
+            tracksRestoredForCurrentMedia = true
+            restoreAudioPreference()
+        }
+        if (!subtitleRestoredForCurrentMedia) {
+            // Without text the restore stays pending: text is already disabled after prepare.
+            if (rows.none { !it.isOff }) return
+            subtitleRestoredForCurrentMedia = true
+            restoreSubtitlePreference()
+            return
+        }
+        val row = rows.getOrNull(shown)
+        if (row != null && previousRow != null && row != previousRow) {
+            // The viewer's row moved or was rebuilt: keep the controller's pending row current.
+            playbackController.selectSubtitle(row)
+        }
+    }
+
+    private fun mergeSubtitleTracks(playerTracks: List<SubtitleTrackUIState>): List<SubtitleTrackUIState> =
+        SubtitleTrackMerger(subtitleLabeler(resources)).merge(apiSubtitleTracks, playerTracks)
+
+    private fun restoreAudioPreference() {
         val preferredLabel = interactor.getPreferredAudioLabel(params.itemId)
         val preferredLang = interactor.getPreferredAudioLang(params.itemId)
-        val subtitleLang = interactor.getPreferredSubtitleLang(params.itemId)
-        val subtitleUrl = interactor.getPreferredSubtitleUrl(params.itemId)
         val content = (stateValue as? PlayerViewState.Content)?.content ?: return
         val audioIndex = audioTrackPreferenceResolver.findAudioTrackIndex(
             tracks = content.audioTracks,
@@ -538,19 +594,25 @@ internal class PlayerVM(
         if (audioIndex >= 0) {
             applyAudioTrackSelection(audioIndex, persist = false)
         }
+    }
 
+    private fun restoreSubtitlePreference() {
+        val subtitleLang = interactor.getPreferredSubtitleLang(params.itemId)
+        val subtitleUrl = interactor.getPreferredSubtitleUrl(params.itemId)
+        val content = (stateValue as? PlayerViewState.Content)?.content ?: return
         val subtitleIndex = audioTrackPreferenceResolver.findSubtitleTrackIndex(
             tracks = content.subtitleTracks,
             preferredLang = subtitleLang,
             preferredUrl = subtitleUrl,
         )
+        if (subtitleIndex >= 0) {
+            applySubtitleSelection(index = subtitleIndex, persist = false)
+            return
+        }
         // Nothing saved resolves for this media: re-send the picker's own row, so a pick still
         // pending in the controller from the previous media cannot turn text back on under an
-        // Off picker. On a rebuild the row is the viewer's live pick, so nothing changes.
-        applySubtitleSelection(
-            index = subtitleIndex.takeIf { it >= 0 } ?: content.selectedSubtitleIndex,
-            persist = false,
-        )
+        // Off picker. The intent is left alone: on a rebuild it may name a row this stream lacks.
+        content.subtitleTracks.getOrNull(content.selectedSubtitleIndex)?.let(playbackController::selectSubtitle)
     }
 
     override fun onAction(action: UIAction) {
@@ -810,8 +872,11 @@ internal class PlayerVM(
         updateContent {
             copy(selectedSubtitleIndex = index)
         }
+        intendedSubtitleRow = subtitle.takeUnless { it.isOff }
         playbackController.selectSubtitle(subtitle)
         if (persist) {
+            // An explicit pick supersedes a restore that is still waiting for text.
+            subtitleRestoredForCurrentMedia = true
             saveTrackPreferences()
         }
     }
@@ -869,6 +934,7 @@ internal class PlayerVM(
         val position = playbackController.currentPosition
         updateContent { copy(selectedBufferPresetIndex = index) }
         tracksRestoredForCurrentMedia = false
+        subtitleRestoredForCurrentMedia = false
         initializePlayer(savedPosition = position)
     }
 
@@ -880,6 +946,7 @@ internal class PlayerVM(
         val position = playbackController.currentPosition
         updateContent { copy(fastDnsEnabled = newValue) }
         tracksRestoredForCurrentMedia = false
+        subtitleRestoredForCurrentMedia = false
         initializePlayer(savedPosition = position)
     }
 
@@ -924,6 +991,8 @@ internal class PlayerVM(
         dismissedSegmentType = null
         countdownDismissed = false
         tracksRestoredForCurrentMedia = false
+        subtitleRestoredForCurrentMedia = false
+        intendedSubtitleRow = null
         onPlaybackResumed()
     }
 
@@ -1780,13 +1849,23 @@ internal class PlayerVM(
     private fun saveTrackPreferences() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
         val audioTrack = state.audioTracks.getOrNull(state.selectedAudioTrackIndex)
-        val subtitle = state.subtitleTracks.getOrNull(state.selectedSubtitleIndex)
+        // While the restore waits for text the saved subtitle passes through; afterwards the viewer's
+        // intent is saved, which stays right while the rows are collapsed to Off.
+        val subtitleLang: String?
+        val subtitleUrl: String?
+        if (subtitleRestoredForCurrentMedia) {
+            subtitleLang = intendedSubtitleRow?.language?.takeIf { it.isNotEmpty() }
+            subtitleUrl = intendedSubtitleRow?.url?.takeIf { it.isNotEmpty() }
+        } else {
+            subtitleLang = interactor.getPreferredSubtitleLang(params.itemId)
+            subtitleUrl = interactor.getPreferredSubtitleUrl(params.itemId)
+        }
         interactor.saveTrackPreferences(
             itemId = params.itemId,
             audioLang = audioTrack?.language?.takeIf { it.isNotEmpty() },
             audioLabel = audioTrack?.label?.takeIf { it.isNotEmpty() },
-            subtitleLang = subtitle?.language?.takeIf { it.isNotEmpty() },
-            subtitleUrl = subtitle?.url?.takeIf { it.isNotEmpty() },
+            subtitleLang = subtitleLang,
+            subtitleUrl = subtitleUrl,
         )
     }
 

@@ -11,6 +11,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.model.BufferPreset
+import com.kino.puber.ui.feature.player.vm.sideLoadable
 
 internal class PlayerUIMapper(
     private val resources: ResourceProvider,
@@ -33,36 +34,21 @@ internal class PlayerUIMapper(
     }
 
     fun mapSubtitleTracks(subtitles: List<SubtitleLink>?): List<SubtitleTrackUIState> {
-        val result = mutableListOf(
+        val offRow = SubtitleTrackUIState(
+            label = resources.getString(R.string.player_subtitles_off),
+            language = "",
+            url = "",
+        )
+        val apiRows = subtitles.sideLoadable().map { sub ->
             SubtitleTrackUIState(
-                index = 0,
-                label = resources.getString(R.string.player_subtitles_off),
-                language = "",
-                url = "",
-            )
-        )
-        val links = subtitles.orEmpty()
-        val labels = subtitleLabels(
-            subtitles = links,
-            displayLocale = resources.locale,
-            aiGeneratedLabel = resources.getString(R.string.player_subtitle_ai_generated),
-            forcedQualifier = resources.getString(R.string.player_subtitle_forced),
-            variantLabel = { label, ordinal ->
-                resources.getString(R.string.player_subtitle_variant_label, label, ordinal)
-            },
-            unknownLabel = { position -> resources.getString(R.string.player_subtitle_unknown, position) },
-        )
-        links.forEachIndexed { index, sub ->
-            result.add(
-                SubtitleTrackUIState(
-                    index = index + 1,
-                    label = labels[index],
-                    language = sub.lang,
-                    url = sub.url,
-                )
+                label = "",
+                language = sub.lang,
+                url = sub.url,
+                isForced = sub.forced,
+                sourceFile = sub.file,
             )
         }
-        return result
+        return listOf(offRow) + subtitleLabeler(resources).apply(apiRows)
     }
 
     fun mapQualities(files: List<VideoFile>?): List<QualityUIState> {

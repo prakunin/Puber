@@ -124,6 +124,7 @@ internal open class PlayerVMTestFixture {
         every { mapper.buildTitle(any()) } returns "Title"
         every { mapper.buildSubtitle(any(), any(), any()) } returns "Sub"
         every { mapper.mapQualities(any()) } returns emptyList()
+        every { mapper.mapSubtitleTracks(any()) } returns testSubtitleTracks
         every { mapper.mapEpisodes(any()) } returns null
         every { mapper.mapSkipSegmentLabel(any()) } returns "Skip"
         every { mapper.defaultSoundModeLabel() } returns "Stereo"
@@ -227,10 +228,9 @@ internal open class PlayerVMTestFixture {
     )
 
     protected val testSubtitleTracks = listOf(
-        SubtitleTrackUIState(index = 0, label = "Off", language = "", url = ""),
-        SubtitleTrackUIState(index = 1, label = "Russian", language = "rus", url = "https://test/subtitles/rus.vtt"),
+        SubtitleTrackUIState(label = "Off", language = "", url = ""),
+        SubtitleTrackUIState(label = "Russian", language = "rus", url = "https://test/subtitles/rus.vtt"),
         SubtitleTrackUIState(
-            index = 2,
             label = "Russian forced",
             language = "rus",
             url = "https://test/subtitles/rus-forced.vtt",

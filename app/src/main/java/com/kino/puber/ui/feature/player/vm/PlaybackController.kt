@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
-import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -27,6 +26,7 @@ import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.extractor.DefaultExtractorsFactory
 import okhttp3.OkHttpClient
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -45,6 +45,7 @@ import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -64,7 +65,15 @@ internal interface PlaybackControl {
             buffered: Long,
         )
 
-        fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int)
+        /**
+         * [subtitleTracks] is null when the player has no subtitle rows of its own (progressive);
+         * the picker then shows the API rows.
+         */
+        fun onTracksUpdated(
+            audioTracks: List<AudioTrackUIState>,
+            selectedIndex: Int,
+            subtitleTracks: List<SubtitleTrackUIState>? = null,
+        )
         fun onPlaybackEnded()
 
         /**
@@ -159,7 +168,11 @@ internal class PlaybackController(
     private var ac3FallbackApplied = false
     private var useFastDns = true
     private var pendingSubtitleTrack: SubtitleTrackUIState? = null
+    private val mediaItemFactory = PlaybackMediaItemFactory()
+    private val subtitleTrackSelector = SubtitleTrackSelector()
     private var currentStreamUrl: String? = null
+    private var currentStreamType: StreamType? = null
+    private var currentItemHasSideLoads = false
     private var effectiveStreamSource: String? = null
     private val videoRenderDiagnostics = VideoRenderDiagnostics()
     private var warmUpPlayer: ExoPlayer? = null
@@ -420,9 +433,11 @@ internal class PlaybackController(
         exoPlayer = player
         videoRenderDiagnostics.reset()
 
-        val mediaItem = buildMediaItem(stream.url, subtitles)
-        setMediaSource(player, mediaItem, stream.type)
+        val spec = mediaItemFactory.spec(stream, subtitles)
+        player.setMediaItem(mediaItemFactory.build(spec))
         currentStreamUrl = stream.url
+        currentStreamType = stream.type
+        currentItemHasSideLoads = spec.hasSideLoads
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.prepare()
@@ -465,7 +480,7 @@ internal class PlaybackController(
      * it, which resets the allocator and — because the allocator trims on reset — hands the whole
      * pooled buffer back to the heap to be re-allocated a moment later. The buffered media itself
      * cannot survive a source swap either way, but the pool can, and giving it up costs a GC pause
-     * at the one moment playback has nothing in reserve. Handing the position to `setMediaSource`
+     * at the one moment playback has nothing in reserve. Handing the position to `setMediaItem`
      * rather than seeking afterwards saves a second buffering round-trip on top.
      */
     private fun createMediaSourceFactory(
@@ -477,7 +492,8 @@ internal class PlaybackController(
                 playerPreferencesRepository.discardEmbeddedArtworkMetadata,
             ),
         )
-            // Covers the progressive fallback; the HLS source sets the same policy itself.
+            // Applies to every stream: HLS and progressive both go through this factory, which also
+            // wraps side-loaded subtitles in a MergingMediaSource.
             .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
             .setExperimentalEnableHagcPlayback(playerPreferencesRepository.hagcPlaybackEnabled)
     }
@@ -488,9 +504,11 @@ internal class PlaybackController(
         val wasPlaying = player.playWhenReady
         val savedTrackParams = player.trackSelectionParameters
 
-        val mediaItem = buildMediaItem(stream.url, subtitles)
-        setMediaSource(player, mediaItem, stream.type, startPositionMs = savedPosition)
+        val spec = mediaItemFactory.spec(stream, subtitles)
+        player.setMediaItem(mediaItemFactory.build(spec), savedPosition)
         currentStreamUrl = stream.url
+        currentStreamType = stream.type
+        currentItemHasSideLoads = spec.hasSideLoads
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
         // The readings describe the stream being left behind, and a quality switch recorded against
         // it would be read as belonging to the new one.
@@ -548,7 +566,7 @@ internal class PlaybackController(
 
     override fun selectSubtitle(track: SubtitleTrackUIState?) {
         val player = exoPlayer ?: return
-        if (track == null || track.url.isEmpty()) {
+        if (track == null || track.turnsSubtitlesOff()) {
             pendingSubtitleTrack = null
             player.trackSelectionParameters = player.trackSelectionParameters
                 .buildUpon()
@@ -574,6 +592,8 @@ internal class PlaybackController(
         trackSelector = null
         dataSourceFactory = null
         currentStreamUrl = null
+        currentStreamType = null
+        currentItemHasSideLoads = false
         effectiveStreamSource = null
         videoRenderDiagnostics.reset()
         bufferAllocator = null
@@ -603,37 +623,6 @@ internal class PlaybackController(
         player.playWhenReady = true
     }
 
-    private fun buildMediaItem(streamUrl: String, subtitles: List<SubtitleLink>?): MediaItem {
-        val builder = MediaItem.Builder().setUri(streamUrl)
-        if (!subtitles.isNullOrEmpty()) {
-            val subtitleConfigs = subtitles.map { sub ->
-                val stableKey = sub.url.stableSubtitleKey()
-                MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())
-                    .setMimeType(subtitleMimeType(sub.url))
-                    .setLanguage(sub.lang)
-                    .setSelectionFlags(if (sub.forced == true) C.SELECTION_FLAG_FORCED else 0)
-                    .setLabel(stableKey)
-                    .setId(stableKey)
-                    .build()
-            }
-            builder.setSubtitleConfigurations(subtitleConfigs)
-        }
-        return builder.build()
-    }
-
-    private fun subtitleMimeType(url: String): String {
-        val normalizedUrl = url
-            .substringBefore('?')
-            .substringBefore('#')
-            .lowercase(Locale.ROOT)
-        return when {
-            normalizedUrl.endsWith(".vtt") || normalizedUrl.endsWith(".webvtt") -> MimeTypes.TEXT_VTT
-            normalizedUrl.endsWith(".ass") || normalizedUrl.endsWith(".ssa") -> MimeTypes.TEXT_SSA
-            normalizedUrl.endsWith(".ttml") || normalizedUrl.endsWith(".xml") -> MimeTypes.APPLICATION_TTML
-            else -> MimeTypes.APPLICATION_SUBRIP
-        }
-    }
-
     private fun createDataSourceFactory(): DataSource.Factory {
         val builder = okHttpClient.newBuilder()
             .connectTimeout(
@@ -654,30 +643,6 @@ internal class PlaybackController(
             .setCache(mediaCache)
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-    }
-
-    private fun setMediaSource(
-        player: ExoPlayer,
-        mediaItem: MediaItem,
-        streamType: StreamType,
-        startPositionMs: Long? = null,
-    ) {
-        val dsFactory = dataSourceFactory ?: return
-        val hlsSource = if (streamType == StreamType.HLS) {
-            HlsMediaSource.Factory(dsFactory)
-                .setAllowChunklessPreparation(true)
-                .setLoadErrorHandlingPolicy(PlaybackErrorPolicy())
-                .createMediaSource(mediaItem)
-        } else {
-            null
-        }
-        when {
-            hlsSource != null && startPositionMs != null ->
-                player.setMediaSource(hlsSource, startPositionMs)
-            hlsSource != null -> player.setMediaSource(hlsSource)
-            startPositionMs != null -> player.setMediaItem(mediaItem, startPositionMs)
-            else -> player.setMediaItem(mediaItem)
-        }
     }
 
     /**
@@ -733,7 +698,8 @@ internal class PlaybackController(
             },
         )
 
-        setWarmUpMediaSource(player, sourceFactory, buildMediaItem(stream.url, subtitles), stream.type)
+        val warmUpItem = mediaItemFactory.build(mediaItemFactory.spec(stream, subtitles))
+        setWarmUpMediaSource(player, sourceFactory, warmUpItem, stream.type)
         player.playWhenReady = false
         player.prepare()
         mainHandler.postDelayed(warmUpTimeout, WARM_UP_TIMEOUT_MS)
@@ -851,8 +817,10 @@ internal class PlaybackController(
 
     private fun notifyTracksUpdated() {
         val player = exoPlayer ?: return
-        val audioGroups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-        if (audioGroups.isEmpty()) return
+        val groups = player.currentTracks.groups
+        val audioGroups = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        val textGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        if (audioGroups.isEmpty() && textGroups.isEmpty()) return
 
         val audioTracks = audioGroups.mapIndexed { index, group ->
             val format = group.getTrackFormat(0)
@@ -864,7 +832,17 @@ internal class PlaybackController(
             )
         }
         val selectedIndex = audioGroups.indexOfFirst { it.isSelected }.coerceAtLeast(0)
-        callback?.onTracksUpdated(audioTracks, selectedIndex)
+        val subtitleRows = when (subtitleReportKind(currentStreamType, currentItemHasSideLoads, textGroups.size)) {
+            // A side-loaded item cannot report audio without its text groups for good: wait for them.
+            SubtitleReportKind.NOT_YET -> return
+            SubtitleReportKind.API_ROWS -> null
+            SubtitleReportKind.PLAYER_ROWS -> {
+                val renditions = (player.currentManifest as? HlsManifest)
+                    ?.multivariantPlaylist?.subtitles.orEmpty()
+                buildSubtitleRows(textGroups, renditions, merged = currentItemHasSideLoads)
+            }
+        }
+        callback?.onTracksUpdated(audioTracks, selectedIndex, subtitleRows)
     }
 
     private fun applyPendingSubtitleSelection() {
@@ -873,71 +851,24 @@ internal class PlaybackController(
 
     private fun applySubtitleTrackSelection(track: SubtitleTrackUIState) {
         val player = exoPlayer ?: return
-        val stableKey = track.url.stableSubtitleKey()
         val textGroups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-        val target = findTextTrack(track, stableKey, textGroups)
+        // No positional fallback: on HLS the text tracks come from the manifest, whose order has
+        // nothing to do with the API list, so "API row N is track N" picked the wrong subtitle.
+        // Without a target the override stays unset and the preferred language chooses instead.
+        val target = subtitleTrackSelector.select(track, textGroups.toPlayerTextTracks())
+        val targetGroup = target?.let { textGroups.getOrNull(it.groupIndex) }
         val builder = player.trackSelectionParameters
             .buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             .setPreferredTextLanguage(track.language)
-        if (target != null) {
+        if (target != null && targetGroup != null) {
             builder.setOverrideForType(
-                TrackSelectionOverride(target.group.mediaTrackGroup, target.trackIndex),
+                TrackSelectionOverride(targetGroup.mediaTrackGroup, target.trackIndex),
             )
         }
         player.trackSelectionParameters = builder.build()
     }
-
-    private fun findTextTrack(
-        track: SubtitleTrackUIState,
-        stableKey: String,
-        textGroups: List<Tracks.Group>,
-    ): TextTrackSelection? {
-        return findTextTrackBy(textGroups) { format ->
-            format.id == track.url
-        } ?: findTextTrackBy(textGroups) { format ->
-            format.id == stableKey || format.label == stableKey
-        } ?: findUnambiguousTextTrackByLanguage(textGroups, track.language)
-        // No positional fallback: on HLS the text tracks come from the manifest, whose order has
-        // nothing to do with the API list, so "API row N is track N" picked the wrong subtitle.
-        // Leaving the override unset lets the preferred language choose instead.
-    }
-
-    private fun findUnambiguousTextTrackByLanguage(
-        textGroups: List<Tracks.Group>,
-        language: String,
-    ): TextTrackSelection? {
-        if (language.isEmpty()) return null
-        val matches = textGroups.flatMap { group ->
-            (0 until group.length).mapNotNull { trackIndex ->
-                group.getTrackFormat(trackIndex).takeIf { format ->
-                    format.language == language
-                }?.let {
-                    TextTrackSelection(group = group, trackIndex = trackIndex)
-                }
-            }
-        }
-        return matches.singleOrNull()
-    }
-
-    private fun findTextTrackBy(
-        textGroups: List<Tracks.Group>,
-        predicate: (Format) -> Boolean,
-    ): TextTrackSelection? {
-        return textGroups.firstNotNullOfOrNull { group ->
-            (0 until group.length).firstNotNullOfOrNull { trackIndex ->
-                group.getTrackFormat(trackIndex).takeIf(predicate)?.let {
-                    TextTrackSelection(group = group, trackIndex = trackIndex)
-                }
-            }
-        }
-    }
-
-    private data class TextTrackSelection(
-        val group: Tracks.Group,
-        val trackIndex: Int,
-    )
 
     private companion object {
         const val MIN_DURATION_FOR_QUALITY_INCREASE_MS = 10_000
