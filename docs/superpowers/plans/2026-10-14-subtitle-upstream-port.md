@@ -588,7 +588,7 @@ The evidence audit passed on the directory (3 files) and on the markdown file.
 **Deviations from the plan:**
 
 - T-M2 uses the last-episode exit recipe from the plan (not the spec's HideControls/Back/ResetControlsTimer).
-- T-L1 uses a `mockk<Context>` (with mocked Resources, Configuration, LocaleList) instead of `FakeResourceProvider`. mockk `answers` flattens varargs via `args.drop(1)`, handled for both flat and array shapes.
+- T-L1 first used a `mockk<Context>`; since 0bf26ee5 the mapper takes a `ResourceProvider` and the test uses `FakeResourceProvider`, as the spec asked.
 - T-P2 is named `publishPreparedContent_resumePromptAfterRetry_staysAloneThroughTheOldHideDeadline`.
 - Extra commit eadf8ca3: the full gate's detekt flagged `String.format(...)` without a locale in my T-L2 test; fixed with `Locale.ROOT`.
 - Red-first runs: the three Task 4 tests (T-D3a, T-D3b, rewritten ambiguous-language test) failed before the `VM` edit and passed after.
@@ -603,11 +603,13 @@ The evidence audit passed on the directory (3 files) and on the markdown file.
 - T-P2 limit: the `controlsHideJob?.cancel()` in `publishPreparedContent` is not observable on its own. The test pins the published state through the stale 6 s deadline.
 - T-P1 is mutation-sensitive by reasoning only (not run): without `initialize`, the machine keeps Episodes open and Back would close it onto visible controls focused on `EpisodesButton`.
 - T-M2 compares the whole `contentState` before/after (no unrelated async field interfered).
-- T-L1 covers en through the mapper; ru stays at the pure-function level (`SubtitleLabelsTest`, T-L2 reading both real resource files).
+- T-L1 covers en through the mapper, and `mapSubtitleTracks_namesLanguagesInTheProvidersLocale` covers ru through the mapper (`FakeResourceProvider` locale); `SubtitleLabelsTest` and T-L2 stay at the function level.
 - AC-2, AC-4, AC-6 (`SELECTION_FLAG_FORCED`) and AC-1 DEFAULT/FORCED manifest have no automated proof by owner decision Q2/Q3.
 - `replay_pid1700735.log` stays untracked.
 
 **Blocked:** nothing.
+
+**Review round 1 fixes:** #1 `PlaybackController.prepare()` clears `pendingSubtitleTrack` (a rebuild of media with audio is re-applied by the VM's restore from the picker's row; on audio-less media nothing is re-applied, so text stays off). #3 ISO 639-2 bibliographic codes map to terminology codes in `canonicalSubtitleLanguage` (ger/fre cases added). #4 T-M1 asserts the state right after `ResumeFromPosition` and is renamed. #5 dead `lastPanelOpener` reset and trailing assertions dropped. #6 this record updated.
 
 ### Fix round 1 (verify defect 1, AC-5)
 
