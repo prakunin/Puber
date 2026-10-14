@@ -1,6 +1,6 @@
 # Side-load API subtitles on HLS and merge them with manifest tracks
 
-Status: draft
+Status: approved
 Date: 2026-10-14
 Slug: subtitle-sideload-merge
 Kind: feature
@@ -27,12 +27,12 @@ Request: "Port the rest of upstream's subtitle work: side-load API subtitles on 
 AC-1. Given an HLS stream whose API subtitle list contains a language the manifest does not declare, When playback starts, Then that subtitle appears in the picker and can be selected and rendered. (device)
 AC-2. Given an HLS stream whose manifest declares a language that the API list lacks, When the picker opens, Then the manifest subtitle is listed with a language-name label and is selectable. (device; unit for the merger)
 AC-3. Given the same language offered by both manifest and API, When rows are merged, Then exactly one source is kept per language: the one with more tracks, HLS on a tie; rows with unknown language are kept unless proven duplicates. (unit: `SubtitleTrackMergerTest`)
-AC-4. Given side-loaded tracks whose ids carry the `n:` prefix from `MergingMediaSource`, When the user selects a row, Then the matching text group is selected by the prefix-stripped, merge-stable group id, not by position. (unit: `SubtitleTrackSelectorTest`)
+AC-4. Given side-loaded tracks whose ids carry the `n:` prefix from `MergingMediaSource`, When the user selects a row, Then the text track is selected by its prefix-stripped source identity (format id / stable subtitle key), falling back to the exact merged `TrackGroup.id` + track index and then to an unambiguous language; never by position. (unit: `SubtitleTrackSelectorTest`) _(reworded at gate 1, owner, Q1)_
 AC-5. Given progressive streams, When playback starts, Then subtitle behaviour is unchanged (still side-loaded, Off by default, rows as before). (unit + device)
 AC-6. Given the player reports text tracks, When tracks change (switch stream, rebuild), Then the picker rows and the selected row update through `PlaybackControl.Callback` without losing the user's selection when the same merged row still exists. (unit: `PlayerVM` tests)
 AC-7. Given a stored per-item subtitle language/URL preference, When the item opens, Then the same restore as on master still selects the matching merged row (existing resolver behaviour kept). (unit, extend `PlayerVMTrackSelectionTest`)
 AC-8. Given duplicate languages across rows, When labels render, Then labels use language names with AI/forced qualifiers and disambiguating ordinals consistent with the first batch's strings (no raw ids). (unit: `SubtitleLabelerTest`; wording `(owner judges)`)
-AC-9. Given a side-loaded subtitle URL that fails to load (404/TLS), When the stream plays, Then playback continues without a fatal error and the video is unaffected. (unit with fake/test source or device check; currently unverified, see risks)
+AC-9. Given a side-loaded subtitle URL that fails to load (404/TLS), When the stream plays, Then playback continues without a fatal error and the video is unaffected. (evidence: the Media3 1.11.0 trace in Design D15; hermetic test in upstream-sync-triage P6; device check if such a title turns up) _(evidence method set at gate 1, owner, Q2)_
 AC-10. Given the warm-up player and the main player, When HLS starts, Then time-to-first-frame is not regressed and the warm cache is still hit. (device observation; only if warm-up shape changes)
 AC-11. Given the change, Then `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` passes and new unit tests (merger, selector, labeler, VM merge) are JUnit 5 with `FakeResourceProvider` where strings are mapped.
 
@@ -384,6 +384,11 @@ See the row counts under the traceability table. Manual device steps: 9 (D-1..D-
 
 | ID | Question | Blocks | Status | Answer |
 |----|----------|--------|--------|--------|
+| Q1 | AC-4 wording: stripped group ids are all "0" for side-loads | yes | answered | Reword: source identity, then full TrackGroup.id + index, then unambiguous language; never position |
+| Q2 | AC-9 evidence without Robolectric | no | answered | Media3 trace (D15); hermetic test in P6; device check if a failing title turns up |
+| Q3 | Keep side-loaded subtitle hosts out of the debug stream-source line | no | answered | Not here; moved to playback-controller-split |
+| Q4 | Embedded container subtitles on progressive | no | assumed | Left out (keeps AC-5) |
+| Q5 | Device-check titles (H1, H2, optional H3, P1) | no | assumed | Owner names them before verify |
 
 ## Decisions
 
@@ -392,3 +397,7 @@ See the row counts under the traceability table. Manual device steps: 9 (D-1..D-
 | 2026-10-12 | Option C, two steps; this run is step 1 (size M) | owner |
 | 2026-10-12 | Labels: upstream SubtitleLabeler with the first batch's strings and Russian ISO-3 rule | owner |
 | 2026-10-12 | Merge rule: upstream 9bd835b0 | owner |
+| 2026-10-14 | AC-4 reworded (Q1) | owner |
+| 2026-10-14 | AC-9 evidence: Media3 trace D15 + P6 hermetic test (Q2) | owner |
+| 2026-10-14 | Debug stream-source filter for side-loads goes to playback-controller-split (Q3) | owner |
+| 2026-10-14 | Gate 1: spec approved | owner |
