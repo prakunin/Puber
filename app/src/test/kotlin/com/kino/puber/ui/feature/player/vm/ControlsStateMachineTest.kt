@@ -18,6 +18,51 @@ class ControlsStateMachineTest {
     }
 
     // ------------------------------------------------------------------
+    // initialize
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `initialize_withoutResumeDialog_showsControlsOnButtons`() {
+        machine.initialize(resumeDialogVisible = false)
+
+        assertTrue(machine.state.controlsVisible)
+        assertEquals(FocusTarget.Buttons, machine.state.focusTarget)
+        assertEquals(ActivePanel.None, machine.state.activePanel)
+    }
+
+    @Test
+    fun `initialize_withResumeDialog_keepsControlsHidden`() {
+        machine.initialize(resumeDialogVisible = true)
+
+        assertFalse(machine.state.controlsVisible)
+        assertEquals(null, machine.state.focusTarget)
+    }
+
+    @Test
+    fun `initialize_dropsWhatThePreviousMediaLeft`() {
+        machine.openPanel(ActivePanel.Episodes)
+        machine.showControlsForEndedPlayback()
+
+        machine.initialize(resumeDialogVisible = false)
+
+        assertEquals(ActivePanel.None, machine.state.activePanel)
+        assertFalse(machine.state.playbackEnded)
+        machine.openPanel(ActivePanel.About)
+        machine.closePanel()
+        assertEquals(FocusTarget.AboutButton, machine.state.focusTarget)
+    }
+
+    @Test
+    fun `initialize_thenBack_hidesControlsInsteadOfExiting`() {
+        machine.initialize(resumeDialogVisible = false)
+
+        val effects = machine.handleBack()
+
+        assertFalse(machine.state.controlsVisible)
+        assertFalse(effects.contains(ControlsStateMachine.Effect.SaveAndExit))
+    }
+
+    // ------------------------------------------------------------------
     // showControls
     // ------------------------------------------------------------------
 

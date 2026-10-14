@@ -35,6 +35,21 @@ internal class ControlsStateMachine {
         private set
 
     private var lastPanelOpener: FocusTarget = FocusTarget.Buttons
+
+    /**
+     * Starts over for freshly prepared media: controls up on the buttons, or down while the resume
+     * prompt owns the screen. Without it this class kept whatever the previous media left behind,
+     * or its initial "hidden" while the published content showed the controls, so back on a new
+     * screen left the player instead of tidying the controls away.
+     */
+    fun initialize(resumeDialogVisible: Boolean) {
+        state = State(
+            controlsVisible = !resumeDialogVisible,
+            focusTarget = FocusTarget.Buttons.takeUnless { resumeDialogVisible },
+        )
+        lastPanelOpener = FocusTarget.Buttons
+    }
+
     fun showControls(focusTarget: FocusTarget?): List<Effect> {
         state = state.copy(controlsVisible = true, focusTarget = focusTarget)
         return listOf(Effect.ScheduleHide)

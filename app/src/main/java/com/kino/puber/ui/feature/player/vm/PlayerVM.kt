@@ -349,13 +349,22 @@ internal class PlayerVM(
             isMarkCurrentWatchedInFlight = watchedMutationsInFlight[token.key].orZero() > 0,
         )
 
-        updateViewState(PlayerViewState.Content(contentState))
+        publishPreparedContent(contentState)
         autoMarkHandledToken = token.takeIf { resolved.isCurrentMediaWatched }
         episodeSwitchInProgress = false
         initializePlayer(savedPosition = if (resumeDialog != null) null else 0L)
         startProgressSync()
         if (resumeDialog == null) scheduleControlsHide()
         loadSkipSegments(item, resolved.seasonNumber, resolved.episodeNumber, token)
+    }
+
+    /** Publishes new media with the controls exactly as [controlsStateMachine] now holds them. */
+    private fun publishPreparedContent(contentState: PlayerContentState) {
+        controlsHideJob?.cancel()
+        controlsStateMachine.initialize(resumeDialogVisible = contentState.resumeDialog != null)
+        updateViewState(
+            PlayerViewState.Content(contentState.withControlsState(controlsStateMachine.state)),
+        )
     }
 
     private fun isCurrentPrepare(generation: Long): Boolean {
@@ -759,14 +768,16 @@ internal class PlayerVM(
 
     private fun applyControlsState() {
         val cs = controlsStateMachine.state
-        updateContent {
-            copy(
-                controlsVisible = cs.controlsVisible,
-                controlsFocusTarget = cs.focusTarget,
-                activePanel = cs.activePanel,
-            )
-        }
+        updateContent { withControlsState(cs) }
     }
+
+    private fun PlayerContentState.withControlsState(
+        state: ControlsStateMachine.State,
+    ): PlayerContentState = copy(
+        controlsVisible = state.controlsVisible,
+        controlsFocusTarget = state.focusTarget,
+        activePanel = state.activePanel,
+    )
 
     private fun processEffects(effects: List<ControlsStateMachine.Effect>) {
         for (effect in effects) {

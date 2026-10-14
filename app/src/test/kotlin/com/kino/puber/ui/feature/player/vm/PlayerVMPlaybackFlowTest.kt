@@ -6,6 +6,7 @@ import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
+import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.ui.feature.player.model.QualityUIState
@@ -56,6 +57,18 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun backPressed_onFreshMedia_hidesTheControlsInsteadOfLeaving() {
+        val vm = startedVM()
+        assertTrue(contentState(vm).controlsVisible)
+        assertEquals(FocusTarget.Buttons, contentState(vm).controlsFocusTarget)
+
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        assertFalse(contentState(vm).controlsVisible)
+        verify(exactly = 0) { router.back(any(), any()) }
+    }
+
+    @Test
     fun backPressed_beforeContent_consumesResultListenerWithEmptyChanges() {
         createVM().onAction(PlayerAction.OnBackPressed)
 
@@ -66,6 +79,8 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
     fun backPressed_afterProgressSave_returnsPlaybackProgressResult() {
         val vm = startedVM()
 
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verifyContentChangeResult(ContentChangeType.PlaybackProgress)
@@ -79,6 +94,8 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         }
         val vm = startedVM()
 
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verify(exactly = 0) { router.back(any(), any()) }
@@ -96,6 +113,8 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         }
         val vm = startedVM()
 
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verify(exactly = 1) { playbackController.pause() }
@@ -110,6 +129,7 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
             releaseSave.await()
         }
         val vm = startedVM()
+        vm.onAction(PlayerAction.HideControls)
 
         vm.onBackPressed()
         vm.onBackPressed()
@@ -133,6 +153,8 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } throws IllegalStateException("save failed")
         val vm = startedVM()
 
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verifyEmptyContentChangeResult()
@@ -151,6 +173,7 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         val vm = startedVM()
 
         Timber.plant(logTree)
+        vm.onAction(PlayerAction.HideControls)
         try {
             vm.onAction(PlayerAction.OnBackPressed)
         } finally {

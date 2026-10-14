@@ -384,6 +384,10 @@ internal class PlaybackController(
             parameters = buildUponParameters()
                 .setExceedVideoConstraintsIfNecessary(false)
                 .setExceedRendererCapabilitiesIfNecessary(false)
+                // The picker starts at Off; only an explicit or restored choice enables text. Without
+                // this an HLS rendition marked DEFAULT or FORCED shows under an Off picker, on the
+                // first start and again after every rebuild of the player.
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
         }
         this.trackSelector = trackSelector
@@ -604,6 +608,7 @@ internal class PlaybackController(
                 MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())
                     .setMimeType(subtitleMimeType(sub.url))
                     .setLanguage(sub.lang)
+                    .setSelectionFlags(if (sub.forced == true) C.SELECTION_FLAG_FORCED else 0)
                     .setLabel(stableKey)
                     .setId(stableKey)
                     .build()
@@ -890,25 +895,10 @@ internal class PlaybackController(
             format.id == track.url
         } ?: findTextTrackBy(textGroups) { format ->
             format.id == stableKey || format.label == stableKey
-        } ?: findTextTrackBySubtitleIndex(textGroups, track.index)
-        ?: findUnambiguousTextTrackByLanguage(textGroups, track.language)
-    }
-
-    // Media3 may not expose SubtitleConfiguration id/label for every source type.
-    // The current track list still preserves the subtitle configuration order.
-    private fun findTextTrackBySubtitleIndex(
-        textGroups: List<Tracks.Group>,
-        subtitleIndex: Int,
-    ): TextTrackSelection? {
-        val targetIndex = subtitleIndex - 1
-        if (targetIndex < 0) return null
-        return textGroups
-            .flatMap { group ->
-                (0 until group.length).map { trackIndex ->
-                    TextTrackSelection(group = group, trackIndex = trackIndex)
-                }
-            }
-            .getOrNull(targetIndex)
+        } ?: findUnambiguousTextTrackByLanguage(textGroups, track.language)
+        // No positional fallback: on HLS the text tracks come from the manifest, whose order has
+        // nothing to do with the API list, so "API row N is track N" picked the wrong subtitle.
+        // Leaving the override unset lets the preferred language choose instead.
     }
 
     private fun findUnambiguousTextTrackByLanguage(
