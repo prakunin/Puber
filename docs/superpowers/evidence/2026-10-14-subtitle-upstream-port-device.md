@@ -47,3 +47,29 @@ catch); the Russian device-locale case (device locale not changed); ISO-3 map co
    device"; OS per-app locale cleared; saved subtitle choice left on `AI-generated` as found.
 4. Account mutations caused by watching: about 40 s of S2E3 and S2E4 and short plays of two movies; no
    other writes.
+
+## Round 2: in-app language fix (commit 0bf26ee5)
+
+Date: 2026-10-14. Device: emulator-5554 (`puber_tv_36`, English device locale), leased and released.
+Build: HEAD 0bf26ee5, `app-dev-debug.apk` sha256 `d10a2dfdca71c47bbf25eb77aecbf84f784f76a16f759a741d4597bac5d8ce3a`,
+installed with `tools/android-apk-install-preserve` (`installed`, `compatible_replace`, same signer, no data lost);
+the on-device `base.apk` has the same sha256. Input: remote key events only. No screenshots kept.
+
+Static gate: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` BUILD SUCCESSFUL
+(1459 tests, 0 failures; Gradle reported the tasks up to date for this exact tree). No crash-buffer entries for the package afterwards.
+
+| Check | Steps | Expected | Observed | Result |
+|---|---|---|---|---|
+| AC-5 door and rows, in-app Russian, no saved choice | Settings > General > Interface language > Русский. Fresh series "Psyren" (API lists 9 subtitle languages), player Settings, Subtitles | Door `Выкл.`; first row `Выкл.` checked; language rows in Russian | Door `Выкл.`; page `Выкл.` (checked), then `Китайский`, `Русский`, `Португальский`, `Польский`, `Итальянский`, `Французский`, `Испанский`, `Немецкий`, `Английский`, `Аа Размер Средний` | PASS |
+| AC-5 AI row, in-app Russian | Outlander S2E3 (saved choice `AI-generated`), Continue, Settings, Subtitles | Door and row `Созданные ИИ` | Door `Созданные ИИ`; page `Выкл.`, `Созданные ИИ` (checked); Russian text rendered | PASS |
+| AC-5 other mapper labels, Russian | Settings > Дополнительно | Buffer preset names in Russian | `БУФЕР`: `Авто`, `Малый (16 МБ / 60с)`, `Средний (32 МБ / 120с)`, `Большой (64 МБ / 180с)`, `Макс (128 МБ / 300с)`; `СЕТЬ`: `Быстрый DNS`, `Вкл.`; root rows `Аудио`, `Качество`, `Скорость`, `Поток` | PASS (aspect-ratio row not reached; no such row on the root page) |
+| AC-5 "Same as the device", English | Interface language back to `Same as the device`; reopen Outlander S2E3, Settings, Subtitles | `Off`, `AI-generated`, `Aa Size Medium`, English root labels | Door `AI-generated`; page `Off`, `AI-generated` (checked), `Aa Size Medium`; root `Audio`, `Subtitles`, `Quality`, `Speed`, `Advanced`, `Stream` | PASS |
+| AC-1 Off default (regression) | Fresh series "Psyren" ep 1 and "Nia Liston" ep 2, no saved choice, in Russian | Door `Выкл.`, `Выкл.` checked, no text | Psyren: `Выкл.` checked, no text over the picture (the Japanese captions are burned into the video). Nia Liston ep 2: `Выкл.` checked, no API rows | PASS |
+| AC-8 Back on fresh media (regression) | Fresh episode starts with controls up; one Back about 4 s in | Controls hide, video continues, not left | Controls hid, picture kept playing (progress advanced on the next key press), still in the player | PASS |
+| AC-8 resume prompt (regression) | Outlander S2E3 with saved progress | Prompt alone, `Continue` focused, no controls over it | Prompt `Продолжить просмотр с 15:44?` with `Продолжить` focused and no control pills; saved AI subtitle rendered | PASS |
+
+Notes:
+1. Interface language was found as `Same as the device` and is restored to it; the final check ran in that state. Saved subtitle choice left on `AI-generated` as found.
+2. Back pressed after the controls had been shown by closing a settings panel left the player (observed twice, about 1 minute into playback); that is not the fresh-media path of AC-8 and matches the round 1 note. Recorded as observed.
+3. Account mutations caused by watching: a few seconds to about a minute of Psyren ep 1, Nia Liston ep 1 and 2, and Outlander S2E3 (played twice); no other writes.
+4. Not covered: forced and duplicate-language labels on a real title, Off across a rebuild, HLS DEFAULT/FORCED manifest, Russian OS locale.
