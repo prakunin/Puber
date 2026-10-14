@@ -73,3 +73,40 @@ Notes:
 2. Back pressed after the controls had been shown by closing a settings panel left the player (observed twice, about 1 minute into playback); that is not the fresh-media path of AC-8 and matches the round 1 note. Recorded as observed.
 3. Account mutations caused by watching: a few seconds to about a minute of Psyren ep 1, Nia Liston ep 1 and 2, and Outlander S2E3 (played twice); no other writes.
 4. Not covered: forced and duplicate-language labels on a real title, Off across a rebuild, HLS DEFAULT/FORCED manifest, Russian OS locale.
+
+## Round 3: review fixes (HEAD 0127f0c3)
+
+Date: 2026-10-14. Device: emulator-5554 (`puber_tv_36`, English device locale), leased and released.
+Build: HEAD 0127f0c3 (runtime changes since round 2: `PlaybackController.prepare()` clears `pendingSubtitleTrack`,
+`SubtitleLabels` maps ISO 639-2 bibliographic codes, `ControlsStateMachine.initialize` drops an unobservable reset).
+`app-dev-debug.apk` sha256 `3a38a33222bda554e903a65f3bdc79ef8379ba4b34013b284ae30f5099c27376`, installed with
+`tools/android-apk-install-preserve` (`installed`, `compatible_replace`, same signer, no data lost); the on-device
+`base.apk` has the same sha256. Input: remote key events only. No screenshots kept. No crash-buffer entries afterwards.
+
+Static gate: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` BUILD SUCCESSFUL (1460 tests on disk,
+0 failures, 0 errors, 0 skipped; Gradle reported all three tasks up to date for this exact tree, so the detekt
+"compiler errors found during analysis" line was not printed in this run). Master be8395a4 was not built. Earlier
+evidence and plans on master record the same warning (83 / 7 errors, exit 0) in `detektDevDebug` and `detektDevDebugUnitTest`
+(`docs/superpowers/evidence/2026-10-12-code-quality-audit-report.md`, `docs/superpowers/plans/2026-10-12-code-quality-audit.md`), so it is pre-existing.
+
+| Check | Steps | Expected | Observed | Result |
+|---|---|---|---|---|
+| AC-1 fresh media Off, no API rows | Slow Horses S4E6, From beginning, Settings, Subtitles | Door `Off`, `Off` checked, no text | Door `Off`; page `Off` (checked), `Aa Size Medium` only; no text | PASS |
+| AC-1 fresh media Off, rows available | Psyren S1E1 (9 API languages, in-app Russian), Settings, Subtitles | Door `Выкл.`, first row checked, no text | Door `Выкл.`; `Выкл.` checked, nine language rows unchecked; only the video's burned-in Japanese captions visible | PASS |
+| AC-1 pick on one episode, switch to the next | Psyren S1E1: pick `Русский`; Next episode to S1E2 (no API rows) | Pick does not leak into the new media: `Выкл.`, no text | Door `Выкл.`, page `Выкл.` checked, only `Aa Размер`; no subtitle text | PASS |
+| AC-1 switching with a picked subtitle (Outlander) | S2E3 with `AI-generated` shown, Next to S2E4 (no rows) | S2E4 starts `Off`, no text | Page `Off` checked only; no text on a speaking frame | PASS |
+| AC-3 saved choice restores and renders | Outlander S2E3 (saved `AI-generated`): resume prompt, Continue; also Previous from S2E4 to S2E3 | Russian text from the first seconds; door and page `AI-generated` | Text under the resume prompt and after Continue; door `AI-generated`, page checked; after Previous the text showed within 4 s | PASS |
+| AC-3 explicit pick `Off`, then the row again | S2E3: `Off`, then `AI-generated` | Off hides text, the row brings it back | After `Off`: `Off` checked, no text over two frames; after `AI-generated`: checked, Russian text rendered | PASS |
+| AC-3 saved choice on a title with API rows | Psyren S1E1 after picking `Русский`, back via Previous | Saved `Русский` restored and rendered | Door `Русский`, row checked, Russian text "Нас учили ими пользоваться в школе." under the Japanese caption | PASS |
+| AC-5 labels, in-app Russian | Interface language Русский: Outlander S2E3 and Psyren S1E1 player Settings | `Выкл.`, `Созданные ИИ`, language names, `Аа Размер Средний`, root `Аудио`, `Субтитры`, `Качество`, `Скорость`, `Дополнительно`, `Поток` | All as expected; Psyren rows `Китайский`, `Русский`, `Португальский`, `Польский`, `Итальянский`, `Французский`, `Испанский`, `Немецкий`, `Английский` | PASS |
+| AC-8 Back on fresh media | Psyren S1E2 started with Next (controls up), one Back at about 3 s | Controls hide, video continues, still in the player | Controls hid, picture advanced between frames, `topResumedActivity` still MainActivity | PASS |
+
+Not observed: the ISO 639-2 bibliographic mapping on device (no title with such codes; unit `SubtitleLabelsTest`),
+the unobservable `ControlsStateMachine.initialize` reset (unit), forced and duplicate-language labels, HLS DEFAULT/FORCED manifest.
+Slow Horses S5E1 opened to a black picture stuck at 0:00 (emulator or stream issue, played nothing; not related to subtitles, opened S4E6 instead).
+
+Notes:
+1. Interface language was found as `Same as the device`, set to Русский, and restored to it; final screenshot confirmed.
+2. Saved subtitle choices: Outlander left on `AI-generated` as found. Psyren S1E1 had no saved choice; after the pass it holds an explicit `Off` (picked to undo `Русский`), which behaves like the default.
+3. Account writes caused by watching: Slow Horses S4E6 started from the beginning (earlier saved position 50:19 may be replaced), about 30 s of it; short plays of Outlander S2E3, S2E4 and Psyren S1E1 and S1E2. Nothing else.
+4. Back from the player after closing panels was inconsistent with the fresh-media path (observed again, as in earlier rounds); not an AC-8 case.
