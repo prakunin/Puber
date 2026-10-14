@@ -853,6 +853,18 @@ Failing-first runs seen: Task 1 (`SubtitleTrackIdentityTest`, `SubtitleLinkTest`
 
 None.
 
+**Fix round 1** (qa defect 1 and triage-1 #1-#6; base `a97ee2b1`):
+
+- Defect 1 (quality switch drops rows and pick). Cause read from code: `switchStream` keeps `pendingSubtitleTrack` but the player first reports audio groups with no text groups; `notifyTracksUpdated` passes `buildSubtitleRows` an empty list, `SubtitleTrackMerger.merge` returns only Off for it, `PlayerVM.onTracksUpdated` finds no row for the pick and sends Off to the controller, which clears the pending pick. Later reports with rows keep Off because the previous row is Off. Fix: a non-null report with no text rows is treated as transient, the VM keeps its rows and selection and sends nothing; the controller's pending pick is applied when text groups return. Test `tracksUpdated_textlessReportAfterQualitySwitch_keepsRowsAndPick` (red before). Not reproduced on a device by me; qa should recheck AC-4/AC-6 on Outlander S1E5.
+- B (`AI-generated` row missing on S2E3): not determinable from code. `ai` stays its own language in `canonicalSubtitleLanguage`, so the per-language count rule never compares it with a regular manifest language, and `SubtitleTrackMergerTest.merge_labelsAiGeneratedManifestTrack_fromKinoPubMetadata` plus the mapper and labeler tests cover an `ai` row. No code path drops an `ai` API link when the player reports its side-load. Remaining possibilities are data: the API no longer returning an `ai` link for that episode, or a link with a blank url (now dropped, #3). qa could not read the API list (the picker shows only the merged result), so this needs the raw `subtitles` response for the episode.
+- #1 `SubtitleTrackMerger.withApiMetadata` keeps the player's forced flag on `fromManifest` rows. Existing test `merge_matchesApiToRenditionByFilePath_whenLanguageOrderDiffers` had a manifest fixture without the FORCED flag whose API row was forced; the fixture now carries the flag (the case is the one the rule changes).
+- #2 the group+index rule in `findSameSubtitleTrackIndex` needs a compatible language and forced flag.
+- #3 `sideLoadable()` drops blank-url links in the factory spec, `PlayerUIMapper.mapSubtitleTracks` and `currentItemHasSideLoads`.
+- #4 `PlayerTextTracksTest` on the JVM: `Format`, `TrackGroup`, `Tracks.Group` build there with `TextUtils.isEmpty` stubbed through mockk (Media3 `Util` calls it while normalising a language); `Rendition.url` is a mocked `Uri`. One observation, not changed: `findRendition`'s label+language fallback matches a rendition when both labels are null, so a label-less manifest track can take the only same-language rendition's uri.
+- #5 `turnsSubtitlesOff()` in `SubtitleTrackSelector.kt`, used by `PlaybackController.selectSubtitle`, tested with an empty-url manifest row.
+- #6 two call-count tests for R5 (after a real pick, after a repeated reordered report); they passed on first run, since the behaviour was already right.
+- Rejected in triage and left alone: #7, #8.
+
 ## Readiness
 
 # Readiness - subtitle-sideload-merge, round 1
