@@ -69,7 +69,7 @@ internal class SubtitleLabelsTest {
                 displayLocale = Locale.forLanguageTag("ru"),
                 aiGeneratedLabel = "Созданные ИИ",
                 forcedQualifier = "частичные",
-                variantLabel = { label, ordinal -> String.format(ru, label, ordinal) },
+                variantLabel = { label, ordinal -> String.format(Locale.ROOT, ru, label, ordinal) },
                 unknownLabel = { position -> "Субтитры $position" },
             ),
         )
@@ -80,7 +80,7 @@ internal class SubtitleLabelsTest {
                 displayLocale = Locale.ENGLISH,
                 aiGeneratedLabel = "AI-generated",
                 forcedQualifier = "forced",
-                variantLabel = { label, ordinal -> String.format(en, label, ordinal) },
+                variantLabel = { label, ordinal -> String.format(Locale.ROOT, en, label, ordinal) },
                 unknownLabel = { position -> "Subtitles $position" },
             ),
         )
