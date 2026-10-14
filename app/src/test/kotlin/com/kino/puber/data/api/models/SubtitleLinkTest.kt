@@ -34,4 +34,17 @@ class SubtitleLinkTest {
 
         assertNull(link.forced)
     }
+
+    @Test
+    fun file_isNullWhenAbsent() {
+        assertNull(json.decodeFromString<SubtitleLink>("""{"lang":"rus","url":"u"}""").file)
+    }
+
+    @Test
+    fun file_readsValue() {
+        assertEquals(
+            "/1/92/x.srt",
+            json.decodeFromString<SubtitleLink>("""{"lang":"rus","url":"u","file":"/1/92/x.srt"}""").file,
+        )
+    }
 }
