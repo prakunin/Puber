@@ -1,7 +1,7 @@
 package com.kino.puber.ui.feature.player.model
 
-import android.content.Context
 import com.kino.puber.R
+import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.model.DurationLabel
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Audio
@@ -13,7 +13,7 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.model.BufferPreset
 
 internal class PlayerUIMapper(
-    private val context: Context,
+    private val resources: ResourceProvider,
     private val navigationPreferencesRepository: NavigationPreferencesRepository? = null,
 ) {
 
@@ -36,7 +36,7 @@ internal class PlayerUIMapper(
         val result = mutableListOf(
             SubtitleTrackUIState(
                 index = 0,
-                label = context.getString(R.string.player_subtitles_off),
+                label = resources.getString(R.string.player_subtitles_off),
                 language = "",
                 url = "",
             )
@@ -44,13 +44,13 @@ internal class PlayerUIMapper(
         val links = subtitles.orEmpty()
         val labels = subtitleLabels(
             subtitles = links,
-            displayLocale = context.resources.configuration.locales[0],
-            aiGeneratedLabel = context.getString(R.string.player_subtitle_ai_generated),
-            forcedQualifier = context.getString(R.string.player_subtitle_forced),
+            displayLocale = resources.locale,
+            aiGeneratedLabel = resources.getString(R.string.player_subtitle_ai_generated),
+            forcedQualifier = resources.getString(R.string.player_subtitle_forced),
             variantLabel = { label, ordinal ->
-                context.getString(R.string.player_subtitle_variant_label, label, ordinal)
+                resources.getString(R.string.player_subtitle_variant_label, label, ordinal)
             },
-            unknownLabel = { position -> context.getString(R.string.player_subtitle_unknown, position) },
+            unknownLabel = { position -> resources.getString(R.string.player_subtitle_unknown, position) },
         )
         links.forEachIndexed { index, sub ->
             result.add(
@@ -82,7 +82,7 @@ internal class PlayerUIMapper(
         val result = mutableListOf(
             QualityUIState(
                 index = 0,
-                label = context.getString(R.string.player_aspect_auto),
+                label = resources.getString(R.string.player_aspect_auto),
                 qualityId = null,
                 width = null,
                 height = null,
@@ -113,7 +113,7 @@ internal class PlayerUIMapper(
                 val title = buildString {
                     append(episode.number)
                     append(". ")
-                    append(episode.title ?: context.getString(R.string.player_episode_untitled))
+                    append(episode.title ?: resources.getString(R.string.player_episode_untitled))
                 }
                 VideoItemUIState(
                     id = episode.id,
@@ -132,7 +132,7 @@ internal class PlayerUIMapper(
             }
             EpisodeSeasonUIState(
                 number = season.number,
-                title = context.getString(
+                title = resources.getString(
                     R.string.player_season_episodes_count,
                     season.number,
                     episodes.size,
@@ -169,38 +169,38 @@ internal class PlayerUIMapper(
             item = item,
             durationLabel = seconds?.let { total ->
                 val template = DurationLabel.template(total)
-                context.getString(template.resId, *template.args.toTypedArray())
+                resources.getString(template.resId, *template.args.toTypedArray())
             },
-            imdbLabel = context.getString(R.string.player_about_rating_imdb),
-            kinopoiskLabel = context.getString(R.string.player_about_rating_kinopoisk),
+            imdbLabel = resources.getString(R.string.player_about_rating_imdb),
+            kinopoiskLabel = resources.getString(R.string.player_about_rating_kinopoisk),
         )
     }
 
     fun buildSubtitle(seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?): String? {
         if (seasonNumber == null || episodeNumber == null) return null
         return if (episodeTitle != null) {
-            context.getString(R.string.player_season_episode_title, seasonNumber, episodeNumber, episodeTitle)
+            resources.getString(R.string.player_season_episode_title, seasonNumber, episodeNumber, episodeTitle)
         } else {
-            context.getString(R.string.player_season_episode, seasonNumber, episodeNumber)
+            resources.getString(R.string.player_season_episode, seasonNumber, episodeNumber)
         }
     }
 
-    fun defaultSoundModeLabel(): String = context.getString(R.string.player_sound_stereo)
+    fun defaultSoundModeLabel(): String = resources.getString(R.string.player_sound_stereo)
 
     fun formatSeekOffset(isForward: Boolean, stepSeconds: Int): String {
         return if (isForward) {
-            context.getString(R.string.player_seek_forward, stepSeconds)
+            resources.getString(R.string.player_seek_forward, stepSeconds)
         } else {
-            context.getString(R.string.player_seek_backward, stepSeconds)
+            resources.getString(R.string.player_seek_backward, stepSeconds)
         }
     }
 
     fun mapSkipSegmentLabel(type: SkipSegmentType): String {
         return when (type) {
-            SkipSegmentType.INTRO -> context.getString(R.string.skip_intro)
-            SkipSegmentType.RECAP -> context.getString(R.string.skip_recap)
-            SkipSegmentType.CREDITS -> context.getString(R.string.skip_credits)
-            SkipSegmentType.PREVIEW -> context.getString(R.string.skip_preview)
+            SkipSegmentType.INTRO -> resources.getString(R.string.skip_intro)
+            SkipSegmentType.RECAP -> resources.getString(R.string.skip_recap)
+            SkipSegmentType.CREDITS -> resources.getString(R.string.skip_credits)
+            SkipSegmentType.PREVIEW -> resources.getString(R.string.skip_preview)
         }
     }
 
@@ -230,17 +230,17 @@ internal class PlayerUIMapper(
     }
 
     fun mapBufferPresets(): List<BufferPresetUIState> = listOf(
-        BufferPresetUIState(0, context.getString(R.string.player_buffer_auto), BufferPreset.AUTO),
-        BufferPresetUIState(1, context.getString(R.string.player_buffer_small), BufferPreset.SMALL),
-        BufferPresetUIState(2, context.getString(R.string.player_buffer_medium), BufferPreset.MEDIUM),
-        BufferPresetUIState(3, context.getString(R.string.player_buffer_large), BufferPreset.LARGE),
-        BufferPresetUIState(4, context.getString(R.string.player_buffer_max), BufferPreset.MAX),
+        BufferPresetUIState(0, resources.getString(R.string.player_buffer_auto), BufferPreset.AUTO),
+        BufferPresetUIState(1, resources.getString(R.string.player_buffer_small), BufferPreset.SMALL),
+        BufferPresetUIState(2, resources.getString(R.string.player_buffer_medium), BufferPreset.MEDIUM),
+        BufferPresetUIState(3, resources.getString(R.string.player_buffer_large), BufferPreset.LARGE),
+        BufferPresetUIState(4, resources.getString(R.string.player_buffer_max), BufferPreset.MAX),
     )
 
     fun mapAspectRatios(): List<AspectRatioUIState> = listOf(
-        AspectRatioUIState(0, context.getString(R.string.player_aspect_auto), AspectRatioMode.AUTO),
-        AspectRatioUIState(1, context.getString(R.string.player_aspect_stretch), AspectRatioMode.STRETCH),
-        AspectRatioUIState(2, context.getString(R.string.player_aspect_crop), AspectRatioMode.CROP),
+        AspectRatioUIState(0, resources.getString(R.string.player_aspect_auto), AspectRatioMode.AUTO),
+        AspectRatioUIState(1, resources.getString(R.string.player_aspect_stretch), AspectRatioMode.STRETCH),
+        AspectRatioUIState(2, resources.getString(R.string.player_aspect_crop), AspectRatioMode.CROP),
     )
 }
 

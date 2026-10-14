@@ -609,6 +609,17 @@ The evidence audit passed on the directory (3 files) and on the markdown file.
 
 **Blocked:** nothing.
 
+### Fix round 1 (verify defect 1, AC-5)
+
+`PlayerUIMapper` took a raw application `Context`, which ignores the in-app language, so with device
+English and in-app Russian the picker read `Off` / `AI-generated`. It now takes `ResourceProvider`
+and resolves every string through it. `ResourceProvider` gained `val locale: Locale` (Android: the
+re-wrapped context's first locale; `FakeResourceProvider`: a settable `var`, English by default) and
+the mapper reads the language-name display locale from it. DI wiring is unchanged (`get()` resolves
+the provider by type). `PlayerUIMapperTest` and `PlayerStartModeTest` moved off mocked `Context` to
+`FakeResourceProvider`; a new test checks language names follow the provider's locale. Files outside
+the plan: `ResourceProvider.kt`, `AndroidResourceProvider.kt`, `FakeResourceProvider.kt`.
+
 ## Readiness
 
 <!-- owner: final-judge, mode readiness; the conductor pastes readiness-<n>.md here. READY | NOT READY and why. -->

@@ -1,25 +1,18 @@
 package com.kino.puber.ui.feature.player.model
 
-import android.content.Context
-import android.content.res.Configuration
-import android.content.res.Resources
-import android.os.LocaleList
 import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.api.models.VideoUrl
-import io.mockk.every
-import io.mockk.mockk
+import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.util.Locale
 
 internal class PlayerUIMapperTest {
 
-    private val context = mockk<Context> {
-        every { getString(R.string.player_aspect_auto) } returns "Auto"
-    }
-    private val mapper = PlayerUIMapper(context)
+    private val resources = FakeResourceProvider()
+    private val mapper = PlayerUIMapper(resources)
 
     @Test
     fun mapQualities_excludesFilesWithoutUsableStreamUrls() {
@@ -36,7 +29,7 @@ internal class PlayerUIMapperTest {
 
         assertEquals(
             listOf(
-                QualityUIState(0, "Auto", null, null, null),
+                QualityUIState(0, resources.getString(R.string.player_aspect_auto), null, null, null),
                 QualityUIState(1, "720p", 3, 1280, 720),
             ),
             mapper.mapQualities(files),
@@ -77,44 +70,46 @@ internal class PlayerUIMapperTest {
 
     @Test
     fun mapSubtitleTracks_namesLanguagesAiForcedUnknownAndVariants() {
-        val localeList = mockk<LocaleList> { every { get(0) } returns Locale.ENGLISH }
-        val configuration = mockk<Configuration> { every { locales } returns localeList }
-        val resources = mockk<Resources> { every { this@mockk.configuration } returns configuration }
-        val subtitleContext = mockk<Context> {
-            every { this@mockk.resources } returns resources
-            every { getString(R.string.player_subtitles_off) } returns "Off"
-            every { getString(R.string.player_subtitle_ai_generated) } returns "AI-generated"
-            every { getString(R.string.player_subtitle_forced) } returns "forced"
-            every { getString(R.string.player_subtitle_variant_label, *anyVararg()) } answers {
-                val values = args.drop(1).flatMap { if (it is Array<*>) it.toList() else listOf(it) }
-                "${values[0]} · variant ${values[1]}"
-            }
-            every { getString(R.string.player_subtitle_unknown, *anyVararg()) } answers {
-                val values = args.drop(1).flatMap { if (it is Array<*>) it.toList() else listOf(it) }
-                "Subtitles ${values[0]}"
-            }
+        val tracks = mapper.mapSubtitleTracks(subtitleLinks())
+        val off = resources.getString(R.string.player_subtitles_off)
+        val variant = { label: String, ordinal: Int ->
+            resources.getString(R.string.player_subtitle_variant_label, label, ordinal)
         }
-
-        val tracks = PlayerUIMapper(subtitleContext).mapSubtitleTracks(
-            listOf(
-                SubtitleLink(lang = "rus", url = "u1"),
-                SubtitleLink(lang = "ai", url = "u2"),
-                SubtitleLink(lang = "eng", url = "u3", forced = true),
-                SubtitleLink(lang = " ", url = "u4"),
-                SubtitleLink(lang = "rus", url = "u5"),
-            ),
-        )
 
         assertEquals(
             listOf(
-                SubtitleTrackUIState(0, "Off", "", ""),
-                SubtitleTrackUIState(1, "Russian · variant 1", "rus", "u1"),
-                SubtitleTrackUIState(2, "AI-generated", "ai", "u2"),
-                SubtitleTrackUIState(3, "English · forced", "eng", "u3"),
-                SubtitleTrackUIState(4, "Subtitles 4", " ", "u4"),
-                SubtitleTrackUIState(5, "Russian · variant 2", "rus", "u5"),
+                SubtitleTrackUIState(0, off, "", ""),
+                SubtitleTrackUIState(1, variant("Russian", 1), "rus", "u1"),
+                SubtitleTrackUIState(2, resources.getString(R.string.player_subtitle_ai_generated), "ai", "u2"),
+                SubtitleTrackUIState(
+                    3,
+                    "English · ${resources.getString(R.string.player_subtitle_forced)}",
+                    "eng",
+                    "u3",
+                ),
+                SubtitleTrackUIState(4, resources.getString(R.string.player_subtitle_unknown, 4), " ", "u4"),
+                SubtitleTrackUIState(5, variant("Russian", 2), "rus", "u5"),
             ),
             tracks,
         )
     }
+
+    @Test
+    fun mapSubtitleTracks_namesLanguagesInTheProvidersLocale() {
+        resources.locale = Locale.forLanguageTag("ru")
+
+        val labels = mapper.mapSubtitleTracks(
+            listOf(SubtitleLink(lang = "eng", url = "u1"), SubtitleLink(lang = "rus", url = "u2")),
+        ).map { it.label }
+
+        assertEquals(listOf(resources.getString(R.string.player_subtitles_off), "Английский", "Русский"), labels)
+    }
+
+    private fun subtitleLinks() = listOf(
+        SubtitleLink(lang = "rus", url = "u1"),
+        SubtitleLink(lang = "ai", url = "u2"),
+        SubtitleLink(lang = "eng", url = "u3", forced = true),
+        SubtitleLink(lang = " ", url = "u4"),
+        SubtitleLink(lang = "rus", url = "u5"),
+    )
 }
