@@ -45,7 +45,7 @@ No crash-buffer entries for the package afterwards.
 3. Subtitle size was changed Medium to Large by an accidental press and cycled back to `Medium` (verified).
 4. Aspect ratio was cycled to Stretch/Crop by accident and returned to `Auto` (verified); it is not persisted.
 5. Watch progress: short plays of Psyren S1E1 (four starts), Outlander S1E3, S1E5, S2E3; S1E3 and S1E5 positions may
-   have been replaced by the short plays (S2E3 showed a resume prompt at 4:03 before it was played). Nothing else was written.
+   have been replaced by the short plays (S1E3 showed a resume prompt at 4:03 before it was played). Nothing else was written.
 
 ## Defect 1: quality switch on an HLS stream with API subtitles drops the picker rows and the selection
 
