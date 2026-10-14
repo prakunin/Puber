@@ -65,7 +65,15 @@ internal interface PlaybackControl {
             buffered: Long,
         )
 
-        fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int)
+        /**
+         * [subtitleTracks] is null when the player has no subtitle rows of its own (progressive);
+         * the picker then shows the API rows.
+         */
+        fun onTracksUpdated(
+            audioTracks: List<AudioTrackUIState>,
+            selectedIndex: Int,
+            subtitleTracks: List<SubtitleTrackUIState>? = null,
+        )
         fun onPlaybackEnded()
 
         /**

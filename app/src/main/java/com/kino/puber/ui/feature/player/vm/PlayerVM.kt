@@ -42,6 +42,8 @@ import com.kino.puber.ui.feature.player.model.PlayerViewState
 import com.kino.puber.ui.feature.player.model.QualityUIState
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 import com.kino.puber.ui.feature.player.model.SeekIndicatorState
+import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.subtitleLabeler
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -173,6 +175,7 @@ internal class PlayerVM(
     private val controlsStateMachine = ControlsStateMachine()
     private val progressTracker = ProgressTracker()
     private val audioTrackPreferenceResolver = AudioTrackPreferenceResolver()
+    private var apiSubtitleTracks: List<SubtitleTrackUIState> = emptyList()
     private val behaviourPreferences = interactor.getBehaviourPreferences()
 
     private val playbackCallback = object : PlaybackControl.Callback {
@@ -208,17 +211,12 @@ internal class PlayerVM(
             }
         }
 
-        override fun onTracksUpdated(audioTracks: List<AudioTrackUIState>, selectedIndex: Int) {
-            updateContent {
-                copy(
-                    audioTracks = audioTracks,
-                    selectedAudioTrackIndex = selectedIndex,
-                )
-            }
-            if (!tracksRestoredForCurrentMedia) {
-                tracksRestoredForCurrentMedia = true
-                restoreTrackPreferences()
-            }
+        override fun onTracksUpdated(
+            audioTracks: List<AudioTrackUIState>,
+            selectedIndex: Int,
+            subtitleTracks: List<SubtitleTrackUIState>?,
+        ) {
+            this@PlayerVM.onTracksUpdated(audioTracks, selectedIndex, subtitleTracks)
         }
 
         override fun onPlaybackEnded() {
@@ -360,6 +358,7 @@ internal class PlayerVM(
 
     /** Publishes new media with the controls exactly as [controlsStateMachine] now holds them. */
     private fun publishPreparedContent(contentState: PlayerContentState) {
+        apiSubtitleTracks = contentState.subtitleTracks
         controlsHideJob?.cancel()
         controlsStateMachine.initialize(resumeDialogVisible = contentState.resumeDialog != null)
         updateViewState(
@@ -485,6 +484,7 @@ internal class PlayerVM(
                     return@launch
                 }
                 currentMedia = refreshedMedia
+                apiSubtitleTracks = mapper.mapSubtitleTracks(resolved.subtitles)
                 updateViewState(
                     PlayerViewState.Content(
                         latestContent.copy(
@@ -522,6 +522,44 @@ internal class PlayerVM(
     private fun isCurrentMedia(token: MediaToken): Boolean {
         return !closing && currentMedia?.token == token
     }
+
+    private fun onTracksUpdated(
+        reportedAudioTracks: List<AudioTrackUIState>,
+        reportedAudioIndex: Int,
+        reportedSubtitleTracks: List<SubtitleTrackUIState>?,
+    ) {
+        val previous = (stateValue as? PlayerViewState.Content)?.content
+        val previousRow = previous?.subtitleTracks?.getOrNull(previous.selectedSubtitleIndex)
+        val rows = reportedSubtitleTracks?.let(::mergeSubtitleTracks) ?: apiSubtitleTracks
+        val rowIndex = previousRow
+            ?.let { audioTrackPreferenceResolver.findSameSubtitleTrackIndex(rows, it) }
+            ?: 0
+        updateContent {
+            copy(
+                audioTracks = reportedAudioTracks.ifEmpty { audioTracks },
+                selectedAudioTrackIndex = if (reportedAudioTracks.isEmpty()) {
+                    selectedAudioTrackIndex
+                } else {
+                    reportedAudioIndex
+                },
+                subtitleTracks = rows,
+                selectedSubtitleIndex = rowIndex,
+            )
+        }
+        if (!tracksRestoredForCurrentMedia) {
+            tracksRestoredForCurrentMedia = true
+            restoreTrackPreferences()
+            return
+        }
+        val row = rows.getOrNull(rowIndex)
+        if (row != null && previousRow != null && row != previousRow) {
+            // The viewer's row moved or was rebuilt: keep the controller's pending row current.
+            playbackController.selectSubtitle(row)
+        }
+    }
+
+    private fun mergeSubtitleTracks(playerTracks: List<SubtitleTrackUIState>): List<SubtitleTrackUIState> =
+        SubtitleTrackMerger(subtitleLabeler(resources)).merge(apiSubtitleTracks, playerTracks)
 
     private fun restoreTrackPreferences() {
         val preferredLabel = interactor.getPreferredAudioLabel(params.itemId)

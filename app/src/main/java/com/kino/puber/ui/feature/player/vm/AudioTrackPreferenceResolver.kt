@@ -2,6 +2,8 @@ package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
+import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 
 internal class AudioTrackPreferenceResolver {
 
@@ -35,6 +37,54 @@ internal class AudioTrackPreferenceResolver {
             matcher().takeIf { it >= 0 }
         } ?: NO_MATCH
     }
+
+    /**
+     * Where the row the viewer picked sits after the rows were rebuilt, or Off when it is gone.
+     *
+     * Rules, in order: the row itself, its player track id, its source identity (API url or
+     * file), its full track group id with the track index, and an unambiguous language. Each
+     * rule has to name exactly one row; none looks at a position.
+     */
+    fun findSameSubtitleTrackIndex(
+        tracks: List<SubtitleTrackUIState>,
+        previous: SubtitleTrackUIState,
+    ): Int {
+        val offIndex = tracks.indexOfFirst { it.isOff }.coerceAtLeast(0)
+        if (previous.isOff) return offIndex
+        val candidates = tracks.withIndex().filterNot { it.value.isOff }
+        val matchers = listOf(
+            { tracks.indexOf(previous) },
+            { candidates.uniqueIndex { it.hasSamePlayerTrackId(previous) } },
+            { candidates.uniqueIndex { it.hasSameSourceIdentity(previous) } },
+            { candidates.uniqueIndex { it.hasSameTrackGroupAndIndex(previous) } },
+            { candidates.uniqueIndex { it.hasSameLanguage(previous) } },
+        )
+        return matchers.firstNotNullOfOrNull { matcher ->
+            matcher().takeIf { it >= 0 }
+        } ?: offIndex
+    }
+
+    private fun List<IndexedValue<SubtitleTrackUIState>>.uniqueIndex(
+        predicate: (SubtitleTrackUIState) -> Boolean,
+    ): Int = filter { predicate(it.value) }.singleOrNull()?.index ?: NO_MATCH
+
+    private fun SubtitleTrackUIState.hasSamePlayerTrackId(other: SubtitleTrackUIState): Boolean =
+        !playerTrackId.isNullOrEmpty() && playerTrackId == other.playerTrackId
+
+    private fun SubtitleTrackUIState.hasSameSourceIdentity(other: SubtitleTrackUIState): Boolean {
+        val ids = listOfNotNull(url, sourceFile).filter { it.isNotEmpty() }
+        val otherIds = listOfNotNull(other.url, other.sourceFile).filter { it.isNotEmpty() }
+        return ids.any { id -> otherIds.any { otherId -> sameSubtitleIdentity(id, otherId) } }
+    }
+
+    private fun SubtitleTrackUIState.hasSameTrackGroupAndIndex(other: SubtitleTrackUIState): Boolean =
+        !playerTrackGroupId.isNullOrEmpty() &&
+            playerTrackGroupId == other.playerTrackGroupId &&
+            playerTrackIndex == other.playerTrackIndex
+
+    private fun SubtitleTrackUIState.hasSameLanguage(other: SubtitleTrackUIState): Boolean =
+        sameSubtitleLanguage(language, other.language) &&
+            (isForced == null || other.isForced == null || isForced == other.isForced)
 
     private fun exactSubtitleUrlMatch(
         tracks: List<SubtitleTrackUIState>,
@@ -94,7 +144,7 @@ internal class AudioTrackPreferenceResolver {
         preferredLang: String?,
     ): Int {
         if (preferredLang == null) return NO_MATCH
-        val matches = tracks.withIndex().filter { it.value.language == preferredLang }
+        val matches = tracks.withIndex().filter { sameSubtitleLanguage(it.value.language, preferredLang) }
         return matches.singleOrNull()?.index ?: NO_MATCH
     }
 

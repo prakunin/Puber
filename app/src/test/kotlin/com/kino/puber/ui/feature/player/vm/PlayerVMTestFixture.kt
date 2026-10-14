@@ -124,6 +124,7 @@ internal open class PlayerVMTestFixture {
         every { mapper.buildTitle(any()) } returns "Title"
         every { mapper.buildSubtitle(any(), any(), any()) } returns "Sub"
         every { mapper.mapQualities(any()) } returns emptyList()
+        every { mapper.mapSubtitleTracks(any()) } returns testSubtitleTracks
         every { mapper.mapEpisodes(any()) } returns null
         every { mapper.mapSkipSegmentLabel(any()) } returns "Skip"
         every { mapper.defaultSoundModeLabel() } returns "Stereo"

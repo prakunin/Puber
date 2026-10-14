@@ -64,10 +64,10 @@ internal class SubtitleLabeler(
         val describable = collisions.filterValues(::hasDistinctReadableLabels).keys
         val ordinals = mutableMapOf<String, Int>()
         return tracks.map { track ->
+            val description = track.readableDescriptiveLabel()?.takeIf { track.label in describable }
             when {
                 track.label !in collisions -> track
-                track.label in describable ->
-                    track.copy(label = withForcedQualifier(track.readableDescriptiveLabel()!!, track))
+                description != null -> track.copy(label = withForcedQualifier(description, track))
                 else -> {
                     val ordinal = ordinals.merge(track.label, 1, Int::plus) ?: 1
                     track.copy(label = variantLabel(track.label, ordinal))
