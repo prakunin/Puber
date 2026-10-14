@@ -57,3 +57,50 @@ Likely area (not verified in code): `PlayerVM.onTracksUpdated` merges the API ro
 empty (`SubtitleTrackMerger` returns only `Off` when the player reports no tracks), and `notifyTracksUpdated` sends that
 report because audio groups exist; the previous row is then not found and the VM selects `Off`. The report with no text
 groups right after `switchStream` for a manual quality stream is the thing to inspect.
+
+---
+
+# Round 2 (fix round 1 build)
+
+Date: 2026-10-14. Device: emulator-5554 (`puber_tv_36`, API 36 TV), leased and released.
+Build: worktree HEAD 7ca85b93 (base a97ee2b1). `app-dev-debug.apk` `com.kino.puber.stage` 1.9.70-dev,
+sha256 `1d1ec6da84beea2b70c57171e546084292f95a02a92ec8175c5b79a4e3baebdb`. Installed with
+`tools/android-apk-install-preserve` (`installed`, `compatible_replace`, same signer
+`6b29181257cb520329553691b7a48c9b1123899950105127b3dd67012c49a83e`, no data lost); the on-device `base.apk` has the same sha256.
+Input: remote key events only. Cue presence was measured by sampling screenshots in memory (a black box with white text in the
+subtitle strip, never saved); no screenshots, logs or UI dumps are kept.
+
+Static gate: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` BUILD SUCCESSFUL (tasks up to date for this
+tree); result XML read: 1578 tests, 0 failures, 0 errors, 0 skipped.
+
+## Checks
+
+| Check | Steps | Expected | Observed | Result |
+|---|---|---|---|---|
+| D-8 restore on open (AC-7) | cold start, Outlander S1E5 (saved `Russian`), Continue | `Russian` selected and rendering | Settings door `Subtitles Russian`, cues rendered | PASS |
+| D-8 back-and-reopen | back to the detail page, reopen S1E3 | `Russian` restored | `Subtitles Russian`, cues in 17 of 24 sampled frames | PASS |
+| Next episode | S1E5 to S1E6 with Next | pick on the new media comes from the saved choice | `Russian` selected, cues in 5 of 17 frames. The saved choice is also `Russian`, so a leaked pick cannot be told from a restore on the device | PASS (consistent), leak case covered by unit tests only |
+| D-4 rows and pick after a switch (AC-4, AC-6), S1E5 | Auto, `Russian` checked, Quality 720p, wait 8 s, Settings root and Subtitles page; then 480p | rows and `Russian` stay | after 720p and after 480p: root reads `Subtitles Russian`, page lists `Off`, `Russian` (checked), `English`, `Aa Size`. Round 1 showed only `Off`. | PASS (row and pick) |
+| D-4 cues still render after a switch (D-4 "and rendering"), S1E5 | same, then sample the subtitle strip for 40 to 150 s during dialogue | cues keep rendering | 720p: no cue in about 60 sampled frames plus visual checks across 4:28 to 7:00 and 3:22 to 3:50. 480p: 0 of 32 and 0 of 27 frames (the second run after re-picking `Russian` at 480p). Auto at the same episode: 8 of 18, 25 of 29, 3 of 19 frames. | FAIL |
+| D-4 cues after a switch, S1E3 | Reopen, Auto: 17 of 24 frames with cues. Quality 720p, wait 8 s: root `Subtitles Russian`, Audio `Track 1` | cues keep rendering | 0 of 49 frames with cues over 40 s | FAIL |
+| D-4 cues after a switch, S2E3 | Auto: 5 of 21 frames. Quality 720p | cues keep rendering | 1 of 56 frames; back to Auto without a re-pick: 18 of 25 frames (cues return) | FAIL (weaker sample than S1E5/S1E3) |
+| D-7 Subtitles page during a quality switch | 720p to 480p, then BACK, Up, OK within about 1.5 s; screenshots at 0.3 s, 3 s, 10 s | focus stays in the panel, rows present | Subtitles page open at all three times, `Russian` checked, rows `Off`, `Russian`, `English`, `Aa Size`, focus in the panel, no crash | PASS |
+| D-1 quick re-check | `Russian` rendering on Auto after each return from 720p/480p | cues render | rendering on Auto in all three episodes | PASS |
+| S2E3 AI row | S2E3, Settings, Subtitles | whether `AI-generated` is listed | rows are `Off`, `Russian`, `English`; no `AI-generated`. No code filters the `ai` language out (`SubtitleLabeler` only labels it), so the API list does not offer it for this episode. Inferred, the raw list was not inspected. | observation |
+| D-2 manifest-only language (AC-2) | no H1 title | n/a | not observed | NOT CHECKED |
+| D-5 progressive (AC-5) | manual qualities still try `hls` first (`PlayerInteractor.kt:233-240`), so no progressive stream is reachable | n/a | not observed | NOT CHECKED |
+
+## Observations that are not ACs
+
+1. Manual quality: Settings Audio reads `Track 1` instead of the named track (`01. Многоголосый. NewStudio (RUS)`) on 720p and 480p; Auto shows the name.
+2. At 480p (and once at 720p) the video surface showed the new stream at its native size in the top-left corner over a frozen frame
+   of the previous size (video render artefact after the switch). Not compared with the base build.
+3. Pressing Previous restarts the item and resets Quality to Auto (not persisted).
+
+## Account and app state changes caused (round 2)
+
+1. Watch progress: short plays of Outlander S1E5 (twice, resumed at 2:19), S1E6 (next episode), S1E3 (resumed at 4:21), S1E4 (opened by mistake), S2E3 (resumed at 2:04).
+   The saved positions of those episodes may have moved.
+2. Saved subtitle for Outlander: `Russian` re-picked once on S1E5 at 480p; the saved value stays `Russian`.
+3. Quality is not persisted and was returned to Auto. The player info overlay was toggled once by a stray key and closed with the player.
+4. Subtitle size, aspect ratio untouched (`Medium`, `Auto`).
