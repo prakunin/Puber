@@ -27,6 +27,12 @@ internal class SubtitleLabelsTest {
     }
 
     @Test
+    fun bibliographicCodes_readAsLanguageNamesToo() {
+        assertEquals(listOf("Немецкий", "Французский"), labels(sub("ger"), sub("fre")))
+        assertEquals(listOf("German", "French"), labels(sub("ger"), sub("fre"), locale = Locale.ENGLISH))
+    }
+
+    @Test
     fun languageNames_followTheDisplayLocale() {
         assertEquals(listOf("Russian"), labels(sub("rus"), locale = Locale.ENGLISH))
     }

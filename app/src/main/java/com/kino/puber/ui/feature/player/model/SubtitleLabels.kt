@@ -45,11 +45,20 @@ internal fun canonicalSubtitleLanguage(language: String): String {
         .lowercase(Locale.ROOT)
         .substringBefore('-')
         .substringBefore('_')
-    return runCatching { Locale.forLanguageTag(normalized).isO3Language }
+    val code = bibliographicToTerminology[normalized] ?: normalized
+    return runCatching { Locale.forLanguageTag(code).isO3Language }
         .getOrNull()
         ?.takeIf { it.isNotBlank() && it != "und" }
-        ?: normalized
+        ?: code
 }
+
+/** ISO 639-2 bibliographic codes that differ from the terminology codes `Locale` knows. */
+private val bibliographicToTerminology = mapOf(
+    "alb" to "sqi", "arm" to "hye", "baq" to "eus", "bur" to "mya", "chi" to "zho",
+    "cze" to "ces", "dut" to "nld", "fre" to "fra", "geo" to "kat", "ger" to "deu",
+    "gre" to "ell", "ice" to "isl", "mac" to "mkd", "mao" to "mri", "may" to "msa",
+    "per" to "fas", "rum" to "ron", "slo" to "slk", "tib" to "bod", "wel" to "cym",
+)
 
 /**
  * Localized name of a subtitle language, or null when the code cannot be resolved.
