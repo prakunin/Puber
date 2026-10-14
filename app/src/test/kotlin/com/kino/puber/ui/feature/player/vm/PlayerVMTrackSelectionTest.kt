@@ -2,7 +2,9 @@ package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
+import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.domain.model.SubtitleSize
+import com.kino.puber.ui.feature.player.model.BufferPresetUIState
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
@@ -386,6 +388,71 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+    }
+
+    private fun pickedRussianWithSavedPreference(): Pair<PlayerVM, List<SubtitleTrackUIState>> {
+        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
+        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[1].url
+        return collapsedAfterPick()
+    }
+
+    @Test
+    fun rebuildFastDns_keepsIntent_whenOtherStreamLacksRow_thenRestoresItWhenRowReturns() {
+        val (vm, rows) = pickedRussianWithSavedPreference()
+
+        vm.onAction(PlayerAction.ToggleFastDns)
+        report(listOf(manifest("en", "subs:English")))
+        clearMocks(playbackController, interactor, answers = false)
+        report(rows)
+
+        val after = contentState(vm)
+        assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[1].url) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), null, null) }
+    }
+
+    @Test
+    fun rebuildFastDns_reSendsPick_onFirstReportWithText_andSavesNothing() {
+        val (vm, rows) = pickedRussianWithSavedPreference()
+
+        vm.onAction(PlayerAction.ToggleFastDns)
+        report(emptyList())
+
+        verify(exactly = 0) { playbackController.selectSubtitle(any()) }
+
+        report(rows)
+
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        val after = contentState(vm)
+        assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
+    }
+
+    @Test
+    fun rebuildBufferPreset_reSendsPick_onFirstReportWithText_andSavesNothing() {
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returns
+            testContentState.copy(
+                bufferPresets = listOf(
+                    BufferPresetUIState(0, "Auto", BufferPreset.AUTO),
+                    BufferPresetUIState(1, "Small", BufferPreset.SMALL),
+                ),
+            )
+        val (vm, rows) = pickedRussianWithSavedPreference()
+
+        vm.onAction(PlayerAction.SelectBufferPreset(1))
+        report(emptyList())
+
+        verify(exactly = 0) { playbackController.selectSubtitle(any()) }
+
+        report(rows)
+
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
         verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
     }
 

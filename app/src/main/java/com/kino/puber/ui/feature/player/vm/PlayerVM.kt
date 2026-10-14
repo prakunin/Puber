@@ -605,13 +605,14 @@ internal class PlayerVM(
             preferredLang = subtitleLang,
             preferredUrl = subtitleUrl,
         )
+        if (subtitleIndex >= 0) {
+            applySubtitleSelection(index = subtitleIndex, persist = false)
+            return
+        }
         // Nothing saved resolves for this media: re-send the picker's own row, so a pick still
         // pending in the controller from the previous media cannot turn text back on under an
-        // Off picker. On a rebuild the row is the viewer's live pick, so nothing changes.
-        applySubtitleSelection(
-            index = subtitleIndex.takeIf { it >= 0 } ?: content.selectedSubtitleIndex,
-            persist = false,
-        )
+        // Off picker. The intent is left alone: on a rebuild it may name a row this stream lacks.
+        content.subtitleTracks.getOrNull(content.selectedSubtitleIndex)?.let(playbackController::selectSubtitle)
     }
 
     override fun onAction(action: UIAction) {

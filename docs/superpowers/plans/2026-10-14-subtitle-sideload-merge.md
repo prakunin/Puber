@@ -874,6 +874,12 @@ None.
 - Deviation: the P1 test `rebuild_textlessFirstReport_audioPick_doesNotPersistOff` is not written; the fixture has a single buffer preset, so a rebuild cannot be triggered without extending it. The rebuild path resets both flags and is otherwise the same code as the next-media path that is tested.
 - Reviewers: `onTracksUpdated` step order (audio restore runs before the subtitle early return), and `saveTrackPreferences` reading `intendedSubtitleRow`.
 
+**Fix round 3** (triage-3 #1, #2; base `a97ee2b1`):
+
+- #1 `PlayerVM.restoreSubtitlePreference`: when no saved row resolves, the displayed row is re-sent with `playbackController.selectSubtitle` only; `intendedSubtitleRow` is untouched and nothing is persisted. `applySubtitleSelection` runs only when a saved row resolves. Test `rebuildFastDns_keepsIntent_whenOtherStreamLacksRow_thenRestoresItWhenRowReturns` (red before): pick Russian, collapse, Fast DNS, other-text rows, original rows -> Russian shown and sent, a later audio pick persists `rus`, never null.
+- #2 `rebuildFastDns_reSendsPick_onFirstReportWithText_andSavesNothing` and `rebuildBufferPreset_reSendsPick_onFirstReportWithText_andSavesNothing` (second preset added through the `contentStateFactory` stub): nothing is sent after a text-less report, exactly one send on the first report with text, zero saves. These two passed on first run (the re-arm was already right; they guard it).
+- Reviewers: the fallback no longer goes through `applySubtitleSelection`, so it does not set `selectedSubtitleIndex` (it is already the shown row).
+
 ## Readiness
 
 # Readiness - subtitle-sideload-merge, round 1
