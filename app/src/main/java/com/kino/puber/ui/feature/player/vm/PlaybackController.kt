@@ -369,6 +369,9 @@ internal class PlaybackController(
         fastDns: Boolean,
     ) {
         release()
+        // A pick made on the previous media must not turn text on for this one; the VM re-sends
+        // the picker's row once the new media reports its audio tracks.
+        pendingSubtitleTrack = null
         ac3FallbackApplied = false
         useFastDns = fastDns
 
