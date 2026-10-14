@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.isOff
 import com.kino.puber.ui.feature.player.model.readableDescriptiveLabel
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 
@@ -116,3 +117,9 @@ internal class SubtitleTrackSelector {
 }
 
 private fun String.normalizedSubtitleLabel(): String = trim().lowercase()
+
+/**
+ * Whether choosing [this] row switches subtitles off. A manifest row whose API url is empty is
+ * a real track, not Off; only the Off row (or no row) is.
+ */
+internal fun SubtitleTrackUIState?.turnsSubtitlesOff(): Boolean = this == null || isOff

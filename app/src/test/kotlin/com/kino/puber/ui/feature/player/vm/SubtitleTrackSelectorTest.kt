@@ -233,4 +233,16 @@ internal class SubtitleTrackSelectorTest {
         playerTrackUri = "https://cdn.test/rendition.m3u8",
         playerTrackIndex = trackIndex,
     )
+
+    @Test
+    fun turnsSubtitlesOff_onlyForNullAndTheOffRow() {
+        val off = SubtitleTrackUIState(label = "Off", language = "", url = "")
+        val manifestRowWithoutUrl = manifestTrack(groupId = "0:rus", trackIndex = 0, formatId = "rus", url = "")
+        val apiRow = SubtitleTrackUIState(label = "Russian", language = "rus", url = "https://api.test/a.srt")
+
+        assertEquals(true, (null as SubtitleTrackUIState?).turnsSubtitlesOff())
+        assertEquals(true, off.turnsSubtitlesOff())
+        assertEquals(false, manifestRowWithoutUrl.turnsSubtitlesOff())
+        assertEquals(false, apiRow.turnsSubtitlesOff())
+    }
 }

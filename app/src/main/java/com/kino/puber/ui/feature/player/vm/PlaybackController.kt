@@ -566,7 +566,7 @@ internal class PlaybackController(
 
     override fun selectSubtitle(track: SubtitleTrackUIState?) {
         val player = exoPlayer ?: return
-        if (track == null || track.isOff) {
+        if (track == null || track.turnsSubtitlesOff()) {
             pendingSubtitleTrack = null
             player.trackSelectionParameters = player.trackSelectionParameters
                 .buildUpon()
