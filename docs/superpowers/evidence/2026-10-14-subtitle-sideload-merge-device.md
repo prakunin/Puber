@@ -15,7 +15,7 @@ No crash-buffer entries for the package afterwards.
 | Role | Title | Finding |
 |---|---|---|
 | H1 (API-only plus manifest-only language) | none identified | The picker shows only the merged result. The app has no view of which source a row came from, so an API-only or manifest-only language cannot be told apart from a shared one on screen. Not established for any title. |
-| H2 (both sources offer a language) | Outlander S1E3, S1E5, S2E3 (API lists Russian, English; picker shows each once) | HLS confirmed (loader thread `ExoPlayer:Loader:HlsSampleStreamWrapper`, adaptive bitrate on Quality Auto). The picker shows `Russian` and `English`, one row each. Whether the manifest also lists them is not observable. |
+| H2 (both sources offer a language) | none established. Correction in round 3: Outlander S1E3, S1E5, S2E3 were first read as H2 (picker shows `Russian` and `English`, one row each), but per design delta 2 they are most likely manifest-only titles (no text on the manual-quality streams, text-less report), which is evidence for AC-2, not H2; AC-1 stays open on Outlander. | HLS confirmed (loader thread `ExoPlayer:Loader:HlsSampleStreamWrapper`, adaptive bitrate on Quality Auto). The picker shows `Russian` and `English`, one row each. Whether the manifest also lists them is not observable. |
 | P1 (progressive) | none | The app picks `hls4`, then `hls`, then `http` for every quality (`PlayerInteractor.kt:228-246`); progressive is only a fallback after an HLS failure, which cannot be arranged. |
 | Psyren S1E1 | HLS, API lists 9 languages | Used for time to first frame only. |
 
@@ -104,3 +104,40 @@ tree); result XML read: 1578 tests, 0 failures, 0 errors, 0 skipped.
 2. Saved subtitle for Outlander: `Russian` re-picked once on S1E5 at 480p; the saved value stays `Russian`.
 3. Quality is not persisted and was returned to Auto. The player info overlay was toggled once by a stray key and closed with the player.
 4. Subtitle size, aspect ratio untouched (`Medium`, `Auto`).
+
+---
+
+# Round 3 (fix round 2 build)
+
+Date: 2026-10-14. Device: emulator-5554 (`puber_tv_36`, API 36 TV), leased and released.
+Build: worktree HEAD f4b311e0 (base a97ee2b1). `app-dev-debug.apk` `com.kino.puber.stage` 1.9.70-dev, versionCode 2090000000,
+sha256 `62b37f060d683800dc0dd1ab26377fc167e7a2275219231cb102268f515a5919`. Installed with `tools/android-apk-install-preserve`
+(`installed`, `compatible_replace`, same signer `6b29181257cb520329553691b7a48c9b1123899950105127b3dd67012c49a83e`, no data lost);
+the on-device `base.apk` has the same sha256. Input: remote key events only. Cue presence was measured by sampling screenshots in
+memory (a black box with white text in the subtitle strip, never saved to the repo); no screenshots, logs or UI dumps are kept in the repo.
+
+Static gate: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` BUILD SUCCESSFUL (tasks up to date for this tree);
+result XML read: 1590 tests, 0 failures, 0 errors, 0 skipped.
+
+Expected (D17, D19): on a stream with no text tracks the picker shows only `Off`, no language row checked while nothing renders; the
+viewer's pick is remembered and re-applied when a stream with that row returns; `Off` is not persisted by the collapse.
+
+## Checks
+
+| Check | Steps | Expected | Observed | Result |
+|---|---|---|---|---|
+| 1. Outlander S1E5 collapse and return | Auto, saved `Russian` (page: `Off`, `Russian` checked, `English`), pick `Russian` again, Quality 720p, wait 8 s, Settings root and Subtitles page; then Quality Auto without a re-pick | 720p: only `Off` (checked) and no cues; Auto: `Russian` checked again, cues render | 720p: root `Subtitles Off`, Audio `Track 1`, page `Off` (checked) and `Aa Size` only, no cue in the frame. Back on Auto after 8 s: root `Subtitles Russian`, page `Off`, `Russian` (checked), `English`, cue rendered ("Это был долгий день.") with no re-pick | PASS |
+| 1b. Reopen S1E5 | BACK to the detail page, reopen S1E5, Continue, Settings | saved `Russian` restored (`Off` not persisted) | root `Subtitles Russian`, cue rendered | PASS |
+| 2. Same on S1E3 | reopen S1E3 (Continue at 6:02), page `Off`/`Russian` checked/`English`, cue; pick `Russian`, 720p, wait 8 s; sample 30 s | 720p: only `Off`, no cues; Auto: `Russian` returns, cues | 720p: root `Subtitles Off`, page `Off` only, 0 of 35 sampled frames with a cue. Auto without a re-pick: root `Subtitles Russian`, 31 of 35 frames with a cue. Reopen S1E3 after exit: `Subtitles Russian`, cue rendered | PASS |
+| 3. Next episode (AC-7, D-8) | S1E5, Next | pick applies on S1E6, restore after reopen | S1E6: root `Subtitles Russian`, cues rendered at 2:20, 2:55, 3:01. Restore after back-and-reopen was seen on S1E5 and S1E3 (checks 1b, 2). The leak case (a pick leaking into the next episode) cannot be told from a restore on the device, the saved value is also `Russian` | PASS (consistent), leak case unit tests only |
+| 4. D-7 focus during a switch | Auto to 720p (rows 3 to 1), open the Subtitles page right after the pick | focus stays in the panel, no crash | Attempt with 0.6 s key spacing: the Subtitles page was open about 1.2 s after the pick (switch overlay `Render 0.8 fps`), only `Off` (focused, checked) and `Aa Size`, focus stayed in the panel at 0.2, 3 and 10 s. Attempt with a combo of keys: the Settings root was seen with `Subtitles Russian` and then `Subtitles Off` within 1 s (the collapse), `Quality` row stayed focused. No crash entries for the package afterwards. Keys sent within about 0.9 s after selecting 720p (BACK, UP, OK) were not applied in two attempts (Quality page stayed); not compared with master | PASS (focus), observation on dropped keys |
+| 5. Manual-quality probe, Psyren S1E1 (AC-1) | Auto: Subtitles page lists manifest and API rows with variants (`Spanish · variant 1/2`, `SPA #01 Forced · forced`, `Russian · variant 1/2`, `Portuguese`, `Polish` ...). Quality 720p, wait 8 s | language rows remain on the manual-quality stream; side-loaded rows render | After 720p the page lists `Off` (checked), `Chinese`, `Russian`, `Portuguese`, `Polish`, `Italian`, `French`, `Spanish`, `German`, `English` (nine languages, one row each, no variants), `Aa Size`. Picking the first language row (`Chinese`) rendered cues (12 of 34 sampled frames, Chinese text in the strip). The manual stream has no manifest text (no variants), so these are the side-loaded API subtitles | PASS (AC-1 on a title with an API-only list) |
+| API count for Outlander S1E5 | Detail page facts line | per-episode count | The series page shows `Subtitles: 5`. `DetailsScreenUIMapper.subtitleCount()` sums the subtitles of every episode in the loaded seasons, so it is a series total, not S1E5's own count. The picker shows two rows (`Russian`, `English`) on Auto. Psyren shows `Subtitles: 9` (consistent with the 9 languages) | observation only |
+
+## Account and app state changes caused (round 3)
+
+1. Playback of Compostelle (Home hero card) was started by a stray OK press and backed out within about 3 s; its watch progress may have moved.
+2. Watch progress: short plays of Outlander S1E5 (resumed at 9:09), S1E6 (next episode, to about 3:00), S1E3 (resumed at 6:02, again later to about 9:00), Psyren S1E1 (resumed at 5:37).
+3. Outlander saved subtitle: re-picked `Russian` (S1E5, S1E3), saved value stays `Russian`.
+4. Psyren saved subtitle: was `Off`; `Chinese` was picked for the probe and `Off` was picked again at the end (verified on the page). Net value `Off`.
+5. Quality is not persisted. Subtitle size (`Medium`) and aspect ratio (`Auto`) untouched. The stream info overlay appears after a quality switch by itself.
