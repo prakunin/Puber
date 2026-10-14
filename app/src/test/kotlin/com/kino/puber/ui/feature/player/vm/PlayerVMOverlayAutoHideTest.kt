@@ -196,6 +196,37 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
     }
 
     @Test
+    fun publishPreparedContent_resumePromptAfterRetry_staysAloneThroughTheOldHideDeadline() {
+        every { interactor.resolveMedia(any(), any(), any(), any()) } returnsMany
+            listOf(testResolvedMedia, testResolvedMedia.copy(watchingTime = 1_200))
+        coEvery { contentStateFactory.build(any(), any(), any(), any(), any(), any()) } returnsMany
+            listOf(
+                testContentState,
+                testContentState.copy(
+                    resumeDialog = ResumeDialogState(savedPosition = 60_000L, formattedTime = "1:00"),
+                ),
+            )
+        vmTest { vm ->
+            assertTrue(contentState(vm).controlsVisible)
+            advanceTimeBy(3_000)
+
+            vm.onAction(PlayerAction.RetryPlayback)
+
+            assertPromptAlone(vm)
+            advanceTimeBy(3_100)
+            assertPromptAlone(vm)
+            advanceTimeBy(60_000)
+            assertPromptAlone(vm)
+        }
+    }
+
+    private fun assertPromptAlone(vm: PlayerVM) {
+        assertNotNull(contentState(vm).resumeDialog)
+        assertFalse(contentState(vm).controlsVisible)
+        assertNull(contentState(vm).controlsFocusTarget)
+    }
+
+    @Test
     fun controlsHideAfter6s_whilePaused() {
         every { playbackController.isPlaying } returns false
         vmTest { vm ->

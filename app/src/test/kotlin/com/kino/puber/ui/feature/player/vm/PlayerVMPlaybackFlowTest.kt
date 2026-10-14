@@ -6,6 +6,7 @@ import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
+import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.FocusTarget
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerViewState
@@ -65,6 +66,25 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.OnBackPressed)
 
         assertFalse(contentState(vm).controlsVisible)
+        verify(exactly = 0) { router.back(any(), any()) }
+    }
+
+    @Test
+    fun publishPreparedContent_closesPanelLeftByPreviousMedia() {
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenEpisodesPanel)
+        assertEquals(ActivePanel.Episodes, contentState(vm).activePanel)
+
+        vm.onAction(PlayerAction.SelectEpisode(1, 2))
+
+        assertEquals(ActivePanel.None, contentState(vm).activePanel)
+        assertTrue(contentState(vm).controlsVisible)
+        assertEquals(FocusTarget.Buttons, contentState(vm).controlsFocusTarget)
+
+        vm.onAction(PlayerAction.OnBackPressed)
+
+        assertFalse(contentState(vm).controlsVisible)
+        assertEquals(ActivePanel.None, contentState(vm).activePanel)
         verify(exactly = 0) { router.back(any(), any()) }
     }
 
