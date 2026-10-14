@@ -41,10 +41,13 @@ class ControlsStateMachineTest {
     @Test
     fun `initialize_dropsWhatThePreviousMediaLeft`() {
         machine.openPanel(ActivePanel.Episodes)
+        machine.holdEpisodesPanel(true)
+        assertTrue(machine.state.episodesPanelHeld)
         machine.showControlsForEndedPlayback()
 
         machine.initialize(resumeDialogVisible = false)
 
+        assertFalse(machine.state.episodesPanelHeld)
         assertEquals(ActivePanel.None, machine.state.activePanel)
         assertFalse(machine.state.playbackEnded)
         machine.openPanel(ActivePanel.About)
