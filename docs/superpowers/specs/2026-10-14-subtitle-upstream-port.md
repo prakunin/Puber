@@ -1,6 +1,6 @@
 # Bring upstream's subtitle fixes into this fork
 
-Status: draft
+Status: approved
 Date: 2026-10-14
 Slug: subtitle-upstream-port
 Kind: improvement
@@ -393,3 +393,4 @@ P2: T-L3, M6, AC-6 device.
 | 2026-10-14 | Take D3 in this run | owner |
 | 2026-10-14 | Rewrite the two master overlay-autohide tests with the same intent | owner |
 | 2026-10-14 | Media change closes any panel and focuses the controls, as upstream | owner |
+| 2026-10-14 | Gate 1: spec approved | owner |
