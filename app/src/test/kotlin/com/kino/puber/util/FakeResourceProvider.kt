@@ -3,8 +3,10 @@ package com.kino.puber.util
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.kino.puber.core.system.ResourceProvider
+import java.util.Locale
 
 class FakeResourceProvider : ResourceProvider {
+    override var locale: Locale = Locale.ENGLISH
     override fun getString(resId: Int): String = "string_$resId"
     override fun getString(resId: Int, vararg arg: Any): String =
         "string_${resId}_${arg.joinToString("_")}"

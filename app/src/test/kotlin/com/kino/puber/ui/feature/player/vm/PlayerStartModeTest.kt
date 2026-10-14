@@ -4,7 +4,6 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
-import android.content.Context
 import com.kino.puber.domain.interactor.player.PlayerBehaviourPreferences
 import com.kino.puber.domain.interactor.player.PlayerInteractor
 import com.kino.puber.domain.interactor.player.ResolvedMedia
@@ -171,7 +170,7 @@ internal class PlayerStartModeTest {
 
     @Test
     fun resumeDialogFormatsSavedPositionWithRealMapper() {
-        mapper = PlayerUIMapper(mockk<Context>(relaxed = true))
+        mapper = PlayerUIMapper(FakeResourceProvider())
         every { interactor.resolveMedia(item, 1, 1, null) } returns savedMedia.copy(
             watchingTime = 3_661,
             duration = 7_200,

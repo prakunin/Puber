@@ -35,10 +35,11 @@ private val previewAudioTracks = listOf(
 
 private val previewSubtitleTracks = listOf(
     SubtitleTrackUIState(0, "Выкл.", "", ""),
-    SubtitleTrackUIState(1, "Русские", "ru", "https://example.com/ru.vtt"),
-    SubtitleTrackUIState(2, "Русские для слабослышащих", "ru", "https://example.com/ru-sdh.vtt"),
-    SubtitleTrackUIState(3, "English", "en", "https://example.com/en.vtt"),
-    SubtitleTrackUIState(4, "Узбекские · Созданы нейросетью", "uz", "https://example.com/uz.vtt"),
+    SubtitleTrackUIState(1, "Русский", "rus", "https://example.com/ru.vtt"),
+    SubtitleTrackUIState(2, "Русский · частичные", "rus", "https://example.com/ru-forced.vtt"),
+    SubtitleTrackUIState(3, "Английский · вариант 1", "eng", "https://example.com/en.vtt"),
+    SubtitleTrackUIState(4, "Английский · вариант 2", "eng", "https://example.com/en-sdh.vtt"),
+    SubtitleTrackUIState(5, "Созданные ИИ", "ai", "https://example.com/ai.vtt"),
 )
 
 private val previewSoundModes = listOf(

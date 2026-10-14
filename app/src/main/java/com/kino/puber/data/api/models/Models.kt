@@ -431,6 +431,7 @@ data class SubtitleLink(
     val url: String,
     val shift: Int? = null,
     val embed: Boolean? = null,
+    val forced: Boolean? = null,
 )
 
 @Serializable

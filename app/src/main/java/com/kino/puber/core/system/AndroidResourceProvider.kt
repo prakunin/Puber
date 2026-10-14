@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.ContextCompat
 import com.kino.puber.core.model.AppLanguage
+import java.util.Locale
 
 class AndroidResourceProvider(private val appContext: Context) : ResourceProvider {
 
@@ -23,6 +24,9 @@ class AndroidResourceProvider(private val appContext: Context) : ResourceProvide
             localized?.takeIf { it.first == language }?.let { return it.second }
             return AppLocale.wrap(appContext, language).also { localized = language to it }
         }
+
+    override val locale: Locale
+        get() = context.resources.configuration.locales[0]
 
     override fun getString(resId: Int): String = context.getString(resId)
     override fun getString(resId: Int, vararg arg: Any): String = context.getString(resId, *arg)

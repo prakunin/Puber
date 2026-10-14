@@ -216,6 +216,8 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
 
         assertTrue(contentState(vm).isCurrentMediaWatched)
         verify(exactly = 1) { errorHandler.map(refreshFailure) }
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
         verifyContentChangeResult(ContentChangeType.Watched, ContentChangeType.PlaybackProgress)
     }
@@ -323,6 +325,8 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
         val vm = startedVM()
 
         vm.onAction(PlayerAction.EpisodeWatchedChanged(currentEpisodeItem, watched = true))
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         assertTrue(contentState(vm).isCurrentMediaWatched)
@@ -456,6 +460,8 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
                 watched = true,
             )
         )
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verifyContentChangeResult(ContentChangeType.Watched, ContentChangeType.PlaybackProgress)
@@ -479,6 +485,8 @@ internal class PlayerVMMutationAndResultTest : PlayerVMTestFixture() {
                 watched = true,
             )
         )
+        // The first back hides the controls the media starts with; the second leaves.
+        vm.onAction(PlayerAction.OnBackPressed)
         vm.onAction(PlayerAction.OnBackPressed)
 
         verifyContentChangeResult(ContentChangeType.Watched, ContentChangeType.PlaybackProgress)

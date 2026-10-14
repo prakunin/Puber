@@ -7,6 +7,7 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -136,7 +137,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     }
 
     @Test
-    fun tracksUpdated_doesNotRestoreAmbiguousSubtitleLanguage_whenUrlIsMissing() {
+    fun tracksUpdated_ambiguousSubtitleLanguage_withoutUrl_reappliesOffRow() {
         every { interactor.getPreferredSubtitleLang(42) } returns "rus"
         every { interactor.getPreferredSubtitleUrl(42) } returns null
         val vm = startedVM()
@@ -144,7 +145,42 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
         callbackSlot.captured.onTracksUpdated(tracks, 0)
 
-        verify(exactly = 0) { playbackController.selectSubtitle(any()) }
+        verify(exactly = 1) { playbackController.selectSubtitle(testSubtitleTracks[0]) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        assertEquals(0, contentState(vm).selectedSubtitleIndex)
+    }
+
+    @Test
+    fun tracksUpdated_reappliesOffRow_whenSavedSubtitleDoesNotResolve() {
+        every { interactor.getPreferredSubtitleLang(42) } returns null
+        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/gone.vtt"
+        val vm = startedVM()
+
+        val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
+        callbackSlot.captured.onTracksUpdated(tracks, 0)
+
+        verify(exactly = 1) { playbackController.selectSubtitle(testSubtitleTracks[0]) }
+        verify(exactly = 0) { playbackController.selectSubtitle(testSubtitleTracks[1]) }
+        verify(exactly = 0) { playbackController.selectSubtitle(testSubtitleTracks[2]) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        assertEquals(0, contentState(vm).selectedSubtitleIndex)
+    }
+
+    @Test
+    fun tracksUpdated_nextMediaWithUnresolvedChoice_sendsOffRow() {
+        val vm = startedVM()
+        vm.onAction(PlayerAction.SelectSubtitle(2))
+        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
+        every { interactor.getPreferredSubtitleUrl(42) } returns null
+
+        vm.onAction(PlayerAction.SelectEpisode(1, 2))
+        val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
+        callbackSlot.captured.onTracksUpdated(tracks, 0)
+
+        verifyOrder {
+            playbackController.selectSubtitle(testSubtitleTracks[2])
+            playbackController.selectSubtitle(testSubtitleTracks[0])
+        }
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
     }
 

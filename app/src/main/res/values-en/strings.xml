@@ -244,6 +244,9 @@
     <string name="player_info_section_playback">PLAYBACK</string>
     <string name="player_subtitles_off">Off</string>
     <string name="player_subtitle_variant_label">%1$s · variant %2$d</string>
+    <string name="player_subtitle_ai_generated">AI-generated</string>
+    <string name="player_subtitle_forced">forced</string>
+    <string name="player_subtitle_unknown">Subtitles %1$d</string>
     <string name="player_subtitle_size">Aa Size</string>
     <string name="player_subtitle_size_small">Small</string>
     <string name="player_subtitle_size_medium">Medium</string>
