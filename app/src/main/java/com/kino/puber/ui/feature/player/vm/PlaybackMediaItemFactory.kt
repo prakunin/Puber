@@ -23,7 +23,10 @@ internal data class MediaItemSpec(
     /** [MimeTypes.APPLICATION_M3U8] for [StreamType.HLS], null otherwise. */
     val mimeType: String?,
     val subtitles: List<SubtitleSpec>,
-)
+) {
+    /** True when the item carries side-loaded subtitles, which is when the player merges sources. */
+    val hasSideLoads: Boolean get() = subtitles.isNotEmpty()
+}
 
 /**
  * Builds the [MediaItem] every stream is played from.
@@ -51,8 +54,7 @@ internal class PlaybackMediaItemFactory {
         },
     )
 
-    fun build(stream: StreamCandidate, subtitles: List<SubtitleLink>?): MediaItem =
-        spec(stream, subtitles).toMediaItem()
+    fun build(spec: MediaItemSpec): MediaItem = spec.toMediaItem()
 
     private fun MediaItemSpec.toMediaItem(): MediaItem {
         val builder = MediaItem.Builder().setUri(uri)

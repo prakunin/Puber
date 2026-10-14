@@ -433,11 +433,11 @@ internal class PlaybackController(
         exoPlayer = player
         videoRenderDiagnostics.reset()
 
-        val mediaItem = mediaItemFactory.build(stream, subtitles)
-        player.setMediaItem(mediaItem)
+        val spec = mediaItemFactory.spec(stream, subtitles)
+        player.setMediaItem(mediaItemFactory.build(spec))
         currentStreamUrl = stream.url
         currentStreamType = stream.type
-        currentItemHasSideLoads = subtitles.sideLoadable().isNotEmpty()
+        currentItemHasSideLoads = spec.hasSideLoads
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.prepare()
@@ -504,11 +504,11 @@ internal class PlaybackController(
         val wasPlaying = player.playWhenReady
         val savedTrackParams = player.trackSelectionParameters
 
-        val mediaItem = mediaItemFactory.build(stream, subtitles)
-        player.setMediaItem(mediaItem, savedPosition)
+        val spec = mediaItemFactory.spec(stream, subtitles)
+        player.setMediaItem(mediaItemFactory.build(spec), savedPosition)
         currentStreamUrl = stream.url
         currentStreamType = stream.type
-        currentItemHasSideLoads = subtitles.sideLoadable().isNotEmpty()
+        currentItemHasSideLoads = spec.hasSideLoads
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
         // The readings describe the stream being left behind, and a quality switch recorded against
         // it would be read as belonging to the new one.
@@ -698,7 +698,7 @@ internal class PlaybackController(
             },
         )
 
-        setWarmUpMediaSource(player, sourceFactory, mediaItemFactory.build(stream, subtitles), stream.type)
+        setWarmUpMediaSource(player, sourceFactory, mediaItemFactory.build(mediaItemFactory.spec(stream, subtitles)), stream.type)
         player.playWhenReady = false
         player.prepare()
         mainHandler.postDelayed(warmUpTimeout, WARM_UP_TIMEOUT_MS)
@@ -831,13 +831,15 @@ internal class PlaybackController(
             )
         }
         val selectedIndex = audioGroups.indexOfFirst { it.isSelected }.coerceAtLeast(0)
-        val subtitleRows = if (currentStreamType == StreamType.HLS) {
-            val renditions = (player.currentManifest as? HlsManifest)
-                ?.multivariantPlaylist?.subtitles.orEmpty()
-            buildSubtitleRows(textGroups, renditions, merged = currentItemHasSideLoads)
-        } else {
-            // Progressive keeps the API rows.
-            null
+        val subtitleRows = when (subtitleReportKind(currentStreamType, currentItemHasSideLoads, textGroups.size)) {
+            // A side-loaded item cannot report audio without its text groups for good: wait for them.
+            SubtitleReportKind.NOT_YET -> return
+            SubtitleReportKind.API_ROWS -> null
+            SubtitleReportKind.PLAYER_ROWS -> {
+                val renditions = (player.currentManifest as? HlsManifest)
+                    ?.multivariantPlaylist?.subtitles.orEmpty()
+                buildSubtitleRows(textGroups, renditions, merged = currentItemHasSideLoads)
+            }
         }
         callback?.onTracksUpdated(audioTracks, selectedIndex, subtitleRows)
     }

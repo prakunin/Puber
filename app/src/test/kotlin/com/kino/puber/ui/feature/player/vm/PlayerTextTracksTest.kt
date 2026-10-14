@@ -8,6 +8,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist.Rendition
+import com.kino.puber.domain.interactor.player.StreamType
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -176,5 +177,28 @@ internal class PlayerTextTracksTest {
         assertEquals(listOf(0, 1), tracks.map { it.groupIndex })
         assertEquals(listOf(false, true), tracks.map { it.isForced })
         assertEquals("English", tracks[0].formatLabel)
+    }
+
+    @Test
+    fun subtitleReportKind_progressiveOrNullType_isApiRows() {
+        assertEquals(SubtitleReportKind.API_ROWS, subtitleReportKind(StreamType.PROGRESSIVE, true, 0))
+        assertEquals(SubtitleReportKind.API_ROWS, subtitleReportKind(StreamType.PROGRESSIVE, false, 2))
+        assertEquals(SubtitleReportKind.API_ROWS, subtitleReportKind(null, true, 0))
+    }
+
+    @Test
+    fun subtitleReportKind_hlsWithSideLoads_noTextGroups_isNotYet() {
+        assertEquals(SubtitleReportKind.NOT_YET, subtitleReportKind(StreamType.HLS, true, 0))
+    }
+
+    @Test
+    fun subtitleReportKind_hlsWithoutSideLoads_noTextGroups_isPlayerRows() {
+        assertEquals(SubtitleReportKind.PLAYER_ROWS, subtitleReportKind(StreamType.HLS, false, 0))
+    }
+
+    @Test
+    fun subtitleReportKind_hlsWithTextGroups_isPlayerRows_withOrWithoutSideLoads() {
+        assertEquals(SubtitleReportKind.PLAYER_ROWS, subtitleReportKind(StreamType.HLS, true, 2))
+        assertEquals(SubtitleReportKind.PLAYER_ROWS, subtitleReportKind(StreamType.HLS, false, 1))
     }
 }

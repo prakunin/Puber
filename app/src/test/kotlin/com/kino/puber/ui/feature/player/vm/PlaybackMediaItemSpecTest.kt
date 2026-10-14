@@ -6,7 +6,9 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 internal class PlaybackMediaItemSpecTest {
@@ -88,5 +90,23 @@ internal class PlaybackMediaItemSpecTest {
         assertEquals(MimeTypes.APPLICATION_TTML, subtitleMimeType("https://x/a.xml"))
         assertEquals(MimeTypes.APPLICATION_SUBRIP, subtitleMimeType("https://x/a.srt?t=1"))
         assertEquals(MimeTypes.APPLICATION_SUBRIP, subtitleMimeType("https://x/a.unknown"))
+    }
+
+    @Test
+    fun hasSideLoads_isFalse_whenEveryLinkHasBlankUrl_orListIsNullOrEmpty() {
+        val stream = StreamCandidate("https://cdn/v.m3u8", StreamType.HLS)
+        val blank = listOf(SubtitleLink(lang = "", url = ""), SubtitleLink(lang = "rus", url = "  "))
+
+        assertFalse(factory.spec(stream, blank).hasSideLoads)
+        assertFalse(factory.spec(stream, emptyList()).hasSideLoads)
+        assertFalse(factory.spec(stream, null).hasSideLoads)
+    }
+
+    @Test
+    fun hasSideLoads_isTrue_whenAnyLinkHasUrl() {
+        val stream = StreamCandidate("https://cdn/v.m3u8", StreamType.HLS)
+        val mixed = listOf(SubtitleLink(lang = "", url = ""), links.first())
+
+        assertTrue(factory.spec(stream, mixed).hasSideLoads)
     }
 }
