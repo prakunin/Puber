@@ -65,6 +65,23 @@ internal class AudioTrackPreferenceResolverTest {
     }
 
     @Test
+    fun findSameSubtitleTrackIndex_groupAndIndexNowHoldAnotherLanguage_givesOff() {
+        val previous = sideLoad("rus", "a.srt", 2)
+        // The refresh dropped the Russian side-load; child 2 is now an English one.
+        val tracks = listOf(off, sideLoad("en", "c.srt", 1), sideLoad("en", "d.srt", 2))
+
+        assertEquals(0, resolver.findSameSubtitleTrackIndex(tracks, previous))
+    }
+
+    @Test
+    fun findSameSubtitleTrackIndex_groupAndIndexNowHoldDifferentForcedFlag_doesNotMatch() {
+        val previous = sideLoad("rus", "a.srt", 2).copy(isForced = false)
+        val tracks = listOf(off, sideLoad("rus", "z.srt", 2).copy(isForced = true))
+
+        assertEquals(0, resolver.findSameSubtitleTrackIndex(tracks, previous))
+    }
+
+    @Test
     fun findSameSubtitleTrackIndex_byUnambiguousCanonicalLanguage() {
         val previous = SubtitleTrackUIState(label = "Russian", language = "rus", url = "")
         val tracks = listOf(off, sideLoad("ru", "a.srt", 1), sideLoad("en", "b.srt", 2))

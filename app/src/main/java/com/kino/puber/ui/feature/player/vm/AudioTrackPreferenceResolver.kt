@@ -80,7 +80,16 @@ internal class AudioTrackPreferenceResolver {
     private fun SubtitleTrackUIState.hasSameTrackGroupAndIndex(other: SubtitleTrackUIState): Boolean =
         !playerTrackGroupId.isNullOrEmpty() &&
             playerTrackGroupId == other.playerTrackGroupId &&
-            playerTrackIndex == other.playerTrackIndex
+            playerTrackIndex == other.playerTrackIndex &&
+            hasCompatibleLanguageAndForced(other)
+
+    /** Group ids are positional, so a refreshed list can put another subtitle at the same address. */
+    private fun SubtitleTrackUIState.hasCompatibleLanguageAndForced(other: SubtitleTrackUIState): Boolean {
+        val languageMatches = language.isBlank() || other.language.isBlank() ||
+            sameSubtitleLanguage(language, other.language)
+        val forcedMatches = isForced == null || other.isForced == null || isForced == other.isForced
+        return languageMatches && forcedMatches
+    }
 
     private fun SubtitleTrackUIState.hasSameLanguage(other: SubtitleTrackUIState): Boolean =
         sameSubtitleLanguage(language, other.language) &&
