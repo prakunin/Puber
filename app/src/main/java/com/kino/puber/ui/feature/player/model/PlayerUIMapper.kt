@@ -11,6 +11,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.model.BufferPreset
+import com.kino.puber.ui.feature.player.vm.sideLoadable
 
 internal class PlayerUIMapper(
     private val resources: ResourceProvider,
@@ -38,7 +39,7 @@ internal class PlayerUIMapper(
             language = "",
             url = "",
         )
-        val apiRows = subtitles.orEmpty().map { sub ->
+        val apiRows = subtitles.sideLoadable().map { sub ->
             SubtitleTrackUIState(
                 label = "",
                 language = sub.lang,

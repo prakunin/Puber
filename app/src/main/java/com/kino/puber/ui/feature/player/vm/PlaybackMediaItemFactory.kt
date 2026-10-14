@@ -38,7 +38,7 @@ internal class PlaybackMediaItemFactory {
     fun spec(stream: StreamCandidate, subtitles: List<SubtitleLink>?): MediaItemSpec = MediaItemSpec(
         uri = stream.url,
         mimeType = MimeTypes.APPLICATION_M3U8.takeIf { stream.type == StreamType.HLS },
-        subtitles = subtitles.orEmpty().map { sub ->
+        subtitles = subtitles.sideLoadable().map { sub ->
             val stableKey = sub.url.stableSubtitleKey()
             SubtitleSpec(
                 uri = sub.url,
@@ -73,6 +73,10 @@ internal class PlaybackMediaItemFactory {
         return builder.build()
     }
 }
+
+/** A link without a url has nothing to load: it is neither a picker row nor a side-load. */
+internal fun List<SubtitleLink>?.sideLoadable(): List<SubtitleLink> =
+    orEmpty().filter { it.url.isNotBlank() }
 
 internal fun subtitleMimeType(url: String): String {
     val normalizedUrl = url

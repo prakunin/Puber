@@ -61,6 +61,16 @@ internal class PlaybackMediaItemSpecTest {
     }
 
     @Test
+    fun blankUrlLinks_areNotAttached() {
+        val stream = StreamCandidate("https://cdn/v.m3u8", StreamType.HLS)
+        val blank = listOf(SubtitleLink(lang = "", url = ""), SubtitleLink(lang = "rus", url = "  "))
+
+        assertEquals(emptyList<SubtitleSpec>(), factory.spec(stream, blank).subtitles)
+        assertEquals(emptyList<SubtitleLink>(), blank.sideLoadable())
+        assertEquals(links, (links + blank).sideLoadable())
+    }
+
+    @Test
     fun emptyOrNullSubtitles_giveNoSpecs() {
         val stream = StreamCandidate("https://cdn/v.m3u8", StreamType.HLS)
 

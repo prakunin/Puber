@@ -437,7 +437,7 @@ internal class PlaybackController(
         player.setMediaItem(mediaItem)
         currentStreamUrl = stream.url
         currentStreamType = stream.type
-        currentItemHasSideLoads = !subtitles.isNullOrEmpty()
+        currentItemHasSideLoads = subtitles.sideLoadable().isNotEmpty()
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
 
         player.prepare()
@@ -508,7 +508,7 @@ internal class PlaybackController(
         player.setMediaItem(mediaItem, savedPosition)
         currentStreamUrl = stream.url
         currentStreamType = stream.type
-        currentItemHasSideLoads = !subtitles.isNullOrEmpty()
+        currentItemHasSideLoads = subtitles.sideLoadable().isNotEmpty()
         effectiveStreamSource = PlaybackDebugFormat.streamSource(stream.url)
         // The readings describe the stream being left behind, and a quality switch recorded against
         // it would be read as belonging to the new one.

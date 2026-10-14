@@ -124,6 +124,16 @@ internal class PlayerUIMapperTest {
         assertEquals(true, rows[0].isOff)
     }
 
+    @Test
+    fun mapSubtitleTracks_dropsLinksWithBlankUrl() {
+        val rows = mapper.mapSubtitleTracks(
+            listOf(SubtitleLink(lang = "", url = ""), SubtitleLink(lang = "rus", url = "u1")),
+        )
+
+        assertEquals(listOf("", "u1"), rows.map { it.url })
+        assertEquals(true, rows[0].isOff)
+    }
+
     private fun subtitleLinks() = listOf(
         SubtitleLink(lang = "rus", url = "u1"),
         SubtitleLink(lang = "ai", url = "u2"),
