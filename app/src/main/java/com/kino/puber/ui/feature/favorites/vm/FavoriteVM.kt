@@ -68,7 +68,7 @@ internal class FavoriteVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
             is CommonAction.ItemPlayed<*> -> onItemPlayed(action.item as VideoItemUIState)
@@ -78,7 +78,7 @@ internal class FavoriteVM(
                 setItemSaved(item, action.isSaved)
             }
             is CommonAction.RetryClicked -> loadData(force = true)
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

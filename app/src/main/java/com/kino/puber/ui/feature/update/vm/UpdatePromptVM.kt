@@ -56,7 +56,7 @@ internal class UpdatePromptVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             UpdatePromptAction.UpdateClicked -> startDownloadFromCurrentState()
             UpdatePromptAction.DismissClicked -> dismiss()
@@ -64,7 +64,7 @@ internal class UpdatePromptVM(
             UpdatePromptAction.RetryInstallClicked -> retryFromCurrentState()
             UpdatePromptAction.RetryCheckClicked -> checkForUpdateNow()
             UpdatePromptAction.OnResume -> retryInstallerAfterPermission()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

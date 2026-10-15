@@ -34,8 +34,8 @@ internal class CollectionsVM(
         loadCollections()
     }
 
-    override fun onAction(action: UIAction) {
-        super.onAction(action)
+    override fun handleAction(action: UIAction) {
+        super.handleAction(action)
     }
 
     fun onCollectionClick(collection: CollectionUIState) {

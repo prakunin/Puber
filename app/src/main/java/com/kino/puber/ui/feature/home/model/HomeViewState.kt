@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.home.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
@@ -29,7 +30,7 @@ internal sealed interface HomeViewState {
          */
         val heroSettled: Boolean = false,
         override val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : HomeViewState
+    ) : HomeViewState, StartupContentState
 
     data class Error(
         val message: String,

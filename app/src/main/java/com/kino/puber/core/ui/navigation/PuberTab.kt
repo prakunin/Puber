@@ -36,6 +36,9 @@ data class PuberTab(
     @IgnoredOnParcel
     override val key: ScreenKey = navigationSlotKey
 
+    /** The wrapped screen's class, for telemetry names. A getter, so Parcelize ignores it. */
+    internal val contentScreenClass: Class<*> get() = screen.javaClass
+
     override val options: TabOptions
         @Composable
         get() {

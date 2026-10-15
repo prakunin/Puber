@@ -87,7 +87,7 @@ internal class SectionVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.LoadMore -> notifyLoadNextPage()
             is CommonAction.RetryClicked -> refreshFirstPage()
@@ -95,7 +95,7 @@ internal class SectionVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

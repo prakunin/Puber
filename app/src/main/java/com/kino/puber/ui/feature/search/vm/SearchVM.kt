@@ -33,7 +33,7 @@ internal class SearchVM(
     private var searchJob: Job? = null
     private val actorQuery = (params.mode as? SearchScreenParams.SearchMode.Actor)?.actorQuery
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.TextChanged -> if (actorQuery == null) onQueryChanged(action.text)
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
@@ -44,7 +44,7 @@ internal class SearchVM(
             }
             is CommonAction.RetryClicked -> restartSearch()
             SearchAction.ScreenEntered -> if (actorQuery == null) resetSearch() else restartSearch()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

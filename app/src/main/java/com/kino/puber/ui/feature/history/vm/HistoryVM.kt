@@ -168,7 +168,7 @@ internal class HistoryVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         if (action.isBlockedDuringDeletionFlow() && runtime.isDeletionFlowActive()) return
         when (action) {
             is CommonAction.ItemSelected<*> -> openDetails(action.item as HistoryItemUIState)
@@ -190,7 +190,7 @@ internal class HistoryVM(
             is HistoryAction.OpenDetails -> openDetails(action.item)
             is HistoryAction.DeleteExactMedia -> deleteExactMedia(action.item)
             HistoryAction.RetryReconciliation -> retry()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

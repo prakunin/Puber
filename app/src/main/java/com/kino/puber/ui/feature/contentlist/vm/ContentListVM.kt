@@ -45,7 +45,7 @@ internal class ContentListVM(
         loadHero()
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.ItemFocused<*> -> onItemFocused(action.item as VideoItemUIState)
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
@@ -54,7 +54,7 @@ internal class ContentListVM(
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
             is ContentListAction.TrailerPreviewFinished -> stopTrailerPreview()
             is ContentListAction.TrailerPreviewStopped -> stopTrailerPreview()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

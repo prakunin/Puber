@@ -21,10 +21,10 @@ internal class LauncherVM(
      * The start screen is opened only once the splash animation has played, otherwise the
      * launcher screen is replaced within a frame and its logo never becomes visible.
      */
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             LauncherAction.SplashShown -> openStartScreen()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

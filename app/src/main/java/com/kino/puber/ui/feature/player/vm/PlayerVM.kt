@@ -629,7 +629,7 @@ internal class PlayerVM(
         shown?.let(playbackController::selectSubtitle)
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         if (closing) {
             if (action is PlayerAction.OnBackPressed) {
                 onBackPressed()
@@ -675,7 +675,7 @@ internal class PlayerVM(
             is PlayerAction.RetryPlayback -> retryPlayback()
             is PlayerAction.OnBackground -> pauseForBackground()
             is PlayerAction.OnBackPressed -> onBackPressed()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

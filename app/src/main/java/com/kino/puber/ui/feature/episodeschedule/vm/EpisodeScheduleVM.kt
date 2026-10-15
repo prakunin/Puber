@@ -27,13 +27,13 @@ internal class EpisodeScheduleVM(
         loadSchedule()
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             CommonAction.RetryClicked,
             EpisodeScheduleScreenState.Action.Retry,
             -> loadSchedule()
 
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

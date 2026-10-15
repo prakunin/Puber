@@ -46,7 +46,7 @@ internal class CollectionDetailVM(
         loadItems()
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         if (closing) return
         when (action) {
             is CommonAction.ItemSelected<*> -> {
@@ -62,7 +62,7 @@ internal class CollectionDetailVM(
                 setItemSaved(item, action.isSaved)
             }
             is CommonAction.RetryClicked -> loadItems()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

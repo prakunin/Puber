@@ -36,6 +36,7 @@ import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.di.LocalPuberScopePrefix
 import com.kino.puber.core.logger.log
+import com.kino.puber.core.telemetry.Telemetry
 import com.kino.puber.core.ui.navigation.AppLauncher
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.Command
@@ -224,6 +225,7 @@ private fun FlowCommandRunner(
     LaunchedEffect(scopeName) {
         router.events().collect { event ->
             router.log("router command: $event")
+            val navFrom = if (Telemetry.isEnabled) navigator.lastItemOrNull else null
             if (event.screen is PuberScreenActivity) {
                 activityNavigator.navigateTo(event.screen as PuberScreenActivity)
             } else {
@@ -266,6 +268,7 @@ private fun FlowCommandRunner(
                     )
                 }
             }
+            if (Telemetry.isEnabled) recordNavCommand(event, navFrom, navigator.lastItemOrNull)
         }
     }
 }
@@ -707,6 +710,7 @@ private fun TabFlowCommandRunner(
         router.clearPendingCommands()
         router.events().collect { event ->
             router.log("tab router command: $event")
+            val navFrom = if (Telemetry.isEnabled) navigator.lastItemOrNull else null
             if (event.screen is PuberScreenActivity) {
                 activityNavigator.navigateTo(event.screen as PuberScreenActivity)
             } else {
@@ -744,6 +748,7 @@ private fun TabFlowCommandRunner(
                     }
                 }
             }
+            if (Telemetry.isEnabled) recordNavCommand(event, navFrom, navigator.lastItemOrNull)
         }
     }
 }

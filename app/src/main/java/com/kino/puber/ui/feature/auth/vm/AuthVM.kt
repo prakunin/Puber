@@ -145,14 +145,14 @@ internal class AuthVM(
             }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             AuthAction.OpenApiDomainDialog -> openApiDomainDialog()
             AuthAction.CloseApiDomainDialog -> closeApiDomainDialog()
             is AuthAction.SaveApiDomain -> saveApiDomain(action.domain)
             AuthAction.DetectApiDomain -> detectApiDomain()
             AuthAction.ResetApiDomain -> resetApiDomain()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 
