@@ -235,6 +235,25 @@ internal class AudioTrackPreferenceResolverTest {
     }
 
     @Test
+    fun findSubtitleTrackIndex_renamedLabel_stillRestoresSingleSameLanguageRow() {
+        val tracks = listOf(off, manifestRendition("eng", "English Captions"))
+
+        assertEquals(1, find(tracks, "eng", "subtitle:English", forced = false, label = "English"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_labelChoosesBetweenSameLanguageRowsWithoutIdentity() {
+        val tracks = listOf(
+            off,
+            sideLoad("eng", "a", 1).copy(isForced = false, descriptiveLabel = "English SDH"),
+            sideLoad("eng", "b", 2).copy(isForced = false, descriptiveLabel = "English Commentary"),
+        )
+
+        assertEquals(2, find(tracks, "eng", null, forced = false, label = "English Commentary"))
+        assertEquals(-1, find(tracks, "eng", null, forced = false, label = "English Other"))
+    }
+
+    @Test
     fun findSubtitleTrackIndex_rowWithoutReadableLabelPassesLabelFilter() {
         val tracks = listOf(off, apiRow("rus", "https://api.test/subtitles/full.vtt"))
 

@@ -28,10 +28,12 @@ internal class AudioTrackPreferenceResolver {
      * The row a saved subtitle preference names, or [NO_MATCH].
      *
      * Rules, in order; the first that names a row wins. An empty language with no identity means
-     * Off. An API url, exact and then by stable key, is looked up over every row. After that only
-     * rows compatible with the preference (language, forced flag, readable label) are candidates,
-     * and each rule has to name exactly one of them: identity, then label, then language, where a
-     * single manifest row beats a single side-load.
+     * Off; that is a contract of this resolver, the app never stores it. An API url, exact and
+     * then by stable key, is looked up over every row. After that only rows compatible with the
+     * preference (language and forced flag) are candidates, and each rule has to name exactly one
+     * of them: identity, then the readable label, then language, where a single manifest row
+     * beats a single side-load. The label chooses between same-language variants; a renamed
+     * label does not exclude a row, so a single same-language row still restores.
      */
     fun findSubtitleTrackIndex(
         tracks: List<SubtitleTrackUIState>,
@@ -43,7 +45,7 @@ internal class AudioTrackPreferenceResolver {
         if (preferredLang == "" && preferredUrl.isNullOrEmpty()) return tracks.indexOfFirst { it.isOff }
         val preferredLabel = preferredDescriptiveLabel.normalizedLabel()
         val candidates = tracks.withIndex().filter { (_, row) ->
-            !row.isOff && row.isCompatibleWith(preferredLang, preferredIsForced, preferredLabel)
+            !row.isOff && row.isCompatibleWith(preferredLang, preferredIsForced)
         }
         val matchers = listOf(
             { exactSubtitleUrlMatch(tracks, preferredUrl) },
@@ -161,21 +163,13 @@ internal class AudioTrackPreferenceResolver {
     private fun SubtitleTrackUIState.isCompatibleWith(
         preferredLang: String?,
         preferredIsForced: Boolean?,
-        preferredLabel: String?,
-    ): Boolean = matchesPreferredLanguage(preferredLang) &&
-        matchesPreferredForced(preferredIsForced) &&
-        matchesPreferredLabel(preferredLabel)
+    ): Boolean = matchesPreferredLanguage(preferredLang) && matchesPreferredForced(preferredIsForced)
 
     private fun SubtitleTrackUIState.matchesPreferredLanguage(preferredLang: String?): Boolean =
         preferredLang.isNullOrEmpty() || language.isBlank() || sameSubtitleLanguage(language, preferredLang)
 
     private fun SubtitleTrackUIState.matchesPreferredForced(preferredIsForced: Boolean?): Boolean =
         preferredIsForced == null || isForced == null || isForced == preferredIsForced
-
-    private fun SubtitleTrackUIState.matchesPreferredLabel(preferredLabel: String?): Boolean {
-        val rowLabel = readableDescriptiveLabel().normalizedLabel()
-        return preferredLabel == null || rowLabel == null || rowLabel == preferredLabel
-    }
 
     private fun String?.normalizedLabel(): String? = this?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
