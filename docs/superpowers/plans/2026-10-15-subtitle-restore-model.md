@@ -717,3 +717,12 @@ sample still holds against the base code. Round 2 reviews the `62d24119..055d22b
 ## Must fix
 
 None.
+
+### Fix round 1
+
+Triage: `.flow/runs/subtitle-restore-model/triage-1.md`. Items #1-#7 fixed, #8 as a KDoc note, #9 rejected.
+
+- #2 and #3: the readable label no longer filters candidates in `AudioTrackPreferenceResolver.findSubtitleTrackIndex`; it only chooses among same-language rows (rule 4). New resolver tests: `..._renamedLabel_stillRestoresSingleSameLanguageRow` (red before: returned -1) and `..._labelChoosesBetweenSameLanguageRowsWithoutIdentity` (decided by rule 4 only). The KDoc says the empty-language Off branch is a resolver contract, not a stored state (#8).
+- #1: `saveTrackPreferences` replaces the stored subtitle only when `subtitlePickedThisMedia`; a row chosen by the restore never overwrites it. New VM test `savedSubtitleRestoredBySubstitute_noPick_audioChangeKeepsStoredPreference` (red before: the substitute was saved).
+- #4-#7: pass-through tests stub forced=false and a label and assert the exact preference; "no wipe" negatives use `match { it.language == null && it.url == null }`; `selectTrack_savesLangToPrefs` asserts `SubtitlePreference.NONE`; the explicit-Off test re-stubs NONE and asserts NONE passes through.
+- AC-5 (forced filter) and AC-6 (label picks the variant) stay covered by the existing resolver tests.
