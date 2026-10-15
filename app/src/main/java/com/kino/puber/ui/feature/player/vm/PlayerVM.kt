@@ -45,6 +45,7 @@ import com.kino.puber.ui.feature.player.model.SeekIndicatorState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
 import com.kino.puber.ui.feature.player.model.subtitleLabeler
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -166,6 +167,9 @@ internal class PlayerVM(
 
     /** True once the viewer picked a subtitle (or Off) for this media; until then a stored preference is kept. */
     private var subtitlePickedThisMedia = false
+
+    /** The viewer's last explicit pick in this media as it was made; a later remap of the row never changes it. */
+    private var pickedSubtitlePreference = SubtitlePreference.NONE
     private var episodeSwitchInProgress = false
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
@@ -888,6 +892,7 @@ internal class PlayerVM(
             // An explicit pick supersedes a restore that is still waiting for text.
             subtitleRestoredForCurrentMedia = true
             subtitlePickedThisMedia = true
+            pickedSubtitlePreference = subtitle.toSubtitlePreference()
             saveTrackPreferences()
         }
     }
@@ -1004,6 +1009,7 @@ internal class PlayerVM(
         tracksRestoredForCurrentMedia = false
         subtitleRestoredForCurrentMedia = false
         subtitlePickedThisMedia = false
+        pickedSubtitlePreference = SubtitlePreference.NONE
         intendedSubtitleRow = null
         onPlaybackResumed()
     }
@@ -1864,7 +1870,7 @@ internal class PlayerVM(
         // Only an explicit pick in this media replaces the stored subtitle. A row the restore chose as a
         // substitute, a restore still waiting for text, or one that found nothing leaves it as it was.
         val subtitle = if (subtitleRestoredForCurrentMedia && subtitlePickedThisMedia) {
-            intendedSubtitleRow.toSubtitlePreference()
+            pickedSubtitlePreference
         } else {
             interactor.getPreferredSubtitlePreference(params.itemId)
         }

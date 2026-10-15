@@ -67,6 +67,44 @@ internal class PlayerVMSubtitlePreferenceTest : PlayerVMTestFixture() {
         }
     }
 
+    @Test
+    fun pickInFirstMedia_nextMediaSubstituteRestore_audioChangeKeepsStoredPreference() {
+        val vm = startedVM()
+        report(listOf(manifestRendition("rus", "Russian Old")))
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.fromManifest }))
+        vm.onAction(PlayerAction.SelectEpisode(1, 2))
+        stubSavedSubtitle("rus", "subtitle:Gone", isForced = false, descriptiveLabel = "Russian Old")
+        report(listOf(manifestRendition("rus", "Russian New")))
+        assertEquals(1, contentState(vm).selectedSubtitleIndex)
+        clearMocks(interactor, answers = false)
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(
+                42, any(), any(), SubtitlePreference("rus", "subtitle:Gone", false, "Russian Old"),
+            )
+        }
+    }
+
+    @Test
+    fun pickThenRemapToSameLanguageRow_audioChangeSavesThePick() {
+        val vm = startedVM()
+        report(listOf(manifestRendition("eng", "English A")))
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.fromManifest }))
+        report(listOf(manifestRendition("eng", "English B")))
+        assertEquals(1, contentState(vm).selectedSubtitleIndex)
+        clearMocks(interactor, answers = false)
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(
+                42, any(), any(), SubtitlePreference("eng", "subtitle:English A", false, "English A"),
+            )
+        }
+    }
+
     private fun unresolvedSavedSubtitleVM(): PlayerVM {
         stubSavedSubtitle("rus", "https://test/subtitles/gone.vtt", isForced = false, descriptiveLabel = "Russian Full")
         val vm = startedVM()
