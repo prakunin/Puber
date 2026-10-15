@@ -1,0 +1,7 @@
+LENS: edge  ROUND: 2  BASE: f351d988  RANGE: a99cdff9..630e2074
+
+No findings.
+
+- Label only chooses (resolver :45-60, :163-172): candidates filtered by language and forced only; a renamed label no longer excludes a row, so a single same-language row restores. AC-5 holds (manifest forced row dropped by saved `false`). AC-6 holds (rule 4 picks among variants). Two variants with a renamed label give Off (rule 4 no match; rule 5 not unique). One manifest row + one side-load of the same language with a renamed label gives the manifest row (D6 rule 5, triage #2).
+- Save gate (PlayerVM.kt:1866) needs `subtitleRestoredForCurrentMedia && subtitlePickedThisMedia`; only `applySubtitleSelection(persist = true)` sets the second flag, only `resetMediaSession` clears it. Explicit pick saves the intent; explicit Off saves NONE; audio pick after a pick saves the intent (or passes the stored value while a rebuild's restore waits for text); rebuild with a kept pick keeps the flag (lines 948/960), restore re-sends with no save; AC-11 clause b: `switchStreamUrl` resets neither flag, intent kept on a stream without the row, never Off saved.
+- Nothing else writes the stored subtitle: `interactor.saveTrackPreferences` has one caller, reached only from the audio-pick path (:875) and the subtitle-pick path (:891). Restore/substitute selections use `persist = false` and pass the stored value through (AC-16).

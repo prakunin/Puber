@@ -1,0 +1,10 @@
+LENS: tests  ROUND: 2  BASE: f351d988  RANGE: a99cdff9..630e2074
+
+Suite at 630e2074: check.full BUILD SUCCESSFUL, 1635 tests, 0 skipped/failures/errors.
+Round-1 F1-F4 closed: rule 4 decides `labelChoosesBetweenSameLanguageRowsWithoutIdentity`; `renamedLabel_stillRestoresSingleSameLanguageRow` fails if the label filter returns; pass-through pinned with forced=false / "Russian Full"; no-wipe negatives use `match { language == null && url == null }`; verify names `SubtitlePreference.NONE`. `savedSubtitleRestoredBySubstitute_noPick_audioChangeKeepsStoredPreference` fails against either old piece of code.
+
+### F1 [major] The T-16c rewrite no longer pins the per-media reset of `subtitlePickedThisMedia`, which is now the only gate against saving a substitute
+- Where: app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/PlayerVMSubtitlePreferenceTest.kt:110-116 (production PlayerVM.kt:1006 and :1866)
+- Problem: spec T-16c (spec :272) says the test proves the pick flag resets on new media. After the re-stub to NONE, a leaked flag saves `intendedSubtitleRow.toSubtitlePreference()`, which is null (reset at :1007, episode-2 restore unresolved) -> NONE, the same value the pass-through gives; the second half cannot fail. No other test does pick -> new media -> audio change with a resolved restore.
+- Failure scenario: delete `subtitlePickedThisMedia = false` in `resetMediaSession`; suite green. In the app: viewer picks in episode 1; episode 2 restores a substitute by language; an audio change overwrites the stored preference with the substitute (the edge F1 bug fixed this round).
+- Fix: one VM test: pick in media 1, `SelectEpisode(1, 2)`, `stubSavedSubtitle("rus", "subtitle:Gone", false, "Russian Old")`, `report(listOf(manifestRendition("rus", "Russian New")))`, `clearMocks`, `SelectAudioTrack(1)`, verify the exact stored `SubtitlePreference("rus", "subtitle:Gone", false, "Russian Old")` is saved. Or make the episode-2 restore in T-16c resolve a row that differs from the stored value.
