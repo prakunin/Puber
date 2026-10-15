@@ -726,3 +726,11 @@ Triage: `.flow/runs/subtitle-restore-model/triage-1.md`. Items #1-#7 fixed, #8 a
 - #1: `saveTrackPreferences` replaces the stored subtitle only when `subtitlePickedThisMedia`; a row chosen by the restore never overwrites it. New VM test `savedSubtitleRestoredBySubstitute_noPick_audioChangeKeepsStoredPreference` (red before: the substitute was saved).
 - #4-#7: pass-through tests stub forced=false and a label and assert the exact preference; "no wipe" negatives use `match { it.language == null && it.url == null }`; `selectTrack_savesLangToPrefs` asserts `SubtitlePreference.NONE`; the explicit-Off test re-stubs NONE and asserts NONE passes through.
 - AC-5 (forced filter) and AC-6 (label picks the variant) stay covered by the existing resolver tests.
+
+### Fix round 2
+
+Triage: `.flow/runs/subtitle-restore-model/triage-2.md`. Items #1 and #2 fixed in one commit (`89c68077`).
+
+- #1: new VM test `pickInFirstMedia_nextMediaSubstituteRestore_audioChangeKeepsStoredPreference` (pick in media 1, `SelectEpisode`, substitute restore, audio pick saves the stored preference). It fails when `subtitlePickedThisMedia = false` is removed from `resetMediaSession` (checked by deleting the line).
+- #2: `PlayerVM` keeps `pickedSubtitlePreference`, set in `applySubtitleSelection(persist = true)` and cleared in `resetMediaSession`; `saveTrackPreferences` saves it instead of the possibly remapped `intendedSubtitleRow`. New test `pickThenRemapToSameLanguageRow_audioChangeSavesThePick` (red before: B was saved). The in-session remap is unchanged.
+- Investigation of the Off at the first S1E5 open on device: no defect found, no code change (see the return notes of the fix round).
