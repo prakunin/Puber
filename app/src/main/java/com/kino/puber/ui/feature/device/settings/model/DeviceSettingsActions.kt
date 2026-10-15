@@ -14,6 +14,9 @@ internal sealed interface DeviceSettingsActions : UIAction {
     data object ToggleSkipRecap : DeviceSettingsActions
     data object ToggleSkipCredits : DeviceSettingsActions
     data object ToggleDebugOverlay : DeviceSettingsActions
+    data object ToggleSessionLog : DeviceSettingsActions
+    data object ShareSessionLog : DeviceSettingsActions
+    data object SessionLogShareFocusRestored : DeviceSettingsActions
     data object ToggleSurroundAudio : DeviceSettingsActions
     data object ToggleOkTogglesPlayPause : DeviceSettingsActions
     data object ToggleShowMarkWatchedButton : DeviceSettingsActions

@@ -15,11 +15,11 @@ internal class BookmarksVM(
 
     override fun onStart() { loadFolders() }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             CommonAction.RetryClicked -> loadFolders()
             is CommonAction.ItemSelected<*> -> onItemSelected(action)
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 }
@@ -42,7 +42,8 @@ failures into state, such as `FavoriteVM`, leaves it null and never calls
 | `onStart()` | runs once, guarded; see `ensureStarted()` |
 | `launch { }` | `viewModelScope` plus the error handler wiring below |
 | `showMessage(String)` / `showMessage(SnackbarMessage)` | transient message, `collectMessage()` on the UI side |
-| `onAction(action)` | `open`; always end the `when` with `else -> super.onAction(action)` |
+| `onAction(action)` | final: records the `act` telemetry event, then calls `handleAction(action)` |
+| `handleAction(action)` | `protected open`, the old `onAction` body; always end the `when` with `else -> super.handleAction(action)` |
 | `onBackPressed()` | routes back through `AppRouter` |
 
 ## Errors

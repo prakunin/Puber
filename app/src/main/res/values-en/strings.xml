@@ -97,6 +97,17 @@
     <string name="settings_network_description">KinoPub connection and device capabilities</string>
     <string name="settings_data_description">Local watch history data</string>
     <string name="settings_developer_description">Diagnostic information for troubleshooting</string>
+    <string name="settings_session_log">Session log (for diagnostics)</string>
+    <string name="settings_session_log_off">Writes app activity to a local file, turns off after 7 days</string>
+    <string name="settings_session_log_recording">Recording · %1$d d %2$d h left</string>
+    <string name="settings_session_log_recording_under_hour">Recording · less than an hour left</string>
+    <string name="settings_session_log_unavailable">Recording unavailable: no storage</string>
+    <string name="settings_share_log">Share log</string>
+    <string name="settings_share_log_subtitle">Pack the closed files into an archive and send it</string>
+    <string name="settings_share_log_empty">Nothing to share yet</string>
+    <string name="settings_share_log_preparing">Preparing the archive…</string>
+    <string name="settings_share_log_chooser">Send the session log</string>
+    <string name="settings_share_log_failed">Could not share the log</string>
     <string name="settings_about_device_title">About app and device</string>
     <string name="device_settings_title">Device settings</string>
     <string name="device_setting_server_location">Server in use</string>
