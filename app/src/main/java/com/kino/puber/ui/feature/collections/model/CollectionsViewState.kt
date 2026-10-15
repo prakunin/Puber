@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.collections.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 
 @Immutable
@@ -10,7 +11,7 @@ internal sealed interface CollectionsViewState {
     @Immutable
     data class Content(
         val collections: List<CollectionUIState> = emptyList(),
-    ) : CollectionsViewState
+    ) : CollectionsViewState, StartupContentState
 
     data class Error(val message: String) : CollectionsViewState
 }

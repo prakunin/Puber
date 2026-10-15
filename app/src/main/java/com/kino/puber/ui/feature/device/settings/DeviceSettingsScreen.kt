@@ -51,6 +51,7 @@ internal class DeviceSettingsScreen : PuberScreen {
                 onAction = onAction,
                 isApiDomainDialogOpen = state.isApiDomainDialogOpen,
                 restoreNetworkDiagnosticsFocus = state.restoreNetworkDiagnosticsFocus,
+                restoreShareFocus = state.restoreShareFocus,
             )
             ApiDomainDialog(
                 state = state.apiDomain.takeIf { state.isApiDomainDialogOpen },

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.SemanticsMatcher
@@ -389,6 +390,27 @@ internal class DeviceSettingsContentFocusTest {
 
         focusedItem(title).assertIsFocused()
         assertTrue(DeviceSettingsActions.NetworkDiagnosticsFocusRestored in actions)
+    }
+
+    @Test
+    fun developerSectionRowsAreFocusableAndLeftReturnsToSectionList() {
+        // No files to share: the Share row is disabled and still has to take focus.
+        setSuccessContent(initialSection = SettingsSection.Developer)
+        val developer = composeRule.onNodeWithTag(SettingsTestTags.section(SettingsSection.Developer.name))
+        developer.assertExists()
+        // All seven sections fit in the list without scrolling.
+        SettingsSection.entries.forEach {
+            composeRule.onNodeWithTag(SettingsTestTags.section(it.name)).assertIsDisplayed()
+        }
+
+        developer.requestFocus().press(Key.DirectionRight)
+        focusedItem(context.getString(R.string.settings_session_log)).assertIsFocused()
+
+        focusedNode().press(Key.DirectionDown)
+        focusedItem(context.getString(R.string.settings_share_log)).assertIsFocused()
+
+        focusedNode().press(Key.DirectionLeft)
+        developer.assertIsFocused()
     }
 
     @Test

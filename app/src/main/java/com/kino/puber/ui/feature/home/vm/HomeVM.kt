@@ -173,7 +173,7 @@ internal class HomeVM(
         publishSections()
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.ItemSelected<*> -> {
                 val item = action.item as VideoItemUIState
@@ -194,7 +194,7 @@ internal class HomeVM(
             is HomeAction.SaveApiDomain -> saveApiDomain(action.domain)
             HomeAction.DetectApiDomain -> detectApiDomain()
             HomeAction.ResetApiDomain -> resetApiDomain()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

@@ -3,6 +3,9 @@ package com.kino.puber.ui.feature.contentlist.vm
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.paginator.Paginator
+import com.kino.puber.core.telemetry.StartupMarks
+import com.kino.puber.core.telemetry.Telemetry
+import com.kino.puber.core.telemetry.TelemetryEvent
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
@@ -18,7 +21,9 @@ import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
+import com.kino.puber.util.FakeTelemetryClock
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.util.RecordingTelemetryRecorder
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -186,6 +191,38 @@ internal class SectionVMTest : SectionVMTestFixture() {
         sideEffectCollector.cancel()
         vm.testCancelScope()
         paginator.close()
+    }
+
+    @Test
+    fun aSectionGoingFromLoadingToContentMarksFirstContent() = runTest {
+        val clock = FakeTelemetryClock(elapsed = 1_000)
+        val startups = mutableListOf<TelemetryEvent.Startup>()
+        Telemetry.install(RecordingTelemetryRecorder(), clock)
+        Telemetry.startupMarks = StartupMarks(0, 0, startups::add, clock)
+        try {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val paginator = paginator(dispatcher)
+            val interactor = mockk<ContentListInteractor>(relaxed = true)
+            coEvery { interactor.loadPage(any(), page = 1) } returns page(item(1))
+            servesFirstPageFromTheNetwork(interactor)
+            val vm = createVM(
+                paginator, config("movies"), interactor, ContentListRefreshCoordinator(), dispatcher,
+                mapper = mapperFor(1),
+            )
+
+            vm.testOnStart()
+            assertTrue(vm.testStateValue !is SectionState.Content)
+            assertTrue(startups.isEmpty())
+            clock.elapsed = 2_500
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(vm.testStateValue is SectionState.Content)
+            assertEquals(listOf(2_500L), startups.map { it.firstContentMs })
+            vm.testCancelScope()
+            paginator.close()
+        } finally {
+            Telemetry.resetForTests()
+        }
     }
 
     @Test

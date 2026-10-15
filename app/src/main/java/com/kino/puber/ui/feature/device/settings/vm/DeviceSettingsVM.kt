@@ -4,7 +4,11 @@ import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.model.AppLanguage
+import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.core.system.ResourceProvider
+import com.kino.puber.core.telemetry.SessionLogController
+import com.kino.puber.core.telemetry.SessionLogState
+import com.kino.puber.core.telemetry.ShareResult
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.toDialogState
@@ -24,12 +28,14 @@ import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceCapabilities
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
+import com.kino.puber.ui.feature.device.settings.mappers.SessionLogUiMapper
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingUIModel
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsViewState
 import com.kino.puber.ui.feature.device.settings.model.MenuSectionUi
+import com.kino.puber.ui.feature.device.settings.model.SessionLogUi
 import com.kino.puber.ui.feature.device.settings.model.SelectableMenuTabs
 import com.kino.puber.ui.feature.device.settings.model.WatchIndexUiState
 import com.kino.puber.domain.model.TabType
@@ -45,12 +51,18 @@ internal class DeviceSettingsVM(
     private val watchStateRepository: WatchStateRepository,
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
     private val updateCheckCoordinator: AppUpdateCheckCoordinator,
+    private val sessionLog: SessionLogController,
+    private val contentSharer: ContentSharer,
     override val errorHandler: ErrorHandler,
     private val resources: ResourceProvider,
     router: AppRouter,
 ) : PuberVM<DeviceSettingsViewState>(router) {
 
     private var latestWatchIndex = WatchIndexUiState()
+    private val sessionLogMapper = SessionLogUiMapper(resources)
+    private var latestSessionLogState: SessionLogState = SessionLogState.Off(hasFiles = false)
+    private var latestSessionLog = SessionLogUi()
+    private var sharing = false
 
     private val capabilities by lazy {
         DeviceCapabilities(
@@ -65,7 +77,68 @@ internal class DeviceSettingsVM(
 
     override fun onStart() {
         observeWatchIndex()
+        observeSessionLog()
         loadDeviceSettings()
+    }
+
+    private fun observeSessionLog() {
+        sessionLog.refresh()
+        launch {
+            sessionLog.state.collect { state ->
+                latestSessionLogState = state
+                publishSessionLog()
+            }
+        }
+    }
+
+    private fun publishSessionLog() {
+        latestSessionLog = sessionLogMapper.map(latestSessionLogState, sharing)
+        val currentState = stateValue.state as? DeviceSettingsState.Success
+        if (currentState != null) {
+            updateViewState(stateValue.copy(state = currentState.copy(sessionLog = latestSessionLog)))
+        }
+    }
+
+    // While the storage is unavailable the row reads "off", but the switch is still persisted:
+    // a tap then turns it off for good instead of silently resuming on a later start.
+    private fun toggleSessionLog() {
+        val turnOn = !latestSessionLog.enabled && latestSessionLogState != SessionLogState.Unavailable
+        sessionLog.setEnabled(turnOn)
+    }
+
+    private fun shareSessionLog() {
+        if (!latestSessionLog.shareEnabled) {
+            showMessage(resources.getString(R.string.settings_share_log_empty))
+            return
+        }
+        if (sharing) return
+        sharing = true
+        publishSessionLog()
+        launch {
+            try {
+                when (val result = sessionLog.share()) {
+                    is ShareResult.Ready -> {
+                        val opened = contentSharer.shareFile(
+                            file = result.archive,
+                            mimeType = ZIP_MIME_TYPE,
+                            chooserTitle = resources.getString(R.string.settings_share_log_chooser),
+                        )
+                        if (opened) {
+                            updateViewState(stateValue.copy(restoreShareFocus = true))
+                        } else {
+                            showMessage(resources.getString(R.string.settings_share_log_failed))
+                        }
+                    }
+                    ShareResult.NothingToShare ->
+                        showMessage(resources.getString(R.string.settings_share_log_empty))
+                    ShareResult.Failed ->
+                        showMessage(resources.getString(R.string.settings_share_log_failed))
+                }
+            } finally {
+                sharing = false
+                publishSessionLog()
+            }
+        }
     }
 
     private fun observeWatchIndex() {
@@ -122,6 +195,7 @@ internal class DeviceSettingsVM(
                                 autoUpdateCheckEnabled = preferences.autoUpdateCheckEnabled,
                                 appLanguage = preferences.appLanguage,
                                 watchIndex = latestWatchIndex,
+                                sessionLog = latestSessionLog,
                             )
                         )
                     )
@@ -132,7 +206,7 @@ internal class DeviceSettingsVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is DeviceSettingsActions.ChangeSettingValue -> onChangeSettingValue(action.setting)
             is DeviceSettingsActions.ToggleListExpand -> onToggleListExpand(action.setting)
@@ -143,6 +217,11 @@ internal class DeviceSettingsVM(
                 it.copy(skipCreditsEnabled = !it.skipCreditsEnabled)
             }
             DeviceSettingsActions.ToggleDebugOverlay -> toggleDebugOverlay()
+            DeviceSettingsActions.ToggleSessionLog -> toggleSessionLog()
+            DeviceSettingsActions.ShareSessionLog -> shareSessionLog()
+            DeviceSettingsActions.SessionLogShareFocusRestored -> updateViewState(
+                stateValue.copy(restoreShareFocus = false)
+            )
             DeviceSettingsActions.ToggleSurroundAudio -> toggleSurroundAudio()
             DeviceSettingsActions.ToggleOkTogglesPlayPause -> toggleOkTogglesPlayPause()
             DeviceSettingsActions.ToggleShowMarkWatchedButton -> toggleShowMarkWatchedButton()
@@ -172,7 +251,7 @@ internal class DeviceSettingsVM(
             DeviceSettingsActions.DetectApiDomain -> detectApiDomain()
             DeviceSettingsActions.ResetApiDomain -> resetApiDomain()
             CommonAction.RetryClicked -> onRetry()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 
@@ -520,3 +599,5 @@ internal fun buildWatchIndexUiState(
         lastSyncAt = cursor.lastSyncAt,
     )
 }
+
+private const val ZIP_MIME_TYPE = "application/zip"

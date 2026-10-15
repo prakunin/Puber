@@ -70,7 +70,7 @@ internal class ShowAllVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         if (closing) return
         when (action) {
             is CommonAction.LoadMore -> notifyLoadNextPage()
@@ -87,7 +87,7 @@ internal class ShowAllVM(
                 val item = action.item as VideoItemUIState
                 setItemSaved(item, action.isSaved)
             }
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

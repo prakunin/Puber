@@ -9,6 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.kino.puber.core.coroutine.DefaultExceptionHandler
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.telemetry.StartupContentState
+import com.kino.puber.core.telemetry.Telemetry
+import com.kino.puber.core.telemetry.TelemetryEvent
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.BackButtonDispatcher
 import com.kino.puber.core.ui.uikit.model.CommonAction
@@ -44,6 +47,7 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     // latest to a new subscriber - but the churn was real. One wrapper, collected once.
     private val snackBarMessages = snackBarMessageFlow.asSharedFlow()
     private val started = AtomicBoolean(false)
+    private val telemetryOpenedAtMs: Long = Telemetry.nowMs()
     protected val viewState: Flow<ViewState> get() = mutableViewState
 
     protected val coroutineContext: CoroutineContext
@@ -80,7 +84,19 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     }
 
     protected open fun updateViewState(viewState: ViewState) {
+        val previous = if (Telemetry.isEnabled) mutableViewState.value else null
         mutableViewState.value = viewState
+        if (Telemetry.isEnabled) recordReady(previous, viewState)
+    }
+
+    private fun recordReady(previous: ViewState?, current: ViewState) {
+        val newClass = (current as Any?)?.javaClass ?: return
+        if ((previous as Any?)?.javaClass === newClass) return
+        val now = Telemetry.nowMs()
+        Telemetry.record(TelemetryEvent.Ready(now, javaClass, newClass, now - telemetryOpenedAtMs))
+        // The first content state of whichever screen the cold start lands on; loading, error and
+        // root overlay states never count, and a mark after the first is ignored.
+        if (current is StartupContentState) Telemetry.startupMarks?.markFirstContent()
     }
 
     protected fun launch(
@@ -132,7 +148,15 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
         viewModelScope.cancel()
     }
 
-    open fun onAction(action: UIAction) {
+    /** Final: every action passes the telemetry probe, then goes to [handleAction]. */
+    fun onAction(action: UIAction) {
+        if (Telemetry.isEnabled) {
+            Telemetry.record(TelemetryEvent.Act(Telemetry.nowMs(), javaClass, action.javaClass))
+        }
+        handleAction(action)
+    }
+
+    protected open fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.SnackBarDismissed -> cleanMessage()
             is CommonAction.SnackBarActionPerformed -> cleanMessage()

@@ -1,5 +1,8 @@
 package com.kino.puber.data.api
 
+import com.kino.puber.core.telemetry.ErrSource
+import com.kino.puber.core.telemetry.Telemetry
+import com.kino.puber.core.telemetry.TelemetryEvent
 import com.kino.puber.BuildConfig
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.error.ApiError
@@ -223,7 +226,9 @@ class KinoPubApiClient(
     /** Drops the session and aborts the refresh; callers treat this as "sign in again". */
     private fun sessionExpiredFailure(cause: Throwable? = null): Nothing {
         onSessionExpired()
-        throw ApiError.Unauthorized(serverMessage = "Failed to refresh token", cause = cause)
+        val error = ApiError.Unauthorized(serverMessage = "Failed to refresh token", cause = cause)
+        if (Telemetry.isEnabled) Telemetry.record(TelemetryEvent.Err(Telemetry.nowMs(), ErrSource.AUTH, error))
+        throw error
     }
 
     fun isAuthenticated(): Boolean =

@@ -52,7 +52,6 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.core.model.AppLanguage
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
@@ -68,7 +67,10 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.ui.feature.device.settings.model.SettingsChoiceOption
 import com.kino.puber.ui.feature.device.settings.model.SettingsSection
 import com.kino.puber.domain.model.TabType
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 private val ScreenHorizontalPadding = 48.dp
 private val ScreenVerticalPadding = 28.dp
@@ -87,6 +89,7 @@ internal fun DeviceSettingsContent(
     initialSection: SettingsSection = SettingsSection.General,
     isApiDomainDialogOpen: Boolean = false,
     restoreNetworkDiagnosticsFocus: Boolean = false,
+    restoreShareFocus: Boolean = false,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (state) {
@@ -103,6 +106,7 @@ internal fun DeviceSettingsContent(
                 initialSection = initialSection,
                 isApiDomainDialogOpen = isApiDomainDialogOpen,
                 restoreNetworkDiagnosticsFocus = restoreNetworkDiagnosticsFocus,
+                restoreShareFocus = restoreShareFocus,
             )
         }
     }
@@ -180,11 +184,10 @@ private fun DeviceSettingsPane(
     initialSection: SettingsSection,
     isApiDomainDialogOpen: Boolean,
     restoreNetworkDiagnosticsFocus: Boolean,
+    restoreShareFocus: Boolean,
 ) {
     var selectedSection by rememberSaveable { mutableStateOf(initialSection) }
-    val sections = remember {
-        SettingsSection.entries.filter { it != SettingsSection.Developer || BuildConfig.DEBUG }
-    }
+    val sections = remember { SettingsSection.entries.toList() }
     val initialFocusRequester = rememberFocusRequesterOnLaunch()
     val sectionFocusRequesters = remember(sections, initialSection, initialFocusRequester) {
         sections.associateWith { section ->
@@ -195,6 +198,20 @@ private fun DeviceSettingsPane(
     // across sections would still name a list that has been thrown away.
     val panelFocusRequester = remember(selectedSection) { FocusRequester() }
     val diagnosticsFocusRequester = remember { FocusRequester() }
+    val shareFocusRequester = remember { FocusRequester() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // The system chooser does not dispose this composition, so a plain effect would ask for focus
+    // before the chooser has even opened. Waiting for the lifecycle to leave RESUMED and come back
+    // is what makes this "after the chooser closed".
+    LaunchedEffect(restoreShareFocus) {
+        if (!restoreShareFocus) return@LaunchedEffect
+        selectedSection = SettingsSection.Developer
+        lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        delay(ReturnFocusDelayMillis)
+        shareFocusRequester.requestFocus()
+        onAction(DeviceSettingsActions.SessionLogShareFocusRestored)
+    }
     LaunchedEffect(restoreNetworkDiagnosticsFocus) {
         if (!restoreNetworkDiagnosticsFocus) return@LaunchedEffect
         selectedSection = SettingsSection.Network
@@ -249,6 +266,7 @@ private fun DeviceSettingsPane(
                 leftFocusRequester = sectionFocusRequesters.getValue(selectedSection),
                 panelFocusRequester = panelFocusRequester,
                 diagnosticsFocusRequester = diagnosticsFocusRequester,
+                shareFocusRequester = shareFocusRequester,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -343,6 +361,7 @@ private fun SettingsSectionPanel(
     leftFocusRequester: FocusRequester,
     panelFocusRequester: FocusRequester,
     diagnosticsFocusRequester: FocusRequester,
+    shareFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -378,6 +397,7 @@ private fun SettingsSectionPanel(
                 leftFocusRequester = leftFocusRequester,
                 panelFocusRequester = panelFocusRequester,
                 diagnosticsFocusRequester = diagnosticsFocusRequester,
+                shareFocusRequester = shareFocusRequester,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag(SettingsTestTags.Content),
@@ -408,6 +428,7 @@ private fun SettingsSectionContent(
     leftFocusRequester: FocusRequester,
     panelFocusRequester: FocusRequester,
     diagnosticsFocusRequester: FocusRequester,
+    shareFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -462,7 +483,7 @@ private fun SettingsSectionContent(
                     diagnosticsFocusRequester,
                 )
                 SettingsSection.Data -> watchHistoryItems(state, onAction)
-                SettingsSection.Developer -> developerItems(state, onAction)
+                SettingsSection.Developer -> developerItems(state, onAction, shareFocusRequester)
             }
         }
     }

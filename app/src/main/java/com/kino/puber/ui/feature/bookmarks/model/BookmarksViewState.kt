@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.bookmarks.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Bookmark
 
@@ -14,7 +15,7 @@ internal sealed interface BookmarksViewState {
         val selectedFolderId: Int? = null,
         val items: List<VideoItemUIState> = emptyList(),
         val isLoadingItems: Boolean = false,
-    ) : BookmarksViewState
+    ) : BookmarksViewState, StartupContentState
 
     data class Error(val message: String) : BookmarksViewState
 }

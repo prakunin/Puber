@@ -15,6 +15,17 @@
     <string name="settings_network_description">Подключение к KinoPub и возможности устройства</string>
     <string name="settings_data_description">Локальные данные истории просмотров</string>
     <string name="settings_developer_description">Диагностическая информация для отладки</string>
+    <string name="settings_session_log">Журнал сеанса (для диагностики)</string>
+    <string name="settings_session_log_off">Пишет действия в локальный файл, выключится через 7 дней</string>
+    <string name="settings_session_log_recording">Идёт запись · осталось %1$d д %2$d ч</string>
+    <string name="settings_session_log_recording_under_hour">Идёт запись · осталось меньше часа</string>
+    <string name="settings_session_log_unavailable">Запись недоступна: нет хранилища</string>
+    <string name="settings_share_log">Поделиться журналом</string>
+    <string name="settings_share_log_subtitle">Упаковать закрытые файлы в архив и отправить</string>
+    <string name="settings_share_log_empty">Пока нечего отправлять</string>
+    <string name="settings_share_log_preparing">Готовлю архив…</string>
+    <string name="settings_share_log_chooser">Отправить журнал сеанса</string>
+    <string name="settings_share_log_failed">Не удалось отправить журнал</string>
     <string name="settings_about_device_title">О приложении и устройстве</string>
     <string name="device_settings_title">Настройки устройства</string>
     <string name="device_setting_server_location">Используемый сервер</string>

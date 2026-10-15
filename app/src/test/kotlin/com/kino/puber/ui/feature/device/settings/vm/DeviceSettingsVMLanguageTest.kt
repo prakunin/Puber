@@ -21,6 +21,7 @@ import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsState
 import com.kino.puber.domain.model.TabType
 import com.kino.puber.util.FakeResourceProvider
+import com.kino.puber.util.FakeSessionLogController
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
@@ -124,6 +125,8 @@ internal class DeviceSettingsVMLanguageTest {
             watchStateRepository = mockk<WatchStateRepository>(relaxed = true),
             watchStateSyncInteractor = mockk<WatchStateSyncInteractor>(relaxed = true),
             updateCheckCoordinator = updateCheckCoordinator,
+            sessionLog = FakeSessionLogController(),
+            contentSharer = mockk(relaxed = true),
             errorHandler = mockk<ErrorHandler>(relaxed = true),
             resources = FakeResourceProvider(),
             router = mockk<AppRouter>(relaxed = true),

@@ -22,6 +22,7 @@ import com.kino.puber.domain.interactor.watchstate.WatchStateSyncProgress
 import com.kino.puber.ui.feature.device.settings.mappers.DeviceUiSettingsMapper
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsActions
 import com.kino.puber.util.FakeResourceProvider
+import com.kino.puber.util.FakeSessionLogController
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.Called
 import io.mockk.clearMocks
@@ -176,6 +177,8 @@ class DeviceSettingsVMMirrorNavigationTest {
             watchStateRepository = watchStateRepository,
             watchStateSyncInteractor = watchStateSyncInteractor,
             updateCheckCoordinator = AppUpdateCheckCoordinator(),
+            sessionLog = FakeSessionLogController(),
+            contentSharer = mockk(relaxed = true),
             errorHandler = errorHandler,
             resources = FakeResourceProvider(),
             router = router,

@@ -12,6 +12,7 @@ internal data class DeviceSettingsViewState(
     val apiDomain: ApiDomainDialogState,
     val isApiDomainDialogOpen: Boolean = false,
     val restoreNetworkDiagnosticsFocus: Boolean = false,
+    val restoreShareFocus: Boolean = false,
 )
 
 @Immutable
@@ -44,8 +45,19 @@ internal sealed interface DeviceSettingsState {
         val autoUpdateCheckEnabled: Boolean = true,
         val appLanguage: AppLanguage = AppLanguage.System,
         val watchIndex: WatchIndexUiState = WatchIndexUiState(),
+        val sessionLog: SessionLogUi = SessionLogUi(),
     ) : DeviceSettingsState
 }
+
+/** What the Developer section shows of the session log; every string is already resolved. */
+@Immutable
+internal data class SessionLogUi(
+    val enabled: Boolean = false,
+    val description: String = "",
+    val shareEnabled: Boolean = false,
+    val sharing: Boolean = false,
+    val shareSubtitle: String = "",
+)
 
 /**
  * One section the menu may or may not carry. The label comes from [TabType] at draw time, and

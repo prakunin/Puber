@@ -100,12 +100,12 @@ internal class MainVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is CommonAction.ItemSelected<*> -> onTabSelected(action.item as MainTab)
             is MainAction.RefreshTab -> onTabRefresh(action.tab)
             MainAction.Resumed -> syncWatchState()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

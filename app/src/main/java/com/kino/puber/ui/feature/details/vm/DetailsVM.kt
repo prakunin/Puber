@@ -160,7 +160,7 @@ internal class DetailsVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         if (closing) return
         when (action) {
             is DetailsAction.PlayClicked -> openPlayer(params.itemId)
@@ -190,7 +190,7 @@ internal class DetailsVM(
                 setSimilarItemSaved(item, action.isSaved)
             }
             is CommonAction.RetryClicked -> loadData()
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

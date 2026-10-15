@@ -18,10 +18,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -147,13 +150,35 @@ private fun InformationMetric(label: String, value: String, modifier: Modifier =
 internal fun LazyListScope.developerItems(
     state: DeviceSettingsState.Success,
     onAction: (UIAction) -> Unit,
+    shareFocusRequester: FocusRequester,
 ) {
-    item(key = "debug-overlay") {
+    item(key = "session-log") {
         SettingsToggleItem(
-            label = stringResource(R.string.settings_debug_overlay),
-            checked = state.debugOverlayEnabled,
-            onToggle = { onAction(DeviceSettingsActions.ToggleDebugOverlay) },
+            label = stringResource(R.string.settings_session_log),
+            checked = state.sessionLog.enabled,
+            description = state.sessionLog.description,
+            onToggle = { onAction(DeviceSettingsActions.ToggleSessionLog) },
         )
+    }
+    item(key = "share-log") {
+        SettingsListItem(
+            headline = stringResource(R.string.settings_share_log),
+            supportingText = state.sessionLog.shareSubtitle,
+            role = Role.Button,
+            enabled = state.sessionLog.shareEnabled && !state.sessionLog.sharing,
+            focusableWhenDisabled = true,
+            modifier = Modifier.focusRequester(shareFocusRequester),
+            onClick = { onAction(DeviceSettingsActions.ShareSessionLog) },
+        )
+    }
+    if (BuildConfig.DEBUG) {
+        item(key = "debug-overlay") {
+            SettingsToggleItem(
+                label = stringResource(R.string.settings_debug_overlay),
+                checked = state.debugOverlayEnabled,
+                onToggle = { onAction(DeviceSettingsActions.ToggleDebugOverlay) },
+            )
+        }
     }
 }
 

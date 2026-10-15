@@ -15,6 +15,7 @@ import cafe.adriel.voyager.navigator.tab.TabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.kino.puber.R
 import com.kino.puber.core.di.LocalPuberKoinScope
+import com.kino.puber.core.telemetry.NavCmd
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.navigation.TabCommand
@@ -104,7 +105,11 @@ internal fun TabComponent(
                 tabRouter.events()
                     .collect { event ->
                         when (event) {
-                            is TabCommand.Open -> navigator.current = event.tab
+                            is TabCommand.Open -> {
+                                val from = navigator.current
+                                navigator.current = event.tab
+                                recordNav(NavCmd.TAB, from, event.tab)
+                            }
                         }
                     }
             }

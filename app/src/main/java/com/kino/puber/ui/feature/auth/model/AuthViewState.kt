@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.auth.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 
 @Immutable
@@ -18,5 +19,5 @@ internal sealed interface AuthViewState {
         val url: String,
         val timeLeft: String = "",
         val apiDomainDialog: ApiDomainDialogState? = null,
-    ) : AuthViewState
+    ) : AuthViewState, StartupContentState
 }

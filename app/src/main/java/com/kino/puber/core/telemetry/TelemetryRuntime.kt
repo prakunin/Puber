@@ -1,0 +1,154 @@
+package com.kino.puber.core.telemetry
+
+import android.app.Activity
+import android.app.ActivityManager
+import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.os.Bundle
+import android.os.Process
+import android.view.Display
+import com.kino.puber.BuildConfig
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import timber.log.Timber
+import kotlin.coroutines.resume
+
+/**
+ * Owns the on/off decision: the persisted switch, the seven-day limit at start, and the probes
+ * (error tree, uncaught handler) that exist only while recording.
+ */
+internal class TelemetryRuntime(
+    private val prefs: SharedPreferences,
+    private val clock: TelemetryClock,
+    private val sink: TelemetrySink,
+) : SessionLogController {
+
+    private var tree: TelemetryErrorTree? = null
+    private var handler: TelemetryUncaughtHandler? = null
+
+    override val state: StateFlow<SessionLogState> = sink.status
+
+    /**
+     * Reads the switch. With no key nothing else happens: no executor, no directory, no tree, no
+     * handler. [startup] builds the cold-start marks and is called only when recording resumes.
+     */
+    fun start(startup: (() -> StartupMarks)?) {
+        if (!prefs.contains(KEY_ENABLED_AT)) return
+        val now = clock.wallMs()
+        // A stored time ahead of the clock (no RTC before time sync) is kept as it is and counts as
+        // no time elapsed; it is never rewritten, so the seven days run from the real switch time.
+        val enabledAt = prefs.getLong(KEY_ENABLED_AT, now)
+        if (now - enabledAt >= TelemetrySink.SEVEN_DAYS_MS) {
+            prefs.edit().remove(KEY_ENABLED_AT).apply()
+            return
+        }
+        enable(enabledAt)
+        val marks = startup?.invoke() ?: return
+        Telemetry.startupMarks = marks
+        sink.schedule(STARTUP_FALLBACK_MS) { marks.onTimeout() }
+    }
+
+    @Synchronized
+    override fun setEnabled(enabled: Boolean) {
+        if (enabled) {
+            if (sink.isEnabled) return
+            val now = clock.wallMs()
+            prefs.edit().putLong(KEY_ENABLED_AT, now).apply()
+            enable(now)
+        } else {
+            prefs.edit().remove(KEY_ENABLED_AT).apply()
+            sink.stop()
+            detachProbes()
+        }
+    }
+
+    override fun refresh() {
+        sink.requestDrain()
+        sink.refreshStatus()
+    }
+
+    override suspend fun share(): ShareResult = suspendCancellableCoroutine { continuation ->
+        sink.export { result -> continuation.resume(result) }
+    }
+
+    // Probes first: if the storage turns out to be unavailable, the sink's callback must find
+    // them planted and remove them, not the other way round.
+    @Synchronized
+    private fun enable(enabledAt: Long) {
+        plantProbes()
+        sink.start(enabledAt, onExpired = ::onExpired, onStopped = ::detachProbes)
+    }
+
+    private fun onExpired() {
+        prefs.edit().remove(KEY_ENABLED_AT).apply()
+        detachProbes()
+    }
+
+    @Synchronized
+    private fun plantProbes() {
+        if (tree == null) tree = TelemetryErrorTree().also(Timber::plant)
+        if (handler == null) handler = TelemetryUncaughtHandler.install(sink)
+    }
+
+    @Synchronized
+    internal fun detachProbes() {
+        tree?.let(Timber::uproot)
+        tree = null
+        handler?.let(TelemetryUncaughtHandler::uninstall)
+        handler = null
+    }
+
+    companion object {
+        const val PREFS_NAME = "telemetry_preferences"
+        const val KEY_ENABLED_AT = "enabled_at_wall_ms"
+        private const val STARTUP_FALLBACK_MS = 60_000L
+
+        fun install(app: Application, appCreateMs: Long) {
+            val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val sink = TelemetrySink(
+                clock = SystemTelemetryClock,
+                store = FileTelemetryStore { app.getExternalFilesDir(null) },
+                executor = ThreadTelemetryExecutor(),
+                sessionInfo = { sessionInfo(app) },
+            )
+            val runtime = TelemetryRuntime(prefs, SystemTelemetryClock, sink)
+            Telemetry.install(sink, SystemTelemetryClock)
+            Telemetry.installController(runtime)
+            runtime.start {
+                StartupMarks(Process.getStartElapsedRealtime(), appCreateMs, sink::record, SystemTelemetryClock)
+            }
+            app.registerActivityLifecycleCallbacks(PauseFlushCallbacks(sink))
+        }
+
+        // Evaluated on the writer thread only.
+        private fun sessionInfo(app: Application): SessionInfo {
+            val activityManager = app.getSystemService(ActivityManager::class.java)
+            val display = app.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+            return SessionInfo(
+                build = BuildConfig.BUILD_TYPE,
+                ver = BuildConfig.VERSION_NAME,
+                api = Build.VERSION.SDK_INT,
+                model = Build.MODEL,
+                ramClass = activityManager?.memoryClass ?: 0,
+                lowRam = activityManager?.isLowRamDevice ?: false,
+                hz = display?.refreshRate ?: 0f,
+            )
+        }
+    }
+}
+
+private class PauseFlushCallbacks(private val sink: TelemetrySink) : Application.ActivityLifecycleCallbacks {
+    override fun onActivityPaused(activity: Activity) {
+        if (Telemetry.isEnabled) sink.requestDrain()
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+    override fun onActivityStarted(activity: Activity) = Unit
+    override fun onActivityResumed(activity: Activity) = Unit
+    override fun onActivityStopped(activity: Activity) = Unit
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+    override fun onActivityDestroyed(activity: Activity) = Unit
+}

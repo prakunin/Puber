@@ -36,10 +36,10 @@ internal class NetworkDiagnosticsVM(
         }
     }
 
-    override fun onAction(action: UIAction) {
+    override fun handleAction(action: UIAction) {
         when (action) {
             is NetworkDiagnosticsActions.Start -> startRun(action.server)
-            else -> super.onAction(action)
+            else -> super.handleAction(action)
         }
     }
 

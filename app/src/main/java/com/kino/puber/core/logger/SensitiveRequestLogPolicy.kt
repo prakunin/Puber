@@ -115,7 +115,7 @@ internal class SensitiveRequestLogPolicy {
 
     fun sanitizeThrowable(throwable: Throwable): Throwable {
         return SanitizedLogThrowable(
-            sourceType = throwable::class.qualifiedName ?: throwable.javaClass.name,
+            sourceType = throwable.javaClass.name,
             sourceMessage = throwable.message?.let(::sanitizeText),
             sourceStackTrace = throwable.stackTrace,
             sourceCause = throwable.cause?.let(::sanitizeThrowable),
@@ -254,9 +254,9 @@ internal class SensitiveRequestLogPolicy {
     }
 }
 
-private class SanitizedLogThrowable(
-    sourceType: String,
-    sourceMessage: String?,
+internal class SanitizedLogThrowable(
+    val sourceType: String,
+    val sourceMessage: String?,
     sourceStackTrace: Array<StackTraceElement>,
     sourceCause: Throwable?,
     sourceSuppressed: List<Throwable>,
