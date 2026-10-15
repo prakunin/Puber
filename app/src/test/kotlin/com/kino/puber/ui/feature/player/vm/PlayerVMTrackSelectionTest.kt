@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.player.vm
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.domain.model.BufferPreset
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.BufferPresetUIState
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
@@ -95,7 +96,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     @Test
     fun selectTrack_savesLangToPrefs() {
         startedVM().onAction(PlayerAction.SelectAudioTrack(1))
-        verify { interactor.saveTrackPreferences(42, "rus", any(), any(), any()) }
+        verify { interactor.saveTrackPreferences(42, "rus", any(), SubtitlePreference.NONE) }
     }
 
     // endregion
@@ -120,8 +121,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_restoresPreferredSubtitleByUrl_beforeLanguage() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/rus-forced.vtt"
+        stubSavedSubtitle("rus", "https://test/subtitles/rus-forced.vtt")
         val vm = startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
@@ -133,9 +133,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_restoresPreferredSubtitleByStableUrl_whenSignedUrlChanges() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns
-                "https://old-cdn.example/pd/expired-token/subtitles/rus-forced.vtt?e=1"
+        stubSavedSubtitle("rus", "https://old-cdn.example/pd/expired-token/subtitles/rus-forced.vtt?e=1")
         val vm = startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
@@ -147,22 +145,20 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_ambiguousSubtitleLanguage_withoutUrl_reappliesOffRow() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns null
+        stubSavedSubtitle("rus", null)
         val vm = startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
         callbackSlot.captured.onTracksUpdated(tracks, 0)
 
         verify(exactly = 1) { playbackController.selectSubtitle(testSubtitleTracks[0]) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
     }
 
     @Test
     fun tracksUpdated_reappliesOffRow_whenSavedSubtitleDoesNotResolve() {
-        every { interactor.getPreferredSubtitleLang(42) } returns null
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/gone.vtt"
+        stubSavedSubtitle(null, "https://test/subtitles/gone.vtt")
         val vm = startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
@@ -171,7 +167,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         verify(exactly = 1) { playbackController.selectSubtitle(testSubtitleTracks[0]) }
         verify(exactly = 0) { playbackController.selectSubtitle(testSubtitleTracks[1]) }
         verify(exactly = 0) { playbackController.selectSubtitle(testSubtitleTracks[2]) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
     }
 
@@ -179,8 +175,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     fun tracksUpdated_nextMediaWithUnresolvedChoice_sendsOffRow() {
         val vm = startedVM()
         vm.onAction(PlayerAction.SelectSubtitle(2))
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns null
+        stubSavedSubtitle("rus", null)
 
         vm.onAction(PlayerAction.SelectEpisode(1, 2))
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
@@ -196,8 +191,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     @Test
     fun tracksUpdated_restoreDoesNotRewritePreferencesFromIntermediateState() {
         every { interactor.getPreferredAudioLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/rus-forced.vtt"
+        stubSavedSubtitle("rus", "https://test/subtitles/rus-forced.vtt")
         val vm = startedVM()
 
         val tracks = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
@@ -205,7 +199,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         verify { playbackController.selectAudioTrack(1) }
         verify { playbackController.selectSubtitle(testSubtitleTracks[2]) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(1, contentState(vm).selectedAudioTrackIndex)
         assertEquals(2, contentState(vm).selectedSubtitleIndex)
     }
@@ -213,18 +207,6 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     // endregion
 
     // region Subtitle rows reported by the player (HLS merge)
-
-    private val audioReport = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
-
-    private fun sideLoad(language: String, url: String, child: Int) = SubtitleTrackUIState(
-        label = "",
-        language = language,
-        url = "",
-        playerTrackId = url.stableSubtitleKey(),
-        playerTrackGroupId = "$child:0",
-        playerTrackIndex = 0,
-        fromManifest = false,
-    )
 
     private fun manifest(language: String, id: String, uri: String? = null) = SubtitleTrackUIState(
         label = "",
@@ -236,18 +218,6 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         playerTrackUri = uri,
         fromManifest = true,
     )
-
-    private fun hlsRowsForFixture() = listOf(
-        sideLoad("rus", testSubtitleTracks[1].url, 1),
-        sideLoad("rus", testSubtitleTracks[2].url, 2),
-    )
-
-    private fun report(subtitles: List<SubtitleTrackUIState>?, audio: List<AudioTrackUIState> = audioReport) {
-        callbackSlot.captured.onTracksUpdated(audio, 0, subtitles)
-    }
-
-    private fun rowIndex(vm: PlayerVM, predicate: (SubtitleTrackUIState) -> Boolean) =
-        contentState(vm).subtitleTracks.indexOfFirst(predicate)
 
     @Test
     fun tracksUpdated_hlsApiOnlyLanguage_appearsInRowsAndIsSelectable() {
@@ -372,7 +342,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
     }
 
     @Test
@@ -388,12 +358,11 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
     }
 
     private fun pickedRussianWithSavedPreference(): Pair<PlayerVM, List<SubtitleTrackUIState>> {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[1].url
+        stubSavedSubtitle("rus", testSubtitleTracks[1].url)
         return collapsedAfterPick()
     }
 
@@ -411,8 +380,14 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
 
         vm.onAction(PlayerAction.SelectAudioTrack(1))
-        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[1].url) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), null, null) }
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(
+                42, any(), any(), match { it.language == "rus" && it.url == testSubtitleTracks[1].url },
+            )
+        }
+        verify(exactly = 0) {
+            interactor.saveTrackPreferences(any(), any(), any(), match { it.language == null && it.url == null })
+        }
     }
 
     @Test
@@ -428,7 +403,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         val after = contentState(vm)
         assertEquals("rus.vtt", after.subtitleTracks[after.selectedSubtitleIndex].playerTrackId)
     }
@@ -453,7 +428,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
     }
 
     @Test
@@ -464,7 +439,9 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.SelectAudioTrack(1))
 
         verify(exactly = 1) {
-            interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[1].url)
+            interactor.saveTrackPreferences(
+                42, any(), any(), match { it.language == "rus" && it.url == testSubtitleTracks[1].url },
+            )
         }
     }
 
@@ -479,7 +456,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
         verify(exactly = 0) { playbackController.selectSubtitle(match { it.playerTrackId == "rus.vtt" }) }
-        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), null, null) }
+        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), SubtitlePreference.NONE) }
     }
 
     @Test
@@ -487,8 +464,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         val vm = startedVM()
         vm.onAction(PlayerAction.SelectEpisode(1, 2))
         every { interactor.getPreferredAudioLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[2].url
+        stubSavedSubtitle("rus", testSubtitleTracks[2].url)
         clearMocks(playbackController, interactor, answers = false)
 
         report(emptyList())
@@ -501,22 +477,23 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.url == testSubtitleTracks[2].url }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
     }
 
     @Test
     fun nextMedia_textlessFirstReport_audioPick_keepsSavedSubtitlePreference() {
         val vm = startedVM()
         vm.onAction(PlayerAction.SelectEpisode(1, 2))
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[2].url
+        stubSavedSubtitle("rus", testSubtitleTracks[2].url)
         report(emptyList())
         clearMocks(playbackController, interactor, answers = false)
 
         vm.onAction(PlayerAction.SelectAudioTrack(1))
 
         verify(exactly = 1) {
-            interactor.saveTrackPreferences(42, any(), any(), "rus", testSubtitleTracks[2].url)
+            interactor.saveTrackPreferences(
+                42, any(), any(), match { it.language == "rus" && it.url == testSubtitleTracks[2].url },
+            )
         }
     }
 
@@ -599,8 +576,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_restoresSavedUrl_onApiLinkedManifestRow() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns testSubtitleTracks[1].url
+        stubSavedSubtitle("rus", testSubtitleTracks[1].url)
         val vm = startedVM()
 
         report(listOf(manifest("rus", "subs:Russian", uri = "https://cdn.test/hls/subtitles/rus.vtt/index.m3u8")))
@@ -614,8 +590,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_mergedRows_restoresPreferredSubtitleByUrl_beforeLanguage() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/rus-forced.vtt"
+        stubSavedSubtitle("rus", "https://test/subtitles/rus-forced.vtt")
         val vm = startedVM()
 
         report(hlsRowsForFixture())
@@ -626,9 +601,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_mergedRows_restoresPreferredSubtitleByStableUrl_whenSignedUrlChanges() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns
-                "https://old-cdn.example/pd/expired-token/subtitles/rus-forced.vtt?e=1"
+        stubSavedSubtitle("rus", "https://old-cdn.example/pd/expired-token/subtitles/rus-forced.vtt?e=1")
         val vm = startedVM()
 
         report(hlsRowsForFixture())
@@ -639,43 +612,40 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     @Test
     fun tracksUpdated_mergedRows_ambiguousSubtitleLanguage_withoutUrl_reappliesOffRow() {
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns null
+        stubSavedSubtitle("rus", null)
         val vm = startedVM()
 
         report(hlsRowsForFixture())
 
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
     }
 
     @Test
     fun tracksUpdated_mergedRows_reappliesOffRow_whenSavedSubtitleDoesNotResolve() {
-        every { interactor.getPreferredSubtitleLang(42) } returns null
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/gone.vtt"
+        stubSavedSubtitle(null, "https://test/subtitles/gone.vtt")
         val vm = startedVM()
 
         report(hlsRowsForFixture())
 
         verify(exactly = 1) { playbackController.selectSubtitle(any()) }
         verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(0, contentState(vm).selectedSubtitleIndex)
     }
 
     @Test
     fun tracksUpdated_mergedRows_restoreDoesNotRewritePreferencesFromIntermediateState() {
         every { interactor.getPreferredAudioLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleLang(42) } returns "rus"
-        every { interactor.getPreferredSubtitleUrl(42) } returns "https://test/subtitles/rus-forced.vtt"
+        stubSavedSubtitle("rus", "https://test/subtitles/rus-forced.vtt")
         val vm = startedVM()
 
         report(hlsRowsForFixture())
 
         verify { playbackController.selectAudioTrack(1) }
         verify { playbackController.selectSubtitle(match { it.url == testSubtitleTracks[2].url }) }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), any()) }
         assertEquals(1, contentState(vm).selectedAudioTrackIndex)
         assertEquals(2, contentState(vm).selectedSubtitleIndex)
     }

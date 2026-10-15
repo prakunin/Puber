@@ -16,6 +16,7 @@ import com.kino.puber.domain.interactor.player.ResolvedMedia
 import com.kino.puber.domain.interactor.player.SkipSegmentInteractor
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
@@ -104,8 +105,7 @@ internal open class PlayerVMTestFixture {
         )
         every { interactor.getPreferredAudioLabel(any()) } returns null
         every { interactor.getPreferredAudioLang(any()) } returns null
-        every { interactor.getPreferredSubtitleLang(any()) } returns null
-        every { interactor.getPreferredSubtitleUrl(any()) } returns null
+        every { interactor.getPreferredSubtitlePreference(any()) } returns SubtitlePreference.NONE
         every { interactor.getBehaviourPreferences() } returns PlayerBehaviourPreferences(
             debugOverlayEnabled = false,
             okTogglesPlayPause = false,
@@ -113,7 +113,7 @@ internal open class PlayerVMTestFixture {
         every { interactor.getSubtitleSize() } returns SubtitleSize.MEDIUM
         every { interactor.getBufferPreset() } returns BufferPreset.AUTO
         every { interactor.isFastDnsEnabled() } returns true
-        every { interactor.saveTrackPreferences(any(), any(), any(), any(), any()) } returns Unit
+        every { interactor.saveTrackPreferences(any(), any(), any(), any()) } returns Unit
         every { interactor.findNextEpisode(any(), any(), any()) } returns null
         every { interactor.findPreviousEpisode(any(), any(), any()) } returns null
         coEvery { skipSegmentInteractor.loadSegments(any(), any(), any()) } returns emptyList()
@@ -152,6 +152,40 @@ internal open class PlayerVMTestFixture {
         contentStateFactory = contentStateFactory,
         playbackController = playbackController,
     ).also(createdViewModels::add)
+
+    protected fun stubSavedSubtitle(
+        language: String?,
+        url: String?,
+        isForced: Boolean? = null,
+        descriptiveLabel: String? = null,
+    ) {
+        every { interactor.getPreferredSubtitlePreference(42) } returns
+            SubtitlePreference(language, url, isForced, descriptiveLabel)
+    }
+
+    protected val audioReport = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
+
+    protected fun sideLoad(language: String, url: String, child: Int) = SubtitleTrackUIState(
+        label = "",
+        language = language,
+        url = "",
+        playerTrackId = url.stableSubtitleKey(),
+        playerTrackGroupId = "$child:0",
+        playerTrackIndex = 0,
+        fromManifest = false,
+    )
+
+    protected fun hlsRowsForFixture() = listOf(
+        sideLoad("rus", testSubtitleTracks[1].url, 1),
+        sideLoad("rus", testSubtitleTracks[2].url, 2),
+    )
+
+    protected fun report(subtitles: List<SubtitleTrackUIState>?, audio: List<AudioTrackUIState> = audioReport) {
+        callbackSlot.captured.onTracksUpdated(audio, 0, subtitles)
+    }
+
+    protected fun rowIndex(vm: PlayerVM, predicate: (SubtitleTrackUIState) -> Boolean) =
+        contentState(vm).subtitleTracks.indexOfFirst(predicate)
 
     protected fun startedVM(): PlayerVM = createVM().also { it.testOnStart() }
 
