@@ -1,6 +1,6 @@
 # Persist and restore the chosen subtitle across player recreation
 
-Status: draft
+Status: approved
 Date: 2026-10-15
 Slug: subtitle-restore-model
 Kind: improvement
@@ -40,15 +40,16 @@ Request: "Restore the chosen subtitle across player recreation with upstream's S
 - AC-1. Given a manifest-only row with a language and no API URL is picked, When the preference is saved, Then the group id with the `N:` merge prefix stripped is stored in `subtitle_url_`, together with language, forced flag and label, and a restore in a new session picks that row. (unit: VM + repository)
 - AC-2. Given a language-less manifest-only row is picked, When saved, Then the preference is not stored as Off: the identity key is persisted, and after re-entry the same row is selected. (unit)
 - AC-3. Given the viewer picked Off explicitly, When saved, Then `subtitle_lang_`, `subtitle_url_`, `subtitle_forced_` and `subtitle_label_` are all removed (no stale forced flag or label). (unit, repository)
-- AC-4. Given a saved preference from before this change (only lang and url), When it is read and restored, Then it resolves exactly as before. (unit, resolver and repository)
+- AC-4. Given a saved preference from before this change (only lang and url), When it is read and restored, Then every old preference that resolved to a row resolves to the same row, and the existing resolver tests pass unchanged; a formerly ambiguous language may now resolve to the single manifest row. (unit, resolver and repository) _(reworded at gate 1, Q1)_
 - AC-5. Given the saved preference is a full subtitle and the stream has only a forced row of that language, When restoring, Then the result is Off (no match), not the forced row. (unit, resolver and VM)
 - AC-6. Given two rows share a language (full and forced, or two labelled variants), When restoring, Then the saved forced flag and readable label choose the right one instead of giving Off. (unit, resolver)
 - AC-7. Given a preference carrying an identity (language-less) whose row has disappeared, When restoring, Then it does not select Off by the empty-language rule. Given a preference with an empty language and no identity, Then it still means Off. (unit, resolver)
 - AC-8. Given the player is rebuilt (buffer preset or Fast DNS) and the live intent differs from the saved preference, When the subtitle restore runs, Then the intent is resolved first and the saved preference is the fallback. Existing tests `PlayerVMTrackSelectionTest.kt:401-457` stay green. (unit)
 - AC-9. Given a rebuild followed by an audio-less report that contains text groups, When tracks are reported, Then the intended subtitle is re-sent to the controller and nothing is persisted. This closes the deferred audio-less item. (unit, regression)
 - AC-10. Given a side-loaded row (group id `<n>:0`), When saved, Then its positional group id is never written to `subtitle_url_`. (unit)
-- AC-11. Given an HLS title with a manifest-only subtitle, When the viewer picks it, leaves the player and opens the same title again, Then the same subtitle is on; and also after a quality switch. (device, D-pad)
+- AC-11. Given an HLS title with a manifest-only subtitle, When the viewer picks it, leaves the player and opens the same title again, Then the same subtitle is on. After a quality switch it is on when the new stream offers that row; on a stream without it the picker shows Off without saving Off, and the pick comes back on Auto and on re-entry. (device, D-pad) _(reworded at gate 1, Q4: manual quality plays url.hls, see run manual-quality-hls4)_
 - AC-12. `check.full` passes: `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` (Part 1). (Part 2's instrumentation compile moved to run subtitle-switch-text-disable.)
+- AC-16. Given a restore found no row for the saved preference and the viewer has not picked a subtitle in this media, When preferences are saved (e.g. on an audio pick), Then the stored subtitle preference is kept, not overwritten with Off. (unit: T-16a..c) _(added at gate 1, Q2)_
 
 ## Out of scope
 
@@ -344,6 +345,10 @@ Perf track: off (tracks: none). No metric, baseline, or threshold.
 
 | ID | Question | Blocks | Status | Answer |
 |----|----------|--------|--------|--------|
+| Q1 | AC-4 wording vs the manifest-preferring language rule | yes | answered | Reword (recommended) |
+| Q2 | Keep the saved preference after a restore that found nothing (new AC-16) | yes | answered | Yes (recommended) |
+| Q3 | Readable-label rule in findSameSubtitleTrackIndex | no | answered | No (recommended) |
+| Q4 | AC-11 after a quality switch when manual quality plays url.hls | yes | answered | Reword: on when the stream offers the row, else Off without saving, back on Auto / re-entry (recommended) |
 
 ## Decisions
 
@@ -352,3 +357,5 @@ Perf track: off (tracks: none). No metric, baseline, or threshold.
 | 2026-10-14 | Rebuild restore: intent first, then saved (AC-8) | owner |
 | 2026-10-14 | Device scope: exit/re-enter on an HLS title with a manifest-only row, then after a quality switch; forced and language-less unit-only | owner |
 | 2026-10-15 | Split: this run is Part 1 (AC-1..AC-12); option C to run subtitle-switch-text-disable after P6-A | owner |
+| 2026-10-15 | Q1-Q4 answered as recommended; AC-4 and AC-11 reworded, AC-16 added | owner (standing instruction: recommended) |
+| 2026-10-15 | Gate 1: spec approved | owner (standing instruction: recommended) |
