@@ -265,7 +265,7 @@ Priority: P0 must exist before review, P1 should, P2 nice to have.
 | AC-10 | unit | P0 | T-10b `PlayerVMTrackSelectionTest.pickSideLoadedRow_savesUrlNotGroupId` | Through the VM; saved url equals the API URL, no `<n>:0` anywhere in the saved preference |
 | AC-10 | unit | P1 | T-10c `findSubtitleTrackIndex_positionalSideLoadGroupIdNeverMatches` | A stored `0:0` does not match a side-load row that happens to have that group id (identities exclude it for non-manifest rows) |
 | AC-10 | unit | P1 | `SubtitlePreferenceKeyTest.keyOrder_urlThenSourceFileThenGroupIdThenTrackUriThenTrackId` | D4 order, and all-empty gives null never `""` |
-| AC-11 | device | P0 | Manual checks M1-M4 | Persistence, playback and re-entry on a real HLS title |
+| AC-11 | device | P0 | Manual checks M1-M4 (steps 1-2 persistence and re-entry; step 3 quality switch, row present; step 4 4b/4c quality switch, row absent) | Persistence, playback and re-entry on a real HLS title; after a quality switch the row is on when the new stream has it; when it lacks it the picker shows Off, Off is not saved, Auto and re-entry bring the row back. Clause (b) is NOT CHECKED, with the reason, if no such stream is found |
 | AC-12 | unit | P0 | `./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` | Whole gate green. The 47 migrated `saveTrackPreferences` verifies compile and keep their negative cases |
 | AC-16 (Q2) | unit | P0 | T-16a `PlayerVMTrackSelectionTest.savedSubtitleUnresolved_noPick_audioChangeKeepsStoredPreference` | Stored preference unmatched (forced-only stream or missing row), intent null, `SelectAudioTrack`: the save carries the stored `SubtitlePreference` unchanged, not `NONE`. Fails on base (the base writes null/null at `PlayerVM.kt:1856-1858`) |
 | AC-16 (Q2) | unit | P0 | T-16b `..._pickAfterUnresolved_replacesStored` | After the viewer picks a row, the save carries the new preference |
@@ -321,10 +321,11 @@ Owner decision: HLS title with a manifest-only row (Psyren S1E1 or Outlander). L
    Expected: the subtitle renders cues. Must not: the picker shows Off after the pick, or the pick selects another language.
 2. Press Back, leave the player, and open the same episode again.
    Expected: the same row is already selected in the picker and cues render without any pick (M1, core of AC-11). Must not: Off, a different row, or the API variant of the same language.
-3. Within the same session, change quality (settings, a different HLS quality), wait for tracks.
-   Expected: the same subtitle row is still on after the switch (observation only; no production change in this run). Must not: Off, or a different row. A flash of cues going off and on is not a defect here. If Off or wrong after the switch, record it as a finding for `subtitle-switch-text-disable`, not as a failure of this run.
-4. After the quality switch, exit and re-enter once more.
-   Expected: the same row again (the save was not damaged by the switch). Must not: Off.
+3. (AC-11 clause a) Same session, pick the manifest-only row first, then change quality to one whose stream still offers that row (settings, another HLS quality), wait for tracks.
+   Expected: the same row is on after the switch and cues render. Must not: Off, or a different row. A brief flash of cues going off and on is not a defect. Off or a wrong row after the switch FAILS AC-11; it is a failure of this run, not an observation.
+4. (AC-11 clause b) Switch to a quality whose stream lacks the row. Manual quality plays `url.hls` with no manifest subtitles (e.g. Outlander S1E5 at 720p; confirm via the stream info that the manifest has no subtitle row). Wait for tracks.
+   Expected: the picker shows Off, and the Off is not saved. Then (4b) select Auto (or the quality that has the row): the row comes back on. Then (4c) Back out of the player and re-enter the episode: the row is on again, which proves Off was not saved. Must not: the row stays Off after Auto; re-entry shows Off; the saved preference becomes NONE (check the player's subtitle-restore log line for the save, filtered by tag).
+   If no title with a stream that lacks the row is found, the qa report marks clause (b) `NOT CHECKED` with the reason (titles tried, what the stream info showed). It must not be passed by observation or by clause (a).
 5. (Rollout) With a stale old-style preference on the device from before the install (the install preserves data), open a title where the viewer previously picked a subtitle.
    Expected: the previous pick still resolves (AC-4), or a title that used to be Off because of ambiguity may now show the single manifest row (Q1). Must not: a crash, or a forced-only row for a full viewer.
 6. Pick Off explicitly, leave, re-enter.

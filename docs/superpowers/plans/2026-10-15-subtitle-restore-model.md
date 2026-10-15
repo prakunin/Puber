@@ -51,7 +51,8 @@
 - Scope (spec "Out of scope"): no change to `PlaybackController` (including `prepare()` and `switchStream`),
   `SubtitleTrackMerger`, `SubtitleTrackSelector`, `findSameSubtitleTrackIndex`, DI, screens, Compose, strings,
   or audio preference persistence. There is no instrumented test.
-- Device verification for AC-11 (spec Test design section 5, M1-M6) belongs to qa-device after Task 4. No task
+- Device verification for AC-11 (spec Test design section 5, M1-M6, with the reworded M3 for the quality switch)
+  belongs to qa-device after Task 4. No task
   here installs, launches or touches a device.
 - Upstream sources are read from the **main checkout**, ported by intent and keeping the fork's names:
   `git -C /mnt/data/projects/PetProjets/Puber show <sha>:<path>`.
@@ -352,6 +353,8 @@ Rules (spec D6/D7). The first rule that names a row wins.
 - **3.** The **single** candidate whose `preferenceIdentities.any { sameSubtitleIdentity(it, preferredUrl) }`.
   Skipped when `preferredUrl` is null or empty.
 - **4.** The **single** candidate whose normalised `readableDescriptiveLabel()` equals the normalised preferred label.
+  Skipped when the normalised preferred label is null (same kind of guard as rule 3). Without it, `null == null`
+  matches a single unlabelled candidate whatever its identity, and T-7a and T-10c return 1 instead of `-1`.
 - **5.** Language, which needs a non-empty `preferredLang`. The matches are the candidates with `sameSubtitleLanguage`.
   Return the single `fromManifest` match, otherwise the single match, otherwise `NO_MATCH`.
 
@@ -508,12 +511,14 @@ This has three returns (the `?: return` guard plus two) and three conditions, so
           `selectSubtitle(match { it.language == "eng" })`, and 0 saves (`any()` in all four slots).
        4. This is red on base and stays red until the D9 branch exists.
      - T-8b `newMedia_intentIsNull_usesSavedPreferenceOnly`:
-       1. Pick rus.vtt, then `SelectEpisode(1, 2)`, then `stubSavedSubtitle("eng", "subtitle:English")`.
-       2. Report `rows`; the eng row is selected and nothing is saved.
+       1. Pick rus.vtt, then `clearMocks(interactor, answers = false)` (the pick itself saves), then
+          `SelectEpisode(1, 2)`, then `stubSavedSubtitle("eng", "subtitle:English")`.
+       2. Report `rows`; the eng row is selected and nothing is saved (`verify(exactly = 0)`, `any()` in all four slots).
      - T-8c `rebuild_intentRowMissing_fallsBackToSavedPreference` (R5 pin):
-       1. Pick rus.vtt, then `stubSavedSubtitle("eng", "subtitle:English")`.
+       1. Pick rus.vtt, then `clearMocks(interactor, answers = false)` (the pick itself saves), then
+          `stubSavedSubtitle("eng", "subtitle:English")`.
        2. `ToggleFastDns`, then report `listOf(manifestRendition("eng", "English"))`.
-       3. Expect `selectSubtitle(eng)` once and zero saves.
+       3. Expect `selectSubtitle(eng)` once and zero saves (`verify(exactly = 0)`, `any()` in all four slots).
      - T-9 `rebuildFastDns_audioEmptyReportWithTextRows_reSendsIntent_andSavesNothing` (AC-9):
        1. Use `pickedRussianWithSavedPreference()` (`TST:394-398`), then `ToggleFastDns`, then `report(rows, audio = emptyList())`.
        2. Expect exactly 1 `selectSubtitle(any())`, and it is the rus.vtt row.
@@ -545,9 +550,16 @@ before the VM edit and green after it.
 
 - qa-device runs the spec's manual checks M1-M6 (AC-11) on a leased emulator with the worktree's own dev APK,
   installed with `tools/android-apk-install-preserve`.
-- AC-11 after a quality switch: when the new stream lacks the row, Off is expected, without saving Off; it comes
-  back on Auto and on re-entry. This needs no extra code. `onTracksUpdated` keeps the intent when the row is missing
-  (`VM:545-550`), and the Task 4 save writes the non-null intent.
+- AC-11 quality-switch clause: qa-device runs the spec's Test design section 5 **M3** as reworded for AC-11 (Q4).
+  It is a pass/fail check of AC-11, not an observation:
+  - (a) Pick a subtitle row, switch to a quality whose stream also offers that row: the row stays on.
+  - (b) Switch to a quality whose stream lacks the row (manual quality is `url.hls` without manifest subtitles,
+    for example Outlander S1E5 720p): the picker shows Off, and Off is **not** saved. Switch back to Auto: the row
+    is on again. Exit the player and re-enter: the row is on (this proves Off was not saved).
+  - If no title with such a stream can be found, the qa report marks (b) `NOT CHECKED` with the reason. It must not
+    be passed by observation, and (a) alone does not pass AC-11.
+- No extra code is needed for (b): `onTracksUpdated` keeps the intent when the row is missing (`VM:545-550`), and the
+  Task 4 save writes the non-null intent.
 
 ---
 
