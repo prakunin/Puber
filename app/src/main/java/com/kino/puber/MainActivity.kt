@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.kino.puber.core.telemetry.Telemetry
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) { appComposed = true }
                 if (appComposed) {
                     App()
+                    LaunchedEffect(Unit) { Telemetry.startupMarks?.markAppComposed() }
                 }
             }
         }

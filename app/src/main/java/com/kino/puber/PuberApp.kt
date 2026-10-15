@@ -2,6 +2,7 @@ package com.kino.puber
 
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -20,6 +21,8 @@ import com.kino.puber.core.logger.LinkingDebugTree
 import com.kino.puber.core.system.AndroidResourceProvider
 import com.kino.puber.core.system.AppLocale
 import com.kino.puber.core.system.ResourceProvider
+import com.kino.puber.core.telemetry.TelemetryRuntime
+import com.kino.puber.core.telemetry.di.telemetryModule
 import com.kino.puber.core.tvhome.ContinueWatchingSource
 import com.kino.puber.core.tvhome.TvHomePublisher
 import com.kino.puber.core.tvhome.TvHomePublisherFactory
@@ -65,8 +68,10 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
     }
 
     override fun onCreate() {
+        val appCreateMs = SystemClock.elapsedRealtime()
         super.onCreate()
 
+        TelemetryRuntime.install(this, appCreateMs)
         initDi()
         initLogger()
     }
@@ -80,6 +85,7 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
                 apiModule,
                 repositoryModule,
                 interactorModule,
+                telemetryModule,
             )
         }
         koinApplication.koin.get<ApiDomainInteractor>().initialize()

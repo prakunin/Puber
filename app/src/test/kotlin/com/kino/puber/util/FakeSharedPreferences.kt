@@ -28,6 +28,9 @@ class FakeSharedPreferences {
         every { sharedPreferences.getInt(any(), any()) } answers {
             values[firstArg()] as? Int ?: secondArg()
         }
+        every { sharedPreferences.getLong(any(), any()) } answers {
+            values[firstArg()] as? Long ?: secondArg()
+        }
         every { sharedPreferences.getBoolean(any(), any()) } answers {
             values[firstArg()] as? Boolean ?: secondArg()
         }
@@ -39,6 +42,10 @@ class FakeSharedPreferences {
         }
         every { editor.putInt(any(), any()) } answers {
             pending[firstArg()] = secondArg<Int>()
+            editor
+        }
+        every { editor.putLong(any(), any()) } answers {
+            pending[firstArg()] = secondArg<Long>()
             editor
         }
         every { editor.putBoolean(any(), any()) } answers {

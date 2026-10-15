@@ -93,6 +93,13 @@
 -keep class com.kino.puber.core.ui.navigation.PuberScreen { *; }
 -keep class com.kino.puber.core.ui.navigation.PuberScreenActivity { *; }
 
+# Telemetry names (AC-8): view models, actions and view states keep readable simple names.
+-keepnames class * extends com.kino.puber.core.ui.PuberVM
+-keepnames class * implements com.kino.puber.core.ui.uikit.model.UIAction
+-keepnames class * implements cafe.adriel.voyager.navigator.tab.Tab
+-keepnames class com.kino.puber.ui.**State
+-keepnames class com.kino.puber.ui.**State$*
+
 # ============================================================================
 # App: Parcelize classes
 # ============================================================================
@@ -126,9 +133,10 @@
     public static void i(...);
 }
 
-# Also strip the app's extension functions that wrap Timber
+# Also strip the app's message-only log extension. Strip only the message overload;
+# log(Throwable, ...) must reach the telemetry error tree in release.
 -assumenosideeffects class com.kino.puber.core.logger.LoggerKt {
-    public static void log(...);
+    public static void log(java.lang.Object, java.lang.String, java.lang.String);
 }
 
 # ============================================================================
