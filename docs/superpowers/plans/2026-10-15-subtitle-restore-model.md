@@ -157,7 +157,7 @@ protected fun stubSavedSubtitle(
 
 Steps:
 
-- [ ] **Red on base (no commit, before any other edit).** In `TST`, add the three failing-first tests against
+- [x] **Red on base (no commit, before any other edit).** In `TST`, add the three failing-first tests against
   the **old** signature. Use the existing private helpers `report` (`TST:245-247`), `rowIndex` (`:249-250`),
   `hlsRowsForFixture` (`:240-243`), plus this local row:
   `SubtitleTrackUIState(label = "", language = L, url = "", isForced = F, descriptiveLabel = N,
@@ -188,7 +188,7 @@ Steps:
   Run `--tests 'com.kino.puber.ui.feature.player.vm.PlayerVMTrackSelectionTest'`. Expect exactly these three to
   fail and the rest to pass. Paste the three failure lines into the Implementation record. Then remove the
   three tests (`git checkout -- <TST>`); they come back in the new form in Task 4.
-- [ ] Write first (repository, red by compile failure):
+- [x] Write first (repository, red by compile failure):
   - `subtitlePreference_roundTripsAllFourValues` (T-1b):
     1. Save `SubtitlePreference("eng", "subtitle:English SDH", true, "English SDH")`.
     2. Read it through a **new** `PlayerPreferencesRepository(fixture.context)`; all four values are equal.
@@ -204,24 +204,24 @@ Steps:
 
   Expose the `FakeSharedPreferences` in the test's `Fixture` data class (add a `preferences` field) so that
   `values` can be seeded and inspected. The upstream model for these is the `7d5addd2` repository test named above.
-- [ ] Create `SubtitlePreference.kt` exactly as under Produces.
-- [ ] Repository:
+- [x] Create `SubtitlePreference.kt` exactly as under Produces.
+- [x] Repository:
   - Add `KEY_SUBTITLE_FORCED_PREFIX = "subtitle_forced_"` and `KEY_SUBTITLE_LABEL_PREFIX = "subtitle_label_"`.
   - `getPreferredSubtitlePreference` reads lang and url with `getString(..., null)`, as `:16-22` do today.
   - It reads forced as `if (prefs.contains(key)) prefs.getBoolean(key, false) else null`, and label with `getString`.
   - `saveTrackPreferences(itemId, audioLang, audioLabel, subtitle)` keeps the single `prefs.edit {}`. For each of
     the four subtitle values it puts the value when non-null and removes the key when null (`putBoolean` for forced).
   - Delete the two old getters.
-- [ ] Interactor: `getPreferredSubtitlePreference(itemId)` and the new `saveTrackPreferences`, both plain
+- [x] Interactor: `getPreferredSubtitlePreference(itemId)` and the new `saveTrackPreferences`, both plain
   delegation. Import `com.kino.puber.domain.model.SubtitlePreference`.
-- [ ] VM, behaviour-neutral (P-g):
+- [x] VM, behaviour-neutral (P-g):
   - In `restoreSubtitlePreference`, set `val saved = interactor.getPreferredSubtitlePreference(params.itemId)` and pass
     `preferredLang = saved.language, preferredUrl = saved.url` to the unchanged two-argument resolver.
   - In `saveTrackPreferences`, keep the `if (subtitleRestoredForCurrentMedia)` split (`:1856`).
     - The true branch builds `SubtitlePreference(language = <:1857 expr>, url = <:1858 expr>, isForced = null, descriptiveLabel = null)`.
     - The else branch is `interactor.getPreferredSubtitlePreference(params.itemId)`.
   - Call `interactor.saveTrackPreferences(itemId, audioLang, audioLabel, subtitle = ...)`.
-- [ ] Tests migration (P-d):
+- [x] Tests migration (P-d):
   - `FIX:107-108` → `every { interactor.getPreferredSubtitlePreference(any()) } returns SubtitlePreference.NONE`.
   - `FIX:116` → `every { interactor.saveTrackPreferences(any(), any(), any(), any()) } returns Unit`.
   - Add `stubSavedSubtitle` to `FIX`, next to `startedVM()` (`FIX:156`).
@@ -233,9 +233,9 @@ Steps:
     - `(42, any(), any(), "rus", URL)` (414, 467, 519) becomes
       `(42, any(), any(), match { it.language == "rus" && it.url == URL })`.
     - `(…, null, null)` (415, 482) becomes `(…, SubtitlePreference.NONE)`.
-- [ ] Run the fast gate. Run the repository test and the player package tests: everything is green, and the four new
+- [x] Run the fast gate. Run the repository test and the player package tests: everything is green, and the four new
   repository tests pass.
-- [ ] Commit: `Persist the subtitle preference as one model with forced and label keys`.
+- [x] Commit: `Persist the subtitle preference as one model with forced and label keys`.
 
 **Done when:**
 - `check.fast` is green.
@@ -285,7 +285,7 @@ internal fun manifestRendition(
 //   playerTrackGroupId = (if (merged) "0:" else "") + "subtitle:$name", playerTrackIndex = 0, fromManifest = true
 ```
 
-- [ ] Write first, in `SubtitlePreferenceKeyTest` (red by compile failure):
+- [x] Write first, in `SubtitlePreferenceKeyTest` (red by compile failure):
   - `keyOrder_urlThenSourceFileThenGroupIdThenTrackUriThenTrackId`: drop the fields one at a time and check
     the next one wins. Clearing them all gives `null`, not `""`.
   - `manifestRow_storesGroupIdWithoutMergePrefix` (AC-1): `manifestRendition("rus", "Rus")` gives the key `"subtitle:Rus"`.
@@ -303,10 +303,10 @@ internal fun manifestRendition(
   - `offOrNull_givesNone`: both `null.toSubtitlePreference()` and the Off row (`language = "", url = ""`) give `NONE`.
   - `manifestIdentities_includePrefixedAndStrippedGroupId`: `manifestRendition("rus", "Rus").preferenceIdentities`
     contains `"0:subtitle:Rus"`, `"subtitle:Rus"` and `"subs:Rus"`.
-- [ ] Implement `SubtitlePreferenceKey.kt` and `SubtitleTestRows.kt` as under Produces. Keep each function short:
+- [x] Implement `SubtitlePreferenceKey.kt` and `SubtitleTestRows.kt` as under Produces. Keep each function short:
   the key is a `listOf(...).firstOrNull { !it.isNullOrEmpty() }` chain, and there are no `return` guards.
-- [ ] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.SubtitlePreferenceKeyTest'`, then the player package.
-- [ ] Commit: `Derive a stable preference key and identities for every subtitle row`.
+- [x] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.SubtitlePreferenceKeyTest'`, then the player package.
+- [x] Commit: `Derive a stable preference key and identities for every subtitle row`.
 
 **Done when:** `check.fast` is green and `SubtitlePreferenceKeyTest` (7 tests) plus the player package are green.
 
