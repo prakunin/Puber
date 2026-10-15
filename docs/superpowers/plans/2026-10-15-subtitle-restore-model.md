@@ -362,7 +362,7 @@ Rules (spec D6/D7). The first rule that names a row wins.
 - Implement the rules as a `listOf({...})` matcher list, as at `:31-38`. Reuse the existing private `uniqueIndex` helper
   (`:67-69`) for "single candidate".
 
-- [ ] Write first (red by compile failure or assertion). Use `manifestRendition` and the existing `sideLoad`/`off`.
+- [x] Write first (red by compile failure or assertion). Use `manifestRendition` and the existing `sideLoad`/`off`.
   - `findSubtitleTrackIndex_matchesManifestRowByStoredGroupId` (T-1c): `[off, eng manifest "English", eng manifest "English SDH"]`
     with `("eng", "subtitle:English SDH")` gives 2.
   - `findSubtitleTrackIndex_matchesPrefixedGroupIdAgainstStoredUnprefixedAndViceVersa` (T-1d):
@@ -405,11 +405,11 @@ Rules (spec D6/D7). The first rule that names a row wins.
   - `findSubtitleTrackIndex_emptyLanguageWithoutIdentity_meansOff` (T-7b): `("", null)` and `("", "")` both give 0.
   - `findSubtitleTrackIndex_positionalSideLoadGroupIdNeverMatches` (T-10c): `[off, sideLoad("", "a.srt", 1)]` with
     `(null, "1:0")` gives -1.
-- [ ] Implement the rules in `RES`. Leave the existing tests `:115-126` untouched; they must stay green.
-- [ ] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.AudioTrackPreferenceResolverTest'`, then the
+- [x] Implement the rules in `RES`. Leave the existing tests `:115-126` untouched; they must stay green.
+- [x] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.AudioTrackPreferenceResolverTest'`, then the
   player package. `TST` must stay green: the VM still passes two fields, and every existing VM restore case resolves
   as before (checked: `TST:149-160` and `:641-651` use non-manifest rows only).
-- [ ] Commit: `Resolve the saved subtitle by identity, readable label and a manifest-preferring language`.
+- [x] Commit: `Resolve the saved subtitle by identity, readable label and a manifest-preferring language`.
 
 **Done when:** `check.fast` is green, `AudioTrackPreferenceResolverTest` (old and new) is green, and the player package
 is green.

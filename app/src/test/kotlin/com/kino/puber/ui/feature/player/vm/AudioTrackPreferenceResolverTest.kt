@@ -124,4 +124,150 @@ internal class AudioTrackPreferenceResolverTest {
 
         assertEquals(-1, resolver.findSubtitleTrackIndex(tracks, preferredLang = "rus", preferredUrl = null))
     }
+
+    private fun apiRow(language: String, url: String, forced: Boolean? = null) =
+        SubtitleTrackUIState(label = language, language = language, url = url, isForced = forced)
+
+    private fun languageLess(playerTrackId: String? = null, url: String = "") = SubtitleTrackUIState(
+        label = "",
+        language = "",
+        url = url,
+        playerTrackId = playerTrackId,
+        playerTrackGroupId = playerTrackId?.let { "1:0" },
+        playerTrackIndex = 0,
+    )
+
+    private fun find(
+        tracks: List<SubtitleTrackUIState>,
+        lang: String?,
+        url: String?,
+        forced: Boolean? = null,
+        label: String? = null,
+    ) = resolver.findSubtitleTrackIndex(tracks, lang, url, forced, label)
+
+    @Test
+    fun findSubtitleTrackIndex_matchesManifestRowByStoredGroupId() {
+        val tracks = listOf(off, manifestRendition("eng", "English"), manifestRendition("eng", "English SDH"))
+
+        assertEquals(2, find(tracks, "eng", "subtitle:English SDH"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_matchesPrefixedGroupIdAgainstStoredUnprefixedAndViceVersa() {
+        val merged = listOf(off, manifestRendition("rus", "Rus"))
+        val unmerged = listOf(off, manifestRendition("rus", "Rus", merged = false))
+
+        assertEquals(1, find(merged, "rus", "subtitle:Rus"))
+        assertEquals(1, find(unmerged, "rus", "subtitle:Rus"))
+        assertEquals(1, find(merged, "rus", "0:subtitle:Rus"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_preservesLanguageLessTrackByIdentity() {
+        val rows = listOf(
+            languageLess(url = "https://test/unknown.vtt") to "https://test/unknown.vtt",
+            languageLess(playerTrackId = "unknown") to "unknown",
+            manifestRendition("", "Unknown") to "subtitle:Unknown",
+        )
+
+        rows.forEach { (row, identity) ->
+            assertEquals(1, find(listOf(off, row), null, identity), identity)
+            assertEquals(1, find(listOf(off, row), "", identity), identity)
+        }
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_legacyPreference_resolvesToSameRowAsBefore() {
+        val url = "https://api.test/subtitles/a.srt"
+        val forcedEng = apiRow("eng", "https://api.test/subtitles/eng-forced.srt", forced = true)
+
+        val both = listOf(off, apiRow("rus", url), apiRow("eng", "https://api.test/subtitles/b.srt"))
+        val signed = "https://other.host/tok/subtitles/a.srt?e=1"
+
+        assertEquals(1, find(both, "rus", url))
+        assertEquals(1, find(listOf(off, apiRow("rus", url)), "rus", signed))
+        assertEquals(1, find(listOf(off, sideLoad("rus", "a.srt", 1)), "rus", null))
+        assertEquals(1, find(listOf(off, forcedEng), "rus", forcedEng.url))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_legacyAmbiguousLanguage_nowResolvesToSingleManifestRow() {
+        val single = listOf(off, sideLoad("rus", "a.srt", 1), manifestRendition("rus", "Rus"))
+        val two = listOf(off, manifestRendition("rus", "Rus"), manifestRendition("rus", "Other"))
+
+        assertEquals(2, find(single, "rus", null))
+        assertEquals(-1, find(two, "rus", null))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_rejectsForcedOnlyReplacementForFullPreference() {
+        val tracks = listOf(off, manifestRendition("rus", "Forced", forced = true))
+
+        assertEquals(-1, find(tracks, "rus", null, forced = false))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_usesForcedFlagToChooseBetweenFullAndForcedSameLanguage() {
+        val tracks = listOf(
+            off,
+            manifestRendition("rus", "Full", forced = false, label = null),
+            manifestRendition("rus", "Forced", forced = true, label = null),
+        )
+
+        assertEquals(1, find(tracks, "rus", null, forced = false))
+        assertEquals(2, find(tracks, "rus", null, forced = true))
+    }
+
+    private fun reusedEnglishRows() = listOf(
+        off,
+        sideLoad("eng", "reused", 1).copy(isForced = false, descriptiveLabel = "English SDH"),
+        sideLoad("eng", "reused", 2).copy(isForced = false, descriptiveLabel = "English Commentary"),
+    )
+
+    @Test
+    fun findSubtitleTrackIndex_usesMeaningfulLabelToResolveSameLanguageVariants() {
+        assertEquals(2, find(reusedEnglishRows(), "eng", "reused", forced = false, label = "English Commentary"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_labelComparisonIsTrimmedAndCaseInsensitive() {
+        assertEquals(2, find(reusedEnglishRows(), "eng", "reused", forced = false, label = "  english commentary "))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_rowWithoutReadableLabelPassesLabelFilter() {
+        val tracks = listOf(off, apiRow("rus", "https://api.test/subtitles/full.vtt"))
+
+        assertEquals(1, find(tracks, "rus", "subtitle:Russian Full", forced = false, label = "Russian Full"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_rejectsReusedIdentityWithDifferentLanguage() {
+        val tracks = listOf(off, sideLoad("spa", "reused-id", 1))
+
+        assertEquals(-1, find(tracks, "eng", "reused-id"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_doesNotRestoreOffWhenLanguageLessIdentityDisappears() {
+        val tracks = listOf(off, languageLess(playerTrackId = "other"))
+
+        assertEquals(-1, find(tracks, null, "missing"))
+        assertEquals(-1, find(tracks, "", "missing"))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_emptyLanguageWithoutIdentity_meansOff() {
+        val tracks = listOf(off, sideLoad("rus", "a.srt", 1))
+
+        assertEquals(0, find(tracks, "", null))
+        assertEquals(0, find(tracks, "", ""))
+    }
+
+    @Test
+    fun findSubtitleTrackIndex_positionalSideLoadGroupIdNeverMatches() {
+        val tracks = listOf(off, sideLoad("", "a.srt", 1))
+
+        assertEquals(-1, find(tracks, null, "1:0"))
+    }
 }
