@@ -14,7 +14,7 @@ rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-10-11
 migrated: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-15
 ---
 
 ## Next
@@ -34,3 +34,4 @@ updated: 2026-10-12
 - spec header (in the worktree): Kind refactor, Size L, Route standard
 - worktree files: reviews/2026-10-11-upstream-sync-triage.md, evidence/2026-10-11-upstream-sync-triage-device.md
 - 2026-10-12 migrated from the former board file (board stage `impl` -> `impl`); the board row Notes are copied verbatim into ## Next
+- 2026-10-15 owner (via subtitle-restore-model triage): prioritise P6-A (player hermetic fixtures) now that subtitle-upstream-port is done; run subtitle-switch-text-disable waits for it.
