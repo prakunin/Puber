@@ -96,7 +96,7 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     @Test
     fun selectTrack_savesLangToPrefs() {
         startedVM().onAction(PlayerAction.SelectAudioTrack(1))
-        verify { interactor.saveTrackPreferences(42, "rus", any(), any()) }
+        verify { interactor.saveTrackPreferences(42, "rus", any(), SubtitlePreference.NONE) }
     }
 
     // endregion
@@ -385,7 +385,9 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
                 42, any(), any(), match { it.language == "rus" && it.url == testSubtitleTracks[1].url },
             )
         }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), SubtitlePreference.NONE) }
+        verify(exactly = 0) {
+            interactor.saveTrackPreferences(any(), any(), any(), match { it.language == null && it.url == null })
+        }
     }
 
     @Test

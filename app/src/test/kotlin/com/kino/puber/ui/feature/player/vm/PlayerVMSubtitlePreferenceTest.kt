@@ -34,7 +34,9 @@ internal class PlayerVMSubtitlePreferenceTest : PlayerVMTestFixture() {
                 42, any(), any(), match { it.language == null && it.url == "subtitle:Signs" },
             )
         }
-        verify(exactly = 0) { interactor.saveTrackPreferences(any(), any(), any(), SubtitlePreference.NONE) }
+        verify(exactly = 0) {
+            interactor.saveTrackPreferences(any(), any(), any(), match { it.language == null && it.url == null })
+        }
     }
 
     @Test
@@ -48,8 +50,25 @@ internal class PlayerVMSubtitlePreferenceTest : PlayerVMTestFixture() {
         verify(exactly = 0) { playbackController.selectSubtitle(match { it.isForced == true }) }
     }
 
+    @Test
+    fun savedSubtitleRestoredBySubstitute_noPick_audioChangeKeepsStoredPreference() {
+        stubSavedSubtitle("rus", "subtitle:Gone", isForced = false, descriptiveLabel = "Russian Old")
+        val vm = startedVM()
+        report(listOf(manifestRendition("rus", "Russian New")))
+        assertEquals(1, contentState(vm).selectedSubtitleIndex)
+        clearMocks(interactor, answers = false)
+
+        vm.onAction(PlayerAction.SelectAudioTrack(1))
+
+        verify(exactly = 1) {
+            interactor.saveTrackPreferences(
+                42, any(), any(), SubtitlePreference("rus", "subtitle:Gone", false, "Russian Old"),
+            )
+        }
+    }
+
     private fun unresolvedSavedSubtitleVM(): PlayerVM {
-        stubSavedSubtitle("rus", "https://test/subtitles/gone.vtt")
+        stubSavedSubtitle("rus", "https://test/subtitles/gone.vtt", isForced = false, descriptiveLabel = "Russian Full")
         val vm = startedVM()
         report(hlsRowsForFixture())
         clearMocks(interactor, answers = false)
@@ -64,7 +83,7 @@ internal class PlayerVMSubtitlePreferenceTest : PlayerVMTestFixture() {
 
         verify(exactly = 1) {
             interactor.saveTrackPreferences(
-                42, any(), any(), SubtitlePreference("rus", "https://test/subtitles/gone.vtt", null, null),
+                42, any(), any(), SubtitlePreference("rus", "https://test/subtitles/gone.vtt", false, "Russian Full"),
             )
         }
     }
@@ -91,13 +110,10 @@ internal class PlayerVMSubtitlePreferenceTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.SelectEpisode(1, 2))
         report(hlsRowsForFixture())
         clearMocks(interactor, answers = false)
+        stubSavedSubtitle(null, null)
         vm.onAction(PlayerAction.SelectAudioTrack(1))
 
-        verify(exactly = 1) {
-            interactor.saveTrackPreferences(
-                42, any(), any(), SubtitlePreference("rus", "https://test/subtitles/gone.vtt", null, null),
-            )
-        }
+        verify(exactly = 1) { interactor.saveTrackPreferences(42, any(), any(), SubtitlePreference.NONE) }
     }
 
     @Test

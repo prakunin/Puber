@@ -1861,11 +1861,9 @@ internal class PlayerVM(
     private fun saveTrackPreferences() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
         val audioTrack = state.audioTracks.getOrNull(state.selectedAudioTrackIndex)
-        // The viewer's intent is saved once it exists, which stays right while the rows are collapsed to Off.
-        // While the restore waits for text, or found nothing and the viewer has picked nothing since, the
-        // stored subtitle passes through.
-        val hasIntent = intendedSubtitleRow != null || subtitlePickedThisMedia
-        val subtitle = if (subtitleRestoredForCurrentMedia && hasIntent) {
+        // Only an explicit pick in this media replaces the stored subtitle. A row the restore chose as a
+        // substitute, a restore still waiting for text, or one that found nothing leaves it as it was.
+        val subtitle = if (subtitleRestoredForCurrentMedia && subtitlePickedThisMedia) {
             intendedSubtitleRow.toSubtitlePreference()
         } else {
             interactor.getPreferredSubtitlePreference(params.itemId)
