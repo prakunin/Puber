@@ -163,6 +163,30 @@ internal open class PlayerVMTestFixture {
             SubtitlePreference(language, url, isForced, descriptiveLabel)
     }
 
+    protected val audioReport = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
+
+    protected fun sideLoad(language: String, url: String, child: Int) = SubtitleTrackUIState(
+        label = "",
+        language = language,
+        url = "",
+        playerTrackId = url.stableSubtitleKey(),
+        playerTrackGroupId = "$child:0",
+        playerTrackIndex = 0,
+        fromManifest = false,
+    )
+
+    protected fun hlsRowsForFixture() = listOf(
+        sideLoad("rus", testSubtitleTracks[1].url, 1),
+        sideLoad("rus", testSubtitleTracks[2].url, 2),
+    )
+
+    protected fun report(subtitles: List<SubtitleTrackUIState>?, audio: List<AudioTrackUIState> = audioReport) {
+        callbackSlot.captured.onTracksUpdated(audio, 0, subtitles)
+    }
+
+    protected fun rowIndex(vm: PlayerVM, predicate: (SubtitleTrackUIState) -> Boolean) =
+        contentState(vm).subtitleTracks.indexOfFirst(predicate)
+
     protected fun startedVM(): PlayerVM = createVM().also { it.testOnStart() }
 
     protected fun contentState(vm: PlayerVM) = (vm.testStateValue as PlayerViewState.Content).content

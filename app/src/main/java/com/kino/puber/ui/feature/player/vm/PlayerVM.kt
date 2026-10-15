@@ -45,7 +45,6 @@ import com.kino.puber.ui.feature.player.model.SeekIndicatorState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
 import com.kino.puber.ui.feature.player.model.subtitleLabeler
-import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -164,6 +163,9 @@ internal class PlayerVM(
     /** Audio only: the subtitle restore has its own flag, because it waits for a report with text. */
     private var tracksRestoredForCurrentMedia = false
     private var subtitleRestoredForCurrentMedia = false
+
+    /** True once the viewer picked a subtitle (or Off) for this media; until then a stored preference is kept. */
+    private var subtitlePickedThisMedia = false
     private var episodeSwitchInProgress = false
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
@@ -598,12 +600,20 @@ internal class PlayerVM(
     }
 
     private fun restoreSubtitlePreference() {
-        val saved = interactor.getPreferredSubtitlePreference(params.itemId)
         val content = (stateValue as? PlayerViewState.Content)?.content ?: return
+        val shown = content.subtitleTracks.getOrNull(content.selectedSubtitleIndex)
+        // On a rebuild onTracksUpdated has already found the viewer's row again; it wins over the saved value.
+        if (intendedSubtitleRow != null && shown != null && !shown.isOff) {
+            playbackController.selectSubtitle(shown)
+            return
+        }
+        val saved = interactor.getPreferredSubtitlePreference(params.itemId)
         val subtitleIndex = audioTrackPreferenceResolver.findSubtitleTrackIndex(
             tracks = content.subtitleTracks,
             preferredLang = saved.language,
             preferredUrl = saved.url,
+            preferredIsForced = saved.isForced,
+            preferredDescriptiveLabel = saved.descriptiveLabel,
         )
         if (subtitleIndex >= 0) {
             applySubtitleSelection(index = subtitleIndex, persist = false)
@@ -612,7 +622,7 @@ internal class PlayerVM(
         // Nothing saved resolves for this media: re-send the picker's own row, so a pick still
         // pending in the controller from the previous media cannot turn text back on under an
         // Off picker. The intent is left alone: on a rebuild it may name a row this stream lacks.
-        content.subtitleTracks.getOrNull(content.selectedSubtitleIndex)?.let(playbackController::selectSubtitle)
+        shown?.let(playbackController::selectSubtitle)
     }
 
     override fun onAction(action: UIAction) {
@@ -877,6 +887,7 @@ internal class PlayerVM(
         if (persist) {
             // An explicit pick supersedes a restore that is still waiting for text.
             subtitleRestoredForCurrentMedia = true
+            subtitlePickedThisMedia = true
             saveTrackPreferences()
         }
     }
@@ -992,6 +1003,7 @@ internal class PlayerVM(
         countdownDismissed = false
         tracksRestoredForCurrentMedia = false
         subtitleRestoredForCurrentMedia = false
+        subtitlePickedThisMedia = false
         intendedSubtitleRow = null
         onPlaybackResumed()
     }
@@ -1849,15 +1861,12 @@ internal class PlayerVM(
     private fun saveTrackPreferences() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
         val audioTrack = state.audioTracks.getOrNull(state.selectedAudioTrackIndex)
-        // While the restore waits for text the saved subtitle passes through; afterwards the viewer's
-        // intent is saved, which stays right while the rows are collapsed to Off.
-        val subtitle = if (subtitleRestoredForCurrentMedia) {
-            SubtitlePreference(
-                language = intendedSubtitleRow?.language?.takeIf { it.isNotEmpty() },
-                url = intendedSubtitleRow?.url?.takeIf { it.isNotEmpty() },
-                isForced = null,
-                descriptiveLabel = null,
-            )
+        // The viewer's intent is saved once it exists, which stays right while the rows are collapsed to Off.
+        // While the restore waits for text, or found nothing and the viewer has picked nothing since, the
+        // stored subtitle passes through.
+        val hasIntent = intendedSubtitleRow != null || subtitlePickedThisMedia
+        val subtitle = if (subtitleRestoredForCurrentMedia && hasIntent) {
+            intendedSubtitleRow.toSubtitlePreference()
         } else {
             interactor.getPreferredSubtitlePreference(params.itemId)
         }

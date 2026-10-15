@@ -208,18 +208,6 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     // region Subtitle rows reported by the player (HLS merge)
 
-    private val audioReport = listOf(AudioTrackUIState(0, "English", "eng"), AudioTrackUIState(1, "Russian", "rus"))
-
-    private fun sideLoad(language: String, url: String, child: Int) = SubtitleTrackUIState(
-        label = "",
-        language = language,
-        url = "",
-        playerTrackId = url.stableSubtitleKey(),
-        playerTrackGroupId = "$child:0",
-        playerTrackIndex = 0,
-        fromManifest = false,
-    )
-
     private fun manifest(language: String, id: String, uri: String? = null) = SubtitleTrackUIState(
         label = "",
         language = language,
@@ -230,18 +218,6 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         playerTrackUri = uri,
         fromManifest = true,
     )
-
-    private fun hlsRowsForFixture() = listOf(
-        sideLoad("rus", testSubtitleTracks[1].url, 1),
-        sideLoad("rus", testSubtitleTracks[2].url, 2),
-    )
-
-    private fun report(subtitles: List<SubtitleTrackUIState>?, audio: List<AudioTrackUIState> = audioReport) {
-        callbackSlot.captured.onTracksUpdated(audio, 0, subtitles)
-    }
-
-    private fun rowIndex(vm: PlayerVM, predicate: (SubtitleTrackUIState) -> Boolean) =
-        contentState(vm).subtitleTracks.indexOfFirst(predicate)
 
     @Test
     fun tracksUpdated_hlsApiOnlyLanguage_appearsInRowsAndIsSelectable() {

@@ -472,7 +472,7 @@ val subtitle = if (subtitleRestoredForCurrentMedia && (intendedSubtitleRow != nu
 This has three returns (the `?: return` guard plus two) and three conditions, so it passes `ReturnCount` and
 `ComplexCondition`.
 
-- [ ] Write first, all in `TST` with the new signature. Use `manifestRendition` from `SubtitleTestRows.kt` and
+- [x] Write first, all in `TST` with the new signature. Use `manifestRendition` from `SubtitleTestRows.kt` and
   `SubtitlePreference` (import `com.kino.puber.domain.model.SubtitlePreference`).
   1. Add the three failing-first tests and run them. **All three must be red** before any VM edit (P-g); record the failures.
      - T-2a `pickLanguageLessManifestRow_savesIdentityNotOff`:
@@ -534,12 +534,12 @@ This has three returns (the `?: return` guard plus two) and three conditions, so
        2. Then `SelectEpisode(1, 2)` and `report(hlsRowsForFixture())` (unresolved again), `clearMocks(interactor, answers = false)`
           and `SelectAudioTrack(1)`. The save passes the stored `("rus", gone, null, null)` through. This checks that the
           flag resets in `resetMediaSession`.
-- [ ] Implement the VM changes under Produces, and set and reset the flag as listed under Files.
-- [ ] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.PlayerVMTrackSelectionTest'`. All tests are
+- [x] Implement the VM changes under Produces, and set and reset the flag as listed under Files.
+- [x] Run the fast gate and `--tests 'com.kino.puber.ui.feature.player.vm.PlayerVMTrackSelectionTest'`. All tests are
   green, including the rebuild tests `:401-457` (AC-8) and the migrated verifies.
-- [ ] Run the full gate (AC-12): `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`.
+- [x] Run the full gate (AC-12): `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug`.
   Fix any detekt finding by restructuring, not by suppression.
-- [ ] Commit: `Save the full subtitle preference and restore the live intent before the saved one`.
+- [x] Commit: `Save the full subtitle preference and restore the live intent before the saved one`.
 
 **Done when:** `check.fast` and `check.full` are green, and the Implementation record lists the three tests that were red
 before the VM edit and green after it.
@@ -567,15 +567,45 @@ before the VM edit and green after it.
 
 <!-- owner: implementer -->
 
-**Commits:**
+**Commits:** (one per task; shas in `git log f351d988..HEAD`)
+
+1. `Persist the subtitle preference as one model with forced and label keys` (Task 1)
+2. `Derive a stable preference key and identities for every subtitle row` (Task 2)
+3. `Resolve the saved subtitle by identity, readable label and a manifest-preferring language` (Task 3)
+4. `Save the full subtitle preference and restore the live intent before the saved one` (Task 4, with this record)
+
+**Red runs (failing-first):**
+
+- On base `f351d988`, old signature, `PlayerVMTrackSelectionTest` (47 tests, exactly these three failed):
+  - `pickLanguageLessManifestRow_savesIdentityNotOff`: `java.lang.AssertionError at PlayerVMTrackSelectionTest.kt:268` (the base wrote null/null).
+  - `savedFullSubtitle_streamHasOnlyForcedRow_staysOff`: `org.opentest4j.AssertionFailedError at PlayerVMTrackSelectionTest.kt:286` (selected index was the forced row).
+  - `savedSubtitleUnresolved_noPick_audioChangeKeepsStoredPreference`: `java.lang.AssertionError at PlayerVMTrackSelectionTest.kt:300`.
+- New signature, before the VM edit of Task 4 (resolver already new, VM still two-field and old save), 6 of the 58 VM tests failed:
+  - the three above (`PlayerVMSubtitlePreferenceTest`-era names are the same; `pickLanguageLessManifestRow...:254`, `savedFullSubtitle...:269`, `savedSubtitleUnresolved_noPick...:287` in the then file);
+  - `savedSubtitleUnresolved_explicitOffAfterUnresolved_clearsStored` (AC-16 flag reset), `rebuild_intentDiffersFromSaved_resolvesIntentFirst` (T-8a), `pickManifestOnlyRow_savesUnprefixedGroupIdWithLanguageForcedAndLabel` (T-1a).
+  - All six are green after the VM edit.
+- Already green before the VM edit (regression pins or resolver-only behaviour): T-1e (both variants), T-3b, T-8b, T-8c, T-9, T-10b, T-16b.
 
 **Deviations from the plan:**
 
+- The new VM tests live in a new class `PlayerVMSubtitlePreferenceTest`, not in `PlayerVMTrackSelectionTest`. Detekt `LargeClass` (an `AC-12` gate) flagged `PlayerVMTrackSelectionTest` once it grew by the new cases, and the plan forbids suppressions. To share the helpers, `audioReport`, `sideLoad`, `hlsRowsForFixture`, `report` and `rowIndex` moved from the test class into `PlayerVMTestFixture` as `protected` (bodies unchanged).
+- T-9 does not use `pickedRussianWithSavedPreference()` (it stays private in `PlayerVMTrackSelectionTest`); it builds the same state inline with `manifestRendition("eng", "English")` as the extra row.
+- The three base-red tests were first written with the old signature as the plan says (their Task 1 form), then reverted; the Task 4 forms use a small `unresolvedSavedSubtitleVM()` helper shared by T-16a..c.
+- `PlayerVM` keeps no import of `SubtitlePreference` (Task 4 produces it through `toSubtitlePreference()`); Task 1 imported it for the behaviour-neutral save and Task 4 removed it again.
+
 **Files touched outside the plan:**
+
+- `PlayerVMTestFixture.kt` (shared helpers moved there, see above) and the new `PlayerVMSubtitlePreferenceTest.kt`.
 
 **For the reviewers:**
 
-**Blocked:**
+- `AudioTrackPreferenceResolver.findSubtitleTrackIndex`: rule 0 is the only guard return; rules 1-2 use the P-a empty guard and run over all rows; rules 3-5 run over `candidates` (Off rows excluded, P-b). Rule 4 is skipped for a null label.
+- `PlayerVM.restoreSubtitlePreference` D9 branch and the `hasIntent` condition in `saveTrackPreferences` (AC-16: intent or an explicit pick this media).
+- Full gate: `testDevDebugUnitTest` failed twice or three times in a row in the first full runs on unrelated suites (`HomeVMIncrementalPublishTest`, `HistoryVMDeletionSchedulingTest`; `UncaughtExceptionsBeforeTest`, a coroutine that touched `Dispatchers.Main` after another test reset it). Each passed when rerun alone, and two further `--rerun-tasks` full runs plus the final `check.full` run were green. I judge it a pre-existing order/load flake and did not touch it; reviewers may want to know it exists.
+- `:app:detektAll` printed "83 compiler errors found during analysis" as a warning in one run; it did not fail the task.
+- Device check AC-11 (M1-M6, steps 3 and 4 of spec section 5) is still open for qa-device.
+
+**Blocked:** none.
 
 ## Readiness
 
