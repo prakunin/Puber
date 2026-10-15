@@ -45,6 +45,7 @@ import com.kino.puber.ui.feature.player.model.SeekIndicatorState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
 import com.kino.puber.ui.feature.player.model.subtitleLabeler
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -597,13 +598,12 @@ internal class PlayerVM(
     }
 
     private fun restoreSubtitlePreference() {
-        val subtitleLang = interactor.getPreferredSubtitleLang(params.itemId)
-        val subtitleUrl = interactor.getPreferredSubtitleUrl(params.itemId)
+        val saved = interactor.getPreferredSubtitlePreference(params.itemId)
         val content = (stateValue as? PlayerViewState.Content)?.content ?: return
         val subtitleIndex = audioTrackPreferenceResolver.findSubtitleTrackIndex(
             tracks = content.subtitleTracks,
-            preferredLang = subtitleLang,
-            preferredUrl = subtitleUrl,
+            preferredLang = saved.language,
+            preferredUrl = saved.url,
         )
         if (subtitleIndex >= 0) {
             applySubtitleSelection(index = subtitleIndex, persist = false)
@@ -1851,21 +1851,21 @@ internal class PlayerVM(
         val audioTrack = state.audioTracks.getOrNull(state.selectedAudioTrackIndex)
         // While the restore waits for text the saved subtitle passes through; afterwards the viewer's
         // intent is saved, which stays right while the rows are collapsed to Off.
-        val subtitleLang: String?
-        val subtitleUrl: String?
-        if (subtitleRestoredForCurrentMedia) {
-            subtitleLang = intendedSubtitleRow?.language?.takeIf { it.isNotEmpty() }
-            subtitleUrl = intendedSubtitleRow?.url?.takeIf { it.isNotEmpty() }
+        val subtitle = if (subtitleRestoredForCurrentMedia) {
+            SubtitlePreference(
+                language = intendedSubtitleRow?.language?.takeIf { it.isNotEmpty() },
+                url = intendedSubtitleRow?.url?.takeIf { it.isNotEmpty() },
+                isForced = null,
+                descriptiveLabel = null,
+            )
         } else {
-            subtitleLang = interactor.getPreferredSubtitleLang(params.itemId)
-            subtitleUrl = interactor.getPreferredSubtitleUrl(params.itemId)
+            interactor.getPreferredSubtitlePreference(params.itemId)
         }
         interactor.saveTrackPreferences(
             itemId = params.itemId,
             audioLang = audioTrack?.language?.takeIf { it.isNotEmpty() },
             audioLabel = audioTrack?.label?.takeIf { it.isNotEmpty() },
-            subtitleLang = subtitleLang,
-            subtitleUrl = subtitleUrl,
+            subtitle = subtitle,
         )
     }
 

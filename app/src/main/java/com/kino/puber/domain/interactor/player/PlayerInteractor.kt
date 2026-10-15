@@ -9,6 +9,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.domain.model.BufferPreset
 import kotlinx.coroutines.CancellationException
@@ -332,27 +333,21 @@ internal class PlayerInteractor(
         return playerPreferencesRepository.getPreferredAudioLabel(itemId)
     }
 
-    fun getPreferredSubtitleLang(itemId: Int): String? {
-        return playerPreferencesRepository.getPreferredSubtitleLang(itemId)
-    }
-
-    fun getPreferredSubtitleUrl(itemId: Int): String? {
-        return playerPreferencesRepository.getPreferredSubtitleUrl(itemId)
+    fun getPreferredSubtitlePreference(itemId: Int): SubtitlePreference {
+        return playerPreferencesRepository.getPreferredSubtitlePreference(itemId)
     }
 
     fun saveTrackPreferences(
         itemId: Int,
         audioLang: String?,
         audioLabel: String?,
-        subtitleLang: String?,
-        subtitleUrl: String?,
+        subtitle: SubtitlePreference,
     ) {
         playerPreferencesRepository.saveTrackPreferences(
             itemId = itemId,
             audioLang = audioLang,
             audioLabel = audioLabel,
-            subtitleLang = subtitleLang,
-            subtitleUrl = subtitleUrl,
+            subtitle = subtitle,
         )
     }
 

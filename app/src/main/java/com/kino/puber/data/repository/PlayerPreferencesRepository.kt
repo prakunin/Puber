@@ -1,7 +1,9 @@
 package com.kino.puber.data.repository
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.domain.model.BufferPreset
 
@@ -13,12 +15,14 @@ class PlayerPreferencesRepository(context: Context) {
         return prefs.getString("${KEY_AUDIO_LANG_PREFIX}$itemId", null)
     }
 
-    fun getPreferredSubtitleLang(itemId: Int): String? {
-        return prefs.getString("${KEY_SUBTITLE_LANG_PREFIX}$itemId", null)
-    }
-
-    fun getPreferredSubtitleUrl(itemId: Int): String? {
-        return prefs.getString("${KEY_SUBTITLE_URL_PREFIX}$itemId", null)
+    fun getPreferredSubtitlePreference(itemId: Int): SubtitlePreference {
+        val forcedKey = "${KEY_SUBTITLE_FORCED_PREFIX}$itemId"
+        return SubtitlePreference(
+            language = prefs.getString("${KEY_SUBTITLE_LANG_PREFIX}$itemId", null),
+            url = prefs.getString("${KEY_SUBTITLE_URL_PREFIX}$itemId", null),
+            isForced = if (prefs.contains(forcedKey)) prefs.getBoolean(forcedKey, false) else null,
+            descriptiveLabel = prefs.getString("${KEY_SUBTITLE_LABEL_PREFIX}$itemId", null),
+        )
     }
 
     fun getPreferredAudioLabel(itemId: Int): String? {
@@ -29,8 +33,7 @@ class PlayerPreferencesRepository(context: Context) {
         itemId: Int,
         audioLang: String?,
         audioLabel: String?,
-        subtitleLang: String?,
-        subtitleUrl: String?,
+        subtitle: SubtitlePreference,
     ) {
         prefs.edit {
             if (audioLang != null) {
@@ -43,17 +46,20 @@ class PlayerPreferencesRepository(context: Context) {
             } else {
                 remove("${KEY_AUDIO_LABEL_PREFIX}$itemId")
             }
-            if (subtitleLang != null) {
-                putString("${KEY_SUBTITLE_LANG_PREFIX}$itemId", subtitleLang)
+            putOrRemove("${KEY_SUBTITLE_LANG_PREFIX}$itemId", subtitle.language)
+            putOrRemove("${KEY_SUBTITLE_URL_PREFIX}$itemId", subtitle.url)
+            putOrRemove("${KEY_SUBTITLE_LABEL_PREFIX}$itemId", subtitle.descriptiveLabel)
+            val forcedKey = "${KEY_SUBTITLE_FORCED_PREFIX}$itemId"
+            if (subtitle.isForced != null) {
+                putBoolean(forcedKey, subtitle.isForced)
             } else {
-                remove("${KEY_SUBTITLE_LANG_PREFIX}$itemId")
-            }
-            if (subtitleUrl != null) {
-                putString("${KEY_SUBTITLE_URL_PREFIX}$itemId", subtitleUrl)
-            } else {
-                remove("${KEY_SUBTITLE_URL_PREFIX}$itemId")
+                remove(forcedKey)
             }
         }
+    }
+
+    private fun SharedPreferences.Editor.putOrRemove(key: String, value: String?) {
+        if (value != null) putString(key, value) else remove(key)
     }
 
     fun getSubtitleSize(): SubtitleSize {
@@ -120,6 +126,8 @@ class PlayerPreferencesRepository(context: Context) {
         const val KEY_AUDIO_LABEL_PREFIX = "audio_label_"
         const val KEY_SUBTITLE_LANG_PREFIX = "subtitle_lang_"
         const val KEY_SUBTITLE_URL_PREFIX = "subtitle_url_"
+        const val KEY_SUBTITLE_FORCED_PREFIX = "subtitle_forced_"
+        const val KEY_SUBTITLE_LABEL_PREFIX = "subtitle_label_"
         const val KEY_SUBTITLE_SIZE = "subtitle_size"
         const val KEY_SKIP_INTRO = "skip_intro_enabled"
         const val KEY_SKIP_RECAP = "skip_recap_enabled"
