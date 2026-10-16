@@ -6,7 +6,7 @@ import com.kino.puber.core.telemetry.TelemetryExecutor
 internal class ManualTelemetryExecutor : TelemetryExecutor {
     private val queued = ArrayDeque<() -> Unit>()
     private val scheduled = mutableListOf<Pair<Long, () -> Unit>>()
-    private val repeating = mutableListOf<() -> Unit>()
+    private val repeating = mutableListOf<Pair<Long, () -> Unit>>()
     private var running = false
 
     /** Every use of the executor, so a test can assert it was never touched. */
@@ -25,13 +25,19 @@ internal class ManualTelemetryExecutor : TelemetryExecutor {
 
     override fun scheduleRepeating(periodMs: Long, task: () -> Unit): AutoCloseable {
         useCount++
-        repeating += task
-        return AutoCloseable { repeating.remove(task) }
+        val entry = periodMs to task
+        repeating += entry
+        return AutoCloseable { repeating.remove(entry) }
     }
 
     override fun isWriterThread(thread: Thread): Boolean = running
 
     val scheduledDelays: List<Long> get() = scheduled.map { it.first }
+
+    /** The period of every repeating task that is still scheduled. */
+    val repeatingPeriods: List<Long> get() = repeating.map { it.first }
+
+    val repeatingCount: Int get() = repeating.size
 
     fun runAll() {
         while (queued.isNotEmpty()) inWriter(queued.removeFirst())
@@ -39,7 +45,7 @@ internal class ManualTelemetryExecutor : TelemetryExecutor {
 
     /** One tick of every repeating task (the periodic drain), then whatever it queued. */
     fun runRepeating() {
-        repeating.toList().forEach { inWriter(it) }
+        repeating.toList().forEach { inWriter(it.second) }
         runAll()
     }
 

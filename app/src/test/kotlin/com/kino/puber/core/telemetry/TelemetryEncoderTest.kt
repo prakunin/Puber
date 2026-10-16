@@ -47,6 +47,22 @@ internal class TelemetryEncoderTest {
             TelemetryEvent.Err(2_000, ErrSource.LOG, IllegalStateException("boom")) to
                 setOf("src", "et", "msg", "frames", "n")
             ),
+        TelemetryEventType.FRAMES to (
+            TelemetryEvent.Frames(2_000, HomeScreen::class.java, 100, 12, 8, 8, 20, 250) to
+                setOf("frames", "janky", "p50", "p90", "p99", "max")
+            ),
+        TelemetryEventType.KEY to (
+            TelemetryEvent.Key(2_000, HomeScreen::class.java, KeyName.DPAD_DOWN, 10, 450) to
+                setOf("key", "n", "dur_ms")
+            ),
+        TelemetryEventType.KEY_LAT to (
+            TelemetryEvent.KeyLat(2_000, HomeScreen::class.java, KeyName.BACK, 70, 33) to
+                setOf("key", "lat_ms", "frame_ms")
+            ),
+        TelemetryEventType.MEM to (
+            TelemetryEvent.Mem(2_000, HomeScreen::class.java, 1_000, 2_000, 3_000, 4_000, null) to
+                setOf("java_kb", "java_max_kb", "native_kb", "pss_kb")
+            ),
         TelemetryEventType.META to (
             TelemetryEvent.Meta(2_000, MetaEv.START) to setOf("ev")
             ),
@@ -61,6 +77,31 @@ internal class TelemetryEncoderTest {
         assertEquals(envelope + fields, json.keys)
         assertEquals(listOf("t", "sid", "type", "scr"), json.keys.take(4))
         assertEquals(type.wire, json.getValue("type").jsonPrimitive.content)
+    }
+
+    @Test
+    fun memTrimLineCarriesTrimAndNoPss() {
+        val json = encoder.encode(
+            TelemetryEvent.Mem(2_000, HomeScreen::class.java, 1_000, 2_000, 3_000, null, 10),
+            "Home",
+        )
+        assertEquals(envelope + setOf("java_kb", "java_max_kb", "native_kb", "trim"), json.keys)
+        assertEquals(10L, json.getValue("trim").jsonPrimitive.long)
+    }
+
+    @Test
+    fun newTypesWriteTheirValues() {
+        val frames = encoder.encode(samples.getValue(TelemetryEventType.FRAMES).first, "Home")
+        val names = listOf("frames", "janky", "p50", "p90", "p99", "max")
+        assertEquals(listOf(100L, 12L, 8L, 8L, 20L, 250L), names.map { frames.getValue(it).jsonPrimitive.long })
+        val key = encoder.encode(samples.getValue(TelemetryEventType.KEY).first, "Home")
+        assertEquals("dpad_down", key.getValue("key").jsonPrimitive.content)
+        assertEquals(10L, key.getValue("n").jsonPrimitive.long)
+        assertEquals(450L, key.getValue("dur_ms").jsonPrimitive.long)
+        val lat = encoder.encode(samples.getValue(TelemetryEventType.KEY_LAT).first, "Home")
+        assertEquals("back", lat.getValue("key").jsonPrimitive.content)
+        assertEquals(70L, lat.getValue("lat_ms").jsonPrimitive.long)
+        assertEquals(33L, lat.getValue("frame_ms").jsonPrimitive.long)
     }
 
     @Test

@@ -30,6 +30,10 @@ internal object Telemetry {
     @Volatile
     internal var startupMarks: StartupMarks? = null
 
+    /** The screen on top while recording; written only by `recordNav`, reset on probe detach. */
+    @Volatile
+    internal var screen: Class<*>? = null
+
     val isEnabled: Boolean get() = recorder.isEnabled
 
     fun record(event: TelemetryEvent) {
@@ -54,5 +58,6 @@ internal object Telemetry {
         clock = JvmTelemetryClock
         controller = DisabledSessionLogController
         startupMarks = null
+        screen = null
     }
 }

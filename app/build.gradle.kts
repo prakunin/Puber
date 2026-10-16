@@ -407,6 +407,9 @@ dependencies {
     // Logging
     implementation(libs.timber)
 
+    // Frame metrics (session log)
+    implementation(libs.androidx.metrics.performance)
+
     // Testing
     testImplementation(libs.junit5)
     testRuntimeOnly(libs.junit5.launcher)
