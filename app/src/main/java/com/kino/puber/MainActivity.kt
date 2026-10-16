@@ -1,15 +1,19 @@
 package com.kino.puber
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.kino.puber.core.telemetry.KeyProbe
 import com.kino.puber.core.telemetry.Telemetry
+import com.kino.puber.core.telemetry.dispatchWithProbe
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +42,16 @@ class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocale.wrap(newBase))
     }
+
+    // Sees every key before the view tree. Off, this is one flag check and the original call; the
+    // returned value is always exactly super's, because Compose focus depends on it. Lint marks
+    // androidx.core's ComponentActivity.dispatchKeyEvent as restricted, but overriding it is the only
+    // hook that sees every key, and calling super is its normal contract.
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        dispatchWithProbe(Telemetry.isEnabled, { super.dispatchKeyEvent(event) }) { handled, dispatchNs ->
+            KeyProbe.onKey(event.action, event.keyCode, event.repeatCount, event.eventTime, dispatchNs, handled)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

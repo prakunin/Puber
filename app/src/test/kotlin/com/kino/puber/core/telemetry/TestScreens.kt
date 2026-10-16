@@ -20,6 +20,8 @@ internal class HomeScreen : TestPuberScreen()
 
 internal class ScreenScreen : TestPuberScreen()
 
+internal class HistoryScreen : TestPuberScreen()
+
 internal class HomeVM
 
 internal class DialogVM

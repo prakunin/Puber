@@ -33,6 +33,28 @@ internal class TelemetrySinkTest {
     }
 
     @Test
+    fun memoryAndFrameTypesAreCountedAsDisabledNoOps() {
+        val h = SinkHarness()
+        val screen = HomeScreen::class.java
+        repeat(100) {
+            h.sink.record(TelemetryEvent.Frames(1, screen, 1, 0, 1, 1, 1, 1))
+            h.sink.record(TelemetryEvent.Key(1, screen, KeyName.DPAD_UP, 1, 1))
+            h.sink.record(TelemetryEvent.KeyLat(1, screen, KeyName.DPAD_UP, 70, 20))
+            h.sink.record(TelemetryEvent.Mem(1, screen, 1, 1, 1, 1, null))
+        }
+        h.executor.runAll()
+        h.drain()
+        assertEquals(0, h.infoCalls)
+        assertTrue(h.store.calls.isEmpty())
+        assertEquals(0, h.executor.useCount)
+        // Control: the same harness does write once started.
+        h.start()
+        h.sink.record(nav())
+        h.drain()
+        assertEquals(1, h.linesOf("nav").size)
+    }
+
+    @Test
     fun nullDirectoryKeepsRecordingOffAndStatusUnavailable() {
         val h = SinkHarness()
         h.store.available = false

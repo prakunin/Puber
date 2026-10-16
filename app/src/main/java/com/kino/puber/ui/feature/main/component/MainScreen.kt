@@ -1,11 +1,14 @@
 package com.kino.puber.ui.feature.main.component
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.ui.model.VideoItemTypeMapper
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.PuberScreen
+import com.kino.puber.core.ui.navigation.TabHostScreen
 import com.kino.puber.core.ui.navigation.TabRouter
+import com.kino.puber.core.ui.navigation.component.LocalTabHostScreen
 import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.vm.MainVM
 import kotlinx.parcelize.Parcelize
@@ -18,7 +21,7 @@ import org.koin.core.scope.ScopeID
 import org.koin.dsl.module
 
 @Parcelize
-internal class MainScreen : PuberScreen {
+internal class MainScreen : PuberScreen, TabHostScreen {
 
     @Suppress("unused")
     private fun buildModule(scopeId: ScopeID, parentScope: Scope): Module {
@@ -33,6 +36,8 @@ internal class MainScreen : PuberScreen {
 
     @Composable
     override fun Content() = DIScope(scopeName = key, moduleFactory = ::buildModule) {
-        MainScreenComponent()
+        CompositionLocalProvider(LocalTabHostScreen provides this) {
+            MainScreenComponent()
+        }
     }
 }

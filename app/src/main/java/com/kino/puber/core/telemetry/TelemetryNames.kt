@@ -1,6 +1,7 @@
 package com.kino.puber.core.telemetry
 
 import com.kino.puber.core.ui.navigation.PuberTab
+import com.kino.puber.core.ui.navigation.component.TabRootScreen
 
 /** Class to stable name. Writer-thread only: plain caches, no locks. */
 internal class TelemetryNames {
@@ -43,5 +44,6 @@ internal class TelemetryNames {
 internal fun telemetryClassOf(screen: Any?): Class<*>? = when (screen) {
     null -> null
     is PuberTab -> screen.contentScreenClass
+    is TabRootScreen -> screen.contentScreenClass
     else -> screen.javaClass
 }

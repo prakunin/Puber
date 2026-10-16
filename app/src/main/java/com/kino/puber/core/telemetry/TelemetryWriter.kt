@@ -111,6 +111,7 @@ internal class TelemetryWriter(
             is TelemetryEvent.Nav -> names.owner(event.to)
             is TelemetryEvent.Ready -> names.owner(event.vm)
             is TelemetryEvent.Act -> names.owner(event.vm)
+            is ScreenScoped -> names.owner(event.screen)
             else -> lastScr
         }
         val line = encoder.line(event, scr)

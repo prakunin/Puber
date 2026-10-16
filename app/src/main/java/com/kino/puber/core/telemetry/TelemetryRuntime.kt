@@ -1,13 +1,13 @@
 package com.kino.puber.core.telemetry
 
-import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.hardware.display.DisplayManager
 import android.os.Build
-import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.view.Display
 import com.kino.puber.BuildConfig
@@ -18,12 +18,16 @@ import kotlin.coroutines.resume
 
 /**
  * Owns the on/off decision: the persisted switch, the seven-day limit at start, and the probes
- * (error tree, uncaught handler) that exist only while recording.
+ * (error tree, uncaught handler, frame, key and memory probes) that exist only while recording.
+ * [probes] need the main thread, so [mainPost] carries their attach and detach there.
  */
 internal class TelemetryRuntime(
     private val prefs: SharedPreferences,
     private val clock: TelemetryClock,
     private val sink: TelemetrySink,
+    private val probes: List<TelemetryProbe> = emptyList(),
+    private val mainPost: (Runnable) -> Unit = { it.run() },
+    private val isMainThread: () -> Boolean = { true },
 ) : SessionLogController {
 
     private var tree: TelemetryErrorTree? = null
@@ -60,6 +64,8 @@ internal class TelemetryRuntime(
             enable(now)
         } else {
             prefs.edit().remove(KEY_ENABLED_AT).apply()
+            // The probes close their open windows while the sink still takes events.
+            flushProbesInline()
             sink.stop()
             detachProbes()
         }
@@ -91,6 +97,14 @@ internal class TelemetryRuntime(
     private fun plantProbes() {
         if (tree == null) tree = TelemetryErrorTree().also(Timber::plant)
         if (handler == null) handler = TelemetryUncaughtHandler.install(sink)
+        // Queued behind any earlier detach; a toggle-off that ran meanwhile must win.
+        if (probes.isNotEmpty()) {
+            mainPost(Runnable { if (sink.isEnabled) probes.forEach(TelemetryProbe::attach) })
+        }
+    }
+
+    private fun flushProbesInline() {
+        if (probes.isNotEmpty() && isMainThread()) probes.forEach(TelemetryProbe::detach)
     }
 
     @Synchronized
@@ -99,6 +113,10 @@ internal class TelemetryRuntime(
         tree = null
         handler?.let(TelemetryUncaughtHandler::uninstall)
         handler = null
+        Telemetry.screen = null
+        // Also reached on the writer thread (expiry, storage failure): never touch the probes inline.
+        // Idempotent after the inline flush, and it must trail an attach queued before it.
+        if (probes.isNotEmpty()) mainPost(Runnable { probes.forEach(TelemetryProbe::detach) })
     }
 
     companion object {
@@ -108,19 +126,43 @@ internal class TelemetryRuntime(
 
         fun install(app: Application, appCreateMs: Long) {
             val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val executor = ThreadTelemetryExecutor()
             val sink = TelemetrySink(
                 clock = SystemTelemetryClock,
                 store = FileTelemetryStore { app.getExternalFilesDir(null) },
-                executor = ThreadTelemetryExecutor(),
+                executor = executor,
                 sessionInfo = { sessionInfo(app) },
             )
-            val runtime = TelemetryRuntime(prefs, SystemTelemetryClock, sink)
+            val memoryProbe = MemoryProbe(
+                executor,
+                DebugMemorySampler(),
+                app::registerComponentCallbacks,
+                app::unregisterComponentCallbacks,
+            )
+            val frameProbe = FrameProbe()
+            val callbacks = TelemetryActivityCallbacks(
+                { Telemetry.isEnabled },
+                frameProbe,
+                KeyProbe::flush,
+                sink::requestDrain,
+                memoryProbe,
+            )
+            val main = Handler(Looper.getMainLooper())
+            val probes = listOf(ActivityProbes(callbacks, frameProbe, memoryProbe, KeyProbe::detach))
+            val runtime = TelemetryRuntime(
+                prefs,
+                SystemTelemetryClock,
+                sink,
+                probes,
+                mainPost = { main.post(it) },
+                isMainThread = { Looper.myLooper() === Looper.getMainLooper() },
+            )
             Telemetry.install(sink, SystemTelemetryClock)
             Telemetry.installController(runtime)
             runtime.start {
                 StartupMarks(Process.getStartElapsedRealtime(), appCreateMs, sink::record, SystemTelemetryClock)
             }
-            app.registerActivityLifecycleCallbacks(PauseFlushCallbacks(sink))
+            app.registerActivityLifecycleCallbacks(callbacks)
         }
 
         // Evaluated on the writer thread only.
@@ -138,17 +180,4 @@ internal class TelemetryRuntime(
             )
         }
     }
-}
-
-private class PauseFlushCallbacks(private val sink: TelemetrySink) : Application.ActivityLifecycleCallbacks {
-    override fun onActivityPaused(activity: Activity) {
-        if (Telemetry.isEnabled) sink.requestDrain()
-    }
-
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-    override fun onActivityStarted(activity: Activity) = Unit
-    override fun onActivityResumed(activity: Activity) = Unit
-    override fun onActivityStopped(activity: Activity) = Unit
-    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-    override fun onActivityDestroyed(activity: Activity) = Unit
 }

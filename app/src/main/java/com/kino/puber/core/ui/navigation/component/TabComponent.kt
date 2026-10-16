@@ -18,6 +18,7 @@ import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.telemetry.NavCmd
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.Screens
+import com.kino.puber.core.ui.navigation.TabHostScreen
 import com.kino.puber.core.ui.navigation.TabCommand
 import com.kino.puber.core.ui.navigation.TabRouter
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
@@ -28,6 +29,9 @@ import kotlinx.coroutines.cancel
 import org.koin.compose.koinInject
 
 internal val LocalTabAppRouterHolder = staticCompositionLocalOf<TabAppRouterHolder?> { null }
+
+/** The screen instance that hosts the tab rail, provided by it, for telemetry naming. */
+internal val LocalTabHostScreen = staticCompositionLocalOf<TabHostScreen?> { null }
 
 internal class TabFlowSession(
     val router: AppRouter,

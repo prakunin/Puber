@@ -225,7 +225,8 @@ private fun FlowCommandRunner(
     LaunchedEffect(scopeName) {
         router.events().collect { event ->
             router.log("router command: $event")
-            val navFrom = if (Telemetry.isEnabled) navigator.lastItemOrNull else null
+            val navChanged = if (Telemetry.isEnabled) navigatorChangedBy(event, navigator) else navigator
+            val navFrom = if (Telemetry.isEnabled) navChanged.lastItemOrNull else null
             if (event.screen is PuberScreenActivity) {
                 activityNavigator.navigateTo(event.screen as PuberScreenActivity)
             } else {
@@ -268,7 +269,7 @@ private fun FlowCommandRunner(
                     )
                 }
             }
-            if (Telemetry.isEnabled) recordNavCommand(event, navFrom, navigator.lastItemOrNull)
+            if (Telemetry.isEnabled) recordNavCommand(event, navFrom, navChanged.lastItemOrNull)
         }
     }
 }
@@ -310,7 +311,17 @@ private fun onBackEventNavigator(
     onBackWithNavigator(navigator, appLauncher)
 }
 
-private fun onBackWithNavigator(navigator: Navigator, appLauncher: AppLauncher?) {
+/** The navigator whose stack [event] changes: Back and FinishFlow may pop a parent's. */
+internal fun navigatorChangedBy(event: Command, navigator: Navigator): Navigator = when (event) {
+    Command.Back -> navigatorToPop(navigator) ?: navigator
+    Command.FinishFlow -> navigator.parent?.let { navigatorToPop(it) ?: it } ?: navigator
+    else -> navigator
+}
+
+private fun navigatorToPop(navigator: Navigator): Navigator? =
+    if (navigator.canPop()) navigator else navigator.parent?.let(::navigatorToPop)
+
+internal fun onBackWithNavigator(navigator: Navigator, appLauncher: AppLauncher?) {
     if (navigator.canPop()) {
         navigator.puberPop()
     } else {
@@ -568,11 +579,16 @@ private fun TabFlowNavigator(
     // holds focus, and then no focus change will ever arrive to report the landing.
     val contentHasFocus = remember { booleanArrayOf(false) }
     val rootAnchorCaptureRegistry = LocalRootAnchorCaptureRegistry.current
+    val tabHost = LocalTabHostScreen.current
     Navigator(
         screen = rootScreen,
         onBackPressed = null,
         key = tabFlowNavigatorKey(navigationSlotKey),
     ) { navigator ->
+        DisposableEffect(tabHost, navigator) {
+            val binding = tabHost?.let { TabHostTelemetry.bind(it) { navigator.lastItemOrNull } }
+            onDispose { binding?.let(TabHostTelemetry::unbind) }
+        }
         val currentScreenKey = screenCompositionKey(
             prefix = "currentTab$scopeName",
             screenKey = navigator.lastItem.key,
@@ -640,10 +656,13 @@ private fun RestoreTabContentFocusEffect(
 }
 
 @Parcelize
-private data class TabRootScreen(
+internal data class TabRootScreen(
     private val delegate: PuberScreen,
     private val tabInstanceKey: ScreenKey,
 ) : PuberScreen {
+
+    /** The wrapped screen's class, for telemetry names. A getter, so Parcelize ignores it. */
+    internal val contentScreenClass: Class<*> get() = delegate.javaClass
 
     @IgnoredOnParcel
     override val key: ScreenKey = tabRootScreenKey(

@@ -34,6 +34,7 @@ room = "3.0.1"
 sqlite = "2.7.0"
 desugarJdkLibs = "2.1.5"
 kover = "0.9.9"
+metricsPerformance = "1.0.0"
 
 
 [plugins]
@@ -49,6 +50,7 @@ androidx-room = { id = "androidx.room3", version.ref = "room" }
 
 [libraries]
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+androidx-metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "metricsPerformance" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-room-runtime = { group = "androidx.room3", name = "room3-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room3", name = "room3-compiler", version.ref = "room" }
