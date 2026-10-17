@@ -81,7 +81,8 @@ private fun ShowAllContentBody(
     val gridState = rememberLazyGridState()
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
 
-    val focusMemory = rememberGridFocusMemory(state.items)
+    val restoreFocus = remember { FocusRequester() }
+    val focusMemory = rememberGridFocusMemory(state.items, restoreFocus, mainContentFocus)
 
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -117,7 +118,7 @@ private fun ShowAllContentBody(
                     modifier = Modifier
                         .then(
                             if (item.id == focusMemory.restoreId) {
-                                Modifier.focusRequester(focusMemory.restoreFocus)
+                                Modifier.focusRequester(restoreFocus)
                             } else {
                                 Modifier
                             },
@@ -139,10 +140,15 @@ private fun ShowAllContentBody(
 /**
  * Remembers the card that held focus when the screen was last left, with its position, and puts
  * focus back on it (or on its neighbour when a reload dropped it). The saved values are read once
- * on entry without observing, so focus moves never recompose the grid.
+ * on entry without observing, so focus moves never recompose the grid. A reload that lands before
+ * the entry focus does re-targets the restore, and if no card takes focus the grid itself is focused.
  */
 @Composable
-private fun rememberGridFocusMemory(items: List<VideoItemUIState>): GridFocusMemory {
+private fun rememberGridFocusMemory(
+    items: List<VideoItemUIState>,
+    restoreFocus: FocusRequester,
+    gridFocus: FocusRequester,
+): GridFocusMemory {
     val lastFocusedId = rememberSaveable { mutableStateOf<Int?>(null) }
     val lastFocusedIndex = rememberSaveable { mutableStateOf(0) }
     val currentItems by rememberUpdatedState(items)
@@ -153,26 +159,31 @@ private fun rememberGridFocusMemory(items: List<VideoItemUIState>): GridFocusMem
             lastFocusedIndex = lastFocusedIndex,
             items = { currentItems },
             contentFocusActive = { contentFocusActive },
+            requestRestore = { restoreFocus.tryRequestFocus() },
+            requestGrid = { gridFocus.tryRequestFocus() },
         )
     }
-    LaunchedEffect(Unit) { memory.restoreOnEntry() }
-    LaunchedEffect(items) { memory.restoreWhenFocusedCardLeft() }
+    LaunchedEffect(items, contentFocusActive) { memory.reconcile() }
     return memory
 }
 
-private class GridFocusMemory(
+internal class GridFocusMemory(
     private val lastFocusedId: MutableState<Int?>,
     private val lastFocusedIndex: MutableState<Int>,
     private val items: () -> List<VideoItemUIState>,
     private val contentFocusActive: () -> Boolean,
+    private val requestRestore: () -> Boolean,
+    private val requestGrid: () -> Boolean,
 ) {
-    val restoreFocus = FocusRequester()
     var restoreId by mutableStateOf(
         Snapshot.withoutReadObservation {
             resolveRestoreId(lastFocusedId.value, lastFocusedIndex.value, items())
         },
     )
         private set
+
+    // True from a re-entry with a saved card until focus first lands in the grid.
+    private var pendingEntry = Snapshot.withoutReadObservation { lastFocusedId.value != null }
 
     // True while focus sits in the grid and was not taken away by the focused card leaving the list.
     private var inGrid = false
@@ -186,35 +197,37 @@ private class GridFocusMemory(
         // A lost focus with the focused card gone from the list is not a user move.
         if (hasFocus) {
             inGrid = true
+            pendingEntry = false
         } else if (items().any { it.id == lastFocusedId.value }) {
             inGrid = false
         }
     }
 
-    suspend fun restoreOnEntry() {
-        if (restoreId != null) requestRestoreFocus()
-    }
-
-    suspend fun restoreWhenFocusedCardLeft() {
+    suspend fun reconcile() {
         val focusedId = lastFocusedId.value
-        if (inGrid && focusedId != null && items().none { it.id == focusedId }) {
-            restoreId = resolveRestoreId(focusedId, lastFocusedIndex.value, items())
-            if (restoreId != null) requestRestoreFocus()
-        }
+        val focusedCardLeft = inGrid && focusedId != null && items().none { it.id == focusedId }
+        if (!pendingEntry && !focusedCardLeft) return
+        restoreId = resolveRestoreId(focusedId, lastFocusedIndex.value, items())
+        if (restoreId == null || requestRestoreFocus()) return
+        // Last resort for a pending entry only: never leave the re-entered grid without focus.
+        if (pendingEntry && contentFocusActive()) requestGrid()
     }
 
-    private suspend fun requestRestoreFocus() {
+    private suspend fun requestRestoreFocus(): Boolean {
         repeat(RESTORE_FOCUS_ATTEMPTS) {
             withFrameNanos { }
-            if (!contentFocusActive()) return
-            if (runCatching { restoreFocus.requestFocus() }.getOrDefault(false)) return
+            if (!contentFocusActive()) return false
+            if (requestRestore()) return true
         }
+        return false
     }
 }
 
 // The opener card, or its neighbour at the same position when a reload dropped it.
-private fun resolveRestoreId(id: Int?, index: Int, items: List<VideoItemUIState>): Int? = when {
+internal fun resolveRestoreId(id: Int?, index: Int, items: List<VideoItemUIState>): Int? = when {
     id == null || items.isEmpty() -> null
     items.any { it.id == id } -> id
     else -> items[index.coerceIn(0, items.lastIndex)].id
 }
+
+private fun FocusRequester.tryRequestFocus(): Boolean = runCatching { requestFocus() }.getOrDefault(false)
