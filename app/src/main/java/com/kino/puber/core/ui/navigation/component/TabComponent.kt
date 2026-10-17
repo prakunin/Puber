@@ -7,6 +7,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.staticCompositionLocalOf
 import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -29,6 +31,9 @@ import kotlinx.coroutines.cancel
 import org.koin.compose.koinInject
 
 internal val LocalTabAppRouterHolder = staticCompositionLocalOf<TabAppRouterHolder?> { null }
+
+/** The tab host's holder for tab subtrees; it lives as long as the host, not as long as the covered tab. */
+internal val LocalTabSubtreeStateHolder = staticCompositionLocalOf<SaveableStateHolder?> { null }
 
 /** The screen instance that hosts the tab rail, provided by it, for telemetry naming. */
 internal val LocalTabHostScreen = staticCompositionLocalOf<TabHostScreen?> { null }
@@ -96,7 +101,11 @@ internal fun TabComponent(
     }
 
     val scopeName = parentScope?.id ?: ""
-    CompositionLocalProvider(LocalTabAppRouterHolder provides holder) {
+    val subtreeStateHolder = rememberSaveableStateHolder()
+    CompositionLocalProvider(
+        LocalTabAppRouterHolder provides holder,
+        LocalTabSubtreeStateHolder provides subtreeStateHolder,
+    ) {
         TabNavigator(
             tab = LoadingTab,
             // Voyager retains one nested Navigator per logical tab so switching tabs preserves its stack.
@@ -130,8 +139,15 @@ fun PuberCurrentTab() {
     val tabNavigator = LocalTabNavigator.current
     val currentTab = tabNavigator.current
 
+    val stateHolder = checkNotNull(LocalTabSubtreeStateHolder.current) {
+        "PuberCurrentTab needs an enclosing TabComponent"
+    }
+
     key(currentTab.key) {
-        tabNavigator.saveableState(currentTab.key) {
+        // Not tabNavigator.saveableState: Voyager registers that state on the tab list navigator, and
+        // the root navigator's nested dispose removes it when a root push covers the host, losing the
+        // tab's stack. The host-owned holder keeps it until the host itself leaves.
+        stateHolder.SaveableStateProvider(currentTab.key) {
             currentTab.Content()
         }
     }

@@ -22,9 +22,8 @@ internal fun navCmdOf(command: Command): NavCmd = when (command) {
 /**
  * What the tab host shows is the top of the live tab navigator, bound while that navigator is
  * composed. When the navigator leaves composition (the host is covered), the screen it will show
- * again is kept for that same host until the next bind. Today that is the tab root, not the top:
- * covering the host makes Voyager dispose the covered tab and its saved stack (run
- * tab-stack-lost-on-root-push). A binding is tied to the host instance it was made for,
+ * again is kept for that same host until the next bind. That is the tab's live top: the tab host keeps the tab's
+ * saved state while it is covered. A binding is tied to the host instance it was made for,
  * so a fresh host never reads a previous host's tab. The screen is frozen whether or not telemetry
  * is on at that moment (it records nothing itself), so telemetry enabled while the host is covered
  * still names the right screen on Back.

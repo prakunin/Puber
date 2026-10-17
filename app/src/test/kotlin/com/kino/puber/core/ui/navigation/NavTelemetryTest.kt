@@ -229,7 +229,7 @@ internal class NavTelemetryTest {
     }
 
     @Test
-    fun unbindWhileOffThenEnabledThenBackNamesTheTabRoot() {
+    fun unbindWhileOffThenEnabledThenBackNamesTheReappearingTop() {
         val host = MainScreen()
         val handle = TabHostTelemetry.bind(host, top = { other }, reappearingTop = { home })
         recorder.isEnabled = false

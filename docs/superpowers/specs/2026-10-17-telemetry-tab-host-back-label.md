@@ -45,7 +45,7 @@ Freeze the tab top on dispose (keep host-identity check; no reference to the dis
 - AC-3. Given a frozen binding, When the host re-composes and binds a live navigator, Then the live top wins; and on a tab switch (old tab disposes, new binds) the new tab's top wins. (JVM test for handle ordering both ways; instrumented test includes a tab switch.)
 - AC-4. Given Home is the current tab and the host re-enters composition after Back from Details, When `TabComponent` receives the replayed `Open(Home)`, Then no `nav tab Home->Home` event is recorded and `Telemetry.screen` is unchanged. (Instrumented test.)
 - AC-5. Given the user selects a different tab, or re-selects the current tab from the rail (a new `PuberTab` instance), When the `Open` arrives, Then `nav tab` is still recorded and `Telemetry.screen` is set to it. (Instrumented or JVM test.)
-- AC-6. (rewritten at gate 1 delta, 2026-10-17) Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` name the screen the tab shows after Back; today the tab root, because the covered host's tab stack is not restored (run tab-stack-lost-on-root-push owns that); no later line names a different screen. (Instrumented test.) Superseded text: Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` are the tab-local screen, and no later line overwrites it with `Home`. (Instrumented test.)
+- AC-6. (rewritten at gate 1 delta, 2026-10-17) Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` name the screen the tab shows after Back; today the tab root, because the covered host's tab stack is not restored (run tab-stack-lost-on-root-push owns that); no later line names a different screen. (Instrumented test.) Superseded text: Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` are the tab-local screen, and no later line overwrites it with `Home`. (Instrumented test.) Restored by tab-stack-lost-on-root-push: Back names the tab-local screen again.
 - AC-7. Given the real `FlowComponent` runner with a `TabHostScreen` host and a recording `TelemetryRecorder`, When Details is pushed from Home and Back is pressed, Then the first nav event after Back has `to` = Home content (not `Main`) and no event or frame window records `Main` as `scr`. This covers the `DisposableEffect`, `LocalTabHostScreen` provider and the `:272` `navChanged` choice. (New androidTest class, own fixture, run via `make DEVICE=<serial> itest TESTS=<class>`.)
 - AC-8. Given the change, When `check.full` runs, Then unit tests, detekt and lint pass with the existing `NavigatorChangedByTest` and the other `NavTelemetryTest` cases unchanged.
 - AC-9. Given telemetry off, When navigation runs, Then no binding or freeze work records anything (`Telemetry.isEnabled` guard intact).
@@ -191,7 +191,7 @@ Conclusion: after Back, the covered host shows its tab root, not the tab navigat
 
 #### Proposed AC-6 (needs owner approval: it changes an approved AC)
 
-- AC-6. Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` name the screen the tab shows after Back. Today the covered host's tab stack is not restored (a pre-existing Voyager dispose of the covered tab, follow-up run `tab-stack-lost-on-root-push`), so that is the tab root (ContentList / Home). No later line in the stream names a different screen. (Instrumented test; JVM test for the frozen value.)
+- AC-6. Given a tab-local push (e.g. Show all), then a root push (Details), When Back, Then `nav back to=` and `Telemetry.screen` name the screen the tab shows after Back. Today the covered host's tab stack is not restored (a pre-existing Voyager dispose of the covered tab, follow-up run `tab-stack-lost-on-root-push`), so that is the tab root (ContentList / Home). No later line in the stream names a different screen. (Instrumented test; JVM test for the frozen value.) Restored by tab-stack-lost-on-root-push: Back names the tab-local screen again.
 
 AC-1 to AC-5 and AC-7 to AC-10 are unchanged. In the Out of scope section, add: "Restoring a tab's local stack after a root push and Back (run `tab-stack-lost-on-root-push`)."
 
@@ -229,7 +229,7 @@ Code state: worktree `2899ccd3`. Fixes landed in `572e252a` and `b256e3a5` (tria
 
 ###### Unchanged
 
-The AC text is unchanged. AC-9 ("no binding or freeze work records anything") still holds. D2-D7, D9, D12-D14 and R1-R6, R8-R12 stand. Note for `tab-stack-lost-on-root-push`: do not reintroduce a `Telemetry.isEnabled` gate in `unbind` (A1).
+The AC text is unchanged. AC-9 ("no binding or freeze work records anything") still holds. D2-D7, D9, D12-D14 and R1-R6, R8-R12 stand. Note for `tab-stack-lost-on-root-push`: do not reintroduce a `Telemetry.isEnabled` gate in `unbind` (A1). Done in tab-stack-lost-on-root-push: `reappearingTop` is the live top (`FlowComponent.kt` `TabFlowNavigator`), and `unbind` stays ungated.
 
 ## Test design
 
