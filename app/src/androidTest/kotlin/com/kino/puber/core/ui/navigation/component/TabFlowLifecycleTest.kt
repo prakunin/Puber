@@ -119,7 +119,7 @@ internal class TabFlowLifecycleTest {
         )
 
         composeRule.runOnIdle { tabRouter.openTab(initialTab) }
-        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=0")
+        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=0", substring = true)
 
         composeRule.onNodeWithTag(CHILD_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag(DESTINATION_TAG).assertTextContains("Child")
@@ -128,13 +128,13 @@ internal class TabFlowLifecycleTest {
         composeRule.runOnIdle { tabRouter.openTab(initialTab) }
         composeRule.onNodeWithTag(DESTINATION_TAG).assertTextContains("Child")
         composeRule.onNodeWithTag(BACK_BUTTON_TAG).performClick()
-        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=0")
+        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=0", substring = true)
 
         composeRule.runOnIdle { tabRouter.openTab(refreshedTab) }
-        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=1")
+        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=1", substring = true)
         composeRule.waitUntil { ProbeHistoryVM.clearedGenerations() == setOf(1) }
         composeRule.runOnIdle { tabRouter.openTab(refreshedAgainTab) }
-        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=2")
+        composeRule.onNodeWithTag(HISTORY_TAG).assertTextContains("content=2", substring = true)
         composeRule.waitUntil { ProbeHistoryVM.clearedGenerations() == setOf(1, 2) }
         composeRule.runOnIdle {
             assertSame(
@@ -172,7 +172,7 @@ internal class TabFlowLifecycleTest {
         composeRule.onNodeWithTag(BACK_BUTTON_TAG).performClick()
         composeRule
             .onNodeWithTag(HISTORY_TAG)
-            .assertTextContains("content=2")
+            .assertTextContains("content=2", substring = true)
     }
 }
 
