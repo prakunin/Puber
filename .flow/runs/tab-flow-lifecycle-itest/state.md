@@ -1,7 +1,7 @@
 ---
 slug: tab-flow-lifecycle-itest
 title: "Fix the instrumented test that fails on master"
-stage: idea
+stage: done
 size:
 tracks: []
 kind: idea
@@ -13,7 +13,7 @@ plan:
 rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-10-11
-updated: 2026-10-12
+updated: 2026-10-17
 ---
 
 ## Next
@@ -30,3 +30,4 @@ updated: 2026-10-12
 ## Log
 - 2026-10-11 created on the board (stage idea)
 - 2026-10-12 migrated from the former board file (board stage `idea` -> `idea`); the board row Notes are copied verbatim into ## Next
+- 2026-10-17 closed as covered by tab-stack-lost-on-root-push (merge db16ba9d): TabFlowLifecycleTest substring fix, green on device (qa-report.md there).
