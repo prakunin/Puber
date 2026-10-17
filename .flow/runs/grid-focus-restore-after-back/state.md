@@ -30,3 +30,4 @@ triage with /task:run grid-focus-restore-after-back
 
 ## Log
 - 2026-10-17 created (stage idea) from tab-stack-lost-on-root-push: spec Q5 (owner, standing instruction: recommended); ShowAllScreenContent.kt fix 6b47873d is the reference; rootAnchorCaptureRegistry only covers LazyListState screens.
+- 2026-10-17 note from showall-focus-restore-hardening: consider extending the Show all last-resort grid focus (fallback C) to the live path (focused card gone while in the grid, all attempts failed).
