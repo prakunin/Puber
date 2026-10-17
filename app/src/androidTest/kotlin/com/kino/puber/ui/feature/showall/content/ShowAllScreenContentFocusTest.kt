@@ -8,9 +8,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
@@ -72,7 +74,15 @@ class ShowAllScreenContentFocusTest {
             composeRule.mainClock.advanceTimeBy(SettleMillis)
         }
         val title = focusedTitle()
-        assertTrue("focus moved below the first row", items.indexOfFirst { it.title == title } >= DeepRows)
+        assertTrue(
+            "focus moved below the first viewport",
+            items.indexOfFirst { it.title == title } >= DeepRows * GridColumns,
+        )
+        val first = composeRule.onAllNodesWithText(items.first().title)
+        assertTrue(
+            "card 1 is off the viewport",
+            (0 until first.fetchSemanticsNodes().size).none { first[it].isDisplayed() },
+        )
 
         restoration.emulateSavedInstanceStateRestore()
 
@@ -84,7 +94,8 @@ class ShowAllScreenContentFocusTest {
 
     @Test
     fun showAllFocusMovesToTheNeighbourWhenTheFocusedCardLeftTheListBeforeReentry() {
-        var shown by mutableStateOf(items)
+        // A plain var: only the restored composition reads the new list, so the entry fallback runs.
+        var shown = items
         val restoration = StateRestorationTester(composeRule)
         restoration.setContent {
             PuberTheme {
@@ -108,6 +119,7 @@ class ShowAllScreenContentFocusTest {
             composeRule.onAllNodesFocusedWith(neighbour)
         }
         composeRule.onNodeWithText(neighbour).assertIsFocused()
+        composeRule.onNodeWithText(items[index].title).assertDoesNotExist()
     }
 
     @Test
@@ -184,6 +196,7 @@ class ShowAllScreenContentFocusTest {
     private companion object {
         const val ItemCount = 24
         const val DeepRows = 5
+        const val GridColumns = 3
         const val SettleMillis = 300L
         const val FocusTimeoutMillis = 5_000L
     }
