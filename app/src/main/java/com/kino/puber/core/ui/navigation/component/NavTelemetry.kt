@@ -1,5 +1,6 @@
 package com.kino.puber.core.ui.navigation.component
 
+import androidx.annotation.VisibleForTesting
 import com.kino.puber.core.telemetry.NavCmd
 import com.kino.puber.core.telemetry.Telemetry
 import com.kino.puber.core.telemetry.TelemetryEvent
@@ -20,19 +21,34 @@ internal fun navCmdOf(command: Command): NavCmd = when (command) {
 
 /**
  * What the tab host shows is the top of the live tab navigator, bound while that navigator is
- * composed and cleared when it leaves. A binding is tied to the host instance it was made for, so
- * a fresh host never reads a previous host's tab.
+ * composed. When the navigator leaves composition (the host is covered), the screen it will show
+ * again is kept for that same host until the next bind. Today that is the tab root, not the top:
+ * covering the host makes Voyager dispose the covered tab and its saved stack (run
+ * tab-stack-lost-on-root-push). A binding is tied to the host instance it was made for,
+ * so a fresh host never reads a previous host's tab. The screen is frozen whether or not telemetry
+ * is on at that moment (it records nothing itself), so telemetry enabled while the host is covered
+ * still names the right screen on Back.
  */
 internal object TabHostTelemetry {
-    internal class Binding(val host: Any, val top: () -> Any?)
+    internal class Binding(val host: Any, val top: () -> Any?, val reappearingTop: () -> Any?)
 
     @Volatile
     private var binding: Binding? = null
 
-    fun bind(host: Any, top: () -> Any?): Binding = Binding(host, top).also { binding = it }
+    /** [reappearingTop] is what the host's tab will show when it is uncovered; [unbind] freezes it. */
+    fun bind(host: Any, top: () -> Any?, reappearingTop: () -> Any?): Binding =
+        Binding(host, top, reappearingTop).also { binding = it }
 
     fun unbind(handle: Binding) {
-        if (binding === handle) binding = null
+        if (binding !== handle) return
+        val frozen = handle.reappearingTop()
+        val keep = { frozen }
+        binding = Binding(handle.host, keep, keep)
+    }
+
+    @VisibleForTesting
+    internal fun resetForTests() {
+        binding = null
     }
 
     fun topOf(host: Any): Any? = binding?.takeIf { it.host === host }?.top?.invoke()

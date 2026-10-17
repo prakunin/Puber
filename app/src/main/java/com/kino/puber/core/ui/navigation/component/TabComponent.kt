@@ -112,7 +112,10 @@ internal fun TabComponent(
                             is TabCommand.Open -> {
                                 val from = navigator.current
                                 navigator.current = event.tab
-                                recordNav(NavCmd.TAB, from, event.tab)
+                                // The router replays its last Open when the host re-enters composition;
+                                // that replay is not a navigation. Identity, not ==: a rail reselect
+                                // builds an equal but distinct PuberTab and must still be recorded.
+                                if (from !== event.tab) recordNav(NavCmd.TAB, from, event.tab)
                             }
                         }
                     }
