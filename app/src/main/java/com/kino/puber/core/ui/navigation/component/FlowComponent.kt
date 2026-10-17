@@ -586,7 +586,16 @@ private fun TabFlowNavigator(
         key = tabFlowNavigatorKey(navigationSlotKey),
     ) { navigator ->
         DisposableEffect(tabHost, navigator) {
-            val binding = tabHost?.let { TabHostTelemetry.bind(it) { navigator.lastItemOrNull } }
+            // Covering the host makes Voyager dispose the covered PuberTab and this navigator's saved stack,
+            // so after Back the tab shows its root again: freeze the root, not the top. When run
+            // tab-stack-lost-on-root-push keeps the stack, reappearingTop becomes the live top.
+            val binding = tabHost?.let {
+                TabHostTelemetry.bind(
+                    it,
+                    top = { navigator.lastItemOrNull },
+                    reappearingTop = { navigator.items.firstOrNull() },
+                )
+            }
             onDispose { binding?.let(TabHostTelemetry::unbind) }
         }
         val currentScreenKey = screenCompositionKey(
