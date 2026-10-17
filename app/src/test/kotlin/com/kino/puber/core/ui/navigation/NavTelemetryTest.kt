@@ -17,6 +17,7 @@ import com.kino.puber.util.FakeTelemetryClock
 import com.kino.puber.util.RecordingTelemetryRecorder
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -25,7 +26,6 @@ internal class NavTelemetryTest {
     private val recorder = RecordingTelemetryRecorder()
     private val home = HomeScreen()
     private val other = ScreenScreen()
-    private var binding: TabHostTelemetry.Binding? = null
 
     private class FakeActivityScreen : PuberScreenActivity() {
         override fun describeContents(): Int = 0
@@ -41,7 +41,7 @@ internal class NavTelemetryTest {
     @AfterEach
     fun tearDown() {
         Telemetry.resetForTests()
-        binding?.let(TabHostTelemetry::unbind)
+        TabHostTelemetry.resetForTests()
     }
 
     private fun navs() = recorder.events.filterIsInstance<TelemetryEvent.Nav>()
@@ -99,8 +99,11 @@ internal class NavTelemetryTest {
     }
 
     private fun bindTop(host: MainScreen, top: () -> Any?) {
-        binding = TabHostTelemetry.bind(host, top)
+        bindSame(host, top)
     }
+
+    private fun bindSame(host: MainScreen, top: () -> Any?): TabHostTelemetry.Binding =
+        TabHostTelemetry.bind(host, top, top)
 
     @Test
     fun tabHostIsReportedAsTheTopOfItsLiveTabNavigator() {
@@ -138,11 +141,103 @@ internal class NavTelemetryTest {
     }
 
     @Test
-    fun clearedBindingGivesTheFallback() {
+    fun disposedBindingKeepsTheTopForTheSameHost() {
         val host = MainScreen()
-        TabHostTelemetry.unbind(TabHostTelemetry.bind(host) { home })
+        TabHostTelemetry.unbind(bindSame(host) { home })
         recordNavCommand(Command.Back, other, host)
+        assertEquals(HomeScreen::class.java, Telemetry.screen)
+        assertEquals(HomeScreen::class.java, navs().single().to)
+    }
+
+    @Test
+    fun frozenBindingOfHostADoesNotLeakIntoFreshHostB() {
+        TabHostTelemetry.unbind(bindSame(MainScreen()) { home })
+        recordNavCommand(Command.Back, other, MainScreen())
+        recordNavCommand(Command.NewRoot(listOf(MainScreen())), other, MainScreen())
+        val events = navs()
+        assertEquals(2, events.size)
+        assertEquals(listOf<Class<*>?>(MainScreen::class.java, MainScreen::class.java), events.map { it.to })
         assertEquals(MainScreen::class.java, Telemetry.screen)
+        assertFalse(events.any { it.to == HomeScreen::class.java || it.from == HomeScreen::class.java })
+    }
+
+    @Test
+    fun liveBindReplacesAFrozenTop() {
+        val host = MainScreen()
+        TabHostTelemetry.unbind(bindSame(host) { home })
+        bindTop(host) { other }
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        assertEquals(ScreenScreen::class.java, Telemetry.screen)
+        assertEquals(ScreenScreen::class.java, navs().single().to)
+    }
+
+    @Test
+    fun tabSwitchUnbindOldThenBindNewShowsNewTop() {
+        val host = MainScreen()
+        val old = bindSame(host) { home }
+        TabHostTelemetry.unbind(old)
+        bindTop(host) { other }
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        assertEquals(ScreenScreen::class.java, navs().single().to)
+    }
+
+    @Test
+    fun tabSwitchBindNewThenUnbindOldKeepsNewTop() {
+        val host = MainScreen()
+        var homeReads = 0
+        val old = bindSame(host) {
+            homeReads++
+            home
+        }
+        bindTop(host) { other }
+        TabHostTelemetry.unbind(old)
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        assertEquals(ScreenScreen::class.java, navs().single().to)
+        assertEquals(0, homeReads)
+    }
+
+    @Test
+    fun tabLocalTopIsFrozenAtUnbind() {
+        val host = MainScreen()
+        var top: Any? = home
+        val handle = bindSame(host) { top }
+        TabHostTelemetry.unbind(handle)
+        top = other
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        assertEquals(HomeScreen::class.java, navs().single().to)
+    }
+
+    @Test
+    fun unbindFreezesTheReappearingTopNotTheLiveTop() {
+        val host = MainScreen()
+        val handle = TabHostTelemetry.bind(host, top = { other }, reappearingTop = { home })
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        TabHostTelemetry.unbind(handle)
+        recordNavCommand(Command.Back, other, host)
+        assertEquals(listOf<Class<*>?>(ScreenScreen::class.java, HomeScreen::class.java), navs().map { it.to })
+        assertEquals(HomeScreen::class.java, Telemetry.screen)
+    }
+
+    @Test
+    fun unbindWithTelemetryOffRecordsNothing() {
+        val host = MainScreen()
+        val handle = TabHostTelemetry.bind(host, top = { other }, reappearingTop = { home })
+        recorder.isEnabled = false
+        TabHostTelemetry.unbind(handle)
+        assertEquals(0, recorder.events.size)
+        assertNull(Telemetry.screen)
+    }
+
+    @Test
+    fun unbindWhileOffThenEnabledThenBackNamesTheTabRoot() {
+        val host = MainScreen()
+        val handle = TabHostTelemetry.bind(host, top = { other }, reappearingTop = { home })
+        recorder.isEnabled = false
+        TabHostTelemetry.unbind(handle)
+        recorder.isEnabled = true
+        recordNavCommand(Command.Back, FakeActivityScreen(), host)
+        assertEquals(HomeScreen::class.java, navs().single().to)
+        assertEquals(HomeScreen::class.java, Telemetry.screen)
     }
 
     @Test
