@@ -91,3 +91,14 @@ content instances behind the same tab slot.
 Switching tabs goes through `TabRouter.openTab(tab)`
 (`core/ui/navigation/TabRouter.kt`), which emits `TabCommand.Open(tab)` on a
 `SharedFlow` that `TabComponent` collects.
+
+`TabComponent` (`core/ui/navigation/component/TabComponent.kt`) owns a
+`SaveableStateHolder` for tab subtrees, exposed as `LocalTabSubtreeStateHolder`.
+`PuberCurrentTab` provides it per tab key, so a tab's stack survives both a tab
+switch and a root push that covers the host. The state is not registered through
+Voyager's `tabNavigator.saveableState`: that would put it on the tab list
+navigator, and Voyager's nested dispose of the covered `PuberTab` would then
+remove it. The holder dies with the host: logout or session expiry replaces
+`MainScreen`, and a fresh host starts at tab roots. `TabHostTelemetry`
+(`core/ui/navigation/component/NavTelemetry.kt`) therefore freezes the tab's live
+top on `unbind`.
