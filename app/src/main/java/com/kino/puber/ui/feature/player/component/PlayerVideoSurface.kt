@@ -227,6 +227,12 @@ internal fun playerActionForKeyCode(keyCode: Int): PlayerAction? {
     }
 }
 
+/** The seek subset of [playerActionForKeyCode], for surfaces that must not react to other keys. */
+internal fun seekActionForKeyCode(keyCode: Int): PlayerAction? {
+    val action = playerActionForKeyCode(keyCode)
+    return action.takeIf { it == PlayerAction.SeekForward || it == PlayerAction.SeekBackward }
+}
+
 /** Only actual playback holds the screen on; paused, ended or stalled lets the screensaver in. */
 internal fun PlayerContentState.shouldKeepScreenOn(): Boolean = isPlaying
 

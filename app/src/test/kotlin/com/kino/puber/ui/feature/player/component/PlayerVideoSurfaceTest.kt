@@ -7,6 +7,7 @@ import com.kino.puber.ui.feature.player.model.PlayerContentState
 import com.kino.puber.ui.feature.player.vm.PlayerVMTestFixture
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -28,6 +29,30 @@ internal class PlayerVideoSurfaceTest {
         )
 
         assertEquals(PlayerAction.ShowControls(FocusTarget.SeekBar), action)
+    }
+
+    @Test
+    fun seekActionForKeyCode_returnsSeekActions_forLeftRightAndMediaSeekKeys() {
+        listOf(
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_MEDIA_REWIND,
+            KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD,
+        ).forEach { assertEquals(PlayerAction.SeekBackward, seekActionForKeyCode(it)) }
+        listOf(
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+            KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD,
+        ).forEach { assertEquals(PlayerAction.SeekForward, seekActionForKeyCode(it)) }
+    }
+
+    @Test
+    fun seekActionForKeyCode_returnsNull_forUpDownCenterAndPlayPause() {
+        listOf(
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+        ).forEach { assertNull(seekActionForKeyCode(it)) }
     }
 
     @Test

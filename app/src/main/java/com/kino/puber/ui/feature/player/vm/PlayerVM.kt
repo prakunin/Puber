@@ -149,6 +149,7 @@ internal class PlayerVM(
     private var bufferingDebounceJob: Job? = null
     private var dismissedSegmentJob: Job? = null
     private var prefetchJob: Job? = null
+    private var seekBurstJob: Job? = null
     private var prefetchedEpisode: Pair<Int, Int>? = null
 
     private var segments: List<SkipSegment> = emptyList()
@@ -703,7 +704,19 @@ internal class PlayerVM(
         }
     }
 
+    /**
+     * Holds the skip and next-episode prompts down while the viewer keeps seeking.
+     *
+     * A prompt that appears under a held Left/Right key would take the key's target away.
+     * Every seek restarts the window; once it runs out the next tick offers whatever applies.
+     */
+    private fun startSeekBurst() {
+        seekBurstJob?.cancel()
+        seekBurstJob = launch { delay(DEFAULT_SEEK_RESET_TIMEOUT_MS) }
+    }
+
     private fun seekForward() {
+        startSeekBurst()
         val step = seekHandler.nextStep()
         val newPosition = (playbackController.currentPosition + step * 1000L).coerceAtMost(playbackController.duration)
         playbackController.seekTo(newPosition)
@@ -712,6 +725,7 @@ internal class PlayerVM(
     }
 
     private fun seekBackward() {
+        startSeekBurst()
         val step = seekHandler.nextStep()
         val newPosition = (playbackController.currentPosition - step * 1000L).coerceAtLeast(0)
         playbackController.seekTo(newPosition)
@@ -1510,8 +1524,10 @@ internal class PlayerVM(
                     if (isPlaying) {
                         checkAutoMarkWatched()
                         checkNextEpisodePrefetch()
-                        checkEarlyNextEpisode()
-                        checkSkipSegment()
+                        if (seekBurstJob?.isActive != true) {
+                            checkEarlyNextEpisode()
+                            checkSkipSegment()
+                        }
                     }
                 }
             }
@@ -1624,7 +1640,8 @@ internal class PlayerVM(
             creditsSegment = skipSegmentInteractor.findCreditsSegment(segments)
             dismissedSegmentType = null
             // Late arrival check: if credits segment exists and position already past it
-            if (creditsSegment != null && !countdownDismissed) {
+            // A seek burst holds the prompt down; the tick offers it once the burst ends.
+            if (creditsSegment != null && !countdownDismissed && seekBurstJob?.isActive != true) {
                 val state = (stateValue as? PlayerViewState.Content)?.content ?: return@launch
                 if (shouldStartNextEpisodeForLoadedCredits(state, requireNotNull(creditsSegment))) {
                     startNextEpisodeCountdown()

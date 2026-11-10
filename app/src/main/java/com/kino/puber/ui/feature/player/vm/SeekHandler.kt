@@ -4,7 +4,7 @@ private const val SHORT_SEEK_STEP_SECONDS = 10
 private const val MEDIUM_SEEK_STEP_SECONDS = 20
 private const val LONG_SEEK_STEP_SECONDS = 30
 private const val MAX_SEEK_STEP_SECONDS = 60
-private const val DEFAULT_SEEK_RESET_TIMEOUT_MS = 1_500L
+internal const val DEFAULT_SEEK_RESET_TIMEOUT_MS = 1_500L
 private val DEFAULT_SEEK_STEPS_SECONDS = intArrayOf(
     SHORT_SEEK_STEP_SECONDS,
     SHORT_SEEK_STEP_SECONDS,
