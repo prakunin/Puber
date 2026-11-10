@@ -105,6 +105,7 @@ internal fun PlayerControlsLayer(
 internal fun PlayerOverlayLayers(
     content: PlayerContentState,
     onAction: (UIAction) -> Unit,
+    focusRequesters: PlayerFocusRequesters,
     bottomInset: Dp = 0.dp,
 ) {
     // The controls bar owns the bottom strip while it is up, so the timed actions step above it.
@@ -114,6 +115,8 @@ internal fun PlayerOverlayLayers(
             state = content.activeSkipSegment,
             onSkip = rememberAction(onAction, PlayerAction.SkipSegmentClicked),
             onCancel = rememberAction(onAction, PlayerAction.CancelSkipSegment),
+            onSeek = onAction,
+            focusRequester = focusRequesters.skipPrompt,
             bottomInset = timedActionInset,
         )
     }
@@ -128,6 +131,8 @@ internal fun PlayerOverlayLayers(
         countdown = content.nextEpisodeCountdown,
         onNextEpisode = rememberAction(onAction, PlayerAction.NextEpisode),
         onCancel = rememberAction(onAction, PlayerAction.CancelNextEpisodeCountdown),
+        onSeek = onAction,
+        focusRequester = focusRequesters.nextEpisodePrompt,
         bottomInset = timedActionInset,
     )
 }

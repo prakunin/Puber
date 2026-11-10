@@ -11,6 +11,8 @@ internal class PlayerFocusRequesters {
     val aboutButton = FocusRequester()
     val settingsButton = FocusRequester()
     val seekBar = FocusRequester()
+    val skipPrompt = FocusRequester()
+    val nextEpisodePrompt = FocusRequester()
 }
 
 @Composable

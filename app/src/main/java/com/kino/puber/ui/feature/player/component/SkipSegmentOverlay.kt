@@ -2,10 +2,12 @@ package com.kino.puber.ui.feature.player.component
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kino.puber.R
+import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import com.kino.puber.ui.feature.player.model.SkipSegmentUIState
 
@@ -15,6 +17,8 @@ internal fun SkipSegmentOverlay(
     state: SkipSegmentUIState?,
     onSkip: () -> Unit,
     onCancel: () -> Unit,
+    onSeek: (PlayerAction) -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
 ) {
@@ -25,7 +29,7 @@ internal fun SkipSegmentOverlay(
         cancelLabel = stringResource(R.string.skip_cancel),
         // Per prompt, not a constant: a segment with little left is offered a shorter countdown.
         seconds = state?.countdown ?: PlayerCountdowns.SKIP_SEGMENT_SEC,
-        focusPrimaryAction = false,
+        focusRequester = focusRequester,
         debugName = state?.type?.let { "skip_${it.name.lowercase()}" } ?: "skip_segment",
         // One segment can take over from another with the plate never leaving the screen. Keyed on
         // where it lands as well as its kind, so two ranges of one kind are two prompts.
@@ -33,6 +37,7 @@ internal fun SkipSegmentOverlay(
         compactCancel = true,
         onAction = onSkip,
         onCancel = onCancel,
+        onSeek = onSeek,
         bottomInset = bottomInset,
         modifier = modifier,
     )

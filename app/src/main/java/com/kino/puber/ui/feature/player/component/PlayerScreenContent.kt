@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -74,10 +75,19 @@ private fun PlayerFocusEffects(
     focusRequesters: PlayerFocusRequesters,
 ) {
     val hasResumeDialog = content?.resumeDialog != null
-    LaunchedEffect(content?.controlsVisible, content?.activePanel, hasResumeDialog) {
+    val prompt = when {
+        content?.nextEpisodeCountdown != null -> VisiblePrompt.NextEpisode
+        content?.activeSkipSegment != null -> VisiblePrompt.Skip
+        else -> null
+    }
+    LaunchedEffect(content?.controlsVisible, content?.activePanel, hasResumeDialog, prompt) {
         if (hasResumeDialog) return@LaunchedEffect
         if (content != null && !content.controlsVisible && content.activePanel == ActivePanel.None) {
-            runCatching { focusRequesters.player.requestFocus() }
+            when (prompt) {
+                VisiblePrompt.NextEpisode -> focusRequesters.nextEpisodePrompt
+                VisiblePrompt.Skip -> focusRequesters.skipPrompt
+                null -> focusRequesters.player
+            }.requestFocusOrRetryNextFrame()
         }
     }
 
@@ -87,6 +97,19 @@ private fun PlayerFocusEffects(
             requestControlsFocus(content.controlsFocusTarget, focusRequesters)
         }
     }
+}
+
+/** The prompt that holds the bare-video focus: the next-episode one wins while both are set. */
+private enum class VisiblePrompt { Skip, NextEpisode }
+
+/**
+ * The target may not be attached on the frame the state arrives, in which case the request throws
+ * or answers false; it gets one more try on the next frame.
+ */
+private suspend fun FocusRequester.requestFocusOrRetryNextFrame() {
+    if (runCatching { requestFocus() }.getOrDefault(false)) return
+    withFrameNanos { }
+    runCatching { requestFocus() }
 }
 
 private fun requestControlsFocus(
@@ -128,7 +151,12 @@ private fun PlayerContent(
         onBottomBarHeightChanged = { controlsBarHeight = it },
     )
     PlayerSettingsPanels(content = content, onAction = onAction)
-    PlayerOverlayLayers(content = content, onAction = onAction, bottomInset = controlsBarHeight)
+    PlayerOverlayLayers(
+        content = content,
+        onAction = onAction,
+        focusRequesters = focusRequesters,
+        bottomInset = controlsBarHeight,
+    )
 }
 
 @Composable

@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.component
 
 import android.os.SystemClock
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedContent
@@ -40,9 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -72,6 +75,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.R
+import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.ui.feature.player.model.PlayerCountdowns
 import kotlin.math.ceil
 
@@ -168,7 +172,8 @@ internal fun PlayerTimedActionOverlay(
     cancelLabel: String,
     /** Seconds the prompt counts down from. The overlay runs the clock from there on its own. */
     seconds: Int,
-    focusPrimaryAction: Boolean,
+    /** Held by the player focus effects, which are the only ones that move focus to the prompt. */
+    focusRequester: FocusRequester,
     /** Changes when a different prompt takes over without the plate ever going away. */
     modifier: Modifier = Modifier,
     promptKey: Any? = null,
@@ -176,6 +181,8 @@ internal fun PlayerTimedActionOverlay(
     compactCancel: Boolean = false,
     onAction: () -> Unit,
     onCancel: () -> Unit,
+    /** Left/Right and the media seek keys pressed on the prompt: it never takes them. */
+    onSeek: (PlayerAction) -> Unit,
     bottomInset: Dp = 0.dp,
 ) {
     BackHandler(enabled = visible, onBack = onCancel)
@@ -185,16 +192,6 @@ internal fun PlayerTimedActionOverlay(
         animationSpec = tween(TIMED_ACTION_LIFT_MS),
         label = "timed_action_lift",
     )
-
-    val primaryFocusRequester = remember { FocusRequester() }
-    val cancelFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(visible) {
-        if (visible) {
-            runCatching {
-                if (focusPrimaryAction) primaryFocusRequester.requestFocus() else cancelFocusRequester.requestFocus()
-            }
-        }
-    }
 
     // The clock lives here, and there is one of it: the bar reads it every frame and the digit
     // flips when it crosses a tick, so the two cannot drift apart, and a second passing changes
@@ -264,14 +261,20 @@ internal fun PlayerTimedActionOverlay(
         ) { displayedPresentation ->
             displayedPresentation?.let { displayed ->
                 Row(
-                    modifier = Modifier.wrapContentWidth(Alignment.End),
+                    modifier = Modifier
+                        .wrapContentWidth(Alignment.End)
+                        .onPreviewKeyEvent { event ->
+                            val seek = seekActionForKeyCode(event.nativeKeyEvent.keyCode)
+                                ?: return@onPreviewKeyEvent false
+                            if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) onSeek(seek)
+                            true
+                        },
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TimedActionButton(
                         label = cancelLabel,
                         onClick = onCancel,
-                        focusRequester = cancelFocusRequester,
                         emphasized = false,
                         iconOnly = compactCancel,
                         secondsLeft = secondsLeft,
@@ -279,7 +282,7 @@ internal fun PlayerTimedActionOverlay(
                     TimedActionButton(
                         label = displayed.actionLabel,
                         onClick = onAction,
-                        focusRequester = primaryFocusRequester,
+                        focusRequester = focusRequester,
                         emphasized = true,
                         secondsLeft = secondsLeft,
                         countsFrom = shownSeconds,
@@ -306,7 +309,7 @@ internal fun PlayerTimedActionOverlay(
 private fun TimedActionButton(
     label: String,
     onClick: () -> Unit,
-    focusRequester: FocusRequester,
+    focusRequester: FocusRequester? = null,
     emphasized: Boolean,
     /**
      * Seconds left on the clock. Not read in this composition: the label reads it in a scope of
@@ -373,12 +376,14 @@ private fun TimedActionButton(
                     Modifier
                 },
             )
+            // The bare X is a pointer target only: the D-pad reaches the action, Back dismisses.
+            .then(if (iconOnly) Modifier.focusProperties { canFocus = false } else Modifier)
             .timeLeftSemantics(secondsLeft, describeTimeLeft)
             .onFocusChanged { focused = it.isFocused }
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged?.invoke(coordinates.boundsInWindow())
             }
-            .focusRequester(focusRequester),
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         border = if (iconOnly) {
             ClickableSurfaceDefaults.border()
