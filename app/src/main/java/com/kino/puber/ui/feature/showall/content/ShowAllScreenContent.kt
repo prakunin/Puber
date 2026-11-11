@@ -32,6 +32,7 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
+import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
@@ -142,6 +143,10 @@ private fun ShowAllContentBody(
  * focus back on it (or on its neighbour when a reload dropped it). The saved values are read once
  * on entry without observing, so focus moves never recompose the grid. A reload that lands before
  * the entry focus does re-targets the restore, and if no card takes focus the grid itself is focused.
+ *
+ * A side rail closing hands focus back to the content. The grid has no restorer of its own, so it
+ * answers that handoff itself: the id is latched (read directly it is null again once the handoff
+ * settles, which would cancel the effect) and each id is answered once.
  */
 @Composable
 private fun rememberGridFocusMemory(
@@ -163,7 +168,13 @@ private fun rememberGridFocusMemory(
             requestGrid = { gridFocus.tryRequestFocus() },
         )
     }
+    var latchedHandoffId by remember { mutableStateOf<Long?>(null) }
+    val handoffId = LocalContentFocusHandoff.current?.pendingRequestId
+    if (handoffId != null && handoffId != latchedHandoffId) latchedHandoffId = handoffId
     LaunchedEffect(items, contentFocusActive) { memory.reconcile() }
+    LaunchedEffect(latchedHandoffId, contentFocusActive) {
+        latchedHandoffId?.let { memory.onHandoff(it) }
+    }
     return memory
 }
 
@@ -188,6 +199,8 @@ internal class GridFocusMemory(
     // True while focus sits in the grid and was not taken away by the focused card leaving the list.
     private var inGrid = false
 
+    private var answeredHandoffId: Long? = null
+
     fun onCardFocused(id: Int, index: Int) {
         lastFocusedId.value = id
         lastFocusedIndex.value = index
@@ -211,6 +224,20 @@ internal class GridFocusMemory(
         if (restoreId == null || requestRestoreFocus()) return
         // Last resort for a pending entry only: never leave the re-entered grid without focus.
         if (pendingEntry && contentFocusActive()) requestGrid()
+    }
+
+    /**
+     * Answers a focus handoff from the side rail by focusing the remembered card again. Without a
+     * remembered card, with focus already in the grid, or with the content inactive it does nothing,
+     * and an id that was already answered is ignored, so a later recomposition never takes focus back.
+     */
+    suspend fun onHandoff(requestId: Long) {
+        if (requestId == answeredHandoffId || !contentFocusActive()) return
+        answeredHandoffId = requestId
+        val focusedId = lastFocusedId.value
+        if (inGrid || focusedId == null) return
+        restoreId = resolveRestoreId(focusedId, lastFocusedIndex.value, items())
+        if (restoreId != null) requestRestoreFocus()
     }
 
     private suspend fun requestRestoreFocus(): Boolean {

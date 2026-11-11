@@ -248,6 +248,109 @@ class GridFocusMemoryTest {
         assertEquals(listOf("restore:6:false", "restore:6:false", "restore:6:false"), h.events)
     }
 
+    // A rail opened from card 5 (index 4): the grid held focus, then lost it to the rail.
+    private fun railOpenedFromCard5(items: List<VideoItemUIState> = cards(1..10)): Harness {
+        val h = Harness(null, 0, items)
+        h.memory.onGridFocusChanged(true)
+        h.memory.onCardFocused(5, 4)
+        h.memory.onGridFocusChanged(false)
+        return h
+    }
+
+    private fun TestScope.handoff(h: Harness, id: Long) {
+        launch(h.clock) { h.memory.onHandoff(id) }
+        advanceUntilIdle()
+    }
+
+    // T-U1
+    @Test
+    fun onHandoff_rememberedCardAndGridUnfocusedRequestsThatCard() = runTest {
+        val h = railOpenedFromCard5()
+        handoff(h, 1)
+        assertEquals(listOf("restore:5:true"), h.events)
+    }
+
+    // T-U2
+    @Test
+    fun onHandoff_withoutARememberedCardMakesNoRequest() = runTest {
+        val h = Harness(null, 0, cards(1..10))
+        handoff(h, 1)
+        assertTrue(h.events.isEmpty())
+    }
+
+    // T-U3
+    @Test
+    fun onHandoff_whileTheGridHoldsFocusMakesNoRequest() = runTest {
+        val h = railOpenedFromCard5()
+        h.memory.onGridFocusChanged(true)
+        handoff(h, 1)
+        assertTrue(h.events.isEmpty())
+    }
+
+    // T-U4
+    @Test
+    fun onHandoff_theSameIdIsAnsweredOnce() = runTest {
+        val h = railOpenedFromCard5()
+        handoff(h, 1)
+        h.memory.onGridFocusChanged(false)
+        handoff(h, 1)
+        assertEquals(listOf("restore:5:true"), h.events)
+        handoff(h, 2)
+        assertEquals(listOf("restore:5:true", "restore:5:true"), h.events)
+    }
+
+    // T-U5
+    @Test
+    fun onHandoff_contentInactiveMakesNoRequestAndFlippingOffStopsIt() = runTest {
+        val off = railOpenedFromCard5()
+        off.activeVar = false
+        handoff(off, 1)
+        assertTrue(off.events.isEmpty())
+
+        val late = Harness(
+            null, 0, cards(1..10),
+            restoreOverride = { false },
+            onFrame = { if (it == 2) activeVar = false },
+        )
+        late.memory.onGridFocusChanged(true)
+        late.memory.onCardFocused(5, 4)
+        late.memory.onGridFocusChanged(false)
+        handoff(late, 1)
+        assertEquals(1, late.restoreEvents().size)
+        assertTrue("grid" !in late.events)
+    }
+
+    // An id seen while the content is inactive stays unanswered until it turns active.
+    @Test
+    fun onHandoff_idArrivingWhileInactiveIsAnsweredOnceContentTurnsActive() = runTest {
+        val h = railOpenedFromCard5()
+        h.activeVar = false
+        handoff(h, 1)
+        h.activeVar = true
+        handoff(h, 1)
+        assertEquals(listOf("restore:5:true"), h.events)
+    }
+
+    // T-U6
+    @Test
+    fun onHandoff_rememberedCardDroppedWhileTheRailWasOpenRequestsTheNeighbour() = runTest {
+        val h = railOpenedFromCard5()
+        h.itemsVar = without(5, cards(1..10))
+        handoff(h, 1)
+        assertEquals(listOf("restore:6:true"), h.events)
+    }
+
+    // T-U7
+    @Test
+    fun onHandoff_leavesPendingEntryUntouched() = runTest {
+        val h = Harness(5, 4, cards(1..10))
+        handoff(h, 1)
+        assertEquals(listOf("restore:5:true"), h.events)
+        run(h)
+        assertEquals(listOf("restore:5:true", "restore:5:true"), h.events)
+        assertTrue("grid" !in h.events)
+    }
+
     private fun TestScope.run(h: Harness) {
         h.start(this)
         advanceUntilIdle()
