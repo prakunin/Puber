@@ -239,13 +239,30 @@ class GridFocusMemoryTest {
     }
 
     @Test
-    fun reconcile_liveGridFocusedCardRemovedAllAttemptsFailingNeverFocusesTheGrid() = runTest {
+    fun reconcile_liveGridFocusedCardRemovedAllAttemptsFailingFocusesTheGrid() = runTest {
         val h = Harness(null, 0, cards(1..10), restoreOverride = { false })
         h.memory.onGridFocusChanged(true)
         h.memory.onCardFocused(5, 4)
         h.itemsVar = without(5, cards(1..10))
         run(h)
-        assertEquals(listOf("restore:6:false", "restore:6:false", "restore:6:false"), h.events)
+        assertEquals(listOf("restore:6:false", "restore:6:false", "restore:6:false", "grid"), h.events)
+    }
+
+    @Test
+    fun reconcile_liveGridFocusedCardRemovedAllAttemptsFailingWithContentInactiveNeverFocusesTheGrid() = runTest {
+        val h = Harness(
+            null,
+            0,
+            cards(1..10),
+            restoreOverride = { false },
+            onFrame = { if (it == 3) activeVar = false },
+        )
+        h.memory.onGridFocusChanged(true)
+        h.memory.onCardFocused(5, 4)
+        h.itemsVar = without(5, cards(1..10))
+        run(h)
+        assertEquals(listOf("restore:6:false", "restore:6:false"), h.events)
+        assertTrue("grid" !in h.events)
     }
 
     // A rail opened from card 5 (index 4): the grid held focus, then lost it to the rail.

@@ -11,12 +11,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -25,8 +29,10 @@ import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.collections.detail.model.CollectionDetailViewState
@@ -45,44 +51,75 @@ internal fun CollectionDetailScreenContent(
         )
         is CollectionDetailViewState.Content -> {
             var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
-            Box(Modifier.fillMaxSize()) {
-                Column(Modifier.fillMaxSize()) {
-                    Text(
-                        text = state.title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                    )
+            val contentFocusActive = LocalContentFocusActive.current
+            // The open menu parks the card focus requests as the rail does.
+            CompositionLocalProvider(
+                LocalContentFocusActive provides (contentFocusActive && contextMenuItem == null),
+            ) {
+                val itemFocus = rememberReconciledItemFocus(
+                    rowKey = "collection_detail",
+                    items = state.items,
+                    isTargetRow = true,
+                    requestAfterFrame = true,
+                    onRowEmpty = {},
+                )
+                Box(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize()) {
+                        Text(
+                            text = state.title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                        )
 
-                    if (state.items.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(stringResource(R.string.empty_state))
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(32.dp),
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
-                                val clickCallback = remember(item.id) { { onItemClick(item) } }
-                                VideoItemHorizontal(
-                                    state = item,
-                                    onClick = clickCallback,
-                                    onContextMenu = { contextMenuItem = item },
-                                )
+                        if (state.items.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(stringResource(R.string.empty_state))
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(3),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(32.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .focusRestorer(itemFocus.focusRequester)
+                                    .onFocusChanged { focusState ->
+                                        itemFocus.rowHasFocusRef[0] = focusState.hasFocus
+                                    },
+                            ) {
+                                itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
+                                    val clickCallback = remember(item.id) { { onItemClick(item) } }
+                                    VideoItemHorizontal(
+                                        modifier = Modifier
+                                            .then(
+                                                if (item.id == itemFocus.targetItemId) {
+                                                    Modifier.focusRequester(itemFocus.focusRequester)
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                            .onFocusChanged { focusState ->
+                                                if (focusState.isFocused) {
+                                                    itemFocus.onItemFocused(item.id)
+                                                }
+                                            },
+                                        state = item,
+                                        onClick = clickCallback,
+                                        onContextMenu = { contextMenuItem = item },
+                                    )
+                                }
                             }
                         }
                     }
+                    VideoItemContextMenuDialog(
+                        item = contextMenuItem,
+                        onDismiss = { contextMenuItem = null },
+                        onAction = onAction,
+                    )
                 }
-                VideoItemContextMenuDialog(
-                    item = contextMenuItem,
-                    onDismiss = { contextMenuItem = null },
-                    onAction = onAction,
-                )
             }
         }
     }
