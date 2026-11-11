@@ -222,8 +222,8 @@ internal class GridFocusMemory(
         if (!pendingEntry && !focusedCardLeft) return
         restoreId = resolveRestoreId(focusedId, lastFocusedIndex.value, items())
         if (restoreId == null || requestRestoreFocus()) return
-        // Last resort for a pending entry only: never leave the re-entered grid without focus.
-        if (pendingEntry && contentFocusActive()) requestGrid()
+        // Last resort for a pending entry or a focused card that left the list: never leave the grid without focus.
+        if ((pendingEntry || focusedCardLeft) && contentFocusActive()) requestGrid()
     }
 
     /**
