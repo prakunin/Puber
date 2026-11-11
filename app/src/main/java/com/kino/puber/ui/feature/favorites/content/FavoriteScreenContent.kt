@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,14 +19,17 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenError
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
-import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.core.ui.uikit.component.LocalTvDialogFocusRestorer
+import com.kino.puber.core.ui.uikit.component.TvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoGrid
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.favorites.model.FavoriteViewState
 
 @Composable
@@ -65,32 +69,56 @@ private fun FavoriteScreenContentBody(
 ) {
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .focusRequester(mainContentFocus)
-    ) {
-        VideoItemGridDetails(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(PuberTheme.Defaults.DetailsWeight),
-            state = state.selectedItem,
+    val contentFocusActive = LocalContentFocusActive.current
+    // Closing the menu puts focus back on the card that opened it; without a restorer the
+    // grid falls back to its first card, or to nothing when the rail has taken focus.
+    val dialogFocusRestorer = remember(mainContentFocus) {
+        TvDialogFocusRestorer(
+            onDialogOpening = {
+                runCatching { mainContentFocus.saveFocusedChild() }
+            },
+            onDialogClosed = {
+                val restored = runCatching { mainContentFocus.restoreFocusedChild() }
+                    .getOrDefault(false)
+                if (!restored) {
+                    runCatching { mainContentFocus.requestFocus() }
+                }
+            },
         )
-
-        Row(Modifier.weight(PuberTheme.Defaults.ContentWeight)) {
-            VideoGrid(
-                modifier = Modifier.fillMaxWidth(),
-                state = state.gridState,
-                onItemClick = { onAction(CommonAction.ItemSelected(it)) },
-                onItemFocused = { onAction(CommonAction.ItemFocused(it)) },
-                onItemContextMenu = { contextMenuItem = it },
-                detailsPrefetchEnabled = true,
-            )
-        }
     }
-    VideoItemContextMenuDialog(
-        item = contextMenuItem,
-        onDismiss = { contextMenuItem = null },
-        onAction = onAction,
-    )
+    // The open menu parks the card focus requests as the rail does.
+    CompositionLocalProvider(
+        LocalContentFocusActive provides (contentFocusActive && contextMenuItem == null),
+        LocalTvDialogFocusRestorer provides dialogFocusRestorer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(mainContentFocus)
+        ) {
+            VideoItemGridDetails(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(PuberTheme.Defaults.DetailsWeight),
+                state = state.selectedItem,
+            )
+
+            Row(Modifier.weight(PuberTheme.Defaults.ContentWeight)) {
+                VideoGrid(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = state.gridState,
+                    onItemClick = { onAction(CommonAction.ItemSelected(it)) },
+                    onItemFocused = { onAction(CommonAction.ItemFocused(it)) },
+                    onItemContextMenu = { contextMenuItem = it },
+                    detailsPrefetchEnabled = true,
+                )
+            }
+        }
+        // Inside the provider, so the dialog must not read LocalContentFocusActive: it is false here.
+        VideoItemContextMenuDialog(
+            item = contextMenuItem,
+            onDismiss = { contextMenuItem = null },
+            onAction = onAction,
+        )
+    }
 }
