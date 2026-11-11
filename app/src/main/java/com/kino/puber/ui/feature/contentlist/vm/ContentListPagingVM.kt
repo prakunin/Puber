@@ -176,6 +176,9 @@ internal abstract class ContentListPagingVM<VS>(
      * through every length between one page and its own, and the focused card would be missing from
      * all of them but the last.
      *
+     * Pages are merged by id, the first occurrence kept: a filtered page that read ahead, or a
+     * reorder between reads, would otherwise put one title in the row twice.
+     *
      * The pagination reported is the deepest page reached, which is what tells [publish] where the
      * next page starts and whether the server has one.
      *
@@ -196,14 +199,19 @@ internal abstract class ContentListPagingVM<VS>(
         if (depth > restoreTo) {
             log("$logName ${config.id}: reload restores $restoreTo of the $depth pages loaded")
         }
-        val items = firstPage.items.toMutableList()
+        val items = LinkedHashMap<Int, Item>()
+        firstPage.items.forEach { items.putIfAbsent(it.id, it) }
         var deepest = firstPage
         var emptyChain = 0
-        // Counted here rather than read back out of each response: the page a reply says it is
-        // decides where paging continues, but it must not decide how many more requests this makes.
+        var requests = 0
+        // The reply may move the cursor forward (a filtered answer that read ahead), never back, and
+        // never decides how many requests are made: `requests` is that ceiling.
         var page = firstPage.pagination.current
-        while (page < restoreTo && deepest.pagination.current < deepest.pagination.total) {
+        while (requests < MAX_RESTORED_PAGES - 1 && page < restoreTo &&
+            deepest.pagination.current < deepest.pagination.total
+        ) {
             page += 1
+            requests += 1
             val next = try {
                 interactor.loadPage(config, page)
             } catch (error: CancellationException) {
@@ -212,15 +220,16 @@ internal abstract class ContentListPagingVM<VS>(
                 log(error, "$logName ${config.id}: reload could not read page $page, row kept as it was")
                 return null
             }
-            items += next.items
+            next.items.forEach { items.putIfAbsent(it.id, it) }
             deepest = next
+            page = maxOf(page, next.pagination.current)
             emptyChain = if (next.items.isEmpty()) emptyChain + 1 else 0
             if (emptyChain > MAX_EMPTY_PAGE_CHAIN) {
                 log("$logName ${config.id}: reload stopped after $emptyChain empty pages at $page")
                 break
             }
         }
-        return PaginatedResponse(items = items, pagination = deepest.pagination)
+        return PaginatedResponse(items = items.values.toList(), pagination = deepest.pagination)
     }
 
     /**
