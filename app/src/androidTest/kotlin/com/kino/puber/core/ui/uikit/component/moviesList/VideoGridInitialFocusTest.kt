@@ -3,16 +3,21 @@ package com.kino.puber.core.ui.uikit.component.moviesList
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.text.TextStyle
 import androidx.tv.material3.Text
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import org.junit.Rule
 import org.junit.Test
@@ -199,6 +204,104 @@ internal class VideoGridInitialFocusTest {
         }
         composeRule.onNodeWithText("Item 3").assertIsFocused()
         composeRule.onNodeWithText("Search").assertIsNotFocused()
+    }
+
+    @Test
+    fun changedInitialFocusedItemIdWithChangedItemsRefocusesTheRetainedRow() {
+        var state by mutableStateOf(
+            VideoGridUIState(
+                list = listOf(
+                    VideoGridItemUIState.Items(
+                        items = listOf(videoItem(1), videoItem(2), videoItem(3)),
+                        rowKey = "retained",
+                    ),
+                ),
+            ),
+        )
+        var initialFocusedItemId by mutableStateOf(1)
+        composeRule.setContent {
+            PuberTheme {
+                VideoGrid(
+                    state = state,
+                    initialFocusedItemId = initialFocusedItemId,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Item 1").assertIsFocused()
+        composeRule.runOnIdle {
+            initialFocusedItemId = 3
+            state = state.copy(
+                list = listOf(
+                    VideoGridItemUIState.Items(
+                        items = listOf(videoItem(1), videoItem(2).copy(isWatched = true), videoItem(3)),
+                        rowKey = "retained",
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText("Item 3").assertIsFocused()
+    }
+
+    @Test
+    fun removedCardInAnUntargetedRowDoesNotPinFocusAfterContentFocusReturns() {
+        var state by mutableStateOf(
+            VideoGridUIState(
+                list = listOf(
+                    VideoGridItemUIState.Items(
+                        items = listOf(videoItem(1), videoItem(2), videoItem(3)),
+                        rowKey = "top",
+                    ),
+                    VideoGridItemUIState.Items(
+                        items = listOf(videoItem(11), videoItem(12), videoItem(13)),
+                        rowKey = "bottom",
+                    ),
+                ),
+            ),
+        )
+        var active by mutableStateOf(true)
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides active) {
+                    VideoGrid(
+                        state = state,
+                        initialFocusedItemId = 1,
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("Item 1").assertIsFocused()
+        composeRule.runOnIdle {
+            state = state.copy(
+                list = listOf(
+                    state.list[0],
+                    VideoGridItemUIState.Items(
+                        items = listOf(videoItem(12), videoItem(13)),
+                        rowKey = "bottom",
+                    ),
+                ),
+            )
+        }
+        composeRule.onNodeWithText("Item 1").performDirection(Key.DirectionDown)
+        composeRule.onNodeWithText("Item 12").assertIsFocused()
+        composeRule.onNodeWithText("Item 12").performDirection(Key.DirectionRight)
+        composeRule.onNodeWithText("Item 13").assertIsFocused()
+
+        composeRule.runOnIdle { active = false }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { active = true }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Item 13").assertIsFocused()
+        composeRule.onNodeWithText("Item 12").assertIsNotFocused()
+    }
+
+    private fun SemanticsNodeInteraction.performDirection(key: Key) {
+        performKeyInput {
+            keyDown(key)
+            keyUp(key)
+        }
     }
 
     private fun assertRemovalFocus(

@@ -61,6 +61,7 @@ internal fun CollectionDetailScreenContent(
                     items = state.items,
                     isTargetRow = true,
                     requestAfterFrame = true,
+                    holdPendingFocusTarget = true,
                     onRowEmpty = {},
                 )
                 Box(Modifier.fillMaxSize()) {

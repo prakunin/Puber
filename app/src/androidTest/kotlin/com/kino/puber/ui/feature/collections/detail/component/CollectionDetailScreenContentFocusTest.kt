@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -22,6 +23,7 @@ import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.collections.detail.model.CollectionDetailViewState
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -93,6 +95,43 @@ class CollectionDetailScreenContentFocusTest {
         composeRule.onNodeWithText(neighbour).assertIsFocused()
     }
 
+    @Test
+    fun collectionDetailFocusStaysOnTheFocusedCardWhenContentIsReplaced() {
+        var shown by mutableStateOf(items)
+        composeRule.setContent { Detail(shown) }
+        val title = focusCardInRowFour()
+
+        shown = shown.map { if (it.title == title) it.copy(isSaved = !it.isSaved) else it }
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+        composeRule.waitForIdle()
+
+        composeRule.waitUntil(FocusTimeoutMillis) { composeRule.focusedWith(title) }
+        composeRule.onNodeWithText(title).assertIsFocused()
+        composeRule.onNodeWithText(title).assertIsDisplayed()
+    }
+
+    @Test
+    fun collectionDetailFocusMovesToTheNeighbourWhenTheFocusedCardLeavesReplacedContent() {
+        var shown by mutableStateOf(items)
+        composeRule.setContent { Detail(shown) }
+        val title = focusCardInRowFour()
+        val neighbour = items[items.indexOfFirst { it.title == title } + 1].title
+
+        shown = shown.filter { it.title != title }
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+        composeRule.waitForIdle()
+
+        runCatching {
+            composeRule.waitUntil(FocusTimeoutMillis) { composeRule.focusedWith(neighbour) }
+        }.onFailure {
+            val focused = items.filter { composeRule.focusedWith(it.title) }.joinToString { it.title }
+            assertTrue("expected $neighbour focused, focused: ${focused.ifEmpty { "none" }}", false)
+        }
+        composeRule.onNodeWithText(neighbour).assertIsFocused()
+        composeRule.onNodeWithText(neighbour).assertIsDisplayed()
+        assertTrue("focus must not fall back to the first card", !composeRule.focusedWith(items.first().title))
+    }
+
     @androidx.compose.runtime.Composable
     private fun Detail(shown: List<VideoItemUIState>) {
         PuberTheme {
@@ -117,6 +156,17 @@ class CollectionDetailScreenContentFocusTest {
         return title
     }
 
+    private fun focusCardInRowFour(): String {
+        composeRule.onNodeWithText(items.first().title).requestFocus()
+        repeat(RowFourSteps) {
+            composeRule.onNode(isFocused()).performDirection(Key.DirectionDown)
+            composeRule.mainClock.advanceTimeBy(SettleMillis)
+        }
+        val title = items.map { it.title }.first { composeRule.focusedWith(it) }
+        assertEquals(RowFourCard, title)
+        return title
+    }
+
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.focusedWith(title: String): Boolean =
         onAllNodes(isFocused() and hasText(title)).fetchSemanticsNodes().isNotEmpty()
 
@@ -131,6 +181,8 @@ class CollectionDetailScreenContentFocusTest {
 
     private companion object {
         const val ItemCount = 24
+        const val RowFourSteps = 3
+        const val RowFourCard = "Card 10"
         const val SettleMillis = 300L
         const val FocusTimeoutMillis = 5_000L
         const val LongPressDelayMillis = 500L

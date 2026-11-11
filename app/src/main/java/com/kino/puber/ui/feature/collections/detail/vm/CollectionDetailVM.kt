@@ -32,6 +32,9 @@ internal class CollectionDetailVM(
     override val initialViewState = CollectionDetailViewState.Loading
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
+    private var loadJob: Job? = null
+    private val savedSinceLastPublish = mutableSetOf<Int>()
+    private val saveJobItemIds = mutableMapOf<Job, Int>()
     private var closing = false
 
     override fun dispatchError(error: ErrorEntity) {
@@ -67,16 +70,32 @@ internal class CollectionDetailVM(
     }
 
     private fun loadItems() {
-        updateViewState(CollectionDetailViewState.Loading)
-        launch {
-            val items = interactor.getCollectionItems(collectionId)
-            updateViewState(
-                CollectionDetailViewState.Content(
-                    title = collectionTitle,
-                    items = mapper.mapShortItemList(items),
-                )
-            )
+        if (stateValue !is CollectionDetailViewState.Content) {
+            updateViewState(CollectionDetailViewState.Loading)
         }
+        saveJobItemIds.keys.removeAll { !it.isActive }
+        savedSinceLastPublish.retainAll(saveJobItemIds.values.toSet())
+        loadJob?.cancel()
+        loadJob = launch {
+            val items = interactor.getCollectionItems(collectionId)
+            awaitPendingMutations()
+            publishItems(mapper.mapShortItemList(items))
+        }
+    }
+
+    private fun publishItems(fetched: List<VideoItemUIState>) {
+        val onScreen = (stateValue as? CollectionDetailViewState.Content)?.items.orEmpty()
+            .associateBy(VideoItemUIState::id)
+        val patched = fetched.map { item ->
+            val current = onScreen[item.id]
+            if (item.id in savedSinceLastPublish && current != null) {
+                item.copy(isSaved = current.isSaved)
+            } else {
+                item
+            }
+        }
+        updateViewState(CollectionDetailViewState.Content(title = collectionTitle, items = patched))
+        savedSinceLastPublish.clear()
     }
 
     private fun openDetails(itemId: Int) {
@@ -102,8 +121,9 @@ internal class CollectionDetailVM(
     }
 
     private fun setItemSaved(item: VideoItemUIState, saved: Boolean) {
+        savedSinceLastPublish += item.id
         updateSavedItem(item.id, saved)
-        launchMutation {
+        val job = launchMutation {
             savedItemInteractor.setSaved(
                 itemId = item.id,
                 isSeriesLike = item.isSeriesLike,
@@ -125,6 +145,7 @@ internal class CollectionDetailVM(
                 throw it
             }
         }
+        saveJobItemIds[job] = item.id
     }
 
     private fun updateSavedItem(itemId: Int, saved: Boolean) {

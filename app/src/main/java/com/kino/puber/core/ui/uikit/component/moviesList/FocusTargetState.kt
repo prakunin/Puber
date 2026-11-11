@@ -36,6 +36,12 @@ private data class PendingItemFocus(
     val canRestoreInactiveContent: Boolean = false,
 )
 
+/**
+ * [holdPendingFocusTarget] is an opt-in for a single grid that is always the target row and passes
+ * no `initialFocusedItemId`. The pending neighbour stays the requester's card until its request
+ * lands, the published-items effect keeps the id resolved in composition, and the request retries
+ * over up to [ROOT_ANCHOR_FOCUS_REQUEST_ATTEMPTS] frames. Off, focus reconciles as before.
+ */
 @Composable
 internal fun rememberReconciledItemFocus(
     rowKey: String,
@@ -44,6 +50,7 @@ internal fun rememberReconciledItemFocus(
     initialFocusedItemId: Int? = null,
     requestAfterFrame: Boolean = false,
     restoreAcrossProcess: Boolean = true,
+    holdPendingFocusTarget: Boolean = false,
     onRowEmpty: () -> Unit,
 ): ReconciledItemFocusState {
     val initialItemId = initialFocusedItemId ?: items.firstOrNull()?.id
@@ -78,6 +85,13 @@ internal fun rememberReconciledItemFocus(
         updatedItems = items,
         focusedItemId = focusedItemId.value,
     )
+    val requestTargetId = if (holdPendingFocusTarget) {
+        pendingFocus.value.itemId
+            ?.takeIf { id -> items.any { it.id == id } }
+            ?: targetItemId
+    } else {
+        targetItemId
+    }
     val canRestoreInactiveContent =
         targetItemId != null &&
             targetItemId != focusedItemId.value &&
@@ -96,6 +110,8 @@ internal fun rememberReconciledItemFocus(
         focusedItemId = focusedItemId,
         previousItems = previousItems,
         canRestoreInactiveContent = canRestoreInactiveContent,
+        resolvedItemId = targetItemId,
+        holdPendingFocusTarget = holdPendingFocusTarget,
         pendingFocus = pendingFocus,
         onRowEmpty = onRowEmpty,
     )
@@ -106,6 +122,7 @@ internal fun rememberReconciledItemFocus(
         rowHasFocusRef = rowHasFocusRef,
         pendingFocus = pendingFocus,
         requestAfterFrame = requestAfterFrame,
+        retryPendingRequest = holdPendingFocusTarget,
         contentFocusActive = contentFocusActive,
         rootAnchorRestoreCompletion = rootAnchorRestoreCompletion,
         screenKey = screenKey,
@@ -120,7 +137,7 @@ internal fun rememberReconciledItemFocus(
     )
 
     return reconciledItemFocusState(
-        targetItemId, focusRequester, rowHasFocusRef, focusSeenRef, focusedItemId, isTargetRow,
+        requestTargetId, focusRequester, rowHasFocusRef, focusSeenRef, focusedItemId, isTargetRow,
         onRootFocusRestored, rowKey, LocalDetailsPrefetchSurface.current,
     )
 }
@@ -196,15 +213,21 @@ private fun ReconcilePublishedItemsEffect(
     focusedItemId: MutableState<Int?>,
     previousItems: MutableState<List<VideoItemUIState>>,
     canRestoreInactiveContent: Boolean,
+    resolvedItemId: Int?,
+    holdPendingFocusTarget: Boolean,
     pendingFocus: MutableState<PendingItemFocus>,
     onRowEmpty: () -> Unit,
 ) {
     LaunchedEffect(items) {
-        val nextFocusedItemId = resolveFocusedItemId(
-            previousItems = previousItems.value,
-            updatedItems = items,
-            focusedItemId = focusedItemId.value,
-        )
+        val nextFocusedItemId = if (holdPendingFocusTarget) {
+            resolvedItemId
+        } else {
+            resolveFocusedItemId(
+                previousItems = previousItems.value,
+                updatedItems = items,
+                focusedItemId = focusedItemId.value,
+            )
+        }
         if (nextFocusedItemId != focusedItemId.value) {
             focusedItemId.value = nextFocusedItemId
             pendingFocus.value = PendingItemFocus(
@@ -227,6 +250,7 @@ private fun RequestReconciledItemFocusEffects(
     rowHasFocusRef: BooleanArray,
     pendingFocus: MutableState<PendingItemFocus>,
     requestAfterFrame: Boolean,
+    retryPendingRequest: Boolean,
     contentFocusActive: Boolean,
     rootAnchorRestoreCompletion: RootAnchorRestoreCompletion,
     screenKey: String?,
@@ -241,7 +265,7 @@ private fun RequestReconciledItemFocusEffects(
         val request = pendingFocus.value
         val canRequestFocus = contentFocusActive || request.canRestoreInactiveContent
         if (isTargetRow && canRequestFocus && request.itemId != null) {
-            focusRequester.requestAfterComposition(requestAfterFrame)
+            focusRequester.requestPending(retryPendingRequest, requestAfterFrame)
             pendingFocus.value = PendingItemFocus()
         }
     }
@@ -297,6 +321,20 @@ private suspend fun FocusRequester.requestAfterAnchorRestore() {
         withFrameNanos { }
         if (requestFocus()) return
     }
+}
+
+private suspend fun FocusRequester.requestUntilFocused(awaitFirstFrame: Boolean) {
+    if (awaitFirstFrame) {
+        withFrameNanos { }
+    }
+    repeat(ROOT_ANCHOR_FOCUS_REQUEST_ATTEMPTS) {
+        if (runCatching { requestFocus() }.getOrDefault(false)) return
+        withFrameNanos { }
+    }
+}
+
+private suspend fun FocusRequester.requestPending(retry: Boolean, awaitFrame: Boolean) {
+    if (retry) requestUntilFocused(awaitFrame) else requestAfterComposition(awaitFrame)
 }
 
 private suspend fun FocusRequester.requestAfterComposition(awaitFrame: Boolean) {
