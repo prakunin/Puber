@@ -38,6 +38,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 class ShowAllVMTest {
 
@@ -259,6 +261,63 @@ class ShowAllVMTest {
         vm.testCancelScope()
         paginator.close()
     }
+
+    /**
+     * The grid restores its depth through the same path as a section row, so a retry over pages
+     * that overlap may not put a title in the grid twice.
+     */
+    @Test
+    fun retry_ofAGridWithOverlappingPages_publishesEachIdOnce() = runBlocking {
+        val page2Calls = AtomicInteger()
+        val mapped = CopyOnWriteArrayList<Pair<Int, List<Int>>>()
+        val mapper = mockk<VideoItemUIMapper>()
+        every { mapper.mapShortItemList(any()) } answers {
+            val items = firstArg<List<Item>>()
+            mapped += page2Calls.get() to items.map { it.id }
+            items.map { videoItem(it.id) }
+        }
+        coEvery { interactor.loadPage(any(), page = 1) } returns pageOf(1, 2, 3, current = 1, total = 2)
+        coEvery { interactor.loadPage(any(), page = 2) } answers {
+            page2Calls.incrementAndGet()
+            pageOf(4, 2, 5, current = 2, total = 2)
+        }
+        servesFirstPageFromTheNetwork(interactor)
+        val paginator = Paginator.Store<Item> { old, new -> old.id == new.id }
+        val vm = createVM(paginator = paginator, mapper = mapper)
+        vm.testOnStart()
+        withTimeout(2_000) {
+            while (vm.testStateValue !is ShowAllViewState.Content) {
+                delay(10)
+            }
+        }
+        vm.onAction(CommonAction.LoadMore)
+        withTimeout(2_000) {
+            while (page2Calls.get() != 1 || shownIds(vm).lastOrNull() != 5) {
+                delay(10)
+            }
+        }
+
+        vm.onAction(CommonAction.RetryClicked)
+
+        withTimeout(2_000) {
+            while (mapped.none { it.first == 2 }) {
+                delay(10)
+            }
+        }
+        val restored = mapped.first { it.first == 2 }.second
+        assertEquals(listOf(1, 2, 3, 4, 5), restored)
+        assertEquals(listOf(1, 2, 3, 4, 5), shownIds(vm))
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    private fun shownIds(vm: ShowAllVM): List<Int> =
+        (vm.testStateValue as? ShowAllViewState.Content)?.items?.map { it.id }.orEmpty()
+
+    private fun pageOf(vararg ids: Int, current: Int, total: Int) = PaginatedResponse(
+        items = ids.map(::item),
+        pagination = Pagination(current = current, perpage = ids.size, total = total),
+    )
 
     /**
      * Wires the cached-first-page flow onto the page loads these tests stub: one fresh emission per
