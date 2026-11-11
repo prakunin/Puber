@@ -1,0 +1,7 @@
+LENS: blind  ROUND: 1  BASE: 901d820d
+
+No findings.
+
+### Unproven
+- /home/user1/orca/workspaces/Puber/carousel-row-duplicate-cards/app/src/main/java/com/kino/puber/ui/feature/contentlist/vm/ContentListPagingVM.kt:223-232: a reply that reports a lower `pagination.current` than the page requested. The loop's cursor `page` never moves back, but the function still returns the last reply's pagination (`deepest = next`). `publish` then sets `currentPage` behind what the row holds. The next LoadMore asks again for pages the row already has (the paginator's id comparator removes the repeats, so the only cost is wasted requests), and the next reload's `depthToRestore()` is too shallow, so the row shrinks. This becomes real if the interactor or server can answer page N with `current < N`. The only thing that exercises it now is the synthetic test `refresh_whosePagesReportALowerPageThanRequested_makesAtMostNineRestoreRequests`. The fix would be to return `deepest.pagination.copy(current = maxOf(page, deepest.pagination.current))`.
+- /home/user1/orca/workspaces/Puber/carousel-row-duplicate-cards/app/src/main/java/com/kino/puber/ui/feature/contentlist/vm/ContentListPagingVM.kt:210: the `requests < MAX_RESTORED_PAGES - 1` ceiling only matters when `firstPage.pagination.current <= 0`. In that case page 1 is fetched a second time and the restore reaches one page less than `restoreTo`. This becomes real if the first-page loader can report page 0. Nothing in the diff shows that it can.
