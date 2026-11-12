@@ -4,11 +4,19 @@ import com.kino.puber.data.api.models.SkipSegment
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.util.MainDispatcherExtension
+import com.kino.puber.data.api.models.Episode
+import com.kino.puber.data.api.models.Season
+import io.mockk.coEvery
+import io.mockk.coVerifyOrder
 import io.mockk.every
+import io.mockk.verify
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 
@@ -65,16 +73,215 @@ internal class PlayerVMPromptDismissalTest : PlayerVMTestFixture() {
             vm.testCancelScope()
         }
 
-    @Test
-    fun aCancelledNextEpisodeIsNotOfferedAgainWhenTheEpisodeRunsOut() {
+    private fun nextEpisodeIs1x2() {
+        every { interactor.findNextEpisode(any(), any(), any()) } returns (1 to 2)
+    }
+
+    private fun verifySwitchedTo1x2() {
+        verify { playbackController.release() }
+        verify { interactor.resolveMedia(item = any(), seasonNumber = 1, episodeNumber = 2, videoNumber = null) }
+    }
+
+    private fun verifyNeverSwitched() {
+        verify(exactly = 0) { playbackController.release() }
+    }
+
+    /** The tail of the episode is reached, so the tick raises the prompt. */
+    private suspend fun TestScope.vmWithThePromptUp(): PlayerVM {
+        every { playbackController.currentPosition } returns 2_380_000L
         val vm = startedVM()
-        callbackSlot.captured.onPlaybackEnded()
+        advanceTimeBy(600)
         assertNotNull(contentState(vm).nextEpisodeCountdown)
+        return vm
+    }
 
+    /** The position loop never ends, so a failed assertion must still cancel the scope. */
+    private fun promptUpTest(block: suspend TestScope.(PlayerVM) -> Unit) =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            nextEpisodeIs1x2()
+            val vm = vmWithThePromptUp()
+            try {
+                block(vm)
+            } finally {
+                vm.testCancelScope()
+            }
+        }
+
+    @Test
+    fun aCancelledNextEpisodeStillStartsWhenTheEpisodeRunsOut() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            assertNull(contentState(vm).nextEpisodeCountdown)
+            verifyNeverSwitched()
+
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            verifySwitchedTo1x2()
+        }
+
+    @Test
+    fun theSwitchOfAnEndedDismissedEpisodeLeavesThePlayersEndedCallbackFirst() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+            callbackSlot.captured.onPlaybackEnded()
+            verifyNeverSwitched()
+
+            advanceTimeBy(2)
+            verifySwitchedTo1x2()
+        }
+
+    @Test
+    fun backOnTheNextEpisodePromptStillStartsItWhenTheEpisodeRunsOut() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.OnBackPressed)
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            verifySwitchedTo1x2()
+            verify(exactly = 0) { router.back(any(), any()) }
+        }
+
+    @Test
+    fun theFinishedEpisodeIsMarkedWatchedBeforeTheNextOneLoads() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            nextEpisodeIs1x2()
+            val vm = startedVM()
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            coVerifyOrder {
+                interactor.markCurrentAsWatched(42, 1, 1)
+                playbackController.release()
+            }
+            vm.testCancelScope()
+        }
+
+    @Test
+    fun anEndedDismissedEpisodeWithNoNextToFindKeepsTheEndedControls() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            val vm = startedVM()
+            vm.onAction(PlayerAction.HideControls)
+            assertFalse(contentState(vm).controlsVisible)
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            assertTrue(contentState(vm).controlsVisible)
+            assertNull(contentState(vm).nextEpisodeCountdown)
+            verifyNeverSwitched()
+            verify(exactly = 0) { router.back(any(), any()) }
+            vm.testCancelScope()
+        }
+
+    @Test
+    fun closingAPanelOverAnEndedDismissedEpisodeStartsTheNextOne() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            vm.onAction(PlayerAction.OpenSettingsPanel)
+            callbackSlot.captured.onPlaybackEnded()
+            verifyNeverSwitched()
+
+            vm.onAction(PlayerAction.ClosePanel)
+
+            verifySwitchedTo1x2()
+        }
+
+    @Test
+    fun aPanelOpenedInsideTheDeferralOfAnEndedDismissedEpisodeStartsTheNextOneOnClose() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.OpenSettingsPanel)
+
+            advanceTimeBy(2)
+            verifyNeverSwitched()
+
+            vm.onAction(PlayerAction.ClosePanel)
+            verifySwitchedTo1x2()
+        }
+
+    @Test
+    fun leavingInsideTheDeferralOfAnEndedDismissedEpisodeDoesNotSwitch() =
+        promptUpTest { vm ->
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            callbackSlot.captured.onPlaybackEnded()
+            vm.onAction(PlayerAction.OnBackPressed)
+            vm.onAction(PlayerAction.OnBackPressed)
+            verify { router.back(any(), any()) }
+
+            advanceTimeBy(2)
+
+            verifyNeverSwitched()
+            verify(exactly = 0) { playbackController.release() }
+        }
+
+    @Test
+    fun pickingAnEpisodeOverAnEndedDismissedEpisodePlaysThePickedOne() {
+        nextEpisodeIs1x2()
+        val item = testItem.copy(
+            seasons = listOf(
+                Season(
+                    id = 1,
+                    number = 1,
+                    episodes = listOf(
+                        Episode(id = 101, number = 1, title = "One"),
+                        Episode(id = 102, number = 2, title = "Two"),
+                        Episode(id = 103, number = 3, title = "Three"),
+                    ),
+                ),
+            ),
+        )
+        coEvery { interactor.getItemDetails(any()) } returns item
+        coEvery { interactor.markCurrentAsWatched(any(), any(), any()) } returns item
+        val vm = startedVM()
         vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+        vm.onAction(PlayerAction.OpenEpisodesPanel)
         callbackSlot.captured.onPlaybackEnded()
 
-        assertNull(contentState(vm).nextEpisodeCountdown)
+        vm.onAction(PlayerAction.SelectEpisodeById(103))
+
+        verify { interactor.resolveMedia(item = any(), seasonNumber = 1, episodeNumber = 3, videoNumber = null) }
+        verify(exactly = 0) {
+            interactor.resolveMedia(item = any(), seasonNumber = 1, episodeNumber = 2, videoNumber = null)
+        }
+    }
+
+    @Test
+    fun aRestartUnderThePanelCancelsTheAdvanceOnClose() {
+        nextEpisodeIs1x2()
+        val vm = startedVM()
+        vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+        callbackSlot.captured.onPlaybackEnded()
+        callbackSlot.captured.onPlaybackStateChanged(
+            isPlaying = true,
+            isBuffering = false,
+            position = 0L,
+            duration = 2_400_000L,
+            buffered = 0L,
+        )
+
+        vm.onAction(PlayerAction.ClosePanel)
+
+        verifyNeverSwitched()
+    }
+
+    @Test
+    fun aCancelAfterTheEndUnderAPanelDoesNotStartTheNextOneOnClose() {
+        nextEpisodeIs1x2()
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+        callbackSlot.captured.onPlaybackEnded()
+        vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+
+        vm.onAction(PlayerAction.ClosePanel)
+
+        verifyNeverSwitched()
     }
 
     @Test
