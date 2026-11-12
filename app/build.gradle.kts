@@ -171,7 +171,11 @@ android {
                 }
                 // 4. Fallback: debug signing (allows build without release keys)
                 else -> {
+                    // AGP 9.4+ rejects a signing config without credentials; these are the standard debug keystore's.
                     storeFile = file("debug.jks")
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
                 }
             }
         }
