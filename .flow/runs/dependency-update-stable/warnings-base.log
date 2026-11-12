@@ -1,0 +1,26 @@
+agentw: worktree detected → GRADLE_USER_HOME=/home/user1/.gradle-agents
+agentw: acquiring lock /home/user1/.gradle-agents/.build.lock
+Starting a Gradle Daemon, 5 busy Daemons could not be reused, use --status for details
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:compileKotlin
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDevDebugBuild UP-TO-DATE
+> Task :app:generateDevDebugBuildConfig
+> Task :app:generateDevDebugResValues
+> Task :app:generateDevDebugResources
+> Task :app:packageDevDebugResources
+> Task :app:processDevDebugNavigationResources
+> Task :app:parseDevDebugLocalResources
+> Task :app:generateDevDebugRFile
+> Task :app:kspDevDebugKotlin
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:compileDevDebugKotlin
+
+BUILD SUCCESSFUL in 1m 39s
+11 actionable tasks: 11 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.0/userguide/configuration_cache_enabling.html

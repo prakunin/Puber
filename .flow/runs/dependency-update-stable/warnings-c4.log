@@ -1,0 +1,35 @@
+> Task :buildSrc:checkKotlinCompilerVersion
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:compileKotlin
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar
+
+> Configure project :app
+The Configuration.setVisible(boolean) method has been deprecated. This is scheduled to be removed in Gradle 11. Consult the upgrading guide for further information: https://docs.gradle.org/9.9.1/userguide/upgrading_version_9.html#deprecate-visible-property
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDevDebugBuild UP-TO-DATE
+> Task :app:generateDevDebugBuildConfig
+> Task :app:generateDevDebugResValues
+> Task :app:generateDevDebugResources
+> Task :app:packageDevDebugResources
+> Task :app:processDevDebugNavigationResources
+> Task :app:parseDevDebugLocalResources
+> Task :app:generateDevDebugRFile
+> Task :app:kspDevDebugKotlin
+> Task :app:copyRoomSchemas NO-SOURCE
+
+> Task :app:compileDevDebugKotlin
+Problem found: Kotlin compiler: DEPRECATION (id: DEPRECATION, in kotlin > compiler:warning)
+  Kotlin compiler warning
+    'suspend fun ByteReadChannel.readRemaining(max: Long): Source' is deprecated. Use readBuffer(Long).
+    Location: /home/user1/orca/workspaces/Puber/dependency-update-stable/app/src/main/java/com/kino/puber/data/api/KtorPlugins.kt:106
+
+[Incubating] Problems report is available at: file:///home/user1/orca/workspaces/Puber/dependency-update-stable/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 37s
+12 actionable tasks: 12 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.9.1/userguide/configuration_cache_enabling.html

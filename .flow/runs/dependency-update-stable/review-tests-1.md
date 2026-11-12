@@ -1,0 +1,25 @@
+LENS: tests  ROUND: 1  BASE: 4db9c0d4
+
+Suite state: I re-ran `AGENT_GRADLE_SERIAL=1 ./tools/agentw testDevDebugUnitTest :app:detektAll :app:lintDevDebug` at c62b3ae1. Result: `BUILD SUCCESSFUL in 9s`. Gradle skipped every task as up to date from qa's run, so this confirms the green outputs are still current but did not re-execute the tests. The AC-4 tests are unchanged: `git diff 4db9c0d4 -- app/src` is empty. No P0 row is `red`, so the plan needs no red run.
+
+### F1 [major] AC-10's watch-progress persistence has no passing test, and the instrumented DAO suites meant to catch R6 were never run
+- Where: `/home/user1/orca/workspaces/Puber/dependency-update-stable/docs/superpowers/evidence/2026-11-12-dependency-update-stable-device.md` (AC-10 row); `/mnt/data/projects/PetProjets/Puber/.flow/runs/dependency-update-stable/qa-report.md` (AC-10 `NOT CHECKED`); test-design row AC-6 instrumented P1.
+- Problem: AC-10 is the only P0 check of the Room 3.0.3 / sqlite 2.7.1 write path (design Risk 5, `withWriteTransaction` in `WatchStateRepository`). It ended `NOT CHECKED`: `watching/marktime` fails on this emulator for the base build as well, so the saved progress never shows up. The test design names a second catcher for R6: `make DEVICE=<serial> itest TESTS=com.kino.puber.data.db.WatchStateDaoTest` and `...CachedPayloadDaoTest`. Both test files exist under `app/src/androidTest/kotlin/com/kino/puber/data/db/`, but no run of either appears in the plan's Implementation record, the qa report or the evidence. So the only evidence for the database bump is that the DB opens and the rows survive a restart. Nothing executed upsert, sync, prune or delete through the new generated DAOs, or a write transaction.
+- Failure scenario: Room 3.0.3 changes transaction or cancellation semantics (the reason it is in Risk 5). A watch-state upsert inside `withWriteTransaction` is then lost or rolled back. The `_Impl` listing (AC-6) and "DB opens" (AC-10 partial) still pass, and the regression ships.
+- Fix: Under a lease, run the two `make DEVICE=<serial> itest TESTS=...` commands and add the result to the evidence. Then either mark AC-10 as covered by those suites plus the partial device check, or record that the owner accepts AC-10 as partial.
+
+### F2 [minor] The spec still targets media3 1.11.1 everywhere except the gate-1 delta, so AC-1 and AC-9 as written do not match what was tested
+- Where: `/home/user1/orca/workspaces/Puber/dependency-update-stable/docs/superpowers/specs/2026-11-12-dependency-update-stable.md:36`, `:64`, `:95`, `:120`, `:142`, `:160`
+- Problem: The Target versions row, AC-9 ("Media3 1.11.1"), C3's key list and R10 still say 1.11.1. Only the Decisions row at `:223` says media3 stays at 1.11.0. Read literally, AC-1 ("every version equals the To column") fails against `gradle/libs.versions.toml:27`. AC-9's guard claim covers a version that is not in the change.
+- Failure scenario: The final judge or a later reader checks AC-1 against the table and reports a failure. Or they take AC-9's PASS as evidence that Media3 1.11.1 HLS works, before the `media3-hagc-removal` run has actually made that bump.
+- Fix: Set the media3 To value to 1.11.0, with a note pointing to the Decisions row. Drop "Media3 1.11.1" from AC-9, C3 and R10.
+
+### F3 [minor] Ktor 3.6.1 deprecates a call in untested production code, and no check records it
+- Where: `/home/user1/orca/workspaces/Puber/dependency-update-stable/app/src/main/java/com/kino/puber/data/api/KtorPlugins.kt:106` (`channel.readRemaining(...)` in `readTextLimited`)
+- Problem: `warnings-c4.log` shows a new Kotlin `DEPRECATION` warning for `ByteReadChannel.readRemaining(max: Long)` ("Use readBuffer(Long)"). It is not in `warnings-base.log`. AC-2 only compares build-script lines, so the bump introduced this without anyone noting it. No unit test exercises `readTextLimited` or the logging body path (no test under `app/src/test` mentions `KtorPlugins` or `readRemaining`), so a change in how the deprecated call behaves would go unnoticed.
+- Failure scenario: A later Ktor patch changes how the deprecated overload behaves or removes it. Body logging then truncates or hangs, or compilation breaks, and no test points at this function.
+- Fix: Note the deprecation in the plan's "For the reviewers" section as a follow-up. Optionally add a small test of `readTextLimited` (a body under and over `MAX_LOG_BODY_SIZE`) when it moves to `readBuffer`.
+
+### Unproven
+- `/home/user1/orca/workspaces/Puber/dependency-update-stable/app/build.gradle.kts:146-170`: AC-5 only exercises the debug-key fallback. The `keystore.properties` and CI release-signing branches have not been run under AGP 9.5.1 `validateSigningProdRelease`. This becomes a real finding if a release build from the main checkout or CI fails signing validation.
+- `warnings-c4.log:11`: the new Gradle deprecation `Configuration.setVisible(boolean)` (removal planned for Gradle 11) comes from a plugin, not from the project's scripts, so AC-2 passes. It matters only if a project script turns out to call `isVisible` (grep finds none).
