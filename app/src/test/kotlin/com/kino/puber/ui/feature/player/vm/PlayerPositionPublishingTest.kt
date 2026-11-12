@@ -4,9 +4,12 @@ import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.PlayerAction
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.every
+import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 import kotlinx.coroutines.test.advanceTimeBy
@@ -85,6 +88,72 @@ internal class PlayerPositionPublishingTest : PlayerVMTestFixture() {
             advanceTimeBy(2_000)
 
             assertEquals(true, contentState(vm).isCurrentMediaWatched)
+            vm.testCancelScope()
+        }
+
+    @Test
+    fun theEndedControlsShowTheFinalPosition() {
+        every { interactor.findNextEpisode(any(), any(), any()) } returns (1 to 2)
+        val vm = startedVM()
+        vm.onAction(PlayerAction.OpenSettingsPanel)
+        every { playbackController.isPlaying } returns false
+        every { playbackController.currentPosition } returns 2_410_000L
+        every { playbackController.duration } returns 2_410_000L
+        every { playbackController.bufferedPosition } returns 2_410_000L
+
+        callbackSlot.captured.onPlaybackEnded()
+        vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+        vm.onAction(PlayerAction.ClosePanel)
+
+        val content = contentState(vm)
+        assertTrue(content.controlsVisible)
+        assertEquals(2_410_000L, content.currentPosition)
+        assertEquals(2_410_000L, content.duration)
+        assertEquals(2_410_000L, content.bufferedPosition)
+    }
+
+    @Test
+    fun theEndedControlsAfterAMissingNextEpisodeShowTheFinalPosition() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            val vm = startedVM()
+            vm.onAction(PlayerAction.HideControls)
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            every { playbackController.isPlaying } returns false
+            every { playbackController.currentPosition } returns 2_410_000L
+            every { playbackController.duration } returns 2_410_000L
+            every { playbackController.bufferedPosition } returns 2_410_000L
+
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            val content = contentState(vm)
+            assertTrue(content.controlsVisible)
+            assertEquals(2_410_000L, content.currentPosition)
+            assertEquals(2_410_000L, content.duration)
+            vm.testCancelScope()
+        }
+
+    @Test
+    fun theEndedControlsOverARunningCountdownShowTheFinalPositionAndKeepTheCountdown() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            every { interactor.findNextEpisode(any(), any(), any()) } returns (1 to 2)
+            every { playbackController.currentPosition } returns 2_380_000L
+            val vm = startedVM()
+            advanceTimeBy(600)
+            assertNotNull(contentState(vm).nextEpisodeCountdown)
+            vm.onAction(PlayerAction.HideControls)
+            every { playbackController.isPlaying } returns false
+            every { playbackController.currentPosition } returns 2_410_000L
+            every { playbackController.duration } returns 2_410_000L
+
+            callbackSlot.captured.onPlaybackEnded()
+            advanceTimeBy(2)
+
+            val content = contentState(vm)
+            assertTrue(content.controlsVisible)
+            assertEquals(2_410_000L, content.currentPosition)
+            assertNotNull(content.nextEpisodeCountdown)
+            verify(exactly = 0) { playbackController.release() }
             vm.testCancelScope()
         }
 }

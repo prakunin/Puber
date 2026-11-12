@@ -162,6 +162,12 @@ internal class PlayerVM(
      * what to watch next.
      */
     private var exitWhenPanelCloses = false
+
+    /**
+     * The media ran out under a panel after the viewer had cancelled the countdown, so the next
+     * episode starts when the panel comes down.
+     */
+    private var advanceWhenPanelCloses = false
     /** Audio only: the subtitle restore has its own flag, because it waits for a report with text. */
     private var tracksRestoredForCurrentMedia = false
     private var subtitleRestoredForCurrentMedia = false
@@ -800,11 +806,12 @@ internal class PlayerVM(
 
     /**
      * Something is playing again, so nothing on screen belongs to the end of the last media any
-     * more — neither the controls held up by it nor an exit still waiting on a panel.
+     * more — neither the controls held up by it nor an exit or an advance still waiting on a panel.
      */
     private fun onPlaybackResumed() {
         controlsStateMachine.onPlaybackResumed()
         exitWhenPanelCloses = false
+        advanceWhenPanelCloses = false
     }
 
     private fun scheduleControlsHide() {
@@ -854,6 +861,10 @@ internal class PlayerVM(
         if (exitWhenPanelCloses) {
             exitPlayer()
             return
+        }
+        if (advanceWhenPanelCloses) {
+            advanceWhenPanelCloses = false
+            if (playNextEpisode()) return
         }
         // A countdown may have become eligible while the panel owned focus. Re-evaluate once the
         // player is interactive again, including the case where playback already reached its end.
@@ -987,8 +998,10 @@ internal class PlayerVM(
             val episode = season.episodes?.find { it.id == episodeId }
             if (episode != null) {
                 // Cleared before the panel comes down: closing it is what would otherwise carry
-                // out the exit the ended media asked for, and the viewer has just asked for more.
+                // out the exit or the advance the ended media asked for, and the viewer has just
+                // asked for a different episode.
                 exitWhenPanelCloses = false
+                advanceWhenPanelCloses = false
                 closePanel()
                 switchEpisode(season.number, episode.number)
                 return
@@ -1043,14 +1056,21 @@ internal class PlayerVM(
         )
     }
 
-    private fun playNextEpisode() {
-        currentEpisode()?.let { episode ->
+    /** True when there was a next episode and the switch to it was started. */
+    private fun playNextEpisode(): Boolean {
+        val next = currentEpisode()?.let { episode ->
             interactor.findNextEpisode(
                 item = episode.media.item,
                 currentSeason = episode.seasonNumber,
                 currentEpisode = episode.episodeNumber,
             )
-        }?.let(::switchEpisode)
+        } ?: return false
+        switchEpisode(next)
+        return true
+    }
+
+    private fun playNextEpisodeOrShowEndedControls() {
+        if (!playNextEpisode()) showControlsForEndedPlayback()
     }
 
     private fun playPreviousEpisode() {
@@ -1361,6 +1381,15 @@ internal class PlayerVM(
         autoMarkCurrentAsWatched()
         val state = stateValue as? PlayerViewState.Content ?: return
         val content = state.content
+        // The ended controls (and the seek bar they show) read the last published position, which
+        // the tick may not have refreshed since the media stopped.
+        updateContent {
+            copy(
+                currentPosition = playbackController.currentPosition,
+                duration = playbackController.duration,
+                bufferedPosition = playbackController.bufferedPosition,
+            )
+        }
         if (content.activePanel != ActivePanel.None) controlsStateMachine.markPlaybackEnded()
         // A film, or the last episode of a series: there is nothing behind this closing frame, so
         // the player hands the viewer back to the screen they started it from instead of leaving
@@ -1370,14 +1399,35 @@ internal class PlayerVM(
             return
         }
         when {
-            content.activePanel == ActivePanel.None &&
-                content.nextEpisodeCountdown == null &&
-                // Cancelling on the credits means cancelled, not postponed: only a seek since then
-                // puts the question back on the table.
-                !countdownDismissed -> startNextEpisodeCountdown()
             // An open panel owns the screen; revealing the controls under it would also expose
-            // the debug overlay the user may have switched off.
-            content.activePanel == ActivePanel.None -> showControlsForEndedPlayback()
+            // the debug overlay the user may have switched off. Its close decides.
+            content.activePanel != ActivePanel.None -> advanceWhenPanelCloses = countdownDismissed
+            content.nextEpisodeCountdown != null -> showControlsForEndedPlayback()
+            // A cancel only hides the prompt; the end of the episode still moves on.
+            countdownDismissed -> advanceAfterDismissedEnd()
+            else -> startNextEpisodeCountdown()
+        }
+    }
+
+    /**
+     * The switch releases the player, which must not happen inside the player's own ended
+     * callback, so it waits one millisecond (the main dispatcher runs a bare yield inline) and
+     * re-checks what it was decided on.
+     */
+    private fun advanceAfterDismissedEnd() {
+        launch {
+            delay(1)
+            val content = (stateValue as? PlayerViewState.Content)?.content ?: return@launch
+            if (closing || episodeSwitchInProgress || !countdownDismissed) return@launch
+            if (content.nextEpisodeCountdown != null) return@launch
+            if (content.activePanel != ActivePanel.None) {
+                // A panel opened inside the wait: leave it as onPlaybackEnded leaves a panel that
+                // was open at the end, so its close carries on to the next episode.
+                controlsStateMachine.markPlaybackEnded()
+                advanceWhenPanelCloses = true
+                return@launch
+            }
+            playNextEpisodeOrShowEndedControls()
         }
     }
 

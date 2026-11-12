@@ -49,6 +49,27 @@ internal class PlayerVMOverlayAutoHideTest : PlayerVMTestFixture() {
         }
 
     @Test
+    fun anEpisodesRowTimingOutOverAnEndedDismissedEpisodeStartsTheNextOne() {
+        every { interactor.findNextEpisode(any(), any(), any()) } returns (1 to 2)
+        vmTest { vm ->
+            every { playbackController.currentPosition } returns 2_380_000L
+            advanceTimeBy(600)
+            assertNotNull(contentState(vm).nextEpisodeCountdown)
+            vm.onAction(PlayerAction.CancelNextEpisodeCountdown)
+            vm.onAction(PlayerAction.OpenEpisodesPanel)
+            callbackSlot.captured.onPlaybackEnded()
+
+            advanceTimeBy(6_100)
+
+            verify { playbackController.release() }
+            verify {
+                interactor.resolveMedia(item = any(), seasonNumber = 1, episodeNumber = 2, videoNumber = null)
+            }
+            verify(exactly = 0) { router.back(any(), any()) }
+        }
+    }
+
+    @Test
     fun openEpisodesPanel_closesItself_after6s() =
         vmTest { vm ->
             vm.onAction(PlayerAction.OpenEpisodesPanel)
