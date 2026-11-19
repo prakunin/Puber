@@ -1,6 +1,7 @@
 package com.kino.puber.core.ui.uikit.component.details
 
 import android.view.Gravity
+import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
@@ -36,6 +37,9 @@ import androidx.media3.ui.R as Media3UiR
  * [onFirstFrameRendered] reports the one moment there is actually something to look at. Until it
  * fires the view is a black rectangle — media3's shutter, and behind it a `SurfaceView` that has
  * been given no frames yet — so the caller has to keep the still on top until then.
+ *
+ * The `SurfaceView` is redrawn once it gets a size, because a size that arrives after the window's
+ * last pre-draw gets no surface otherwise.
  */
 @UnstableApi
 @Composable
@@ -129,7 +133,11 @@ internal fun TrailerPreviewPlayer(
                 resizeMode = playerResizeMode
                 updateContentGravity(alignContentToTop)
                 player = exoPlayer
+                videoSurfaceView?.addOnLayoutChangeListener(surfaceRedrawOnSizeChange)
             }
+        },
+        onRelease = { playerView ->
+            playerView.videoSurfaceView?.removeOnLayoutChangeListener(surfaceRedrawOnSizeChange)
         },
         update = { playerView ->
             playerView.resizeMode = playerResizeMode
@@ -137,6 +145,17 @@ internal fun TrailerPreviewPlayer(
         },
         modifier = modifier,
     )
+}
+
+/** A redraw is needed only for a change to a non-zero size. */
+internal fun surfaceNeedsRedraw(oldWidth: Int, oldHeight: Int, newWidth: Int, newHeight: Int): Boolean =
+    newWidth > 0 && newHeight > 0 && (newWidth != oldWidth || newHeight != oldHeight)
+
+private val surfaceRedrawOnSizeChange = View.OnLayoutChangeListener {
+        v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+    if (surfaceNeedsRedraw(oldRight - oldLeft, oldBottom - oldTop, right - left, bottom - top)) {
+        v.post { v.invalidate() }
+    }
 }
 
 @OptIn(UnstableApi::class)
