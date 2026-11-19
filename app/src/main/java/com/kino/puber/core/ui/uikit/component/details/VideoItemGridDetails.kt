@@ -1,8 +1,10 @@
 package com.kino.puber.core.ui.uikit.component.details
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.fadeOut
+import android.content.Context
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
@@ -44,15 +49,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil3.annotation.ExperimentalCoilApi
+import coil3.compose.useExistingImageAsPlaceholder
 import coil3.request.ImageRequest
-import coil3.request.crossfade
+import coil3.request.ImageResult
+import coil3.request.SuccessResult
+import coil3.request.transitionFactory
+import coil3.transition.CrossfadeTransition
+import coil3.transition.Transition
+import coil3.transition.TransitionTarget
 import com.kino.puber.core.ui.uikit.component.Rating
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.SkeletonAsyncImage
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 import com.kino.puber.core.ui.uikit.model.Lorem
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import kotlinx.coroutines.delay
 
+
+private const val POSTER_FADE_OUT_MS = 300
+private const val POSTER_CROSSFADE_MS = 200
+
+/** How long a card's `Loading` may keep the previous poster before the panel falls back to the skeleton. */
+private const val POSTER_HOLD_MS = 3_000L
+
+/** The poster keeps its last picture instead of flashing a skeleton on every card change. */
+internal const val POSTER_SKELETON_ONLY_UNTIL_FIRST_IMAGE = true
 
 /** Side-by-side layout only: the description column measured against the poster column. */
 private const val DescriptionWeight = 3F
@@ -246,6 +268,7 @@ fun VideoItemGridDetails(
                     .weight(PosterWeight),
                 imageUrl = state.imageUrl,
                 imageFallbackUrls = state.imageFallbackUrls,
+                isLoading = state.isLoading,
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
             )
@@ -273,6 +296,7 @@ fun VideoDetailsMedia(
                 modifier = Modifier,
                 imageUrl = state.imageUrl,
                 imageFallbackUrls = state.imageFallbackUrls,
+                isLoading = state.isLoading,
                 trailerUrl = trailerUrl,
                 onTrailerFinished = onTrailerFinished,
                 fullBleed = true,
@@ -292,6 +316,7 @@ fun VideoDetailsMedia(
                 .align(Alignment.CenterEnd),
             imageUrl = state.imageUrl,
             imageFallbackUrls = state.imageFallbackUrls,
+            isLoading = state.isLoading,
             trailerUrl = trailerUrl,
             onTrailerFinished = onTrailerFinished,
             fullBleed = true,
@@ -417,6 +442,7 @@ private fun VideoDetailsPoster(
     modifier: Modifier,
     imageUrl: String,
     imageFallbackUrls: List<String>,
+    isLoading: Boolean = false,
     trailerUrl: String? = null,
     onTrailerFinished: () -> Unit = {},
     fullBleed: Boolean = false,
@@ -435,28 +461,23 @@ private fun VideoDetailsPoster(
                 .filter { it.isNotBlank() }
                 .distinct()
         }
-        var urlIndex by remember(imageUrls) { mutableIntStateOf(0) }
-        val currentUrl = imageUrls.getOrNull(urlIndex)
+        val heldUrls = rememberHeldUrls(imageUrls, isLoading)
+        var urlIndex by remember(heldUrls) { mutableIntStateOf(0) }
+        val currentUrl = heldUrls.getOrNull(urlIndex)
         val posterRequest = rememberPosterRequest(currentUrl)
 
         var trailerRendered by remember(trailerUrl) { mutableStateOf(false) }
 
-        // A fitted trailer may not occupy the whole poster frame. Remove the still once video is
-        // actually visible so the larger poster cannot show through around the player.
-        if (trailerUrl == null || !trailerRendered) {
-            PosterStill(
-                request = posterRequest,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(),
-                alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
-                onError = {
-                    if (urlIndex < imageUrls.lastIndex) {
-                        urlIndex++
-                    }
-                },
-            )
-        }
+        val hasTrailer = trailerUrl != null
+        val fade = animateFloatAsState(
+            targetValue = posterFadeTarget(hasTrailer, trailerRendered),
+            animationSpec = if (hasTrailer && trailerRendered) {
+                tween(POSTER_FADE_OUT_MS, easing = FastOutSlowInEasing)
+            } else {
+                snap()
+            },
+            label = "posterFade",
+        )
 
         if (trailerUrl != null) {
             TrailerPreviewPlayer(
@@ -469,26 +490,27 @@ private fun VideoDetailsPoster(
                     .fillMaxHeight()
                     .fillMaxWidth(),
             )
-
-            // The player is a `SurfaceView`: it punches a transparent hole through everything the
-            // window drew before it, and media3 fills that hole with a black shutter until the
-            // first frame arrives. So the still above is not what is on screen while the trailer
-            // buffers — this second copy, drawn *after* the player, is. The 48 dp gradients below
-            // stay visible over a playing trailer for the same reason.
-            AnimatedVisibility(
-                visible = !trailerRendered,
-                enter = EnterTransition.None,
-                exit = fadeOut(),
-            ) {
-                PosterStill(
-                    request = posterRequest,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(),
-                    alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
-                )
-            }
         }
+
+        // The player is a `SurfaceView`: it punches a transparent hole through everything the
+        // window drew before it, and media3 fills that hole with a black shutter until the first
+        // frame arrives. So the still is drawn after the player. It is the same composable before,
+        // during and after a trailer, and rests at alpha 0 over a rendered one, so a fitted trailer
+        // is not framed by poster pixels. The 48 dp gradients below stay visible over a playing
+        // trailer for the same reason.
+        PosterStill(
+            request = posterRequest,
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth()
+                .graphicsLayer { alpha = posterStillAlpha(hasTrailer, trailerRendered, fade.value) },
+            alignment = if (alignMediaToTop) Alignment.TopCenter else Alignment.Center,
+            onError = {
+                if (urlIndex < heldUrls.lastIndex) {
+                    urlIndex++
+                }
+            },
+        )
 
         if (fullBleed) {
             // The description's last third lies on top of the picture, so the scrim is what keeps
@@ -549,23 +571,27 @@ private fun VideoDetailsPoster(
  * trailer tick and description swap on the details screen, and a fresh [ImageRequest] each time is
  * a fresh Coil request each time: the same picture re-fetched instead of read from memory.
  *
- * Both copies of the still - the one under a buffering trailer and the one beside it - share this
- * single request for the same reason.
+ * There is one still now: the request carries the previous image as its placeholder and always
+ * crossfades, so a card change fades from the old poster instead of cutting or showing a skeleton.
  */
+@OptIn(ExperimentalCoilApi::class)
 @Composable
 private fun rememberPosterRequest(imageUrl: String?): ImageRequest? {
     val context = LocalContext.current
-    return remember(imageUrl, context) {
-        imageUrl
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { url ->
-                ImageRequest.Builder(context)
-                    .data(url)
-                    .crossfade(true)
-                    .build()
-            }
-    }
+    return remember(imageUrl, context) { posterRequest(context, imageUrl) }
 }
+
+@OptIn(ExperimentalCoilApi::class)
+internal fun posterRequest(context: Context, imageUrl: String?): ImageRequest? =
+    imageUrl
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .useExistingImageAsPlaceholder(true)
+                .transitionFactory(PosterCrossfade)
+                .build()
+        }
 
 @Composable
 private fun PosterStill(
@@ -583,6 +609,7 @@ private fun PosterStill(
         contentDescription = null,
         contentScale = ContentScale.FillWidth,
         alignment = alignment,
+        skeletonOnlyUntilFirstImage = POSTER_SKELETON_ONLY_UNTIL_FIRST_IMAGE,
     )
 }
 
@@ -630,3 +657,63 @@ private fun VideoItemGridPreview() = PuberTheme {
         Box(Modifier.weight(2F))
     }
 }
+
+/**
+ * While the next card's details load, `Loading` carries no poster URL. Keeping the previous list
+ * (the same instance, so the URL index and the request survive) keeps the old poster on screen
+ * instead of dropping to the skeleton. [holdExpired] bounds the wait: a details request that
+ * never answers must not leave the old card's poster beside the new card's skeleton text.
+ */
+internal fun heldPosterUrls(
+    previous: List<String>?,
+    current: List<String>,
+    isLoading: Boolean,
+    holdExpired: Boolean = false,
+): List<String> {
+    val holding = isLoading && current.isEmpty() && !holdExpired
+    return if (holding && previous != null) previous else current
+}
+
+/**
+ * Coil's own `crossfade(true)` factory returns no transition for a memory-cache hit, so a warm
+ * change between two prefetched posters would cut. This one fades every successful result.
+ */
+internal object PosterCrossfade : Transition.Factory {
+    override fun create(target: TransitionTarget, result: ImageResult): Transition =
+        if (result is SuccessResult) {
+            CrossfadeTransition(target, result, POSTER_CROSSFADE_MS)
+        } else {
+            Transition.Factory.NONE.create(target, result)
+        }
+}
+
+private class PosterUrlHolder {
+    var last: List<String>? = null
+}
+
+@Composable
+private fun rememberHeldUrls(imageUrls: List<String>, isLoading: Boolean): List<String> {
+    val holder = remember { PosterUrlHolder() }
+    val holding = isLoading && imageUrls.isEmpty()
+    var holdExpired by remember(holding) { mutableStateOf(false) }
+    LaunchedEffect(holding) {
+        if (holding) {
+            delay(POSTER_HOLD_MS)
+            holdExpired = true
+        }
+    }
+    val held = heldPosterUrls(holder.last, imageUrls, isLoading, holdExpired)
+    SideEffect { holder.last = held }
+    return held
+}
+
+/** The still rests at 0 only over a trailer that has drawn its first frame; otherwise it is opaque. */
+internal fun posterFadeTarget(hasTrailer: Boolean, trailerRendered: Boolean): Float =
+    if (hasTrailer && trailerRendered) 0F else 1F
+
+/**
+ * The animated [fade] counts only while a rendered trailer is there. The moment the trailer goes,
+ * the still is opaque in the same frame, even though the animation has not left 0 yet.
+ */
+internal fun posterStillAlpha(hasTrailer: Boolean, trailerRendered: Boolean, fade: Float): Float =
+    if (!hasTrailer || !trailerRendered) 1F else fade
