@@ -24,8 +24,10 @@ fun SkeletonAsyncImage(
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.Center,
     onError: () -> Unit = {},
+    skeletonOnlyUntilFirstImage: Boolean = false,
 ) {
     var isLoading by remember(model) { mutableStateOf(model != null) }
+    var hasShownImage by remember(model != null) { mutableStateOf(false) }
     var isFailed by remember(model) { mutableStateOf(false) }
 
     Box(
@@ -44,6 +46,7 @@ fun SkeletonAsyncImage(
                 },
                 onSuccess = {
                     isLoading = false
+                    hasShownImage = true
                     isFailed = false
                 },
                 onError = {
@@ -60,7 +63,17 @@ fun SkeletonAsyncImage(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .placeholder(visible = isLoading),
+                .placeholder(visible = skeletonVisible(isLoading, skeletonOnlyUntilFirstImage, hasShownImage)),
         )
     }
 }
+
+/**
+ * With [skeletonOnlyUntilFirstImage] the skeleton marks the wait for the first picture only; later
+ * loads keep the previous picture on screen instead of flashing the skeleton over it.
+ */
+internal fun skeletonVisible(
+    isLoading: Boolean,
+    skeletonOnlyUntilFirstImage: Boolean,
+    hasShownImage: Boolean,
+): Boolean = isLoading && !(skeletonOnlyUntilFirstImage && hasShownImage)
