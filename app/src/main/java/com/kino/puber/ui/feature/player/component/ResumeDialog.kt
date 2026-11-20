@@ -34,6 +34,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
 
 private const val DIALOG_ENTER_MS = 210
@@ -48,8 +49,9 @@ internal fun ResumeDialog(
     modifier: Modifier = Modifier,
 ) {
     val resumeFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(state != null) {
-        if (state != null) runCatching { resumeFocusRequester.requestFocus() }
+    val contentFocusActive = LocalContentFocusActive.current
+    LaunchedEffect(state != null, contentFocusActive) {
+        if (state != null && contentFocusActive) runCatching { resumeFocusRequester.requestFocus() }
     }
 
     Box(modifier = modifier.fillMaxSize()) {

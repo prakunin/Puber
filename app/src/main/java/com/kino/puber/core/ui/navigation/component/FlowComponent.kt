@@ -51,6 +51,7 @@ import com.kino.puber.core.ui.navigation.puberReplaceAll
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
+import com.kino.puber.core.ui.uikit.component.modifier.ContentFocusGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.yield
 import kotlinx.parcelize.IgnoredOnParcel
@@ -85,6 +86,7 @@ fun FlowComponent(
     composableScope: CoroutineScope = rememberCoroutineScope(),
     moduleFactory: (scopeId: ScopeID, parentScope: Scope) -> Module = { _, _ -> module {} },
     remoteKeyHandler: ((android.view.KeyEvent, AppRouter, PuberScreen) -> Boolean)? = null,
+    screenFocusActive: Boolean = true,
     content: @Composable () -> Unit = {},
 ) = DIScope(
     moduleFactory = { scopeId, parentScope ->
@@ -105,6 +107,7 @@ fun FlowComponent(
         screen = screen,
         router = router,
         remoteKeyHandler = remoteKeyHandler,
+        screenFocusActive = screenFocusActive,
     )
     content()
 }
@@ -115,6 +118,7 @@ private fun FlowNavigator(
     screen: PuberScreen,
     router: AppRouter,
     remoteKeyHandler: ((android.view.KeyEvent, AppRouter, PuberScreen) -> Boolean)?,
+    screenFocusActive: Boolean,
 ) {
     val contentFocusRequester = remember { FocusRequester() }
     val rootAnchorCaptureRegistry = remember { RootAnchorCaptureRegistry() }
@@ -152,7 +156,9 @@ private fun FlowNavigator(
                         .focusRestorer()
                         .focusGroup()
                 ) {
-                    CurrentScreen("currentScreen$scopeName")
+                    ContentFocusGate(active = screenFocusActive) {
+                        CurrentScreen("currentScreen$scopeName")
+                    }
                 }
             }
         }
@@ -163,6 +169,10 @@ private fun FlowNavigator(
             rootAnchorCaptureRegistry = rootAnchorCaptureRegistry,
         )
         DropResultListenersOnPop(navigator = navigator, router = router)
+        GateFocusRestoreEffect(
+            screenFocusActive = screenFocusActive,
+            contentFocusRequester = contentFocusRequester,
+        )
         RootFlowReturnEffect(
             stackSize = navigator.items.size,
             currentScreenKey = currentScreenKey,
@@ -643,6 +653,29 @@ private fun TabFlowNavigator(
             contentFocusRequester = contentFocusRequester,
             contentHasFocus = { contentHasFocus[0] },
         )
+    }
+}
+
+/**
+ * Remembers the focused child while a gate closes the screen and puts focus back on it when the
+ * gate opens, so dismissing a dialog over the screen returns to the item the user left. Without a
+ * remembered child nothing is requested: the screen's own launch focus covers that case.
+ */
+@Composable
+private fun GateFocusRestoreEffect(
+    screenFocusActive: Boolean,
+    contentFocusRequester: FocusRequester,
+) {
+    val saved = remember { booleanArrayOf(false) }
+    LaunchedEffect(screenFocusActive) {
+        if (!screenFocusActive) {
+            contentFocusRequester.saveFocusedChild()
+            saved[0] = true
+        } else if (saved[0]) {
+            withFrameNanos {}
+            saved[0] = false
+            contentFocusRequester.restoreFocusedChild()
+        }
     }
 }
 

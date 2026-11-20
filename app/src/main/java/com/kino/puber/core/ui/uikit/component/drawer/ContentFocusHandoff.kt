@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -97,12 +98,15 @@ fun ContentFocusHandoffEffect(
     contentHasFocus: () -> Boolean,
 ) {
     val requestId = handoff?.pendingRequestId
+    val contentFocusActive = LocalContentFocusActive.current
     // Null when this content was already on screen before the handoff began, which is exactly what
     // marks it as the outgoing tab.
     val bornDuringRequest = remember(restartKey) { handoff?.pendingRequestId }
 
-    LaunchedEffect(requestId, restartKey) {
-        if (handoff == null || requestId == null) return@LaunchedEffect
+    // Keyed on the gate so a modal over the content (the update prompt) neither has its focus taken
+    // nor burns the timeout below: the handoff stays pending and starts afresh when the gate opens.
+    LaunchedEffect(requestId, restartKey, contentFocusActive) {
+        if (handoff == null || requestId == null || !contentFocusActive) return@LaunchedEffect
         if (handoff.expectsNewContent && bornDuringRequest != requestId) {
             // A tab swap is in flight and this is the tab being swapped out. Taking focus here
             // would confirm a landing on content about to be torn down.

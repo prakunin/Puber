@@ -3,8 +3,10 @@ package com.kino.puber.core.ui.uikit.component.modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,6 +32,22 @@ val LocalAutoFocusOnLaunchEnabled = staticCompositionLocalOf { true }
 val LocalContentFocusActive = staticCompositionLocalOf { true }
 
 /**
+ * Closes the focus claims of [content] while [active] is false: both [LocalContentFocusActive] and
+ * [LocalAutoFocusOnLaunchEnabled] become the outer value AND [active], so a host that is already
+ * inactive stays inactive.
+ */
+@Composable
+internal fun ContentFocusGate(active: Boolean, content: @Composable () -> Unit) {
+    val contentActive = LocalContentFocusActive.current && active
+    val autoFocusEnabled = LocalAutoFocusOnLaunchEnabled.current && active
+    CompositionLocalProvider(
+        LocalContentFocusActive provides contentActive,
+        LocalAutoFocusOnLaunchEnabled provides autoFocusEnabled,
+        content = content,
+    )
+}
+
+/**
  * How long [rememberFocusRequesterOnLaunch] lets a freshly composed screen settle before it asks
  * for focus, so the request lands on a node that is already attached, placed and in a window that
  * has itself finished taking focus.
@@ -45,6 +63,9 @@ fun rememberFocusRequesterOnLaunch(): FocusRequester {
     val scope = rememberCoroutineScope()
     val isDrawerOpen = LocalDrawerState.current?.currentValue == DrawerValue.Open
     val autoFocusEnabled = LocalAutoFocusOnLaunchEnabled.current
+    // Read again after the settle delay: a gate that closed meanwhile (a dialog opened) must stop
+    // a request scheduled before it, and the flag stays unset so opening the gate re-arms it.
+    val latestAutoFocusEnabled by rememberUpdatedState(autoFocusEnabled)
     // The screen key is an input, not a `key`: the flag belongs to this call site and is reset
     // when the site is reused for another navigation entry. A custom `key` is deprecated
     // because it shares one slot between every call site that names it.
@@ -56,7 +77,7 @@ fun rememberFocusRequesterOnLaunch(): FocusRequester {
         SideEffect {
             scope.launch {
                 delay(FOCUS_ON_LAUNCH_DELAY_MILLIS)
-                if (isFocusRequested.not()) {
+                if (isFocusRequested.not() && latestAutoFocusEnabled) {
                     isFocusRequested = true
                     focusRequester.requestFocus()
                 }
