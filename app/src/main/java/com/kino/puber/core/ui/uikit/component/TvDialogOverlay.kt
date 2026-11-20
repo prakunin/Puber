@@ -12,9 +12,22 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalInspectionMode
 
 private const val DialogScrimAlpha = 0.62f
+
+// D-pad and Tab moves must not reach content beneath the scrim; Enter, Exit and programmatic
+// changes (clearFocus, requestFocus) still pass.
+private val TrapDirections = setOf(
+    FocusDirection.Up,
+    FocusDirection.Down,
+    FocusDirection.Left,
+    FocusDirection.Right,
+    FocusDirection.Next,
+    FocusDirection.Previous,
+)
 
 internal data class TvDialogFocusRestorer(
     val onDialogOpening: () -> Unit,
@@ -47,6 +60,11 @@ internal fun TvDialogOverlay(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = DialogScrimAlpha))
+            .focusProperties {
+                onExit = {
+                    if (requestedFocusDirection in TrapDirections) cancelFocusChange()
+                }
+            }
             .focusGroup(),
         contentAlignment = contentAlignment,
     ) {

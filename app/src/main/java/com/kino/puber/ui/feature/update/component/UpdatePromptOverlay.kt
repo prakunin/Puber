@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.update.component
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,8 @@ private val DialogCornerRadius = 18.dp
 private val ContentSpacing = 16.dp
 private val NotesMaxHeight = 180.dp
 private const val FocusDelayMs = 100L
+private const val FocusRetryDelayMs = 50L
+private const val FocusAttempts = 16
 
 @Composable
 internal fun UpdatePromptOverlay(
@@ -54,9 +57,13 @@ internal fun UpdatePromptOverlay(
 
     val primaryFocusRequester = remember { FocusRequester() }
     LaunchedEffect(state) {
-        if (state != UpdatePromptViewState.Checking) {
-            delay(FocusDelayMs)
-            runCatching { primaryFocusRequester.requestFocus() }
+        delay(FocusDelayMs)
+        // The target may not be attached yet when the prompt appears with the screen beneath.
+        repeat(FocusAttempts) {
+            if (runCatching { primaryFocusRequester.requestFocus() }.getOrDefault(false)) {
+                return@LaunchedEffect
+            }
+            delay(FocusRetryDelayMs)
         }
     }
 
@@ -72,7 +79,7 @@ internal fun UpdatePromptOverlay(
                 verticalArrangement = Arrangement.spacedBy(ContentSpacing),
             ) {
                 when (state) {
-                    UpdatePromptViewState.Checking -> CheckingContent()
+                    UpdatePromptViewState.Checking -> CheckingContent(primaryFocusRequester)
                     UpdatePromptViewState.UpToDate -> UpToDateContent(
                         primaryFocusRequester = primaryFocusRequester,
                         onAction = onAction,
@@ -87,7 +94,7 @@ internal fun UpdatePromptOverlay(
                         primaryFocusRequester = primaryFocusRequester,
                         onAction = onAction,
                     )
-                    is UpdatePromptViewState.Downloading -> DownloadingContent(state)
+                    is UpdatePromptViewState.Downloading -> DownloadingContent(state, primaryFocusRequester)
                     is UpdatePromptViewState.PermissionRequired -> PermissionRequiredContent(
                         primaryFocusRequester = primaryFocusRequester,
                         onAction = onAction,
@@ -105,18 +112,20 @@ internal fun UpdatePromptOverlay(
 }
 
 @Composable
-private fun CheckingContent() {
-    Text(
-        text = stringResource(R.string.update_prompt_checking_title),
-        style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-    Text(
-        text = stringResource(R.string.update_prompt_checking),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    CircularProgressIndicator(modifier = Modifier.size(36.dp))
+private fun CheckingContent(primaryFocusRequester: FocusRequester) {
+    FocusHolder(primaryFocusRequester) {
+        Text(
+            text = stringResource(R.string.update_prompt_checking_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.update_prompt_checking),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+    }
 }
 
 @Composable
@@ -200,22 +209,46 @@ private fun AvailableContent(
 }
 
 @Composable
-private fun DownloadingContent(state: UpdatePromptViewState.Downloading) {
-    Header(
-        title = stringResource(R.string.update_prompt_title),
-        version = state.update.version.toString(),
-    )
-    Text(
-        text = stringResource(R.string.update_prompt_downloading, state.progressPercent),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-    LinearProgressIndicator(
-        progress = { state.progressPercent.coerceIn(0, 100) / 100f },
+private fun DownloadingContent(
+    state: UpdatePromptViewState.Downloading,
+    primaryFocusRequester: FocusRequester,
+) {
+    FocusHolder(primaryFocusRequester) {
+        Header(
+            title = stringResource(R.string.update_prompt_title),
+            version = state.update.version.toString(),
+        )
+        Text(
+            text = stringResource(R.string.update_prompt_downloading, state.progressPercent),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        LinearProgressIndicator(
+            progress = { state.progressPercent.coerceIn(0, 100) / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp),
+        )
+    }
+}
+
+/**
+ * Holds the prompt's focus in states without a button, so focus never drops out of the overlay
+ * behind the scrim. It takes no key.
+ */
+@Composable
+private fun FocusHolder(
+    focusRequester: FocusRequester,
+    content: @Composable () -> Unit,
+) {
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(4.dp),
-    )
+            .focusRequester(focusRequester)
+            .focusable(),
+        verticalArrangement = Arrangement.spacedBy(ContentSpacing),
+    ) {
+        content()
+    }
 }
 
 @Composable
