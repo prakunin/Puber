@@ -163,6 +163,22 @@ and the heading does not.
 `FadeGradient` is still sized from `VideoItemHeight`, so at a 115 dp card its 180 dp now overhangs
 the row by 32 dp either side. Invisible on black, still wrong, still open.
 
+## Motion
+
+A card change in the details panel (catalogue and Favourites) moves the poster and the text from the side the carousel moves toward. Row changes, the first focus, Back and tab re-entry fade with no shift. Values are in dp at 1080p and live in `PanelMotion` in `VideoItemGridDetails.kt`; the numbers below are a proposal until the owner accepts them on the TV (AC-10).
+
+| Part | Shift | Translation | Alpha |
+|---|---|---|---|
+| Poster, incoming | 48 dp to 0 | 250 ms, `FastOutSlowInEasing` | 0 to 1 over 150 ms, `LinearOutSlowInEasing` |
+| Poster, outgoing | 0 to 48 dp, opposite side | 250 ms, `FastOutSlowInEasing` | stays 1 under the incoming still, then leaves composition when the motion ends |
+| Text, incoming | 40 dp to 0 | 250 ms, `FastOutSlowInEasing` | 0 to 1, 160 ms after a 90 ms delay, `LinearOutSlowInEasing` |
+| Text, outgoing | 0 to 40 dp, opposite side | 250 ms, `FastOutSlowInEasing` | 1 to 0 over 90 ms, `FastOutLinearInEasing` |
+
+The poster crossfades with overlap; the text fades through, so two titles are never readable at once. The text is clipped at its start edge only. While details load, the previous text and poster stay for up to 3 s; a poster whose URLs all fail ends that hold at once.
+
+- **Edge strip.** The incoming still is shifted, so on a press toward the screen edge it leaves a strip about 47 dp wide bare at that edge (the full-bleed media has no scrim there). The outgoing poster therefore stays opaque under the still until the motion ends (option b of the UX review). Option c, overscanning the media by the shift on the edge side (about 3 % larger at rest), changes the stand's geometry and is taken only if the owner still sees the seam on the TV. Over a rendered trailer the outgoing layer is not drawn.
+- **Retarget.** A new card change during a running one starts from the values on screen: the interrupted outgoing layer finishes its own motion, and the text restarts from its current position through `AnimatedContent`. A change that arrives before the new poster has loaded replaces the waiting record and carries on from its values.
+
 ## What the port had to break apart
 
 Four of these numbers lived in constants that other screens read. None was retuned in place:

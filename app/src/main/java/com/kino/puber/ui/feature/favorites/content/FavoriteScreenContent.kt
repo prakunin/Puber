@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +24,7 @@ import com.kino.puber.core.ui.uikit.component.LocalTvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.TvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
+import com.kino.puber.core.ui.uikit.component.details.rememberPanelDirectionTracker
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoGrid
@@ -70,6 +72,8 @@ private fun FavoriteScreenContentBody(
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
     val contentFocusActive = LocalContentFocusActive.current
+    val tracker = rememberPanelDirectionTracker()
+    SideEffect { tracker.markShown(state.selectedItem) }
     // Closing the menu puts focus back on the card that opened it; without a restorer the
     // grid falls back to its first card, or to nothing when the rail has taken focus.
     val dialogFocusRestorer = remember(mainContentFocus) {
@@ -101,6 +105,7 @@ private fun FavoriteScreenContentBody(
                     .fillMaxWidth()
                     .weight(PuberTheme.Defaults.DetailsWeight),
                 state = state.selectedItem,
+                direction = tracker.directionTo(state.selectedItem),
             )
 
             Row(Modifier.weight(PuberTheme.Defaults.ContentWeight)) {
@@ -109,6 +114,7 @@ private fun FavoriteScreenContentBody(
                     state = state.gridState,
                     onItemClick = { onAction(CommonAction.ItemSelected(it)) },
                     onItemFocused = { onAction(CommonAction.ItemFocused(it)) },
+                    onItemPositionFocused = tracker::onCardFocused,
                     onItemContextMenu = { contextMenuItem = it },
                     detailsPrefetchEnabled = true,
                 )

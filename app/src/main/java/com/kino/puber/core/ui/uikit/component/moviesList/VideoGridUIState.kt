@@ -42,6 +42,7 @@ import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.DpadScrollAxis
 import com.kino.puber.core.ui.uikit.component.FadeGradient
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
+import com.kino.puber.core.ui.uikit.component.details.PanelPosition
 import com.kino.puber.core.ui.uikit.component.dpadScrollOptimization
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.contentlist.content.rememberFocusedListItemScroller
@@ -84,6 +85,7 @@ fun VideoGrid(
     detailsPrefetchEnabled: Boolean = false,
     rowsFillViewport: Boolean = false,
     onDownFromLastRow: (() -> Unit)? = null,
+    onItemPositionFocused: (PanelPosition) -> Unit = {},
 ) {
     DetailsPrefetchSurface(enabled = detailsPrefetchEnabled) {
         VideoGridContent(
@@ -97,6 +99,7 @@ fun VideoGrid(
             detailsPrefetchEnabled = detailsPrefetchEnabled,
             rowsFillViewport = rowsFillViewport,
             onDownFromLastRow = onDownFromLastRow,
+            onItemPositionFocused = onItemPositionFocused,
         )
     }
 }
@@ -113,6 +116,7 @@ private fun VideoGridContent(
     detailsPrefetchEnabled: Boolean,
     rowsFillViewport: Boolean,
     onDownFromLastRow: (() -> Unit)?,
+    onItemPositionFocused: (PanelPosition) -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
     val gridFocus = rememberVideoGridFocusState(
@@ -200,6 +204,7 @@ private fun VideoGridContent(
                             onItemClick = onItemClick,
                             onItemContextMenu = onItemContextMenu,
                             onItemFocused = onItemFocused,
+                            onItemPositionFocused = onItemPositionFocused,
                             onSectionFocused = onSectionFocused,
                         )
                     }
@@ -235,6 +240,7 @@ private fun VideoGridContent(
                                     gridFocus.rowFocus.onRowFocused(columnItem.rowKey)
                                     onItemFocused(item)
                                 },
+                                onItemPositionFocused = onItemPositionFocused,
                                 onRowEmpty = {
                                     gridFocus.rowFocus.onRowEmpty(
                                         gridFocus.rows.indexOfFirst { it.key == columnItem.rowKey }
@@ -336,6 +342,7 @@ private fun LazyItemScope.VideoGridSection(
     onItemClick: (VideoItemUIState) -> Unit,
     onItemContextMenu: ((VideoItemUIState) -> Unit)?,
     onItemFocused: (VideoItemUIState) -> Unit,
+    onItemPositionFocused: (PanelPosition) -> Unit,
     onSectionFocused: (Int) -> Unit,
 ) {
     Column(modifier = Modifier.fillParentMaxHeight()) {
@@ -364,6 +371,7 @@ private fun LazyItemScope.VideoGridSection(
                     onSectionFocused(sectionIndex)
                     onItemFocused(item)
                 },
+                onItemPositionFocused = onItemPositionFocused,
                 onRowEmpty = {
                     gridFocus.rowFocus.onRowEmpty(
                         gridFocus.rows.indexOfFirst { it.key == items.rowKey },
@@ -406,6 +414,7 @@ private fun VideoGridItems(
     onItemClick: (VideoItemUIState) -> Unit,
     onItemContextMenu: ((VideoItemUIState) -> Unit)?,
     onItemFocused: (VideoItemUIState) -> Unit,
+    onItemPositionFocused: (PanelPosition) -> Unit,
     onRowEmpty: () -> Unit,
 ) {
     DetailsPrefetchRow(
@@ -451,8 +460,9 @@ private fun VideoGridItems(
                     savedItemFocusRequester = itemFocus.focusRequester,
                     onItemClick = onItemClick,
                     onItemContextMenu = onItemContextMenu,
-                    onItemFocused = { _, focusedItem ->
+                    onItemFocused = { index, focusedItem ->
                         if (itemFocus.onItemFocused(focusedItem.id)) {
+                            onItemPositionFocused(PanelPosition(items.rowKey, index, focusedItem.id))
                             onItemFocused(focusedItem)
                         }
                     },

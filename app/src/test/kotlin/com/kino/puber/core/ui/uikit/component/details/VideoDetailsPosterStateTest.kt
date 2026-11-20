@@ -83,6 +83,28 @@ internal class VideoDetailsPosterStateTest {
     }
 
     @Test
+    fun posterRequest_hasNoTransition_whenCrossfadeOff() {
+        val request = posterRequest(context, "https://example.test/p.jpg", crossfade = false)
+
+        assertSame(Transition.Factory.NONE, request?.transitionFactory)
+    }
+
+    @Test
+    fun cardEnterAlpha_isOne_whenTrailerRendered() {
+        assertEquals(1F, cardEnterAlpha(hasTrailer = true, trailerRendered = true, enter = 0.3F))
+    }
+
+    @Test
+    fun cardEnterAlpha_followsEnter_whenNoTrailer() {
+        assertEquals(0.3F, cardEnterAlpha(hasTrailer = false, trailerRendered = false, enter = 0.3F))
+    }
+
+    @Test
+    fun cardEnterAlpha_followsEnter_whenTrailerNotRendered() {
+        assertEquals(0.3F, cardEnterAlpha(hasTrailer = true, trailerRendered = false, enter = 0.3F))
+    }
+
+    @Test
     fun posterRequest_isNull_whenUrlMissingOrEmpty() {
         assertEquals(null, posterRequest(context, null))
         assertEquals(null, posterRequest(context, ""))
@@ -137,6 +159,44 @@ internal class VideoDetailsPosterStateTest {
         assertEquals(Transition.Factory.NONE.create(target, error)::class, transition::class)
         assertFalse(transition is CrossfadeTransition)
     }
+
+    @Test
+    fun heldDescription_returnsPrevious_whenLoadingAfterLoaded() {
+        val previous = loadedDetails(1)
+
+        val result = heldDescription(previous, VideoDetailsUIState.Loading)
+
+        assertSame(previous, result)
+    }
+
+    @Test
+    fun heldDescription_returnsCurrent_whenNewDetailsLoaded() {
+        val current = loadedDetails(2)
+
+        val result = heldDescription(loadedDetails(1), current)
+
+        assertSame(current, result)
+    }
+
+    @Test
+    fun heldDescription_returnsCurrent_whenNothingHeldYet() {
+        val current = VideoDetailsUIState.Loading.copy()
+
+        val result = heldDescription(null, current)
+
+        assertSame(current, result)
+    }
+
+    @Test
+    fun heldDescription_returnsCurrent_whenHoldExpired() {
+        val current = VideoDetailsUIState.Loading.copy()
+
+        val result = heldDescription(loadedDetails(1), current, holdExpired = true)
+
+        assertSame(current, result)
+    }
+
+    private fun loadedDetails(id: Int) = VideoDetailsUIState.Loading.copy(id = id, isLoading = false)
 
     private val context = mockk<Context>(relaxed = true)
 

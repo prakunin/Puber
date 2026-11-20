@@ -17,8 +17,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.text.TextStyle
 import androidx.tv.material3.Text
+import com.kino.puber.core.ui.uikit.component.details.PanelPosition
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -92,6 +94,37 @@ internal class VideoGridInitialFocusTest {
             initialFocusedItemId = 3
         }
         composeRule.onNodeWithText("Item 3").assertIsFocused()
+    }
+
+    @Test
+    fun dpadRightReportsFocusedPositionWithRowKeyAndIndex() {
+        val positions = mutableListOf<PanelPosition>()
+        composeRule.setContent {
+            PuberTheme {
+                VideoGrid(
+                    state = VideoGridUIState(
+                        list = listOf(
+                            VideoGridItemUIState.Items(
+                                items = listOf(videoItem(10), videoItem(11), videoItem(12)),
+                                rowKey = "grid_row",
+                            ),
+                        ),
+                    ),
+                    initialFocusedItemId = 10,
+                    onItemPositionFocused = { positions += it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Item 10").assertIsFocused()
+        composeRule.runOnIdle {
+            positions.clear()
+        }
+        composeRule.onNodeWithText("Item 10").performDirection(Key.DirectionRight)
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(PanelPosition("grid_row", 1, 11)), positions.toList())
+        }
     }
 
     @Test
