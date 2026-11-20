@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,7 +34,9 @@ import androidx.tv.material3.Text
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
+import com.kino.puber.core.ui.uikit.component.details.PanelPosition
 import com.kino.puber.core.ui.uikit.component.details.VideoItemGridDetails
+import com.kino.puber.core.ui.uikit.component.details.rememberPanelDirectionTracker
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.core.ui.uikit.theme.SectionTitleStyle
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
@@ -140,6 +143,8 @@ private fun ContentListLayout(
     var rowsHaveFocus by remember { mutableStateOf(false) }
     val isHeroItemPresent = state.isHeroLoading || state.heroItems.isNotEmpty()
     val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
+    val tracker = rememberPanelDirectionTracker()
+    SideEffect { tracker.markShown(state.selectedItem) }
 
     // One list item per screen is a rule about the space the detail panel leaves over. With the
     // panel present the list viewport is a hair taller than a single section, so making each one a
@@ -172,6 +177,7 @@ private fun ContentListLayout(
             onTrailerFinished = { onAction(ContentListAction.TrailerPreviewFinished) },
             fullBleedMedia = true,
             expandMediaIntoContent = true,
+            direction = tracker.directionTo(state.selectedItem),
         )
 
         PositionFocusedItemInLazyLayout(keepFullyVisibleItemInPlace = true) {
@@ -211,6 +217,7 @@ private fun ContentListLayout(
                     onListItemFocused = onListItemFocused,
                     onContextMenu = onContextMenu,
                     onAction = onAction,
+                    onCardFocused = tracker::onCardFocused,
                 )
             }
         }
@@ -319,6 +326,7 @@ private fun LazyListScope.sectionItems(
     onListItemFocused: (Int) -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
     onAction: (UIAction) -> Unit,
+    onCardFocused: (PanelPosition) -> Unit,
 ) {
     sections.forEachIndexed { index, config ->
         sectionItem(
@@ -333,6 +341,7 @@ private fun LazyListScope.sectionItems(
             onRowFocused = { onListItemFocused(sectionListItemIndex(index, isHeroItemPresent)) },
             onContextMenu = onContextMenu,
             onAction = onAction,
+            onCardFocused = onCardFocused,
             onRowEmpty = {
                 val rows = sections.mapIndexed { rowIndex, section ->
                     val itemCount = (sectionStates[rowIndex] as? SectionState.Content)
@@ -365,6 +374,7 @@ private fun LazyListScope.sectionItem(
     onRowFocused: () -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
     onAction: (UIAction) -> Unit,
+    onCardFocused: (PanelPosition) -> Unit,
     onRowEmpty: () -> Unit,
 ) {
     item(key = "section_${config.id}", contentType = "section") {
@@ -391,6 +401,7 @@ private fun LazyListScope.sectionItem(
                 onItemClick = rememberedOnItemClick,
                 onItemContextMenu = { onContextMenu(it, sectionVm) },
                 onItemFocused = rememberedOnItemFocused,
+                onItemPositionFocused = onCardFocused,
                 onSectionFocused = rememberedOnSectionFocused,
                 onFocusChanged = { hasFocus -> if (hasFocus) onRowFocused() },
                 onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },

@@ -36,6 +36,7 @@ import com.kino.puber.core.ui.uikit.component.FadeGradient
 import com.kino.puber.core.ui.uikit.component.LoadMoreHandler
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.R
+import com.kino.puber.core.ui.uikit.component.details.PanelPosition
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.rememberReconciledItemFocus
@@ -61,6 +62,7 @@ internal fun SectionRowContent(
     // Content cards, the Loading shimmer, or the Error row's Retry button -- unlike
     // `onSectionFocused`, which only the Content-card path invokes.
     onFocusChanged: (Boolean) -> Unit = {},
+    onItemPositionFocused: (PanelPosition) -> Unit = {},
 ) {
     val contentFocusRequester = remember { FocusRequester() }
     val hasFocusRef = remember { booleanArrayOf(false) }
@@ -93,6 +95,7 @@ internal fun SectionRowContent(
                 onItemClick = onItemClick,
                 onItemContextMenu = onItemContextMenu,
                 onItemFocused = onItemFocused,
+                onItemPositionFocused = onItemPositionFocused,
                 onSectionFocused = onSectionFocused,
                 onLoadMore = onLoadMore,
                 onShowAll = onShowAll,
@@ -113,6 +116,7 @@ private fun ContentSectionCards(
     onItemClick: (VideoItemUIState) -> Unit,
     onItemContextMenu: (VideoItemUIState) -> Unit,
     onItemFocused: (VideoItemUIState) -> Unit,
+    onItemPositionFocused: (PanelPosition) -> Unit,
     onSectionFocused: () -> Unit,
     onLoadMore: () -> Unit,
     onShowAll: (() -> Unit)?,
@@ -157,6 +161,7 @@ private fun ContentSectionCards(
                             // the event for *that* card is already coming. Reporting this one
                             // would put the wrong film in the panel for a frame and fetch it.
                             if (itemFocus.onItemFocused(item.id)) {
+                                onItemPositionFocused(PanelPosition(rowKey, index, item.id))
                                 onItemFocused(item)
                             }
                         }

@@ -39,6 +39,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
+import com.kino.puber.core.ui.uikit.component.details.PanelPosition
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -103,6 +104,39 @@ internal class SectionRowFocusTraversalTest {
             assertEquals(1, focusedItemId)
         }
         composeRule.onNodeWithText(itemTitle(row = 0, column = 1)).assertIsFocused()
+    }
+
+    @Test
+    fun dpadRightReportsFocusedPositionWithRowKeyAndIndex() {
+        val positions = mutableListOf<PanelPosition>()
+        composeRule.setContent {
+            PuberTheme {
+                SectionRowContent(
+                    state = SectionState.Content(
+                        items = listOf(item(0, 0), item(0, 1), item(0, 2)),
+                    ),
+                    config = SectionConfig(id = "row_0", title = "Row 0"),
+                    isTargetRow = false,
+                    onItemClick = {},
+                    onItemContextMenu = {},
+                    onItemFocused = {},
+                    onItemPositionFocused = { positions += it },
+                    onSectionFocused = {},
+                    onRetry = {},
+                    onLoadMore = {},
+                )
+            }
+        }
+
+        requestFocus(itemTitle(row = 0, column = 0))
+        composeRule.runOnIdle {
+            positions.clear()
+        }
+        pressCurrent(Key.DirectionRight)
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(PanelPosition("row_0", 1, 1)), positions.toList())
+        }
     }
 
     @Test
