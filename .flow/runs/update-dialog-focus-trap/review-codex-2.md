@@ -1,0 +1,6 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/main/java/com/kino/puber/ui/feature/update/component/UpdatePromptOverlay.kt:59-63 - `LaunchedEffect(state)` is keyed on the whole view state, so every `Downloading.progressPercent` change cancels the pending `delay(FocusDelayMs)` and the retry loop, and restarts the 100 ms delay. Scenario: the user presses Update, the focused Update button leaves composition, and the new FocusHolder needs a claim. On a fast link, such as a LAN or local mirror, the percent changes faster than every 100 ms, so the claim never fires until progress pauses or finishes. During that time, D-pad input has no focus target inside the prompt and can reach the gated rail or content. The window is bounded by download length (a few seconds when progress is that fast), so I grade it minor. The fix is cheap: key the effect on the state's type, or on whether the target changed, not on progress. A test should update progress every 50 ms after the Available to Downloading transition and assert focus stays in the prompt. The round-1 test steps progress once per second, so it misses this case.
+REJECTED:
+- Codex plain review: no regressions found. Nothing to adjudicate.
+VERDICT: changes needed
