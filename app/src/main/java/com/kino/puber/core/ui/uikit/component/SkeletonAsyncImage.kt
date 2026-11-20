@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.MaterialTheme
 import coil3.compose.AsyncImage
+import coil3.request.SuccessResult
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 
 @Composable
@@ -23,6 +24,7 @@ fun SkeletonAsyncImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.Center,
+    onSuccess: (SuccessResult) -> Unit = {},
     onError: () -> Unit = {},
     skeletonOnlyUntilFirstImage: Boolean = false,
 ) {
@@ -48,6 +50,7 @@ fun SkeletonAsyncImage(
                     isLoading = false
                     hasShownImage = true
                     isFailed = false
+                    onSuccess(it.result)
                 },
                 onError = {
                     isLoading = false
