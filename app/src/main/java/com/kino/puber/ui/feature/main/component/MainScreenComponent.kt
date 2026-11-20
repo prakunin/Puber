@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -92,11 +93,21 @@ private fun DrawerMainContent(
     tabAppRouterHolder: TabAppRouterHolder,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val outerActive = LocalContentFocusActive.current
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     val handoff = remember(drawerState, mainContentFocus) {
         ContentFocusHandoff(drawerState, mainContentFocus)
     }
     val exitConfirmation = remember { ExitConfirmation() }
+
+    // A dialog over the screens (outerActive false) is dismissed by removing the node that holds
+    // focus, and the focus system then lands on the rail, which reveals it. A handoff in flight is
+    // the contract that makes the rail pass such a bounce back to the content, which restores the
+    // item the user left. It stays pending while the dialog is up and settles once the content
+    // holds focus again.
+    LaunchedEffect(outerActive) {
+        if (!outerActive) drawerState.beginInitialHandoff()
+    }
 
     CompositionLocalProvider(
         LocalDrawerState provides drawerState,
@@ -105,7 +116,7 @@ private fun DrawerMainContent(
         // Registered BEFORE the tab content on purpose. OnBackPressedDispatcher gives the event to
         // the last enabled callback, so a pushed tab screen — whose TabBackHandler registers later
         // — keeps Back while the rail is closed. Only when there is nothing to pop does this fire.
-        RailClosedBackHandler(drawerState, exitConfirmation)
+        RailClosedBackHandler(drawerState, exitConfirmation, outerActive)
 
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -135,7 +146,7 @@ private fun DrawerMainContent(
                 // is being asked for focus, so the rows must be free to answer with the card the
                 // user left rather than waiting for the rail to finish closing.
                 CompositionLocalProvider(
-                    LocalContentFocusActive provides (drawerState.currentValue != DrawerValue.Open),
+                    LocalContentFocusActive provides (outerActive && drawerState.currentValue != DrawerValue.Open),
                 ) {
                     MainScreenContentBody(mainContentFocus, tabRouter, tabAppRouterHolder)
                 }
@@ -145,7 +156,7 @@ private fun DrawerMainContent(
         // Registered AFTER the tab content, which is the only way the rail can win over
         // TabBackHandler while it is on top: the dispatcher picks the last enabled callback, and
         // `enabled` alone cannot reorder that. Disabled while closed so the handler above governs.
-        RailOpenBackHandler(drawerState, exitConfirmation)
+        RailOpenBackHandler(drawerState, exitConfirmation, outerActive)
     }
 }
 
@@ -160,11 +171,12 @@ private fun DrawerMainContent(
 private fun RailClosedBackHandler(
     drawerState: DrawerState,
     exitConfirmation: ExitConfirmation,
+    outerActive: Boolean,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
 
-    BackHandler(enabled = drawerState.currentValue == DrawerValue.Closed) {
+    BackHandler(enabled = outerActive && drawerState.currentValue == DrawerValue.Closed) {
         if (exitConfirmation.isArmed) {
             activity?.finish()
         } else {
@@ -179,11 +191,12 @@ private fun RailClosedBackHandler(
 private fun RailOpenBackHandler(
     drawerState: DrawerState,
     exitConfirmation: ExitConfirmation,
+    outerActive: Boolean,
 ) {
     val context = LocalContext.current
     val exitPrompt = stringResource(R.string.main_press_back_again_to_exit)
 
-    BackHandler(enabled = drawerState.currentValue != DrawerValue.Closed) {
+    BackHandler(enabled = outerActive && drawerState.currentValue != DrawerValue.Closed) {
         // HandingOff is swallowed rather than acted on: the rail is already closing, and letting
         // the event through would pop the screen arriving underneath it.
         if (drawerState.currentValue != DrawerValue.Open) return@BackHandler

@@ -25,6 +25,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.player.model.ActivePanel
 import com.kino.puber.ui.feature.player.model.FocusTarget
@@ -75,13 +76,20 @@ private fun PlayerFocusEffects(
     focusRequesters: PlayerFocusRequesters,
 ) {
     val hasResumeDialog = content?.resumeDialog != null
+    val contentFocusActive = LocalContentFocusActive.current
     val prompt = when {
         content?.nextEpisodeCountdown != null -> VisiblePrompt.NextEpisode
         content?.activeSkipSegment != null -> VisiblePrompt.Skip
         else -> null
     }
-    LaunchedEffect(content?.controlsVisible, content?.activePanel, hasResumeDialog, prompt) {
-        if (hasResumeDialog) return@LaunchedEffect
+    LaunchedEffect(
+        content?.controlsVisible,
+        content?.activePanel,
+        hasResumeDialog,
+        prompt,
+        contentFocusActive,
+    ) {
+        if (hasResumeDialog || !contentFocusActive) return@LaunchedEffect
         if (content != null && !content.controlsVisible && content.activePanel == ActivePanel.None) {
             when (prompt) {
                 VisiblePrompt.NextEpisode -> focusRequesters.nextEpisodePrompt
@@ -91,8 +99,13 @@ private fun PlayerFocusEffects(
         }
     }
 
-    LaunchedEffect(content?.controlsVisible, content?.controlsFocusTarget, hasResumeDialog) {
-        if (hasResumeDialog) return@LaunchedEffect
+    LaunchedEffect(
+        content?.controlsVisible,
+        content?.controlsFocusTarget,
+        hasResumeDialog,
+        contentFocusActive,
+    ) {
+        if (hasResumeDialog || !contentFocusActive) return@LaunchedEffect
         if (content?.controlsVisible == true && content.controlsFocusTarget != null) {
             requestControlsFocus(content.controlsFocusTarget, focusRequesters)
         }
@@ -166,8 +179,9 @@ private fun ErrorOverlay(
     onBack: () -> Unit,
 ) {
     val retryFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        runCatching { retryFocusRequester.requestFocus() }
+    val contentFocusActive = LocalContentFocusActive.current
+    LaunchedEffect(contentFocusActive) {
+        if (contentFocusActive) runCatching { retryFocusRequester.requestFocus() }
     }
 
     Box(

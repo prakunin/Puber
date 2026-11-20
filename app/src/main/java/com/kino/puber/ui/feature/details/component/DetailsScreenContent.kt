@@ -76,6 +76,7 @@ import com.kino.puber.core.ui.uikit.component.details.MediaScrim
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsMedia
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.placeholder
 import com.kino.puber.core.ui.uikit.component.onTvContextMenuKey
 import com.kino.puber.core.ui.uikit.model.CommonAction
@@ -389,8 +390,9 @@ private fun ActionRow(
     modifier: Modifier = Modifier,
 ) {
     val firstButtonFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(state.trailerUrl, state.buttons.size) {
-        if (state.trailerUrl == null) {
+    val contentFocusActive = LocalContentFocusActive.current
+    LaunchedEffect(state.trailerUrl, state.buttons.size, contentFocusActive) {
+        if (contentFocusActive && state.trailerUrl == null) {
             runCatching { firstButtonFocusRequester.requestFocus() }
         }
     }

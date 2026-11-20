@@ -3,8 +3,12 @@ package com.kino.puber.ui.feature.root.component
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.lifecycle.Lifecycle
@@ -35,6 +39,7 @@ import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.ui.ScreensImpl
 import com.kino.puber.ui.feature.update.component.UpdatePromptOverlay
 import com.kino.puber.ui.feature.update.model.UpdatePromptAction
+import com.kino.puber.ui.feature.update.model.UpdatePromptViewState
 import com.kino.puber.ui.feature.update.vm.UpdatePromptVM
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.scopedOf
@@ -126,10 +131,13 @@ private fun WarmContentLaunchHandler() {
 }
 
 @Composable
-private fun UpdatePromptHost() {
+private fun UpdatePromptHost(onOpenChange: (Boolean) -> Unit) {
     val vm = puberViewModel<UpdatePromptVM>()
     val state by vm.collectViewState()
     val onAction = remember(vm) { vm::onAction }
+    val latestOnOpenChange by rememberUpdatedState(onOpenChange)
+    val isOpen = state != UpdatePromptViewState.Hidden
+    SideEffect { latestOnOpenChange(isOpen) }
 
     LifecycleAction(
         event = Lifecycle.Event.ON_RESUME,
@@ -145,6 +153,7 @@ private fun UpdatePromptHost() {
 @Composable
 fun App() {
     val appLauncher = AppLauncherImpl.rememberAppLauncher()
+    var updatePromptOpen by remember { mutableStateOf(false) }
     PuberTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -154,6 +163,7 @@ fun App() {
                 scopeName = ScopeRoot,
                 screen = LauncherScreen(),
                 remoteKeyHandler = AppRemoteHotkeyHandler::handle,
+                screenFocusActive = !updatePromptOpen,
                 moduleFactory = { scopeId, parentScope ->
                     buildFlowModule(
                         scopeId,
@@ -166,7 +176,7 @@ fun App() {
                 ReportAppForeground(getKoin().get())
                 SessionExpiredHandler()
                 WarmContentLaunchHandler()
-                UpdatePromptHost()
+                UpdatePromptHost(onOpenChange = { updatePromptOpen = it })
             }
         }
     }
