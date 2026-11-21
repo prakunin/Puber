@@ -18,6 +18,9 @@ import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.logger.LinkingDebugTree
+import com.kino.puber.core.startup.AppStartup
+import com.kino.puber.core.startup.StartupReveal
+import com.kino.puber.core.startup.reportingToStartupReveal
 import com.kino.puber.core.system.AndroidResourceProvider
 import com.kino.puber.core.system.AppLocale
 import com.kino.puber.core.system.ResourceProvider
@@ -31,7 +34,6 @@ import com.kino.puber.data.cache.CachedPayloadSweeper
 import com.kino.puber.data.di.apiModule
 import com.kino.puber.data.di.repositoryModule
 import com.kino.puber.domain.di.interactorModule
-import com.kino.puber.domain.interactor.api.ApiDomainInteractor
 import okio.Path.Companion.toOkioPath
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
@@ -73,6 +75,7 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
 
         TelemetryRuntime.install(this, appCreateMs)
+        StartupReveal.installFrameWait()
         initDi()
         initLogger()
     }
@@ -89,7 +92,7 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
                 telemetryModule,
             )
         }
-        koinApplication.koin.get<ApiDomainInteractor>().initialize()
+        koinApplication.koin.get<AppStartup>().start()
         koinApplication.koin.get<CachedPayloadSweeper>().start()
     }
 
@@ -127,6 +130,7 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
             .components {
                 add(HttpsEnforcingInterceptor())
             }
+            .reportingToStartupReveal()
             .build()
     }
 }
