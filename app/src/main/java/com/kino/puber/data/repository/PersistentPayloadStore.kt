@@ -31,6 +31,9 @@ interface PersistentPayloadStore {
     suspend fun touch(key: String, updatedAt: Long)
     suspend fun remove(key: String)
     suspend fun removeByPrefix(prefix: String)
+
+    /** Deletes the rows with `updatedAt < olderThan`, then every row but the `keepNewest` newest. */
+    suspend fun sweep(olderThan: Long, keepNewest: Int)
     suspend fun clear()
 }
 
@@ -92,6 +95,11 @@ class RoomPersistentPayloadStore(
 
     override suspend fun removeByPrefix(prefix: String) {
         dao.deleteByPrefix(prefix)
+    }
+
+    override suspend fun sweep(olderThan: Long, keepNewest: Int) {
+        dao.deleteOlderThan(olderThan)
+        dao.deleteBeyondNewest(keepNewest)
     }
 
     override suspend fun clear() {

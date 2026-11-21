@@ -108,8 +108,25 @@ class PersistentPayloadStoreTest {
         assertEquals(StoredPayload("{}", 1), store.read("item:1"))
     }
 
+    @Test
+    fun sweepDeletesByAgeThenTrimsToTheNewest() = runTest {
+        store.write(key = "a", payload = "{}", updatedAt = 10)
+        store.write(key = "b", payload = "{}", updatedAt = 20)
+        store.write(key = "c", payload = "{}", updatedAt = 30)
+        store.write(key = "d", payload = "{}", updatedAt = 40)
+
+        store.sweep(olderThan = 15, keepNewest = 2)
+
+        assertEquals(listOf("deleteOlderThan:15", "deleteBeyondNewest:2"), dao.calls)
+        assertNull(store.read("a"))
+        assertNull(store.read("b"))
+        assertEquals(StoredPayload("{}", 30), store.read("c"))
+        assertEquals(StoredPayload("{}", 40), store.read("d"))
+    }
+
     private class FakeCachedPayloadDao : CachedPayloadDao {
         private val rows = mutableMapOf<String, CachedPayloadEntity>()
+        val calls = mutableListOf<String>()
         var onUpsert: (suspend () -> Unit)? = null
         var onClear: (suspend () -> Unit)? = null
 
@@ -136,6 +153,16 @@ class PersistentPayloadStoreTest {
 
         override suspend fun deleteByPrefix(prefix: String) {
             rows.keys.filter { it.startsWith(prefix) }.forEach(rows::remove)
+        }
+
+        override suspend fun deleteOlderThan(cutoff: Long) {
+            calls += "deleteOlderThan:$cutoff"
+            rows.values.filter { it.updatedAt < cutoff }.forEach { rows.remove(it.key) }
+        }
+
+        override suspend fun deleteBeyondNewest(keepNewest: Int) {
+            calls += "deleteBeyondNewest:$keepNewest"
+            rows.values.sortedByDescending { it.updatedAt }.drop(keepNewest).forEach { rows.remove(it.key) }
         }
 
         override suspend fun clear() {

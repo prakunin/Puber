@@ -2,6 +2,7 @@ package com.kino.puber.data.db
 
 import androidx.room3.ColumnInfo
 import androidx.room3.Entity
+import androidx.room3.Index
 import androidx.room3.PrimaryKey
 
 /**
@@ -17,7 +18,7 @@ import androidx.room3.PrimaryKey
  * judged against it, and marking an entry stale is done by moving it backwards rather than by
  * deleting the row — a readable stale payload is worth more than a spinner.
  */
-@Entity(tableName = "cached_payload")
+@Entity(tableName = "cached_payload", indices = [Index(value = ["updated_at"])])
 data class CachedPayloadEntity(
     @PrimaryKey
     @ColumnInfo(name = "key") val key: String,

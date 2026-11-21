@@ -28,6 +28,15 @@ interface CachedPayloadDao {
     @Query("DELETE FROM cached_payload WHERE key LIKE :prefix || '%'")
     suspend fun deleteByPrefix(prefix: String)
 
+    @Query("DELETE FROM cached_payload WHERE updated_at < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long)
+
+    @Query(
+        "DELETE FROM cached_payload WHERE key IN " +
+            "(SELECT key FROM cached_payload ORDER BY updated_at DESC LIMIT -1 OFFSET :keepNewest)",
+    )
+    suspend fun deleteBeyondNewest(keepNewest: Int)
+
     @Query("DELETE FROM cached_payload")
     suspend fun clear()
 }

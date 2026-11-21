@@ -8,6 +8,9 @@ import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.cache.CachedPayloadSweeper
+import com.kino.puber.data.cache.MEDIA_CACHE_SIZE_BYTES
+import com.kino.puber.data.cache.mediaCacheTrimAction
 import com.kino.puber.data.repository.AppUpdateDownloader
 import com.kino.puber.data.repository.AppUpdateInstaller
 import com.kino.puber.data.repository.AppUpdatePreferencesRepository
@@ -74,9 +77,6 @@ val apiModule = module {
     singleOf(::IntroDbAppApiClient)
 }
 
-private const val MIB = 1024L * 1024L
-private const val MEDIA_CACHE_SIZE_BYTES = 512L * MIB
-
 val repositoryModule = module {
     single { ContentSharer(androidContext()) }
     singleOf(::AppUpdateRepository) { bind<IAppUpdateRepository>() }
@@ -105,6 +105,15 @@ val repositoryModule = module {
     single { get<PuberDatabase>().watchStateSyncDao() }
     single { get<PuberDatabase>().cachedPayloadDao() }
     single<PersistentPayloadStore> { RoomPersistentPayloadStore(dao = get()) }
+    single {
+        val mediaCache = lazy { get<androidx.media3.datasource.cache.Cache>() }
+        CachedPayloadSweeper(
+            store = get(),
+            foreground = get(),
+            scope = CachedPayloadSweeper.defaultScope(),
+            trimMediaCache = mediaCacheTrimAction(mediaCache),
+        )
+    }
     single { get<PuberDatabase>().transactions() }
     single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
     single<androidx.media3.datasource.cache.Cache> {
