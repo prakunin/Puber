@@ -50,6 +50,7 @@ internal class ApiDomainInteractor(
     private val probe: EndpointProbe,
     private val reachability: EndpointReachability,
     private val detailsPrefetcher: DetailsPrefetcher,
+    private val evictDnsCache: () -> Unit,
 ) {
     private val walkLock = Any()
     private var inFlightWalk: CompletableDeferred<ApiDomainAutoResolveResult>? = null
@@ -212,6 +213,9 @@ internal class ApiDomainInteractor(
      * the dialog, show the result, kick off the reload) that follows this call.
      */
     private suspend fun clearDomainSensitiveCaches() {
+        // Resolver answers describe the domain just left: kept, a mirror switch would keep dialling
+        // the old addresses until their TTL ran out.
+        clearWithoutFailing { evictDnsCache() }
         // One owner clears both normalized item records and every query index. The underlying store
         // generation also prevents an old-domain request already in flight from landing afterwards.
         clearWithoutFailing { contentCache.clear() }

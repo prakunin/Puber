@@ -4,6 +4,7 @@ package com.kino.puber.data.di
 
 import android.net.ConnectivityManager
 import androidx.annotation.OptIn
+import com.kino.puber.BuildConfig
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
@@ -41,27 +42,33 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.api.IntroDbAppApiClient
 import com.kino.puber.data.api.TheIntroDbApiClient
 import com.kino.puber.data.api.TmdbApiClient
+import okhttp3.DnsCache
 import okhttp3.OkHttpClient
-import com.kino.puber.data.api.network.DnsOverHttpsFactory
+import com.kino.puber.data.api.network.HttpStack
+import com.kino.puber.data.api.network.NetworkStats
+import com.kino.puber.data.api.network.createImageHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
 
+/** The Ktor client Coil fetches images with: the shared stack, no KinoPub plugins or auth. */
+val ImageHttpClientQualifier = named("imageHttpClient")
+
 val apiModule = module {
     single { SessionEventBus() }
     // Shared: the client is what reports a domain going quiet, the domain interactor is what acts
     // on it. Neither can see the other, so the verdict itself is the thing they hold in common.
     single { EndpointReachability() }
-    single {
-        OkHttpClient.Builder()
-            .dns(DnsOverHttpsFactory.create())
-            .build()
-    }
+    single { HttpStack.create(if (BuildConfig.DEBUG) NetworkStats::factory else null) }
+    single<OkHttpClient> { get<HttpStack>().client }
+    single<DnsCache> { get<HttpStack>().dnsCache }
+    single(ImageHttpClientQualifier) { createImageHttpClient(get(), NetworkStats.factoryOrNull("image")) }
     single {
         KinoPubApiClient(
             okHttpClient = get(),
