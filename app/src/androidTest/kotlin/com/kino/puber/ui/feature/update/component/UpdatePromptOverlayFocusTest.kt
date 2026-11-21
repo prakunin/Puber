@@ -18,6 +18,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import android.view.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,6 +38,9 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.data.repository.AppVersion
 import com.kino.puber.data.repository.AvailableUpdate
+import com.kino.puber.ui.feature.root.component.REVEAL_FADE_MS
+import com.kino.puber.ui.feature.root.component.STARTUP_SPLASH_TAG
+import com.kino.puber.ui.feature.root.component.StartupSplashHost
 import com.kino.puber.ui.feature.update.model.UpdatePromptAction
 import com.kino.puber.ui.feature.update.model.UpdatePromptViewState
 import org.junit.Assert.assertEquals
@@ -101,6 +106,38 @@ class UpdatePromptOverlayFocusTest {
         composeRule.mainClock.advanceTimeBy(2_000)
 
         assertFocusOn(updateText)
+    }
+
+    @Test
+    fun updatePromptOpenedUnderTheSplashHasFocusOnUpdateAfterReveal() {
+        var state by mutableStateOf<UpdatePromptViewState>(UpdatePromptViewState.Hidden)
+        var covered by mutableStateOf(true)
+        val actions = mutableListOf<UIAction>()
+        composeRule.setContent {
+            PuberTheme {
+                StartupSplashHost(covered) {
+                    Box(Modifier.fillMaxSize()) {
+                        ContentFocusGate(active = state == UpdatePromptViewState.Hidden) {
+                            val launchTarget = rememberFocusRequesterOnLaunch()
+                            Box(Modifier.size(40.dp).focusRequester(launchTarget).focusable())
+                        }
+                        UpdatePromptOverlay(state = state, onAction = { actions += it })
+                    }
+                }
+            }
+        }
+
+        composeRule.runOnIdle { state = available }
+        composeRule.mainClock.advanceTimeBy(500)
+        composeRule.onNodeWithTag(STARTUP_SPLASH_TAG).assertExists()
+        composeRule.runOnIdle { covered = false }
+        composeRule.mainClock.advanceTimeBy(REVEAL_FADE_MS + 32L)
+
+        composeRule.onNodeWithTag(STARTUP_SPLASH_TAG).assertDoesNotExist()
+        assertFocusOn(updateText)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+        assertEquals(listOf<UIAction>(UpdatePromptAction.DismissClicked), actions.toList())
     }
 
     @Test

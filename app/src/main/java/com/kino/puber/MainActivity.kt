@@ -11,11 +11,14 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.kino.puber.core.startup.CoveredKeyFilter
+import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.telemetry.KeyProbe
 import com.kino.puber.core.telemetry.Telemetry
 import com.kino.puber.core.telemetry.dispatchWithProbe
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,7 +28,8 @@ import com.kino.puber.core.tvhome.TvHomePublisherFactory
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.ui.AppLanguageProvider
 import com.kino.puber.ui.feature.root.component.App
-import com.kino.puber.ui.feature.root.component.SplashContent
+import com.kino.puber.ui.feature.root.component.StartupSplashHost
+import kotlinx.coroutines.delay
 import org.koin.mp.KoinPlatform.getKoin
 
 class MainActivity : ComponentActivity() {
@@ -36,6 +40,8 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
+    private val coveredKeys = CoveredKeyFilter()
+
     // The chosen language is read from preferences rather than DI: this runs before the
     // application has finished starting Koin. It settles what the first frame is drawn in;
     // AppLanguageProvider takes over from there and follows the choice while the app is running.
@@ -44,31 +50,50 @@ class MainActivity : ComponentActivity() {
     }
 
     // Sees every key before the view tree. Off, this is one flag check and the original call; the
-    // returned value is always exactly super's, because Compose focus depends on it. Lint marks
+    // returned value is super's, because Compose focus depends on it, except for the keys the startup
+    // splash swallows. Lint marks
     // androidx.core's ComponentActivity.dispatchKeyEvent as restricted, but overriding it is the only
     // hook that sees every key, and calling super is its normal contract.
     @SuppressLint("RestrictedApi")
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        dispatchWithProbe(Telemetry.isEnabled, { super.dispatchKeyEvent(event) }) { handled, dispatchNs ->
-            KeyProbe.onKey(event.action, event.keyCode, event.repeatCount, event.eventTime, dispatchNs, handled)
-        }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = dispatchWithProbe(
+        Telemetry.isEnabled,
+        {
+            // D-pad and OK pressed under the startup splash would move or open what the user cannot see.
+            if (coveredKeys.shouldDrop(StartupReveal.isCovered, event.action, event.keyCode)) {
+                true
+            } else {
+                super.dispatchKeyEvent(event)
+            }
+        },
+    ) { handled, dispatchNs ->
+        KeyProbe.onKey(event.action, event.keyCode, event.repeatCount, event.eventTime, dispatchNs, handled)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
         acceptContentIntent(intent)
+        StartupReveal.onActivityCreated(restored = savedInstanceState != null)
         setContent {
             // Outermost, so the wordmark is in the chosen language too.
             AppLanguageProvider {
-                // The wordmark is composed on its own first, so it reaches the screen without
-                // waiting for the theme, navigation and DI graph that App() builds behind it.
-                SplashContent()
-
-                var appComposed by remember { mutableStateOf(false) }
-                LaunchedEffect(Unit) { appComposed = true }
-                if (appComposed) {
-                    App()
-                    LaunchedEffect(Unit) { Telemetry.startupMarks?.markAppComposed() }
+                val covered by StartupReveal.covered.collectAsState()
+                // The cap counts from onCreate, not from this composition.
+                LaunchedEffect(Unit) {
+                    delay(StartupReveal.remainingCapMs())
+                    StartupReveal.onCap()
+                }
+                // The fade starts here, which is the moment the content is revealed.
+                LaunchedEffect(covered) { if (!covered) Telemetry.startupMarks?.markRevealed() }
+                // The wordmark is drawn in the first frame; the app is composed beneath it, so its
+                // data and launch focus settle while it covers the screen.
+                StartupSplashHost(covered) {
+                    var appComposed by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { appComposed = true }
+                    if (appComposed) {
+                        App()
+                        LaunchedEffect(Unit) { Telemetry.startupMarks?.markAppComposed() }
+                    }
                 }
             }
         }

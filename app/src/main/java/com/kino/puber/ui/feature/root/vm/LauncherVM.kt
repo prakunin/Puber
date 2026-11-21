@@ -2,37 +2,42 @@ package com.kino.puber.ui.feature.root.vm
 
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.toScreen
+import com.kino.puber.core.startup.AppStartup
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
-import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
-import com.kino.puber.ui.feature.root.model.LauncherAction
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal class LauncherVM(
     router: AppRouter,
     private val cryptoPreferenceRepository: ICryptoPreferenceRepository,
     private val contentLaunchCoordinator: ContentLaunchCoordinator,
+    private val appStartup: AppStartup,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : PuberVM<Any>(router) {
     override val initialViewState: Any = Unit
 
     private var startScreenOpened = false
 
     /**
-     * The start screen is opened only once the splash animation has played, otherwise the
-     * launcher screen is replaced within a frame and its logo never becomes visible.
+     * Routes as soon as the saved API domain is applied: the splash now covers the whole app from
+     * [MainActivity], so there is no animation left to wait for. The token is read off the main
+     * thread, where the encrypted preferences are first opened.
      */
-    override fun handleAction(action: UIAction) {
-        when (action) {
-            LauncherAction.SplashShown -> openStartScreen()
-            else -> super.handleAction(action)
+    override fun onStart() {
+        launch {
+            appStartup.awaitDomainInitialized()
+            val token = withContext(ioDispatcher) { cryptoPreferenceRepository.getAccessToken() }
+            openStartScreen(isAuthenticated = !token.isNullOrEmpty())
         }
     }
 
-    private fun openStartScreen() {
+    private fun openStartScreen(isAuthenticated: Boolean) {
         if (startScreenOpened) return
         startScreenOpened = true
 
-        val isAuthenticated = cryptoPreferenceRepository.getAccessToken().isNullOrEmpty().not()
         if (isAuthenticated) {
             val target = contentLaunchCoordinator.consumeForAuthenticatedStart()
             if (target == null) {

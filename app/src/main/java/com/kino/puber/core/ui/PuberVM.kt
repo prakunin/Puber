@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.kino.puber.core.coroutine.DefaultExceptionHandler
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.telemetry.Telemetry
 import com.kino.puber.core.telemetry.TelemetryEvent
@@ -34,6 +35,10 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     BackButtonDispatcher {
 
     protected open val errorHandler: ErrorHandler? = null
+
+    /** Whether publishing a [StartupContentState] lifts the startup splash; Home reveals on its launch focus instead. */
+    protected open val revealsOnContentState: Boolean get() = true
+
     protected abstract val initialViewState: ViewState
     private val mutableViewState: MutableStateFlow<ViewState> by lazy {
         MutableStateFlow(initialViewState)
@@ -86,6 +91,7 @@ abstract class PuberVM<ViewState>(protected val router: AppRouter) : ViewModel()
     protected open fun updateViewState(viewState: ViewState) {
         val previous = if (Telemetry.isEnabled) mutableViewState.value else null
         mutableViewState.value = viewState
+        if (revealsOnContentState && viewState is StartupContentState) StartupReveal.markReady()
         if (Telemetry.isEnabled) recordReady(previous, viewState)
     }
 

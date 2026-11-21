@@ -217,6 +217,7 @@ internal class SectionVMTest : SectionVMTestFixture() {
             testScheduler.advanceUntilIdle()
 
             assertTrue(vm.testStateValue is SectionState.Content)
+            Telemetry.startupMarks?.onTimeout()
             assertEquals(listOf(2_500L), startups.map { it.firstContentMs })
             vm.testCancelScope()
             paginator.close()

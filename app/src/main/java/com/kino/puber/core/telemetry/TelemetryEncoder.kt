@@ -69,6 +69,7 @@ internal class TelemetryEncoder(
         put("app_create", event.appCreateMs - event.procStartMs)
         event.appComposedMs?.let { put("app_composed", it - event.procStartMs) }
         event.firstContentMs?.let { put("first_content", it - event.procStartMs) }
+        event.revealedMs?.let { put("revealed", it - event.procStartMs) }
     }
 
     private fun JsonObjectBuilder.putNav(event: TelemetryEvent.Nav) {

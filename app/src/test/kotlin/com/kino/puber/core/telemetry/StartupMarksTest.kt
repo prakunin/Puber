@@ -27,6 +27,54 @@ internal class StartupMarksTest {
     }
 
     @Test
+    fun lineWaitsForRevealedAndCarriesBothMarks() {
+        clock.elapsed = 900
+        marks.markFirstContent()
+        assertEquals(0, out.size)
+        clock.elapsed = 1_200
+        marks.markRevealed()
+
+        val startup = out.single()
+        assertEquals(900L, startup.firstContentMs)
+        assertEquals(1_200L, startup.revealedMs)
+    }
+
+    @Test
+    fun oneLineWhenRevealedComesBeforeFirstContent() {
+        clock.elapsed = 700
+        marks.markRevealed()
+        assertEquals(0, out.size)
+        clock.elapsed = 800
+        marks.markFirstContent()
+        marks.markRevealed()
+
+        val startup = out.single()
+        assertEquals(800L, startup.firstContentMs)
+        assertEquals(700L, startup.revealedMs)
+    }
+
+    @Test
+    fun fallbackLineHasNoRevealedWhenItNeverCame() {
+        clock.elapsed = 900
+        marks.markFirstContent()
+        marks.onTimeout()
+
+        val startup = out.single()
+        assertEquals(900L, startup.firstContentMs)
+        assertNull(startup.revealedMs)
+    }
+
+    @Test
+    fun revealedKeepsTheFirstValue() {
+        clock.elapsed = 700
+        marks.markRevealed()
+        clock.elapsed = 800
+        marks.markRevealed()
+        marks.onTimeout()
+        assertEquals(700L, out.single().revealedMs)
+    }
+
+    @Test
     fun appComposedKeepsTheFirstValue() {
         clock.elapsed = 300
         marks.markAppComposed()

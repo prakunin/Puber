@@ -8,4 +8,5 @@ internal sealed interface HomeAction : UIAction {
     data class SaveApiDomain(val domain: String) : HomeAction
     data object DetectApiDomain : HomeAction
     data object ResetApiDomain : HomeAction
+    data object LaunchFocusSettled : HomeAction
 }

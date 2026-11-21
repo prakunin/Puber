@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.home.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -42,6 +43,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -95,6 +97,33 @@ class HomeVMTest {
         every { mapper.mapItemSection(any(), any()) } returns null
         every { mapper.mapCollectionSection(any()) } returns null
         every { videoItemMapper.mapHeroItems(any()) } returns emptyList()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        StartupReveal.resetForTests()
+    }
+
+    @Test
+    fun launchFocusSettled_revealsTheSplash() {
+        var revealed = 0
+        val vm = createVM(revealSignal = { revealed++ })
+
+        vm.onAction(HomeAction.LaunchFocusSettled)
+
+        assertEquals(1, revealed)
+    }
+
+    @Test
+    fun contentState_keepsTheSplashUntilLaunchFocusSettled() = runTest {
+        StartupReveal.begin()
+        val vm = createVM(presentationDispatcher = StandardTestDispatcher(testScheduler))
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        assertTrue(vm.testStateValue is HomeViewState.Content)
+        assertTrue(StartupReveal.isCovered)
     }
 
     @Test
@@ -445,6 +474,7 @@ class HomeVMTest {
 
     private fun createVM(
         presentationDispatcher: CoroutineDispatcher = mainDispatcher.dispatcher,
+        revealSignal: () -> Unit = {},
     ) = HomeVM(
         router = router,
         interactor = interactor,
@@ -456,6 +486,7 @@ class HomeVMTest {
         resources = FakeResourceProvider(),
         errorHandler = errorHandler,
         presentationDispatcher = presentationDispatcher,
+        revealSignal = revealSignal,
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(
