@@ -30,6 +30,7 @@ import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,12 +38,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -50,6 +54,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 
+@Suppress("LargeClass")
 class HomeVMIncrementalPublishTest {
 
     companion object {
@@ -580,16 +585,14 @@ class HomeVMIncrementalPublishTest {
         try {
             vm.testOnStart()
 
-            // Waits for every one of the 8 initial collectors' own publishSections() calls to fully
-            // drain, not just for the first to land - mapHeroItems runs exactly once per publish, so 8
-            // calls means the mutex has nothing left queued. Gating mapItemSection before this point
-            // risks catching a leftover initial-burst publish instead of the one triggered below: that
-            // leftover is itself a child of loadHomeJob and gets silently cancelled (not resurrected)
-            // once the clear's loadHome() cancels that job, but it also means the trigger below - the
-            // one call that isn't scoped under loadHomeJob and could actually demonstrate the race - is
-            // left queued behind it and doesn't take its (stale, pre-clear) snapshot until after the
-            // clear, defeating the test.
-            verify(exactly = 8, timeout = 2_000) { videoItemMapper.mapHeroItems(any()) }
+            // Waits for the initial publishes to drain through the mutex, not just for the first to
+            // land. Gating mapItemSection before this point risks catching a leftover initial-burst
+            // publish instead of the one triggered below: that leftover is itself a child of
+            // loadHomeJob and gets silently cancelled (not resurrected) once the clear's loadHome()
+            // cancels that job, but it also means the trigger below - the one call that isn't scoped
+            // under loadHomeJob and could actually demonstrate the race - is left queued behind it and
+            // doesn't take its (stale, pre-clear) snapshot until after the clear, defeating the test.
+            vm.drained()
             assertTrue(vm.testStateValue is HomeViewState.Content, "the unrelated sections never settled")
 
             val mappingEntered = CountDownLatch(1)
@@ -685,13 +688,12 @@ class HomeVMIncrementalPublishTest {
             vm.testOnStart()
 
             // ContinueWatching and Hot are held back by the controlled flows above, so initial settle
-            // is the other five sections plus collections: six publishSections() calls. Waits for all
-            // six to fully drain through the mutex (mapHeroItems runs exactly once per publish, so six
-            // calls means nothing is left queued) before installing the gate below - otherwise the gate
-            // risks catching one of these leftover calls instead of the one triggered below, which is
-            // scoped under loadHomeJob same as they are and so wouldn't even demonstrate anything about
-            // a publish that outlives it.
-            verify(exactly = 6, timeout = 2_000) { videoItemMapper.mapHeroItems(any()) }
+            // is the other five sections plus collections. Waits for those publishes to drain through
+            // the mutex before installing the gate below - otherwise the gate risks catching one of
+            // these leftover calls instead of the one triggered below, which is scoped under
+            // loadHomeJob same as they are and so wouldn't even demonstrate anything about a publish
+            // that outlives it.
+            vm.drained()
             assertEquals(false, (vm.testStateValue as HomeViewState.Content).heroSettled)
 
             val firstMappingEntered = CountDownLatch(1)
@@ -771,6 +773,213 @@ class HomeVMIncrementalPublishTest {
             watcherScope.cancel()
             threadPool.shutdown()
         }
+    }
+
+    @Test
+    fun arrivalsQueuedBehindAnInFlightPublishFoldIntoOneFollowUp() = runTest {
+        // Four sections are held back. The first one to arrive parks its publish at the hop; the other
+        // three arrive while it is parked and queue behind it. Without folding each of them maps the
+        // whole screen again (four publishes since the park); folded, the one in flight is followed by
+        // a single publish whose snapshot already holds all three.
+        val watching = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val hot = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val fresh = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val popularMovies = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        every { interactor.observeWatchingItems(any()) } returns watching
+        every { interactor.observeHotItems() } returns hot
+        every { interactor.observeFreshItems() } returns fresh
+        every { interactor.observePopularMovies() } returns popularMovies
+        val heroMaps = AtomicInteger()
+        every { videoItemMapper.mapHeroItems(any()) } answers {
+            heroMaps.incrementAndGet()
+            emptyList()
+        }
+
+        val threadPool = Executors.newFixedThreadPool(4)
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+        try {
+            vm.testOnStart()
+            vm.drained()
+
+            val mappingEntered = CountDownLatch(1)
+            val releaseMapping = CountDownLatch(1)
+            val mappingGate = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
+                // Keyed on the type only the held sections can produce, so a leftover initial publish
+                // cannot take the gate.
+                if (type == HomeSectionType.ContinueWatching && mappingGate.compareAndSet(false, true)) {
+                    mappingEntered.countDown()
+                    releaseMapping.await(5, TimeUnit.SECONDS)
+                }
+                stateFor(type)
+            }
+            watching.tryEmit(Cached.Value(listOf(item(1)), isStale = false))
+            assertTrue(mappingEntered.await(2, TimeUnit.SECONDS), "the first publish never started mapping")
+            val mapsAtThePark = heroMaps.get()
+
+            hot.tryEmit(Cached.Value(listOf(item(2)), isStale = false))
+            fresh.tryEmit(Cached.Value(listOf(item(3)), isStale = false))
+            popularMovies.tryEmit(Cached.Value(listOf(item(4)), isStale = false))
+            releaseMapping.countDown()
+            vm.drained()
+
+            assertEquals(1, heroMaps.get() - mapsAtThePark, "the three queued arrivals did not fold into one publish")
+            val types = (vm.testStateValue as HomeViewState.Content).sections.map { it.type }
+            assertTrue(
+                types.containsAll(
+                    listOf(
+                        HomeSectionType.ContinueWatching,
+                        HomeSectionType.Hot,
+                        HomeSectionType.Fresh,
+                        HomeSectionType.PopularMovies,
+                    )
+                ),
+                "the follow-up publish is missing a section that arrived while the first was parked: $types",
+            )
+        } finally {
+            vm.testCancelScope()
+            threadPool.shutdown()
+        }
+    }
+
+    @Test
+    fun aCancelledFollowUpLeavesTheNextQueuedRequestToPublish() = runTest {
+        // A publish parked at the hop and a second request behind it both belong to loadHomeJob; a
+        // card-display change queues a third from outside it. The resume cancels the first two. They
+        // record nothing, so the third still has to publish rather than count as covered.
+        val watching = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        val hot = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+        every { interactor.observeWatchingItems(any()) } returns watching
+        every { interactor.observeHotItems() } returns hot
+        val heroMaps = AtomicInteger()
+        every { videoItemMapper.mapHeroItems(any()) } answers {
+            heroMaps.incrementAndGet()
+            emptyList()
+        }
+
+        val threadPool = Executors.newFixedThreadPool(4)
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+        try {
+            vm.testOnStart()
+            vm.drained()
+
+            val mappingEntered = CountDownLatch(1)
+            val releaseMapping = CountDownLatch(1)
+            val mappingGate = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
+                if (type == HomeSectionType.ContinueWatching && mappingGate.compareAndSet(false, true)) {
+                    mappingEntered.countDown()
+                    releaseMapping.await(5, TimeUnit.SECONDS)
+                }
+                stateFor(type)
+            }
+            watching.tryEmit(Cached.Value(listOf(item(1)), isStale = false))
+            assertTrue(mappingEntered.await(2, TimeUnit.SECONDS), "the first publish never started mapping")
+            hot.tryEmit(Cached.Value(listOf(item(2)), isStale = false))
+            displayChanges.emit(Unit)
+            val mapsAtThePark = heroMaps.get()
+
+            // The reload that the resume starts never answers, so only the queued requests can publish.
+            val neverCompletes = CompletableDeferred<Unit>()
+            every { interactor.observeWatchingItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+            vm.onAction(CommonAction.OnResume)
+            releaseMapping.countDown()
+            vm.drained()
+
+            assertEquals(
+                1,
+                heroMaps.get() - mapsAtThePark,
+                "the request queued from outside loadHomeJob never published",
+            )
+            val types = (vm.testStateValue as HomeViewState.Content).sections.map { it.type }
+            assertTrue(
+                types.containsAll(listOf(HomeSectionType.ContinueWatching, HomeSectionType.Hot)),
+                "the surviving publish is missing sections that arrived before the resume: $types",
+            )
+        } finally {
+            vm.testCancelScope()
+            threadPool.shutdown()
+        }
+    }
+
+    @Test
+    fun aSectionArrivingAfterAClearPublishesEvenWhenAStalePublishWasSkipped() = runTest {
+        // The stale publish parked at the hop is skipped by the epoch check. A section of the new
+        // catalogue has already queued behind it by then, so the skip must cover only the requests
+        // the stale snapshot held: marking the new arrival covered would leave its row unshown.
+        val threadPool = Executors.newFixedThreadPool(6)
+        val watcherScope = CoroutineScope(threadPool.asCoroutineDispatcher())
+        val vm = createVM(presentationDispatcher = threadPool.asCoroutineDispatcher())
+        try {
+            vm.testOnStart()
+            vm.drained()
+
+            val mappingEntered = CountDownLatch(1)
+            val releaseMapping = CountDownLatch(1)
+            val mappingGate = AtomicBoolean(false)
+            every { mapper.mapItemSection(any(), any()) } answers {
+                val type = secondArg<HomeSectionType>()
+                if (mappingGate.compareAndSet(false, true)) {
+                    mappingEntered.countDown()
+                    releaseMapping.await(5, TimeUnit.SECONDS)
+                }
+                stateFor(type)
+            }
+            displayChanges.emit(Unit)
+            assertTrue(mappingEntered.await(2, TimeUnit.SECONDS), "the stale publish never started mapping")
+
+            val neverCompletes = CompletableDeferred<Unit>()
+            val newWatching = MutableSharedFlow<Cached<List<Item>>>(replay = 1)
+            newWatching.tryEmit(Cached.Value(listOf(item(7)), isStale = false))
+            every { interactor.observeWatchingItems(any()) } returns newWatching
+            every { interactor.observeHotItems() } returns flow { neverCompletes.await() }
+            every { interactor.observeFreshItems() } returns flow { neverCompletes.await() }
+            every { interactor.observePopularMovies() } returns flow { neverCompletes.await() }
+            every { interactor.observePopularSeries() } returns flow { neverCompletes.await() }
+            every { interactor.observeWatchLaterItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeBookmarkItems(any()) } returns flow { neverCompletes.await() }
+            every { interactor.observeCollections() } returns flow { neverCompletes.await() }
+
+            val clearedToLoading = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { it is HomeViewState.Loading }
+                clearedToLoading.countDown()
+            }
+            val requestedBeforeReset = vm.publishRequestCount
+            vm.onAction(HomeAction.ResetApiDomain)
+            assertTrue(clearedToLoading.await(2, TimeUnit.SECONDS), "the domain reset never cleared the screen")
+            // The new catalogue's arrival queues behind the parked publish on the main dispatcher; wait
+            // until it is counted, so the stale publish is released only with it already queued.
+            withContext(Dispatchers.Default) {
+                withTimeout(2_000) { vm.awaitPublishRequestsBeyond(requestedBeforeReset) }
+            }
+
+            val newRowShown = CountDownLatch(1)
+            watcherScope.launch {
+                vm.testStateFlow.first { state ->
+                    state is HomeViewState.Content && state.sections.any { it.type == HomeSectionType.ContinueWatching }
+                }
+                newRowShown.countDown()
+            }
+            releaseMapping.countDown()
+
+            assertTrue(
+                newRowShown.await(2, TimeUnit.SECONDS),
+                "the new catalogue's row was never published after the stale publish was skipped",
+            )
+        } finally {
+            vm.testCancelScope()
+            watcherScope.cancel()
+            threadPool.shutdown()
+        }
+    }
+
+    /** Real-time bound: runTest's virtual clock would fire a bare withTimeout at once. */
+    private suspend fun HomeVM.drained() {
+        withContext(Dispatchers.Default) { withTimeout(2_000) { awaitPublishesDrained() } }
     }
 
     private fun collection(id: Int) = KCollection(id = id, title = "Collection $id")

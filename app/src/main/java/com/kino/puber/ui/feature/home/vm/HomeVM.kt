@@ -43,7 +43,11 @@ import com.kino.puber.ui.feature.home.model.HomeSectionState
 import com.kino.puber.ui.feature.home.model.HomeSectionType
 import com.kino.puber.ui.feature.home.model.HomeUIMapper
 import com.kino.puber.ui.feature.home.model.HomeViewState
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.updateAndGet
 
 internal class HomeVM(
     router: AppRouter,
@@ -87,8 +91,22 @@ internal class HomeVM(
      * missing rows already shown. Holding the lock across the snapshot too means each publish that
      * gets to run reads the freshest state rather than one captured while an earlier call was still
      * in flight.
+     *
+     * Requests queued behind a publish in flight fold into one follow-up: each request takes a number
+     * before it queues, and a publish records the highest number whose data its snapshot already
+     * held ([requestedPublishes], read before the snapshot). A request whose number is covered by an
+     * earlier publish returns without mapping, so a burst of section arrivals costs the publish in
+     * flight plus one more, never one per arrival. A cancelled publish records nothing, so the next
+     * request still queued maps. The first request of a quiet period runs at once: there is no
+     * window.
      */
     private val publishMutex = Mutex()
+
+    /** Publish requests made so far; a request is counted before it queues for [publishMutex]. */
+    private val requestedPublishes = MutableStateFlow(0L)
+
+    /** The highest request count whose data a completed (or epoch-skipped) publish has covered. */
+    private val publishedThrough = MutableStateFlow(0L)
 
     /**
      * Bumped every time [clearRowsFromPreviousCatalogue] runs, so a publish parked at the
@@ -464,59 +482,85 @@ internal class HomeVM(
     }
 
     /** Maps what the sections returned into cards, against whatever the index and settings say now. */
-    private suspend fun publishSections() = publishMutex.withLock {
-        // Snapshot the main-thread state before hopping: the maps below, heroSettled and the epoch
-        // are written by collectors — or by a catalogue clear — on the main dispatcher and must not
-        // be read fresh after the hop, which is exactly the window a clear can land in. Taken inside
-        // the lock so a publish that had to wait its turn reads the freshest state, not one captured
-        // before an earlier publish finished.
-        val epoch = catalogueEpoch
-        val sections = loadedSections.toMap()
-        val collections = loadedCollections
-        val watchedAt = lastWatchedAt
-        val heroSettledAtSnapshot = heroSettled
-        val mapped = withContext(presentationDispatcher) {
-            MappedHome(
-                heroItems = videoItemMapper.mapHeroItems(
-                    interactor.prepareHomeItems(
-                        items = sections[HomeSectionType.Hot].orEmpty(),
-                        lastWatchedAt = watchedAt,
-                        sortByLastWatched = false,
-                    ).take(HERO_ITEMS_COUNT),
-                ),
-                sections = listOfNotNull(
-                    *sections
-                        .map { (type, items) ->
-                            mapper.mapItemSection(
-                                interactor.prepareHomeItems(
-                                    items = items,
-                                    lastWatchedAt = watchedAt,
-                                    sortByLastWatched = type == HomeSectionType.WatchLater ||
-                                        type == HomeSectionType.Bookmarks,
-                                ),
-                                type,
-                            )
-                        }
-                        .toTypedArray(),
-                    collections?.let { mapper.mapCollectionSection(it) },
-                ).sortedBy { it.type.ordinal },
+    private suspend fun publishSections() {
+        val mine = requestedPublishes.updateAndGet { it + 1 }
+        publishMutex.withLock {
+            if (publishedThrough.value >= mine) return@withLock
+            // Read before the snapshot: every request counted here had its data written before it was
+            // counted, so the snapshot below holds it.
+            val upTo = requestedPublishes.value
+            // Snapshot the main-thread state before hopping: the maps below, heroSettled and the epoch
+            // are written by collectors — or by a catalogue clear — on the main dispatcher and must not
+            // be read fresh after the hop, which is exactly the window a clear can land in. Taken inside
+            // the lock so a publish that had to wait its turn reads the freshest state, not one captured
+            // before an earlier publish finished.
+            val epoch = catalogueEpoch
+            val sections = loadedSections.toMap()
+            val collections = loadedCollections
+            val watchedAt = lastWatchedAt
+            val heroSettledAtSnapshot = heroSettled
+            val mapped = withContext(presentationDispatcher) {
+                MappedHome(
+                    heroItems = videoItemMapper.mapHeroItems(
+                        interactor.prepareHomeItems(
+                            items = sections[HomeSectionType.Hot].orEmpty(),
+                            lastWatchedAt = watchedAt,
+                            sortByLastWatched = false,
+                        ).take(HERO_ITEMS_COUNT),
+                    ),
+                    sections = listOfNotNull(
+                        *sections
+                            .map { (type, items) ->
+                                mapper.mapItemSection(
+                                    interactor.prepareHomeItems(
+                                        items = items,
+                                        lastWatchedAt = watchedAt,
+                                        sortByLastWatched = type == HomeSectionType.WatchLater ||
+                                            type == HomeSectionType.Bookmarks,
+                                    ),
+                                    type,
+                                )
+                            }
+                            .toTypedArray(),
+                        collections?.let { mapper.mapCollectionSection(it) },
+                    ).sortedBy { it.type.ordinal },
+                )
+            }
+            if (catalogueEpoch != epoch) {
+                // A clear landed while this publish was parked at the hop: its snapshot describes a
+                // catalogue that is no longer on screen. The clear already published its own Loading
+                // state (or a later publish will publish the new catalogue's rows); writing this one
+                // over it would resurrect rows the clear specifically exists to drop. Its requests are
+                // still covered, or a later arrival would wait behind a number no publish will reach.
+                publishedThrough.value = upTo
+                return@withLock
+            }
+            updateViewState(
+                HomeViewState.Content(
+                    heroItems = mapped.heroItems,
+                    sections = applySavedOverrides(mapped.sections),
+                    heroSettled = heroSettledAtSnapshot,
+                    apiDomainDialog = currentDialogState(),
+                )
             )
+            publishedThrough.value = upTo
         }
-        if (catalogueEpoch != epoch) {
-            // A clear landed while this publish was parked at the hop: its snapshot describes a
-            // catalogue that is no longer on screen. The clear already published its own Loading
-            // state (or a later publish will publish the new catalogue's rows); writing this one
-            // over it would resurrect rows the clear specifically exists to drop.
-            return@withLock
-        }
-        updateViewState(
-            HomeViewState.Content(
-                heroItems = mapped.heroItems,
-                sections = applySavedOverrides(mapped.sections),
-                heroSettled = heroSettledAtSnapshot,
-                apiDomainDialog = currentDialogState(),
-            )
-        )
+    }
+
+    /** Returns once every publish requested so far has been published or covered by a later one. */
+    @VisibleForTesting
+    internal suspend fun awaitPublishesDrained() {
+        publishedThrough.first { it >= requestedPublishes.value }
+    }
+
+    /** Publish requests counted so far. */
+    @VisibleForTesting
+    internal val publishRequestCount: Long get() = requestedPublishes.value
+
+    /** Returns once more than [count] publishes have been requested, that is, once one more has been counted. */
+    @VisibleForTesting
+    internal suspend fun awaitPublishRequestsBeyond(count: Long) {
+        requestedPublishes.first { it > count }
     }
 
     private class MappedHome(

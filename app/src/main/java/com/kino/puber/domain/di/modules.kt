@@ -3,6 +3,7 @@ package com.kino.puber.domain.di
 import com.kino.puber.core.coroutine.AppCoroutineScope
 import com.kino.puber.core.lifecycle.AppForegroundState
 import com.kino.puber.core.startup.AppStartup
+import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.data.api.network.HttpEndpointProbe
 import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.api.network.diagnostics.OkHttpBoundedDownloader
@@ -78,9 +79,11 @@ val interactorModule = module {
         DetailsPrefetcher(
             details = get(),
             foreground = get(),
+            awaitSettled = get<StartupSettled>()::await,
         )
     }
     single { AppCoroutineScope() }
+    single { StartupSettled(scope = get<AppCoroutineScope>()) }
     // Providers, not instances: resolving AppStartup on the main thread must not build the interactors
     // (and with them half the graph), only the work it starts on IO does.
     single {

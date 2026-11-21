@@ -1,6 +1,10 @@
 package com.kino.puber.ui.feature.update.vm
 
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.StartupSlot
+import com.kino.puber.core.startup.settledStartup
+import com.kino.puber.core.startup.unsettledStartup
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.data.repository.AppUpdateDownload
 import com.kino.puber.data.repository.AppVersion
@@ -19,6 +23,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -40,7 +47,21 @@ class UpdatePromptVMTest {
     private val updateInteractor = mockk<IAppUpdateInteractor>(relaxUnitFun = true)
     private val updateCheckCoordinator = AppUpdateCheckCoordinator()
 
-    private fun createVM(): UpdatePromptVM {
+    private val startupSettled = settledStartup(TestScope(mainDispatcher.dispatcher))
+
+    private fun passUpdateSlot(extraMs: Long = 1) {
+        val scheduler = mainDispatcher.dispatcher.scheduler
+        scheduler.advanceTimeBy(StartupSlot.UpdateCheck.offset.inWholeMilliseconds + extraMs)
+        scheduler.runCurrent()
+    }
+
+    private fun passInputGuard() {
+        val scheduler = mainDispatcher.dispatcher.scheduler
+        scheduler.advanceTimeBy(UPDATE_PROMPT_INPUT_GUARD.inWholeMilliseconds + 1)
+        scheduler.runCurrent()
+    }
+
+    private fun createVM(startupSettled: StartupSettled = this.startupSettled): UpdatePromptVM {
         every { updateInteractor.isAutoCheckEnabled() } returns true
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(null)
         coEvery { updateInteractor.checkForUpdateNow(any()) } returns Result.success(null)
@@ -50,6 +71,7 @@ class UpdatePromptVMTest {
             errorHandler = errorHandler,
             updateInteractor = updateInteractor,
             updateCheckCoordinator = updateCheckCoordinator,
+            startupSettled = startupSettled,
             resources = FakeResourceProvider(),
         )
     }
@@ -63,6 +85,7 @@ class UpdatePromptVMTest {
             errorHandler = errorHandler,
             updateInteractor = updateInteractor,
             updateCheckCoordinator = updateCheckCoordinator,
+            startupSettled = startupSettled,
             resources = FakeResourceProvider(),
         )
         vm.testOnStart()
@@ -147,10 +170,59 @@ class UpdatePromptVMTest {
     }
 
     @Test
+    fun onStart_doesNotCheckForUpdateBeforeItsStartupSlot() {
+        val unsettled = unsettledStartup(TestScope(mainDispatcher.dispatcher))
+        val vm = createVM(unsettled)
+        val scheduler = mainDispatcher.dispatcher.scheduler
+
+        vm.testOnStart()
+        scheduler.advanceTimeBy(10_000)
+        scheduler.runCurrent()
+        coVerify(exactly = 0) { updateInteractor.checkForUpdate(any()) }
+
+        unsettled.onSplashGone()
+        scheduler.advanceTimeBy(StartupSlot.UpdateCheck.offset.inWholeMilliseconds - 1)
+        scheduler.runCurrent()
+        coVerify(exactly = 0) { updateInteractor.checkForUpdate(any()) }
+
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        coVerify(exactly = 1) { updateInteractor.checkForUpdate(any()) }
+    }
+
+    @Test
+    fun manualCheck_runsBeforeStartupSettles() {
+        val vm = createVM(unsettledStartup(TestScope(mainDispatcher.dispatcher)))
+        val update = availableUpdate()
+        coEvery { updateInteractor.checkForUpdateNow(any()) } returns Result.success(update)
+        vm.testOnStart()
+
+        updateCheckCoordinator.requestManualCheck()
+
+        assertEquals(UpdatePromptViewState.Available(update), vm.testStateValue)
+    }
+
+    @Test
+    fun onStart_skipsTheAutoCheckWhenClearedBeforeItsSlot() {
+        val unsettled = unsettledStartup(TestScope(mainDispatcher.dispatcher))
+        val vm = createVM(unsettled)
+        vm.testOnStart()
+
+        vm.testCancelScope()
+        unsettled.onSplashGone()
+        val scheduler = mainDispatcher.dispatcher.scheduler
+        scheduler.advanceTimeBy(10_000)
+        scheduler.runCurrent()
+
+        coVerify(exactly = 0) { updateInteractor.checkForUpdate(any()) }
+    }
+
+    @Test
     fun onStart_keepsHidden_whenNoUpdateExists() {
         val vm = createVM()
 
         vm.testOnStart()
+        passUpdateSlot()
 
         assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
     }
@@ -161,6 +233,7 @@ class UpdatePromptVMTest {
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.failure(IOException("Network error"))
 
         vm.testOnStart()
+        passUpdateSlot()
 
         assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
     }
@@ -172,6 +245,7 @@ class UpdatePromptVMTest {
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
 
         vm.testOnStart()
+        passUpdateSlot()
 
         assertEquals(UpdatePromptViewState.Available(update), vm.testStateValue)
     }
@@ -182,6 +256,7 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
 
         vm.onAction(UpdatePromptAction.DismissClicked)
 
@@ -197,6 +272,8 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
+        passInputGuard()
 
         vm.onAction(UpdatePromptAction.UpdateClicked)
 
@@ -214,6 +291,8 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
+        passInputGuard()
 
         vm.onAction(UpdatePromptAction.UpdateClicked)
 
@@ -231,6 +310,8 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
+        passInputGuard()
 
         vm.onAction(UpdatePromptAction.UpdateClicked)
         vm.onAction(UpdatePromptAction.OnResume)
@@ -248,6 +329,8 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
+        passInputGuard()
 
         vm.onAction(UpdatePromptAction.UpdateClicked)
 
@@ -272,12 +355,57 @@ class UpdatePromptVMTest {
         val vm = createVM()
         coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
         vm.testOnStart()
+        passUpdateSlot()
+        passInputGuard()
 
         vm.onAction(UpdatePromptAction.UpdateClicked)
         downloadStarted.await()
         vm.onAction(UpdatePromptAction.DismissClicked)
 
         assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
+    }
+
+    @Test
+    fun automaticResult_doesNotReplaceAManualCheckInProgress() {
+        val update = availableUpdate()
+        val autoResult = CompletableDeferred<Result<AvailableUpdate?>>()
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdate(any()) } coAnswers { autoResult.await() }
+        coEvery { updateInteractor.checkForUpdateNow(any()) } coAnswers {
+            CompletableDeferred<Result<AvailableUpdate?>>().await()
+        }
+        vm.testOnStart()
+        passUpdateSlot()
+        updateCheckCoordinator.requestManualCheck()
+        assertEquals(UpdatePromptViewState.Checking, vm.testStateValue)
+
+        autoResult.complete(Result.success(update))
+        mainDispatcher.dispatcher.scheduler.runCurrent()
+
+        assertEquals(UpdatePromptViewState.Checking, vm.testStateValue)
+    }
+
+    @Test
+    fun updateClicked_isIgnored_whileTheAutomaticPromptIsInItsInputGuard() {
+        val update = availableUpdate()
+        coEvery { updateInteractor.downloadUpdate(update, any()) } returns
+            AppUpdateDownload.Completed(File("update.apk"))
+        every { updateInteractor.launchInstaller(any()) } returns InstallLaunchResult.Launched
+        val vm = createVM()
+        coEvery { updateInteractor.checkForUpdate(any()) } returns Result.success(update)
+        vm.testOnStart()
+        passUpdateSlot()
+
+        vm.onAction(UpdatePromptAction.UpdateClicked)
+
+        assertEquals(UpdatePromptViewState.Available(update), vm.testStateValue)
+        coVerify(exactly = 0) { updateInteractor.downloadUpdate(any(), any()) }
+
+        passInputGuard()
+        vm.onAction(UpdatePromptAction.UpdateClicked)
+
+        assertEquals(UpdatePromptViewState.Hidden, vm.testStateValue)
+        coVerify(exactly = 1) { updateInteractor.downloadUpdate(update, any()) }
     }
 
     private fun availableUpdate() = AvailableUpdate(

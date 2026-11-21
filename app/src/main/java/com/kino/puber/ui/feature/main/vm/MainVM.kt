@@ -2,6 +2,8 @@ package com.kino.puber.ui.feature.main.vm
 
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.StartupSlot
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.TabRouter
@@ -19,10 +21,8 @@ import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.domain.model.TabType
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
-import kotlin.time.Duration.Companion.seconds
 
 internal class MainVM(
     router: AppRouter,
@@ -31,6 +31,7 @@ internal class MainVM(
     private val navigationPreferencesRepository: NavigationPreferencesRepository,
     private val deviceInfoInteractor: IDeviceInfoInteractor,
     private val watchStateSyncInteractor: WatchStateSyncInteractor,
+    private val startupSettled: StartupSettled,
     private val tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
 ) : PuberVM<MainViewState>(router) {
     override val initialViewState = MainViewState()
@@ -41,8 +42,8 @@ internal class MainVM(
     /** The one watch-state sync this screen will have in flight; see [syncWatchState]. */
     private var watchStateSyncJob: Job? = null
 
-    /** Whether the startup wait has already been served, so only the first run pays it. */
-    private var startupSyncDelayServed = false
+    /** Whether the watch-state slot wait has already been served, so only the first run pays it. */
+    private var startupSlotServed = false
 
     override fun onStart() {
         val state = mainUIMapper.buildViewState()
@@ -51,12 +52,20 @@ internal class MainVM(
         tabRouter.openTab(buildTabContent(state.selectedTab))
         reportDeviceInformation()
         syncWatchState()
-        tvHomeSyncCoordinator?.requestRefresh(immediate = true)
+        requestTvHomeRefresh()
         launch {
             navigationPreferencesRepository.contentPreferences.collect(::onContentPreferencesChanged)
         }
         launch {
             navigationPreferencesRepository.menuTabsChanges.collect { onMenuTabsChanged() }
+        }
+    }
+
+    private fun requestTvHomeRefresh() {
+        val coordinator = tvHomeSyncCoordinator ?: return
+        launch {
+            startupSettled.awaitSlot(StartupSlot.TvHome)
+            coordinator.requestRefresh(immediate = true)
         }
     }
 
@@ -69,8 +78,8 @@ internal class MainVM(
      * job serves them together. They are not alternatives that happen to overlap: the first
      * ON_RESUME arrives during the very composition that starts this screen, so a startup run and a
      * resume run always coincide on a cold start. Kept apart, the resume one has nothing to wait for
-     * and wins, which left [StartupSyncDelay] governing only a run that then found the index
-     * already claimed and did nothing — the wait was, in effect, never served.
+     * and wins, which left the slot wait governing only a run that then found the index already
+     * claimed and did nothing — the wait was, in effect, never served.
      *
      * So the wait belongs to the first run rather than to the trigger that asked for it, and a
      * trigger arriving while a run is in flight is dropped: the run under way is already the one it
@@ -79,9 +88,9 @@ internal class MainVM(
     private fun syncWatchState() {
         if (watchStateSyncJob?.isActive == true) return
         watchStateSyncJob = launch {
-            if (!startupSyncDelayServed) {
-                delay(StartupSyncDelay)
-                startupSyncDelayServed = true
+            if (!startupSlotServed) {
+                startupSettled.awaitSlot(StartupSlot.WatchState)
+                startupSlotServed = true
             }
             runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
@@ -94,6 +103,7 @@ internal class MainVM(
      */
     private fun reportDeviceInformation() {
         launch {
+            startupSettled.awaitSlot(StartupSlot.DeviceInfo)
             deviceInfoInteractor.setDeviceInformation()
                 .catch { error -> log(error, "Failed to report device information") }
                 .collect()
@@ -179,16 +189,6 @@ internal class MainVM(
     }
 
     internal companion object {
-        /**
-         * How long the startup watch-state sync waits before it starts.
-         *
-         * A heuristic, not a handshake: nothing here can observe the home screen's first frame, and
-         * the point is only to keep the history walk out of the way while the screen's own requests
-         * are competing for OkHttp's five-per-host budget. Overshooting costs a slightly later
-         * index; undershooting costs a slower first frame, which the user actually sees.
-         */
-        val StartupSyncDelay = 5.seconds
-
         val ANIME_FILTERED_TABS = setOf(
             TabType.Home,
             TabType.Movies,
