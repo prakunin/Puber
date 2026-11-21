@@ -31,3 +31,4 @@ startup-splash-preload left AC-13 (revealed median 2789 vs 2292 ms) and AC-15 (f
 
 ## Log
 - 2026-11-21 created (stage idea) from the AC-13/AC-15 waiver of startup-splash-preload
+- 2026-11-21 from startup-settled-signal baseline (its baseline.md): at 7bcbfd83 on emulator-5554, devBenchmarkRelease, 8 of 8 cold starts reveal only at the 2.5 s cap (revealed median 2857 ms) although Home Content ready and LaunchFocusSettled land 1.0-1.6 s in; find why the reveal gate holds
