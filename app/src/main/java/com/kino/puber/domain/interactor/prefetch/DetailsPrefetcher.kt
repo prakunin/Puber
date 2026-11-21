@@ -33,6 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 class DetailsPrefetcher(
     private val details: ItemDetailsRepository,
     private val foreground: AppForegroundState,
+    private val awaitSettled: suspend () -> Unit,
     private val focusedDwell: Duration = 250.milliseconds,
     private val neighbourDwell: Duration = 750.milliseconds,
     private val recentlyWarmedWindow: Duration = 60.seconds,
@@ -112,12 +113,14 @@ class DetailsPrefetcher(
      * Takes a slot and hands the fetch to [scope], so that a focus change from here on cancels only
      * what has not started.
      *
-     * Both suspension points before the hand-off — the foreground wait and the slot — are still part
-     * of "not started", and cancelling there is exactly right. Once the fetch is detached it is left
+     * All three suspension points before the hand-off — the startup wait, the foreground wait and the
+     * slot — are still part of "not started", and cancelling there is exactly right. Once the fetch is detached it is left
      * to finish: it is one request, `CachedFeed` deduplicates it against the one a press would
      * issue, and cancelling it would sometimes throw away precisely the work this class exists for.
      */
     private suspend fun warm(itemId: Int) {
+        // Startup first, and before the slot, so a warm held for it takes no slot from one that is not.
+        awaitSettled()
         // Asked before the slot so that an app already off screen does not sit in the queue holding
         // one, and again after it because the wait itself can outlast the user's stay.
         foreground.awaitForeground()

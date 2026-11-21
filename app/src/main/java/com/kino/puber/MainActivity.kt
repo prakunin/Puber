@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.kino.puber.core.startup.CoveredKeyFilter
 import com.kino.puber.core.startup.StartupReveal
+import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.core.telemetry.KeyProbe
 import com.kino.puber.core.telemetry.Telemetry
 import com.kino.puber.core.telemetry.dispatchWithProbe
@@ -74,6 +75,8 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         acceptContentIntent(intent)
         StartupReveal.onActivityCreated(restored = savedInstanceState != null)
+        val startupSettled = getKoin().get<StartupSettled>()
+        startupSettled.onActivityCreated(restored = savedInstanceState != null)
         setContent {
             // Outermost, so the wordmark is in the chosen language too.
             AppLanguageProvider {
@@ -87,7 +90,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(covered) { if (!covered) Telemetry.startupMarks?.markRevealed() }
                 // The wordmark is drawn in the first frame; the app is composed beneath it, so its
                 // data and launch focus settle while it covers the screen.
-                StartupSplashHost(covered) {
+                StartupSplashHost(covered, onGone = startupSettled::onSplashGone) {
                     var appComposed by remember { mutableStateOf(false) }
                     LaunchedEffect(Unit) { appComposed = true }
                     if (appComposed) {

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -58,6 +59,24 @@ class StartupSplashHostTest {
         composeRule.mainClock.advanceTimeBy(REVEAL_FADE_MS + 32L)
 
         composeRule.onNodeWithTag(STARTUP_SPLASH_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun splashReportsGoneOnceAfterTheFade() {
+        var covered by mutableStateOf(true)
+        var goneCalls = 0
+        composeRule.setContent {
+            PuberTheme { StartupSplashHost(covered, onGone = { goneCalls++ }) { Box(Modifier.fillMaxSize()) } }
+        }
+        composeRule.mainClock.advanceTimeBy(500)
+        assertEquals(0, goneCalls)
+
+        composeRule.runOnIdle { covered = false }
+        composeRule.mainClock.advanceTimeBy(REVEAL_FADE_MS + 32L)
+        assertEquals(1, goneCalls)
+
+        composeRule.mainClock.advanceTimeBy(500)
+        assertEquals(1, goneCalls)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.kino.puber.domain.interactor.prefetch
 
 import com.kino.puber.core.lifecycle.AppForegroundState
+import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.data.repository.ItemDetailsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -30,9 +31,13 @@ class DetailsPrefetcherTest {
     /** Past every threshold, so a case that expects nothing has genuinely given it the chance. */
     private val pastEveryDwell = 5.seconds
 
-    private fun TestScope.prefetcher(maxConcurrent: Int = 2): DetailsPrefetcher = DetailsPrefetcher(
+    private fun TestScope.prefetcher(
+        maxConcurrent: Int = 2,
+        settled: StartupSettled = StartupSettled(backgroundScope).also { it.onActivityCreated(restored = true) },
+    ): DetailsPrefetcher = DetailsPrefetcher(
         details = details,
         foreground = foreground,
+        awaitSettled = settled::await,
         focusedDwell = focusedDwell,
         neighbourDwell = neighbourDwell,
         recentlyWarmedWindow = 60.seconds,
@@ -237,6 +242,32 @@ class DetailsPrefetcherTest {
         runCurrent()
 
         coVerify(exactly = 1) { details.warmItemDetails(2) }
+    }
+
+    @Test
+    fun noWarmStartsBeforeStartupSettles() = runTest {
+        val prefetcher = prefetcher(settled = StartupSettled(backgroundScope))
+
+        prefetcher.onFocused(surface(), itemId = 1, neighbours = emptyList())
+        advanceTimeBy(pastEveryDwell)
+        runCurrent()
+
+        coVerify(exactly = 0) { details.warmItemDetails(any()) }
+    }
+
+    @Test
+    fun aWarmHeldForStartupProceedsOnceItSettles() = runTest {
+        val settled = StartupSettled(backgroundScope)
+        val prefetcher = prefetcher(settled = settled)
+
+        prefetcher.onFocused(surface(), itemId = 1, neighbours = emptyList())
+        advanceTimeBy(pastEveryDwell)
+        runCurrent()
+        settled.onSplashGone()
+        advanceTimeBy(TICK)
+        runCurrent()
+
+        coVerify(exactly = 1) { details.warmItemDetails(1) }
     }
 
     @Test
