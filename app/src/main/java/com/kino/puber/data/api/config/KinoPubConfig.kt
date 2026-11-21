@@ -17,20 +17,21 @@ object KinoPubConfig {
         String(Base64.decode(encoded.reversed().toByteArray(), Base64.DEFAULT)).trim()
     }
 
-    @Volatile
-    private var domainOverride: String? = null
+    private class Snapshot(val override: String?, val endpoint: ApiEndpointPreset)
 
-    private val defaultEndpoint: ApiEndpointPreset
-        get() {
-            val apiHost = "api.$defaultDomain"
-            return ApiEndpointPreset(
-                domain = defaultDomain,
-                apiHost = apiHost,
-                mainBaseUrl = "https://$apiHost/v1/",
-                oauthBaseUrl = "https://$apiHost/oauth2/",
-                extraBaseUrl = "https://$apiHost/",
-            )
-        }
+    @Volatile
+    private var snapshot: Snapshot? = null
+
+    private val defaultEndpoint: ApiEndpointPreset by lazy {
+        val apiHost = "api.$defaultDomain"
+        ApiEndpointPreset(
+            domain = defaultDomain,
+            apiHost = apiHost,
+            mainBaseUrl = "https://$apiHost/v1/",
+            oauthBaseUrl = "https://$apiHost/oauth2/",
+            extraBaseUrl = "https://$apiHost/",
+        )
+    }
 
     private val aladorEndpoint = ApiEndpointPreset(
         domain = "api.alador.space",
@@ -49,17 +50,16 @@ object KinoPubConfig {
     )
 
     private val activeEndpoint: ApiEndpointPreset
-        get() = domainOverride
-            ?.let(::resolveEndpoint)
-            ?: defaultEndpoint
+        get() = snapshot?.endpoint ?: defaultEndpoint
 
     val DEFAULT_API_DOMAIN: String get() = defaultDomain
     val CURRENT_API_DOMAIN: String get() = activeEndpoint.domain
     val CURRENT_API_HOST: String get() = activeEndpoint.apiHost
     val CURRENT_ENDPOINT: ApiEndpointPreset get() = activeEndpoint
-    val CUSTOM_API_DOMAIN: String? get() = domainOverride
-    val BUILT_IN_ENDPOINTS: List<ApiEndpointPreset>
-        get() = listOf(defaultEndpoint, aladorEndpoint, legacyCdnEndpoint)
+    val CUSTOM_API_DOMAIN: String? get() = snapshot?.override
+    val BUILT_IN_ENDPOINTS: List<ApiEndpointPreset> by lazy {
+        listOf(defaultEndpoint, aladorEndpoint, legacyCdnEndpoint)
+    }
 
     val MAIN_API_BASE_URL: String get() = activeEndpoint.mainBaseUrl
     val OAUTH_BASE_URL: String get() = activeEndpoint.oauthBaseUrl
@@ -70,7 +70,7 @@ object KinoPubConfig {
     const val GRANT_TYPE_REFRESH_TOKEN = "refresh_token"
 
     fun setDomainOverride(domain: String?) {
-        domainOverride = domain
+        snapshot = Snapshot(domain, domain?.let(::resolveEndpoint) ?: defaultEndpoint)
     }
 
     private fun resolveEndpoint(domain: String): ApiEndpointPreset {
