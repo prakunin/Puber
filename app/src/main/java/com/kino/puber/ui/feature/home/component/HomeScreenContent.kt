@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -157,6 +158,25 @@ private fun ErrorView(
     }
 }
 
+internal fun isLaunchFocusSettled(
+    heroSettled: Boolean,
+    heroEmpty: Boolean,
+    heroFocusResolved: Boolean,
+    rowsHeldFocus: Boolean,
+): Boolean = heroSettled && (heroEmpty || heroFocusResolved || rowsHeldFocus)
+
+@Composable
+private fun ReportLaunchFocusSettledOnce(settled: Boolean, onSettled: () -> Unit) {
+    var sent by remember { mutableStateOf(false) }
+    val latestOnSettled by rememberUpdatedState(onSettled)
+    LaunchedEffect(settled) {
+        if (settled && !sent) {
+            sent = true
+            latestOnSettled()
+        }
+    }
+}
+
 @Composable
 private fun HomeContent(
     state: HomeViewState.Content,
@@ -200,6 +220,13 @@ private fun HomeContent(
             heroFocusResolved = true
             heroRefusedFocus = !claimed
         },
+    )
+    // Reported once: the launch focus is either where it will stay or Home is not claiming any, and
+    // that is when the startup splash may lift. Without rowsHeldFocus a recreated Home, which never
+    // claims, would keep it until the cap.
+    ReportLaunchFocusSettledOnce(
+        settled = isLaunchFocusSettled(state.heroSettled, state.heroItems.isEmpty(), heroFocusResolved, rowsHeldFocus),
+        onSettled = { onAction(HomeAction.LaunchFocusSettled) },
     )
     val rows = remember(state.sections) {
         state.sections.map { row ->

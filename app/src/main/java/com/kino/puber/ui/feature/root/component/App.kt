@@ -18,6 +18,7 @@ import com.kino.puber.core.di.LocalPuberKoinScope
 import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
 import com.kino.puber.core.lifecycle.ReportAppForeground
+import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
@@ -176,7 +177,12 @@ fun App() {
                 ReportAppForeground(getKoin().get())
                 SessionExpiredHandler()
                 WarmContentLaunchHandler()
-                UpdatePromptHost(onOpenChange = { updatePromptOpen = it })
+                UpdatePromptHost(
+                    onOpenChange = { open ->
+                        updatePromptOpen = open
+                        StartupReveal.onUpdatePromptOpenChanged(open)
+                    },
+                )
             }
         }
     }

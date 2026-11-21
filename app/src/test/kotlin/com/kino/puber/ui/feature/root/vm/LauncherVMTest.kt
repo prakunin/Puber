@@ -2,19 +2,28 @@ package com.kino.puber.ui.feature.root.vm
 
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.ContentUriCodec
+import com.kino.puber.core.startup.AppStartup
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
-import com.kino.puber.ui.feature.root.model.LauncherAction
 import com.kino.puber.util.MainDispatcherExtension
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import java.util.concurrent.Executors
 
 internal class LauncherVMTest {
 
@@ -27,58 +36,128 @@ internal class LauncherVMTest {
     }
 
     @Test
-    fun start_keepsSplashOnScreenUntilItsAnimationHasPlayed() = runTest(dispatcher) {
-        val router = router()
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
-
-        vm.testOnStart()
-
-        verify(exactly = 0) { router.newRootScreen(*anyVararg()) }
-        vm.testCancelScope()
-    }
-
-    @Test
-    fun splashShown_opensMainScreenForAuthenticatedSession() = runTest(dispatcher) {
+    fun start_opensMainScreenWithoutASplashAction() = runTest(dispatcher) {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
 
         vm.testOnStart()
-        vm.onAction(LauncherAction.SplashShown)
+        advanceUntilIdle()
 
         verify(exactly = 1) { router.newRootScreen(mainScreen) }
         vm.testCancelScope()
     }
 
     @Test
-    fun splashShown_opensAuthScreenWithoutAccessToken() = runTest(dispatcher) {
+    fun start_readsTheAccessTokenOnTheIoDispatcher() = runTest(dispatcher) {
+        val executor = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "launcher-io") }
+        try {
+            val readOn = CompletableDeferred<String>()
+            val preferences = mockk<ICryptoPreferenceRepository>(relaxed = true)
+            every { preferences.getAccessToken() } answers {
+                readOn.complete(Thread.currentThread().name)
+                "token"
+            }
+            val vm = LauncherVM(router(), preferences, coordinator(), startup(), executor.asCoroutineDispatcher())
+
+            vm.testOnStart()
+            advanceUntilIdle()
+
+            val thread = withContext(Dispatchers.Default) { withTimeout(5_000) { readOn.await() } }
+            assertTrue(thread.startsWith("launcher-io"), thread)
+            vm.testCancelScope()
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun start_waitsForDomainInitBeforeReadingTheToken() = runTest(dispatcher) {
+        val router = router()
+        val mainScreen = mockk<PuberScreen>()
+        every { router.screens.main() } returns mainScreen
+        val preferences = preferences(accessToken = "token")
+        val gate = CompletableDeferred<Unit>()
+        val vm = LauncherVM(router, preferences, coordinator(), startup(gate), dispatcher)
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { preferences.getAccessToken() }
+        verify(exactly = 0) { router.newRootScreen(*anyVararg()) }
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { router.newRootScreen(mainScreen) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_opensMainScreenForAuthenticatedSession() = runTest(dispatcher) {
+        val router = router()
+        val mainScreen = mockk<PuberScreen>()
+        every { router.screens.main() } returns mainScreen
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { router.newRootScreen(mainScreen) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_opensAuthScreenWithoutAccessToken() = runTest(dispatcher) {
         val router = router()
         val authScreen = mockk<PuberScreen>()
         every { router.screens.auth() } returns authScreen
-        val vm = LauncherVM(router, preferences(accessToken = null), coordinator())
+        val vm = LauncherVM(router, preferences(accessToken = null), coordinator(), startup(), dispatcher)
 
         vm.testOnStart()
-        vm.onAction(LauncherAction.SplashShown)
+        advanceUntilIdle()
 
         verify(exactly = 1) { router.newRootScreen(authScreen) }
         vm.testCancelScope()
     }
 
     @Test
-    fun splashShownTwice_opensStartScreenOnlyOnce() = runTest(dispatcher) {
+    fun start_opensMainAndTheContentLinkTarget_whenALinkIsPending() = runTest(dispatcher) {
+        val router = router()
+        val screens = mockk<Screens>(relaxed = true)
+        every { router.screens } returns screens
+        val mainScreen = mockk<PuberScreen>()
+        val detailsScreen = mockk<PuberScreen>()
+        every { screens.main() } returns mainScreen
+        every { screens.details(42) } returns detailsScreen
+        val coordinator = coordinator().apply { accept("puber://content/items/42") }
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator, startup(), dispatcher)
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { router.newRootScreens(listOf(mainScreen, detailsScreen)) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun startTwice_opensStartScreenOnlyOnce() = runTest(dispatcher) {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator())
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
 
         vm.testOnStart()
-        vm.onAction(LauncherAction.SplashShown)
-        vm.onAction(LauncherAction.SplashShown)
+        vm.testOnStart()
+        advanceUntilIdle()
 
         verify(exactly = 1) { router.newRootScreen(mainScreen) }
         vm.testCancelScope()
     }
+
+    private fun startup(gate: CompletableDeferred<Unit> = CompletableDeferred(Unit)): AppStartup =
+        mockk<AppStartup>().apply { coEvery { awaitDomainInitialized() } coAnswers { gate.await() } }
 
     private fun router(): AppRouter {
         val router = mockk<AppRouter>(relaxed = true)

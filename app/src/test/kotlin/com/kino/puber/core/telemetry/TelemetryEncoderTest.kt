@@ -125,6 +125,12 @@ internal class TelemetryEncoderTest {
     }
 
     @Test
+    fun startupWritesRevealed() {
+        val json = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, 300, 900, 1_400), "")
+        assertEquals(1_300L, json.getValue("revealed").jsonPrimitive.long)
+    }
+
+    @Test
     fun startupOmitsMarksNotReached() {
         val json = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, null, null), "")
         assertEquals(envelope + setOf("proc_start", "app_create"), json.keys)

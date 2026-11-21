@@ -133,6 +133,7 @@ internal sealed interface TelemetryEvent {
         val appCreateMs: Long,
         val appComposedMs: Long?,
         val firstContentMs: Long?,
+        val revealedMs: Long? = null,
     ) : TelemetryEvent {
         override val type get() = TelemetryEventType.STARTUP
     }

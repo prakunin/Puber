@@ -10,9 +10,11 @@ import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 
 internal data class ApiDomainState(
@@ -49,6 +51,11 @@ internal class ApiDomainInteractor(
     private val reachability: EndpointReachability,
     private val detailsPrefetcher: DetailsPrefetcher,
 ) {
+    private val walkLock = Any()
+    private var inFlightWalk: CompletableDeferred<ApiDomainAutoResolveResult>? = null
+
+    /** Counts the domain changes that come from the user, so a walk can tell its answer went stale. */
+    private val domainVersion = AtomicInteger()
 
     fun initialize() {
         KinoPubConfig.setDomainOverride(
@@ -72,6 +79,7 @@ internal class ApiDomainInteractor(
         if (normalized.isEmpty()) return ApiDomainUpdateResult.Empty
         if (!normalized.isValidHostname()) return ApiDomainUpdateResult.Invalid
 
+        domainVersion.incrementAndGet()
         preferences.saveApiDomain(normalized)
         KinoPubConfig.setDomainOverride(normalized)
         clearDomainSensitiveCaches()
@@ -114,7 +122,39 @@ internal class ApiDomainInteractor(
             getState()
         }
 
-    suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult = withContext(Dispatchers.IO) {
+    suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult {
+        // One walk at a time: a concurrent caller (the startup warm-up and Home) joins the walk in
+        // flight and takes its result, a NotFound included, instead of repeating the same failing probes.
+        while (true) {
+            val (walk, owner) = synchronized(walkLock) {
+                inFlightWalk?.let { it to false }
+                    ?: CompletableDeferred<ApiDomainAutoResolveResult>().also { inFlightWalk = it }.let { it to true }
+            }
+            if (!owner) {
+                // join() throws only when this caller is cancelled; a walk its owner abandoned is retried.
+                walk.join()
+                if (walk.isCancelled) continue
+                return walk.getCompleted()
+            }
+            // The slot is emptied before the walk is completed or cancelled: a joiner resumed inline by
+            // either must not find the finished walk and re-join it.
+            try {
+                val result = withContext(Dispatchers.IO) { walkForWorkingDomain() }
+                clearInFlightWalk(walk)
+                walk.complete(result)
+                return result
+            } finally {
+                clearInFlightWalk(walk)
+                walk.cancel()
+            }
+        }
+    }
+
+    private fun clearInFlightWalk(walk: CompletableDeferred<ApiDomainAutoResolveResult>) =
+        synchronized(walkLock) { if (inFlightWalk === walk) inFlightWalk = null }
+
+    private suspend fun walkForWorkingDomain(): ApiDomainAutoResolveResult {
+        val versionAtStart = domainVersion.get()
         val currentDomain = KinoPubConfig.CURRENT_API_DOMAIN
         // The home screen resolves before every load, and the load behind an ON_RESUME is by far the
         // most common one. Re-asking a domain that answered minutes ago costs a full catalogue GET
@@ -123,12 +163,24 @@ internal class ApiDomainInteractor(
         // reported the same `changed = false`, so answering from here is the identical outcome
         // without the request.
         if (isKnownReachable(currentDomain)) {
-            return@withContext ApiDomainAutoResolveResult.Success(state = getState(), changed = false)
+            return ApiDomainAutoResolveResult.Success(state = getState(), changed = false)
         }
 
         val endpoint = buildAutoResolveCandidates().firstOrNull(::isEndpointReachable)
-            ?: return@withContext ApiDomainAutoResolveResult.NotFound
+            ?: return ApiDomainAutoResolveResult.NotFound
 
+        // A domain the user set or reset while the walk ran is newer than what the walk found.
+        return if (domainVersion.get() != versionAtStart) {
+            ApiDomainAutoResolveResult.Success(state = getState(), changed = false)
+        } else {
+            switchToFound(endpoint, currentDomain)
+        }
+    }
+
+    private suspend fun switchToFound(
+        endpoint: ApiEndpointPreset,
+        currentDomain: String,
+    ): ApiDomainAutoResolveResult.Success {
         val persistedDomain = endpoint.domain.takeIf { it != KinoPubConfig.DEFAULT_API_DOMAIN }
         val changed = endpoint.domain != currentDomain
 
@@ -138,13 +190,14 @@ internal class ApiDomainInteractor(
             clearDomainSensitiveCaches()
         }
 
-        ApiDomainAutoResolveResult.Success(
+        return ApiDomainAutoResolveResult.Success(
             state = getState(),
             changed = changed,
         )
     }
 
     suspend fun resetToDefault(): ApiDomainState {
+        domainVersion.incrementAndGet()
         preferences.saveApiDomain(null)
         KinoPubConfig.setDomainOverride(null)
         clearDomainSensitiveCaches()
@@ -179,6 +232,7 @@ internal class ApiDomainInteractor(
     }
 
     private suspend fun applyEndpoint(endpoint: ApiEndpointPreset) {
+        domainVersion.incrementAndGet()
         val persistedDomain = endpoint.domain.takeIf { it != KinoPubConfig.DEFAULT_API_DOMAIN }
         preferences.saveApiDomain(persistedDomain)
         KinoPubConfig.setDomainOverride(persistedDomain)

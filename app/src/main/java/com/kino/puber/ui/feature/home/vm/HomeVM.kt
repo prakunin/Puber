@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import com.kino.puber.R
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.model.VideoItemUIMapper
+import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.uikit.component.HeroItemState
@@ -55,7 +56,11 @@ internal class HomeVM(
     private val resources: ResourceProvider,
     override val errorHandler: ErrorHandler,
     private val presentationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val revealSignal: () -> Unit = StartupReveal::markReady,
 ) : PuberVM<HomeViewState>(router) {
+
+    // Home reveals on its launch-focus outcome, not on the first content state.
+    override val revealsOnContentState: Boolean get() = false
 
     companion object {
         private const val HERO_ITEMS_COUNT = 10
@@ -194,6 +199,7 @@ internal class HomeVM(
             is HomeAction.SaveApiDomain -> saveApiDomain(action.domain)
             HomeAction.DetectApiDomain -> detectApiDomain()
             HomeAction.ResetApiDomain -> resetApiDomain()
+            HomeAction.LaunchFocusSettled -> revealSignal()
             else -> super.handleAction(action)
         }
     }

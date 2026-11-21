@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.details.model
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
@@ -29,7 +30,7 @@ internal sealed interface DetailsScreenState {
          * still. Distinct from [trailerUrl], which is the full-screen trailer the user asked for.
          */
         val previewTrailerUrl: String? = null,
-    ) : DetailsScreenState {
+    ) : DetailsScreenState, StartupContentState {
 
         /** The season under the chosen chip; the last one before anything has been chosen. */
         val selectedSeason: DetailsSeasonUIState?

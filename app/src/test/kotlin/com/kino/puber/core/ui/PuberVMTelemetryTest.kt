@@ -143,6 +143,7 @@ internal class PuberVMTelemetryTest {
         clock.elapsed = 40_000
         later.publish(TestState.Content(2))
 
+        Telemetry.startupMarks?.onTimeout()
         assertEquals(listOf(1_500L), startups.map { it.firstContentMs })
     }
 
@@ -158,6 +159,7 @@ internal class PuberVMTelemetryTest {
         clock.elapsed = 3_000
         home.publish(TestState.Content(1))
 
+        Telemetry.startupMarks?.onTimeout()
         assertEquals(listOf(3_000L), startups.map { it.firstContentMs })
     }
 
@@ -174,6 +176,7 @@ internal class PuberVMTelemetryTest {
         clock.elapsed = 2_500
         home.publish(TestState.Content(1))
 
+        Telemetry.startupMarks?.onTimeout()
         assertEquals(listOf(2_500L), startups.map { it.firstContentMs })
     }
 
