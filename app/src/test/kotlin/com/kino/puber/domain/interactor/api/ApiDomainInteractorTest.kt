@@ -44,6 +44,8 @@ internal class ApiDomainInteractorTest {
     private var reachableDomains = emptySet<String>()
     private val probeCalls = mutableListOf<String>()
     private var now = 1_000_000L
+    private var evictCalls = 0
+    private var evictFailure: Throwable? = null
     private val reachability = EndpointReachability(clock = { now })
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
@@ -54,6 +56,10 @@ internal class ApiDomainInteractorTest {
         },
         reachability = reachability,
         detailsPrefetcher = detailsPrefetcher,
+        evictDnsCache = {
+            evictCalls++
+            evictFailure?.let { throw it }
+        },
     )
 
     private var domainOverride: String? = null
@@ -76,6 +82,8 @@ internal class ApiDomainInteractorTest {
         )
         reachableDomains = emptySet()
         probeCalls.clear()
+        evictCalls = 0
+        evictFailure = null
     }
 
     private fun endpointFor(domain: String) = ApiEndpointPreset(
@@ -107,6 +115,46 @@ internal class ApiDomainInteractorTest {
         assertNull(state.customDomain)
         verify(exactly = 1) { preferences.saveApiDomain(null) }
         coVerify(exactly = 1) { contentCache.clear() }
+    }
+
+    @Test
+    fun resetToDefault_evictsTheDnsCacheBeforeReturning() = runTest {
+        interactor.resetToDefault()
+
+        assertEquals(1, evictCalls)
+    }
+
+    @Test
+    fun saveCustomDomain_evictsTheDnsCacheBeforeReturning() = runTest {
+        interactor.saveCustomDomain("api.custom.example")
+
+        assertEquals(1, evictCalls)
+    }
+
+    /** A stale resolver answer is no reason to leave the other caches stale or to strand the caller. */
+    @Test
+    fun resetToDefault_stillClearsContentCacheAndPrefetcherWhenDnsEvictFails() = runTest {
+        evictFailure = IllegalStateException("resolver gone")
+
+        val state = interactor.resetToDefault()
+
+        assertEquals("service-kp.test", state.domain)
+        coVerify(exactly = 1) { contentCache.clear() }
+        coVerify(exactly = 1) { detailsPrefetcher.invalidate() }
+    }
+
+    @Test
+    fun autoResolve_failoverToAMirror_evictsTheDnsCache() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+        interactor.autoResolveWorkingDomain()
+        assertEquals(0, evictCalls)
+
+        reachableDomains = setOf("api.alador.test")
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(1, evictCalls)
     }
 
     @Test
@@ -163,6 +211,7 @@ internal class ApiDomainInteractorTest {
         probe = probe,
         reachability = reachability,
         detailsPrefetcher = detailsPrefetcher,
+        evictDnsCache = { evictCalls++ },
     )
 
     /**

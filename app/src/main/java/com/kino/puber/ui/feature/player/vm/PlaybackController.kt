@@ -39,6 +39,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
+import com.kino.puber.data.api.network.NetworkStats
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
@@ -632,6 +633,7 @@ internal class PlaybackController(
         if (useFastDns) {
             builder.dns(okhttp3.Dns.SYSTEM)
         }
+        NetworkStats.factoryOrNull("player")?.let(builder::eventListenerFactory)
         val playerClient = builder.build()
         val httpFactory = OkHttpDataSource.Factory(playerClient)
             .setUserAgent("Puber/${BuildConfig.VERSION_NAME} (Android)")

@@ -25,7 +25,7 @@ class TmdbApiClient private constructor(
 
     /**
      * Built on the app's shared OkHttp client so this API resolves through the same DNS-over-HTTPS
-     * setup, connection pool and cache as everything else. A second engine of its own would answer
+     * setup and connection pool as everything else. A second engine of its own would answer
      * to whatever the device's resolver says, which is exactly what that setup exists to avoid.
      */
     constructor(okHttpClient: OkHttpClient) : this(createHttpClient(okHttpClient))

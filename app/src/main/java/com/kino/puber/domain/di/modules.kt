@@ -27,6 +27,7 @@ import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
+import okhttp3.DnsCache
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -42,12 +43,14 @@ val interactorModule = module {
     singleOf(::WatchLaterBookmarkInteractor)
     singleOf(::SavedItemInteractor)
     single {
+        val dnsCache = get<DnsCache>()
         ApiDomainInteractor(
             preferences = get(),
             contentCache = get(),
             probe = HttpEndpointProbe(get()),
             reachability = get(),
             detailsPrefetcher = get(),
+            evictDnsCache = { dnsCache.evictAll() },
         )
     }
     single {
