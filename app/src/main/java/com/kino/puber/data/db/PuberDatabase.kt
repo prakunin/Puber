@@ -10,11 +10,15 @@ import kotlinx.coroutines.Dispatchers
 
 @Database(
     entities = [WatchStateEntity::class, WatchStateSyncEntity::class, CachedPayloadEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
     // Adding a column is a migration Room writes itself, and this one is worth writing: dropping
     // the tables would cost a walk of the whole history to get back what is already there.
-    autoMigrations = [AutoMigration(from = 2, to = 3)],
+    // 3 -> 4 adds the updated_at index the cache sweep orders by and deletes the legacy cache rows once.
+    autoMigrations = [
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4, spec = LegacyPayloadCleanup::class),
+    ],
 )
 abstract class PuberDatabase : RoomDatabase() {
 
@@ -27,8 +31,8 @@ abstract class PuberDatabase : RoomDatabase() {
     companion object {
         private const val NAME = "puber.db"
 
-        fun create(context: Context): PuberDatabase {
-            return Room.databaseBuilder(context, PuberDatabase::class.java, NAME)
+        fun create(context: Context, name: String = NAME): PuberDatabase {
+            return Room.databaseBuilder(context, PuberDatabase::class.java, name)
                 // Room 3 requires an explicit driver. The platform one keeps the on-device SQLite
                 // this database has always run on, so the migration changes no query behaviour.
                 .setDriver(AndroidSQLiteDriver())

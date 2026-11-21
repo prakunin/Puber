@@ -57,8 +57,23 @@ class FakePayloadStore : PersistentPayloadStore {
         rows.remove(key)
     }
 
+    val removedPrefixes = mutableListOf<String>()
+
     override suspend fun removeByPrefix(prefix: String) {
+        removedPrefixes += prefix
         rows.keys.filter { it.startsWith(prefix) }.forEach(rows::remove)
+    }
+
+    var sweepCount: Int = 0
+
+    /** Runs first in every [sweep], so a test can record the calling thread or throw through it. */
+    var onSweep: (suspend () -> Unit)? = null
+
+    override suspend fun sweep(olderThan: Long, keepNewest: Int) {
+        sweepCount += 1
+        onSweep?.invoke()
+        rows.entries.filter { it.value.updatedAt < olderThan }.forEach { rows.remove(it.key) }
+        rows.entries.sortedByDescending { it.value.updatedAt }.drop(keepNewest).forEach { rows.remove(it.key) }
     }
 
     override suspend fun clear() {

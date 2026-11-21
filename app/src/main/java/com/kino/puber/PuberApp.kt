@@ -27,6 +27,7 @@ import com.kino.puber.core.tvhome.ContinueWatchingSource
 import com.kino.puber.core.tvhome.TvHomePublisher
 import com.kino.puber.core.tvhome.TvHomePublisherFactory
 import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
+import com.kino.puber.data.cache.CachedPayloadSweeper
 import com.kino.puber.data.di.apiModule
 import com.kino.puber.data.di.repositoryModule
 import com.kino.puber.domain.di.interactorModule
@@ -55,7 +56,7 @@ private val handlersModule = module {
     singleOf(::DefaultErrorHandler) { bind<ErrorHandler>() }
 }
 
-private const val IMAGE_MEMORY_CACHE_PERCENT = 0.15
+private const val IMAGE_MEMORY_CACHE_BYTES = 48L * 1024 * 1024
 private const val IMAGE_DISK_CACHE_BYTES = 100L * 1024 * 1024
 
 class PuberApp : Application(), SingletonImageLoader.Factory {
@@ -89,6 +90,7 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
             )
         }
         koinApplication.koin.get<ApiDomainInteractor>().initialize()
+        koinApplication.koin.get<CachedPayloadSweeper>().start()
     }
 
     private fun initLogger() {
@@ -110,8 +112,11 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(context, IMAGE_MEMORY_CACHE_PERCENT)
+                    .maxSizeBytes(IMAGE_MEMORY_CACHE_BYTES)
                     .build()
+                    .also { cache ->
+                        if (BuildConfig.DEBUG) Timber.d("Coil memory cache maxSize=%d", cache.maxSize)
+                    }
             }
             .diskCache {
                 DiskCache.Builder()

@@ -234,6 +234,8 @@ class HomeInteractorCacheTest {
             rows.remove(key)
         }
 
+        override suspend fun sweep(olderThan: Long, keepNewest: Int) = Unit
+
         override suspend fun removeByPrefix(prefix: String) {
             rows.keys.filter { it.startsWith(prefix) }.forEach(rows::remove)
         }

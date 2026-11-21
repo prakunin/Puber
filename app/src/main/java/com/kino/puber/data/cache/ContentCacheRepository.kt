@@ -9,8 +9,6 @@ import com.kino.puber.data.repository.PersistentPayloadStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
@@ -44,10 +42,6 @@ class ContentCacheRepository(
         memoryWeigher = { payload -> payload.length * Char.SIZE_BYTES },
     )
     private val seenWatchStateVersions = ConcurrentHashMap<String, Long>()
-    private val legacyCleanupMutex = Mutex()
-
-    @Volatile
-    private var legacyCleanupComplete = false
 
     val generation: Long
         get() = store.generation
@@ -58,7 +52,6 @@ class ContentCacheRepository(
         force: Boolean = false,
         loader: suspend () -> List<Item>,
     ): Flow<Cached<List<Item>>> = flow {
-        ensureLegacyRowsRemoved()
         val storeKey = queryKey(key)
         val incomplete = queryNeedsRefetch(storeKey, ItemListRecord.serializer(), ItemListRecord::itemIds)
         cache.load(
@@ -95,7 +88,6 @@ class ContentCacheRepository(
         force: Boolean = false,
         loader: suspend () -> PaginatedResponse<Item>,
     ): Flow<Cached<PaginatedResponse<Item>>> = flow {
-        ensureLegacyRowsRemoved()
         val storeKey = queryKey(key)
         val incomplete = queryNeedsRefetch(storeKey, ItemPageRecord.serializer(), ItemPageRecord::itemIds)
         cache.load(
@@ -160,7 +152,6 @@ class ContentCacheRepository(
         force: Boolean = false,
         loader: suspend () -> PaginatedResponse<History>,
     ): Flow<Cached<PaginatedResponse<History>>> = flow {
-        ensureLegacyRowsRemoved()
         val storeKey = queryKey(CacheKeys.historyPage(FIRST_PAGE))
         val incomplete = queryNeedsRefetch(storeKey, HistoryPageRecord.serializer()) { record ->
             record.items.map(HistoryEntryRecord::itemId)
@@ -216,7 +207,6 @@ class ContentCacheRepository(
         force: Boolean = false,
         loader: suspend () -> Item,
     ): Flow<Cached<Item>> = flow {
-        ensureLegacyRowsRemoved()
         val existing = readItemRecord(itemId)
         val cachedRecordRequiresRefresh = when (val updatedAt = existing?.detailsUpdatedAt) {
             null -> existing != null
@@ -274,7 +264,6 @@ class ContentCacheRepository(
         force: Boolean = false,
         loader: suspend () -> T,
     ): Flow<Cached<T>> = flow {
-        ensureLegacyRowsRemoved()
         val storeKey = payloadKey(key)
         // The feed itself stores strings, so its own "undecodable row, drop it" recovery can never
         // fire for the real model — the payload decodes one level in, here. Without this a row left
@@ -321,7 +310,6 @@ class ContentCacheRepository(
         items: List<Item>,
         expectedGeneration: Long = generation,
     ): List<Item> {
-        ensureLegacyRowsRemoved()
         mergeItems(items, details = false, expectedGeneration = expectedGeneration)
         val records = readItemRecords(items.map(Item::id))
         // The response itself is the fallback here, unlike the cached read paths: the caller just
@@ -338,7 +326,6 @@ class ContentCacheRepository(
      * land afterwards and quietly restore the freshness this just took away.
      */
     suspend fun markItemDetailsStale(itemId: Int) {
-        ensureLegacyRowsRemoved()
         val current = readItemRecord(itemId) ?: return
         cache.put(
             key = itemKey(itemId),
@@ -348,7 +335,6 @@ class ContentCacheRepository(
     }
 
     suspend fun invalidateItemDetails(itemId: Int) {
-        ensureLegacyRowsRemoved()
         val current = readItemRecord(itemId) ?: return
         cache.put(
             key = itemKey(itemId),
@@ -358,29 +344,12 @@ class ContentCacheRepository(
     }
 
     suspend fun invalidateQuery(key: String) {
-        ensureLegacyRowsRemoved()
         cache.invalidate(queryKey(key))
         cache.invalidate(payloadKey(key))
     }
 
     suspend fun clear() {
         store.clear()
-        legacyCleanupComplete = true
-    }
-
-    /**
-     * The normalized cache introduced a private `content:v1:` namespace without changing Room's
-     * schema. Rows written by the previous feeds therefore cannot expire through normal reads: no
-     * current key ever addresses them. Remove those known prefixes once per process before serving
-     * the new cache, while leaving unrelated persistent rows alone.
-     */
-    private suspend fun ensureLegacyRowsRemoved() {
-        if (legacyCleanupComplete) return
-        legacyCleanupMutex.withLock {
-            if (legacyCleanupComplete) return@withLock
-            LEGACY_PREFIXES.forEach { prefix -> store.removeByPrefix(prefix) }
-            legacyCleanupComplete = true
-        }
     }
 
     private suspend fun mergeItems(
@@ -618,14 +587,6 @@ class ContentCacheRepository(
         private const val STALE_TIMESTAMP = 0L
         private const val FIRST_PAGE = 1
         private const val MEMORY_TIER_BYTES = 16L * 1024 * 1024
-        private val LEGACY_PREFIXES = listOf(
-            CacheKeys.HomePrefix,
-            CacheKeys.ItemPrefix,
-            CacheKeys.SimilarPrefix,
-            CacheKeys.SectionPrefix,
-            CacheKeys.WatchlistPrefix,
-            CacheKeys.HistoryPrefix,
-        )
 
         fun itemKey(itemId: Int): String = "${CONTENT_PREFIX}item:$itemId"
         fun queryKey(key: String): String = "${CONTENT_PREFIX}query:$key"
