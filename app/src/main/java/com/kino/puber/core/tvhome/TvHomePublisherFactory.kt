@@ -3,6 +3,7 @@ package com.kino.puber.core.tvhome
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import com.kino.puber.R
 import com.kino.puber.core.contentlink.ContentUriCodec
 
 internal object TvHomePublisherFactory {
@@ -20,7 +21,13 @@ internal object TvHomePublisherFactory {
         context.packageManager.hasSystemFeature(FIRE_TV_FEATURE) -> FireTvHomePublisher(context, uriCodec)
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ->
-            AndroidTvHomePublisher(context, uriCodec)
+            AndroidTvHomePublisher(
+                gateway = PreviewChannelTvProviderGateway(context),
+                store = PreferencesTvHomeStore(context),
+                uriCodec = uriCodec,
+                channelName = { context.getString(R.string.tv_home_continue_watching) },
+                packageName = context.packageName,
+            )
         else -> NoOpTvHomePublisher
     }
 }
