@@ -51,7 +51,7 @@ class CachedFeed<V : Any>(
     private val clock: () -> Long = System::currentTimeMillis,
     maximumSize: Int = DEFAULT_MAXIMUM_SIZE,
     maximumMemoryWeight: Long = Long.MAX_VALUE,
-    memoryWeigher: (V) -> Int = { 1 },
+    memoryWeigher: (encodedLength: Int) -> Int = { 1 },
 ) {
     private val defaultTtl = ttl
 
@@ -69,7 +69,7 @@ class CachedFeed<V : Any>(
         // in-memory tier frozen in real time and the two disagree about what is fresh.
         nowNanos = { clock() * NANOS_PER_MILLI },
         maximumWeight = maximumMemoryWeight,
-        weigher = { stamped -> memoryWeigher(stamped.value) },
+        weigher = { stamped -> memoryWeigher(stamped.encodedLength) },
     )
 
     /**
@@ -202,12 +202,13 @@ class CachedFeed<V : Any>(
                     val epoch = epochOf(key)
                     val value = loader()
                     val updatedAt = clock()
+                    val payload = json.encodeToString(serializer, value)
                     var discardValue = false
                     val settled = epochOf(key)
                     if (settled == epoch) {
                         store.write(
                             key = key,
-                            payload = json.encodeToString(serializer, value),
+                            payload = payload,
                             updatedAt = updatedAt,
                         )
                         // A store mutation can land while the database write is suspended, after
@@ -229,6 +230,7 @@ class CachedFeed<V : Any>(
                         updatedAt = updatedAt,
                         generation = epoch.generation,
                         discardValue = discardValue,
+                        encodedLength = payload.length,
                     )
                 }
                 if (fresh.discardValue) detachSupersededValue(key)
@@ -354,13 +356,9 @@ class CachedFeed<V : Any>(
             memory.remove(key)
         }
         val epochs = values.keys.associateWith(::epochOf)
+        val payloads = values.mapValues { (_, value) -> json.encodeToString(serializer, value) }
         store.writeAll(
-            values.mapValues { (_, value) ->
-                StoredPayload(
-                    payload = json.encodeToString(serializer, value),
-                    updatedAt = updatedAt,
-                )
-            }
+            payloads.mapValues { (_, payload) -> StoredPayload(payload = payload, updatedAt = updatedAt) }
         )
         values.forEach { (key, value) ->
             val epoch = epochs.getValue(key)
@@ -369,7 +367,12 @@ class CachedFeed<V : Any>(
                 settled == epoch -> {
                     memory.put(
                         key,
-                        Stamped(value, updatedAt, generation = epoch.generation),
+                        Stamped(
+                            value,
+                            updatedAt,
+                            generation = epoch.generation,
+                            encodedLength = payloads.getValue(key).length,
+                        ),
                         ttl = HardCeiling,
                     )
                     if (epochOf(key) != epoch) memory.remove(key)
@@ -529,7 +532,12 @@ class CachedFeed<V : Any>(
         epoch: Epoch,
         ttl: Duration,
     ): Usable<V>? {
-        val promoted = Stamped(stored.value, stored.updatedAt, generation = epoch.generation)
+        val promoted = Stamped(
+            stored.value,
+            stored.updatedAt,
+            generation = epoch.generation,
+            encodedLength = stored.encodedLength,
+        )
         if (memory.putIfAbsent(key, promoted, ttl = remainingFreshness(stored.updatedAt, ttl))) {
             return stored.takeIf { epochOf(key) == epoch }.also { accepted ->
                 if (accepted == null) memory.remove(key)
@@ -537,7 +545,7 @@ class CachedFeed<V : Any>(
         }
         if (epochOf(key) != epoch) return null
         return readCurrentGenerationFromMemory(key)
-            ?.let { current -> Usable(current.value, current.updatedAt) }
+            ?.let { current -> Usable(current.value, current.updatedAt, current.encodedLength) }
             ?: stored
     }
 
@@ -570,10 +578,10 @@ class CachedFeed<V : Any>(
             store.remove(key)
             return null
         }
-        return Usable(value = value, updatedAt = stored.updatedAt)
+        return Usable(value = value, updatedAt = stored.updatedAt, encodedLength = stored.payload.length)
     }
 
-    private class Usable<V>(val value: V, val updatedAt: Long)
+    private class Usable<V>(val value: V, val updatedAt: Long, val encodedLength: Int)
 
     /** A value together with the moment it was accepted, so the memory tier keeps ages too. */
     private data class Stamped<V : Any>(
@@ -581,6 +589,7 @@ class CachedFeed<V : Any>(
         val updatedAt: Long,
         val generation: Long,
         val discardValue: Boolean = false,
+        val encodedLength: Int,
     )
 
     companion object {

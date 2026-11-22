@@ -6,12 +6,15 @@ import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.repository.PersistentPayloadStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
@@ -27,20 +30,17 @@ class ContentCacheRepository(
     private val store: PersistentPayloadStore,
     private val clock: () -> Long = System::currentTimeMillis,
     private val json: Json = CachedFeed.DefaultJson,
+    private val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    private val cache = CachedFeed(
-        store = store,
-        serializer = String.serializer(),
-        ttl = CachedFeed.HardCeiling,
-        keyPrefix = CONTENT_PREFIX,
-        clock = clock,
-        // A details record carries the whole seasons/episodes/files tree of a series, a megabyte of
-        // JSON for a long one, and the hard ceiling keeps it pinned for a week. Count alone let a
-        // browsing session pile tens of megabytes of strings into this tier; Room still has them all.
-        maximumMemoryWeight = MEMORY_TIER_BYTES,
-        memoryWeigher = { payload -> payload.length * Char.SIZE_BYTES },
-    )
+    // One feed per record type, so the memory tier holds the decoded record and a hit costs no decode.
+    private val itemFeed = newFeed(ItemRecord.serializer())
+    private val listFeed = newFeed(ItemListRecord.serializer())
+    private val pageFeed = newFeed(ItemPageRecord.serializer())
+    private val historyFeed = newFeed(HistoryPageRecord.serializer())
+
+    /** One feed per payload store key, created on first use because the payload type is the caller's. */
+    private val payloadFeeds = ConcurrentHashMap<String, CachedFeed<*>>()
     private val seenWatchStateVersions = ConcurrentHashMap<String, Long>()
 
     val generation: Long
@@ -53,8 +53,8 @@ class ContentCacheRepository(
         loader: suspend () -> List<Item>,
     ): Flow<Cached<List<Item>>> = flow {
         val storeKey = queryKey(key)
-        val incomplete = queryNeedsRefetch(storeKey, ItemListRecord.serializer(), ItemListRecord::itemIds)
-        cache.load(
+        val incomplete = queryNeedsRefetch(listFeed, storeKey, ItemListRecord::itemIds)
+        listFeed.load(
             key = storeKey,
             force = force || incomplete,
             ttl = ttl,
@@ -62,25 +62,20 @@ class ContentCacheRepository(
             val generation = store.generation
             val items = loader()
             mergeItems(items, details = false, expectedGeneration = generation)
-            encode(ItemListRecord(items.map(Item::id)))
+            ItemListRecord(items.map(Item::id))
         }.collect { cached ->
             when (cached) {
-                is Cached.Value -> {
-                    val record = decodeOrDiscard(storeKey, ItemListRecord.serializer(), cached.value)
-                    if (record != null) {
-                        emit(
-                            Cached.Value(
-                                value = readItems(record.itemIds),
-                                isStale = cached.isStale,
-                                updatedAt = cached.updatedAt,
-                            )
-                        )
-                    }
-                }
+                is Cached.Value -> emit(
+                    Cached.Value(
+                        value = readItems(cached.value.itemIds),
+                        isStale = cached.isStale,
+                        updatedAt = cached.updatedAt,
+                    )
+                )
                 is Cached.RefreshFailed -> emit(cached)
             }
         }
-    }
+    }.flowOn(decodeDispatcher)
 
     fun observeItemPage(
         key: String,
@@ -89,8 +84,8 @@ class ContentCacheRepository(
         loader: suspend () -> PaginatedResponse<Item>,
     ): Flow<Cached<PaginatedResponse<Item>>> = flow {
         val storeKey = queryKey(key)
-        val incomplete = queryNeedsRefetch(storeKey, ItemPageRecord.serializer(), ItemPageRecord::itemIds)
-        cache.load(
+        val incomplete = queryNeedsRefetch(pageFeed, storeKey, ItemPageRecord::itemIds)
+        pageFeed.load(
             key = storeKey,
             force = force || incomplete,
             ttl = ttl,
@@ -98,28 +93,23 @@ class ContentCacheRepository(
             val generation = store.generation
             val page = loader()
             mergeItems(page.items, details = false, expectedGeneration = generation)
-            encode(ItemPageRecord(page.items.map(Item::id), page.pagination))
+            ItemPageRecord(page.items.map(Item::id), page.pagination)
         }.collect { cached ->
             when (cached) {
-                is Cached.Value -> {
-                    val record = decodeOrDiscard(storeKey, ItemPageRecord.serializer(), cached.value)
-                    if (record != null) {
-                        emit(
-                            Cached.Value(
-                                value = PaginatedResponse(
-                                    items = readItems(record.itemIds),
-                                    pagination = record.pagination,
-                                ),
-                                isStale = cached.isStale,
-                                updatedAt = cached.updatedAt,
-                            )
-                        )
-                    }
-                }
+                is Cached.Value -> emit(
+                    Cached.Value(
+                        value = PaginatedResponse(
+                            items = readItems(cached.value.itemIds),
+                            pagination = cached.value.pagination,
+                        ),
+                        isStale = cached.isStale,
+                        updatedAt = cached.updatedAt,
+                    )
+                )
                 is Cached.RefreshFailed -> emit(cached)
             }
         }
-    }
+    }.flowOn(decodeDispatcher)
 
     fun sectionPage(
         key: String,
@@ -153,10 +143,10 @@ class ContentCacheRepository(
         loader: suspend () -> PaginatedResponse<History>,
     ): Flow<Cached<PaginatedResponse<History>>> = flow {
         val storeKey = queryKey(CacheKeys.historyPage(FIRST_PAGE))
-        val incomplete = queryNeedsRefetch(storeKey, HistoryPageRecord.serializer()) { record ->
+        val incomplete = queryNeedsRefetch(historyFeed, storeKey) { record ->
             record.items.map(HistoryEntryRecord::itemId)
         }
-        cache.load(
+        historyFeed.load(
             key = storeKey,
             force = force || incomplete,
             ttl = CacheTtl.HistoryPage,
@@ -168,39 +158,35 @@ class ContentCacheRepository(
                 details = false,
                 expectedGeneration = generation,
             )
-            encode(
-                HistoryPageRecord(
-                    items = page.items.map(HistoryEntryRecord::from),
-                    pagination = page.pagination,
-                )
+            HistoryPageRecord(
+                items = page.items.map(HistoryEntryRecord::from),
+                pagination = page.pagination,
             )
         }.collect { cached ->
             when (cached) {
                 is Cached.Value -> {
-                    val record = decodeOrDiscard(storeKey, HistoryPageRecord.serializer(), cached.value)
-                    if (record != null) {
-                        // Zipping would silently re-pair entries with the wrong items once a card
-                        // row is missing, so each entry looks its own item up and drops out if it
-                        // is gone.
-                        val items = readItemRecords(record.items.map(HistoryEntryRecord::itemId))
-                        emit(
-                            Cached.Value(
-                                value = PaginatedResponse(
-                                    items = record.items.mapNotNull { entry ->
-                                        items[entry.itemId]?.let { entry.toHistory(it.item) }
-                                    },
-                                    pagination = record.pagination,
-                                ),
-                                isStale = cached.isStale,
-                                updatedAt = cached.updatedAt,
-                            )
+                    val record = cached.value
+                    // Zipping would silently re-pair entries with the wrong items once a card
+                    // row is missing, so each entry looks its own item up and drops out if it
+                    // is gone.
+                    val items = readItemRecords(record.items.map(HistoryEntryRecord::itemId))
+                    emit(
+                        Cached.Value(
+                            value = PaginatedResponse(
+                                items = record.items.mapNotNull { entry ->
+                                    items[entry.itemId]?.let { entry.toHistory(it.item) }
+                                },
+                                pagination = record.pagination,
+                            ),
+                            isStale = cached.isStale,
+                            updatedAt = cached.updatedAt,
                         )
-                    }
+                    )
                 }
                 is Cached.RefreshFailed -> emit(cached)
             }
         }
-    }
+    }.flowOn(decodeDispatcher)
 
     fun observeItemDetails(
         itemId: Int,
@@ -213,25 +199,24 @@ class ContentCacheRepository(
             else -> clock() - updatedAt > CacheTtl.ItemDetails.inWholeMilliseconds
         }
         var served = false
-        cache.load(
+        itemFeed.load(
             key = itemKey(itemId),
             force = force || cachedRecordRequiresRefresh,
             ttl = CacheTtl.ItemDetails,
         ) {
-            val record = mergeItemRecord(
+            mergeItemRecord(
                 existing = readItemRecord(itemId),
                 incoming = loader(),
                 details = true,
             )
-            encode(record)
         }.collect { cached ->
             when (cached) {
                 is Cached.Value -> {
-                    val record = decodeOrDiscard(itemKey(itemId), ItemRecord.serializer(), cached.value)
+                    val record = cached.value
                     // Not `cached.updatedAt`: the row is shared with the card, and every list merge
                     // restamps it. Callers that order observations by this — the watch-state index —
                     // would credit details fetched long ago to the moment a card was last seen.
-                    val detailsUpdatedAt = record?.detailsUpdatedAt
+                    val detailsUpdatedAt = record.detailsUpdatedAt
                     if (detailsUpdatedAt != null) {
                         served = true
                         emit(Cached.Value(record.item, cached.isStale, detailsUpdatedAt))
@@ -244,7 +229,7 @@ class ContentCacheRepository(
                 is Cached.RefreshFailed -> if (served) emit(cached) else throw cached.error
             }
         }
-    }
+    }.flowOn(decodeDispatcher)
 
     fun observeSimilarItems(
         itemId: Int,
@@ -265,28 +250,8 @@ class ContentCacheRepository(
         loader: suspend () -> T,
     ): Flow<Cached<T>> = flow {
         val storeKey = payloadKey(key)
-        // The feed itself stores strings, so its own "undecodable row, drop it" recovery can never
-        // fire for the real model — the payload decodes one level in, here. Without this a row left
-        // by a build whose model differed fails every read, for good: genres and bookmark folders
-        // would stay broken until a logout rather than healing on the next fetch.
-        discardUndecodablePayload(storeKey, serializer)
-        cache.load(
-            key = storeKey,
-            force = force,
-            ttl = ttl,
-            loader = { json.encodeToString(serializer, loader()) },
-        ).collect { cached ->
-            when (cached) {
-                is Cached.Value -> {
-                    val value = decodeOrDiscard(storeKey, serializer, cached.value)
-                    if (value != null) {
-                        emit(Cached.Value(value, cached.isStale, cached.updatedAt))
-                    }
-                }
-                is Cached.RefreshFailed -> emit(cached)
-            }
-        }
-    }
+        emitAll(payloadFeed(storeKey, serializer).load(key = storeKey, force = force, ttl = ttl, loader = loader))
+    }.flowOn(decodeDispatcher)
 
     suspend fun <T : Any> getPayload(
         key: String,
@@ -309,14 +274,14 @@ class ContentCacheRepository(
     suspend fun mergeItems(
         items: List<Item>,
         expectedGeneration: Long = generation,
-    ): List<Item> {
+    ): List<Item> = withContext(decodeDispatcher) {
         mergeItems(items, details = false, expectedGeneration = expectedGeneration)
         val records = readItemRecords(items.map(Item::id))
         // The response itself is the fallback here, unlike the cached read paths: the caller just
         // fetched these, so a row that went missing between the merge and the read-back costs
         // nothing, whereas dropping it would quietly hand the screen fewer items than the server
         // sent with nothing to notice or repair it.
-        return items.map { item -> records[item.id]?.item ?: item }
+        items.map { item -> records[item.id]?.item ?: item }
     }
 
     /**
@@ -325,27 +290,34 @@ class ContentCacheRepository(
      * still worth drawing. Marked as superseding so a details load already out on the network cannot
      * land afterwards and quietly restore the freshness this just took away.
      */
-    suspend fun markItemDetailsStale(itemId: Int) {
-        val current = readItemRecord(itemId) ?: return
-        cache.put(
+    suspend fun markItemDetailsStale(itemId: Int) = withContext(decodeDispatcher) {
+        val current = readItemRecord(itemId) ?: return@withContext
+        itemFeed.put(
             key = itemKey(itemId),
-            value = encode(current.copy(detailsUpdatedAt = STALE_TIMESTAMP)),
+            value = current.copy(detailsUpdatedAt = STALE_TIMESTAMP),
             supersede = true,
         )
     }
 
-    suspend fun invalidateItemDetails(itemId: Int) {
-        val current = readItemRecord(itemId) ?: return
-        cache.put(
+    suspend fun invalidateItemDetails(itemId: Int) = withContext(decodeDispatcher) {
+        val current = readItemRecord(itemId) ?: return@withContext
+        itemFeed.put(
             key = itemKey(itemId),
-            value = encode(current.copy(detailsUpdatedAt = null)),
+            value = current.copy(detailsUpdatedAt = null),
             supersede = true,
         )
     }
 
     suspend fun invalidateQuery(key: String) {
-        cache.invalidate(queryKey(key))
-        cache.invalidate(payloadKey(key))
+        // A query key names a list, a page or a history page depending on who wrote it, so each of
+        // those feeds is asked. The payload feed may not exist yet on a fresh process, in which case
+        // the row is still there for the next read to find, so it is removed from the store itself.
+        val query = queryKey(key)
+        listFeed.invalidate(query)
+        pageFeed.invalidate(query)
+        historyFeed.invalidate(query)
+        val payload = payloadKey(key)
+        payloadFeeds[payload]?.invalidate(payload) ?: store.remove(payload)
     }
 
     suspend fun clear() {
@@ -362,15 +334,13 @@ class ContentCacheRepository(
         val itemsById = items.associateBy(Item::id)
         val existing = readItemRecords(itemsById.keys.toList())
         val updatedAt = clock()
-        cache.putAll(
+        itemFeed.putAll(
             values = itemsById.map { (itemId, item) ->
-                itemKey(itemId) to encode(
-                    mergeItemRecord(
-                        existing = existing[itemId],
-                        incoming = item,
-                        details = details,
-                        updatedAt = updatedAt,
-                    )
+                itemKey(itemId) to mergeItemRecord(
+                    existing = existing[itemId],
+                    incoming = item,
+                    details = details,
+                    updatedAt = updatedAt,
                 )
             }.toMap(),
             updatedAt = updatedAt,
@@ -399,42 +369,43 @@ class ContentCacheRepository(
     /**
      * Reads a stored query row before a load consults it, and reports whether the load must refetch.
      *
-     * The feed cannot see either failure mode: a row that no longer decodes is dropped here, so the
-     * load simply finds nothing cached, and a row that decodes but references card payloads that are
-     * gone is left in place — its remaining cards are still worth drawing — with a refetch demanded,
-     * because a row that is not stale would otherwise never be reloaded.
+     * A row that references card payloads that are gone is left in place — its remaining cards are
+     * still worth drawing — with a refetch demanded, because a row that is not stale would otherwise
+     * never be reloaded. The feed drops a row that no longer decodes, so that case finds nothing here.
+     *
+     * Read with [CachedFeed.peekAll] rather than `peek`: only the former promotes a row read from
+     * Room into the memory tier, so the load that follows finds it there instead of reading and
+     * decoding the same row a second time.
      */
-    @Suppress("ReturnCount")
     private suspend fun <R : Any> queryNeedsRefetch(
+        feed: CachedFeed<R>,
         key: String,
-        serializer: KSerializer<R>,
         itemIds: (R) -> List<Int>,
     ): Boolean {
-        val cached = cache.peek(key) ?: return false
-        val record = runCatching { json.decodeFromString(serializer, cached.value) }.getOrElse {
-            cache.invalidate(key)
-            return false
-        }
-        val ids = itemIds(record).distinct()
-        if (ids.isEmpty()) return false
-        return readItemRecords(ids).size != ids.size
+        val ids = feed.peekAll(listOf(key))[key]?.value?.let(itemIds)?.distinct().orEmpty()
+        return ids.isNotEmpty() && readItemRecords(ids).size != ids.size
     }
 
-    private suspend fun <T : Any> discardUndecodablePayload(key: String, serializer: KSerializer<T>) {
-        val cached = cache.peek(key) ?: return
-        runCatching { json.decodeFromString(serializer, cached.value) }
-            .onFailure { cache.invalidate(key) }
-    }
+    private fun <V : Any> newFeed(serializer: KSerializer<V>): CachedFeed<V> = CachedFeed(
+        store = store,
+        serializer = serializer,
+        ttl = CachedFeed.HardCeiling,
+        keyPrefix = CONTENT_PREFIX,
+        json = json,
+        clock = clock,
+        // A details record carries the whole seasons/episodes/files tree of a series, a megabyte of
+        // JSON for a long one, and the hard ceiling keeps it pinned for a week. Count alone let a
+        // browsing session pile tens of megabytes into this tier; weighing each entry by the length of
+        // the JSON it was stored as keeps the cap proportional without walking the decoded object.
+        // Room still has them all.
+        maximumMemoryWeight = MEMORY_TIER_ENCODED_CHARS,
+        memoryWeigher = { encodedLength -> encodedLength },
+    )
 
-    /** Decodes a row the feed handed over, dropping it rather than failing the caller's stream. */
-    private suspend fun <R : Any> decodeOrDiscard(
-        key: String,
-        serializer: KSerializer<R>,
-        value: String,
-    ): R? = runCatching { json.decodeFromString(serializer, value) }.getOrElse {
-        cache.invalidate(key)
-        null
-    }
+    /** A payload's type is the caller's, so its feed is made on first use and kept under its key. */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : Any> payloadFeed(storeKey: String, serializer: KSerializer<T>): CachedFeed<T> =
+        payloadFeeds.computeIfAbsent(storeKey) { newFeed(serializer) } as CachedFeed<T>
 
     private suspend fun readItemRecord(itemId: Int): ItemRecord? {
         return readItemRecords(listOf(itemId))[itemId]
@@ -442,15 +413,8 @@ class ContentCacheRepository(
 
     private suspend fun readItemRecords(ids: List<Int>): Map<Int, ItemRecord> {
         val keysById = ids.distinct().associateWith(::itemKey)
-        val cachedByKey = cache.peekAll(keysById.values.toList())
-        val records = mutableMapOf<Int, ItemRecord>()
-        keysById.forEach { (itemId, key) ->
-            val cached = cachedByKey[key] ?: return@forEach
-            runCatching { decode<ItemRecord>(cached.value) }
-                .onSuccess { records[itemId] = it }
-                .onFailure { cache.invalidate(key) }
-        }
-        return records
+        val cachedByKey = itemFeed.peekAll(keysById.values.toList())
+        return keysById.mapNotNull { (itemId, key) -> cachedByKey[key]?.let { itemId to it.value } }.toMap()
     }
 
     private fun mergeItemRecord(
@@ -524,10 +488,6 @@ class ContentCacheRepository(
         ageRating = incoming.ageRating ?: ageRating,
     )
 
-    private inline fun <reified T> encode(value: T): String = json.encodeToString(value)
-
-    private inline fun <reified T> decode(value: String): T = json.decodeFromString(value)
-
     @Serializable
     private data class ItemRecord(
         val item: Item,
@@ -583,10 +543,10 @@ class ContentCacheRepository(
     companion object {
         const val INDEX_INDEPENDENT: Long = -1L
 
-        private const val CONTENT_PREFIX = "content:v1:"
+        private const val CONTENT_PREFIX = "content:v2:"
         private const val STALE_TIMESTAMP = 0L
         private const val FIRST_PAGE = 1
-        private const val MEMORY_TIER_BYTES = 16L * 1024 * 1024
+        private const val MEMORY_TIER_ENCODED_CHARS = 16L * 1024 * 1024
 
         fun itemKey(itemId: Int): String = "${CONTENT_PREFIX}item:$itemId"
         fun queryKey(key: String): String = "${CONTENT_PREFIX}query:$key"
