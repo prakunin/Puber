@@ -243,12 +243,43 @@ internal class TelemetryRuntimeTest {
     fun coldStartResumeBuildsStartupMarksAndSchedulesFallback() {
         prefs.values[key] = clock.wall
         var marks: StartupMarks? = null
-        runtime.start { StartupMarks(0, 0, sink::record, clock).also { marks = it } }
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule).also { marks = it } }
         assertSame(marks, Telemetry.startupMarks)
         assertEquals(listOf(60_000L), executor.scheduledDelays)
         executor.runAll()
         executor.runScheduled()
         executor.runRepeating()
         assertTrue(lines().any { it.str("type") == "startup" })
+    }
+
+    @Test
+    fun startThatNeverRevealsEmitsAtTheSixtySecondFallback() {
+        prefs.values[key] = clock.wall
+        var marks: StartupMarks? = null
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule).also { marks = it } }
+        executor.runAll()
+        marks!!.markFirstContent()
+        executor.runScheduled()
+        executor.runRepeating()
+
+        val startups = lines().filter { it.str("type") == "startup" }
+        assertEquals(1, startups.size)
+        assertFalse(startups.single().containsKey("revealed"))
+    }
+
+    @Test
+    fun revealedStartWritesOneLineWhenBoundAndFallbackBothFire() {
+        prefs.values[key] = clock.wall
+        var marks: StartupMarks? = null
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule).also { marks = it } }
+        executor.runAll()
+        val started = marks!!
+        started.markFirstContent()
+        started.markRevealed()
+        assertTrue(executor.scheduledDelays.containsAll(listOf(60_000L, 5_000L)))
+        executor.runScheduled()
+        executor.runRepeating()
+
+        assertEquals(1, lines().count { it.str("type") == "startup" })
     }
 }

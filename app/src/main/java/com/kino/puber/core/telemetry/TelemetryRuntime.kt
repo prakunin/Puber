@@ -160,7 +160,13 @@ internal class TelemetryRuntime(
             Telemetry.install(sink, SystemTelemetryClock)
             Telemetry.installController(runtime)
             runtime.start {
-                StartupMarks(Process.getStartElapsedRealtime(), appCreateMs, sink::record, SystemTelemetryClock)
+                StartupMarks(
+                    Process.getStartElapsedRealtime(),
+                    appCreateMs,
+                    sink::record,
+                    SystemTelemetryClock,
+                    sink::schedule,
+                )
             }
             app.registerActivityLifecycleCallbacks(callbacks)
         }

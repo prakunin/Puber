@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Choreographer
 import androidx.annotation.VisibleForTesting
+import com.kino.puber.core.telemetry.Telemetry
 import kotlinx.coroutines.flow.StateFlow
 
 /** The reveal gate of the process: the splash covers the app from `begin()` until ready or the cap. */
@@ -14,9 +15,30 @@ internal object StartupReveal {
     private val gate = RevealGate(
         clock = { System.nanoTime() / NS_PER_MS },
         afterFrame = { frameHook(it) },
+        observer = object : RevealObserver {
+            override fun onReadyRequested() {
+                Telemetry.startupMarks?.markReadyRequested()
+            }
+
+            override fun onReady(inFlight: Int) {
+                Telemetry.startupMarks?.markReady(inFlight)
+            }
+
+            override fun onImagesIdle() {
+                Telemetry.startupMarks?.markImagesIdle()
+            }
+
+            override fun onHeldDrained() {
+                Telemetry.startupMarks?.markHeldDrained()
+            }
+
+            override fun onRevealed(cause: RevealCause, inFlight: Int) {
+                Telemetry.startupMarks?.markRevealCause(cause, inFlight)
+            }
+        },
     )
 
-    val imageActivity = StartupImageActivity(gate::onImagesBusy)
+    val imageActivity = StartupImageActivity(gate)
 
     val covered: StateFlow<Boolean> get() = gate.covered
     val isCovered: Boolean get() = gate.covered.value
@@ -52,7 +74,6 @@ internal object StartupReveal {
 
     @VisibleForTesting
     fun resetForTests() {
-        imageActivity.reset()
         gate.reset()
         frameHook = { it() }
     }
