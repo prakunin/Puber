@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.player.vm
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
@@ -141,6 +142,7 @@ internal open class PlayerVMTestFixture {
     protected fun createVM(
         playerParams: PlayerScreenParams = params,
         playerErrorHandler: ErrorHandler = errorHandler,
+        tvHomeSyncCoordinator: TvHomeSyncCoordinator? = null,
     ) = PlayerVM(
         router = router,
         errorHandler = playerErrorHandler,
@@ -151,6 +153,7 @@ internal open class PlayerVMTestFixture {
         skipSegmentInteractor = skipSegmentInteractor,
         contentStateFactory = contentStateFactory,
         playbackController = playbackController,
+        tvHomeSyncCoordinator = tvHomeSyncCoordinator,
     ).also(createdViewModels::add)
 
     protected fun stubSavedSubtitle(

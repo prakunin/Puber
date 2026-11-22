@@ -51,11 +51,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 // Deliberately left whole for now: the panel, skip-segment and watch-progress responsibilities
 // want their own collaborators, but the player is the riskiest screen to restructure and that
@@ -187,6 +189,13 @@ internal class PlayerVM(
     private var autoMarkHandledToken: MediaToken? = null
     private var closeJob: Job? = null
     private var closing = false
+
+    // Written only on Main. Progress and watched changes are announced once, at background or
+    // exit, instead of on every save: the details mark and the Home row refresh each cost a
+    // request or a rebuild, and neither is visible while the player is in front.
+    private var detailsStaleOwed = false
+    private var homeRefreshOwed = false
+    private var backgroundFlushJob: Job? = null
 
     private val seekHandler = SeekHandler()
     private val controlsStateMachine = ControlsStateMachine()
@@ -1488,6 +1497,17 @@ internal class PlayerVM(
             updateContent { copy(isPlaying = false) }
         }
         saveCurrentPosition()
+        val previous = backgroundFlushJob
+        // Not launchMutation: awaitPendingMutations would wait on this job itself.
+        // NonCancellable: the owed mark and refresh are about saves that already succeeded, and
+        // the player can be cleared (a launcher row replaces the stack) while the final save waits.
+        backgroundFlushJob = launch {
+            withContext(NonCancellable) {
+                previous?.join()
+                awaitPendingMutations()
+                flushOwedInvalidation()
+            }
+        }
     }
 
     private fun retryPlayback() {
@@ -1904,6 +1924,7 @@ internal class PlayerVM(
                                 time = request.timeSeconds,
                                 season = request.seasonNumber,
                             )
+                            detailsStaleOwed = true
                             markContentChanged(ContentChangeType.PlaybackProgress)
                         } catch (error: CancellationException) {
                             throw error
@@ -1952,8 +1973,18 @@ internal class PlayerVM(
     private fun markContentChanged(type: ContentChangeType) {
         contentChanges = contentChanges.merge(ContentChange(params.itemId, type))
         if (type == ContentChangeType.Watched || type == ContentChangeType.PlaybackProgress) {
-            tvHomeSyncCoordinator?.requestRefresh()
+            homeRefreshOwed = true
         }
+    }
+
+    private suspend fun flushOwedInvalidation() {
+        val markDetails = detailsStaleOwed
+        val refreshHome = homeRefreshOwed
+        // Cleared before any suspension, so exit and background cannot both issue the pair.
+        detailsStaleOwed = false
+        homeRefreshOwed = false
+        if (markDetails) runCatchingCancellable { interactor.markItemDetailsStale(params.itemId) }
+        if (refreshHome) tvHomeSyncCoordinator?.requestRefresh()
     }
 
     private fun launchMutation(
@@ -1999,6 +2030,8 @@ internal class PlayerVM(
         saveCurrentPosition()
         closeJob = launch {
             awaitPendingMutations()
+            backgroundFlushJob?.join()
+            flushOwedInvalidation()
             router.back(RESULT_CONTENT_CHANGED, contentChanges)
         }
     }
