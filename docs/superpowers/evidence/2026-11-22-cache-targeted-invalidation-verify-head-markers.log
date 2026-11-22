@@ -1,0 +1,129 @@
+# PUBERBASE markers only, head c0da5da7 + shim, device clock
+11:12:54.556 refreshNow
+11:13:01.935 detailsNetworkLoad id=108496
+11:13:01.970 detailsNetworkLoad id=13337
+11:13:47.117 saveOk
+11:13:49.913 detailsNetworkLoad id=76651
+11:14:16.926 saveOk
+11:15:48.644 saveOk
+11:16:18.099 saveOk
+11:16:48.137 saveOk
+11:17:18.174 saveOk
+11:17:48.179 saveOk
+11:18:18.161 saveOk
+11:18:48.177 saveOk
+11:19:18.179 saveOk
+11:19:48.211 saveOk
+11:20:18.202 saveOk
+11:20:48.212 saveOk
+11:21:18.218 saveOk
+11:21:48.247 saveOk
+11:22:18.249 saveOk
+11:22:48.260 saveOk
+11:23:18.276 saveOk
+11:23:48.290 saveOk
+11:24:18.332 saveOk
+11:24:48.369 saveOk
+11:25:18.332 saveOk
+11:25:48.324 saveOk
+11:26:18.337 saveOk
+11:26:48.357 saveOk
+11:27:18.382 saveOk
+11:27:48.372 saveOk
+11:28:18.393 saveOk
+11:28:48.416 saveOk
+11:29:18.403 saveOk
+11:29:48.439 saveOk
+11:30:18.454 saveOk
+11:30:48.454 saveOk
+11:31:18.444 saveOk
+11:31:48.459 saveOk
+11:32:18.469 saveOk
+11:32:35.371 detailsNetworkLoad id=76651
+11:32:48.491 saveOk
+11:33:18.498 saveOk
+11:33:48.602 saveOk
+11:33:49.381 saveOk
+11:34:19.495 saveOk
+11:34:49.360 saveOk
+11:35:19.386 saveOk
+11:35:49.373 saveOk
+11:36:19.379 saveOk
+11:36:49.416 saveOk
+11:37:19.458 saveOk
+11:37:49.428 saveOk
+11:38:19.462 saveOk
+11:38:49.496 saveOk
+11:39:19.488 saveOk
+11:39:49.481 saveOk
+11:40:19.476 saveOk
+11:40:49.508 saveOk
+11:41:19.512 saveOk
+11:41:49.549 saveOk
+11:42:19.539 saveOk
+11:42:49.574 saveOk
+11:42:55.109 exitStart
+11:42:55.257 saveOk
+11:42:55.258 markItemDetailsStale id=76651
+11:42:55.271 routerBack
+11:42:55.278 detailsNetworkLoad id=76651
+11:42:55.382 frame1
+11:42:55.607 frame2
+11:42:57.271 refreshNow
+11:43:24.227 exitStart
+11:43:25.176 saveOk
+11:43:25.203 markItemDetailsStale id=76651
+11:43:25.361 routerBack
+11:43:25.433 detailsNetworkLoad id=76651
+11:43:25.594 frame1
+11:43:25.817 frame2
+11:43:27.362 refreshNow
+11:43:43.970 exitStart
+11:43:44.719 saveOk
+11:43:44.740 markItemDetailsStale id=76651
+11:43:44.868 routerBack
+11:43:44.900 detailsNetworkLoad id=76651
+11:43:45.059 frame1
+11:43:45.228 frame2
+11:43:46.869 refreshNow
+11:44:03.699 exitStart
+11:44:04.759 saveOk
+11:44:04.760 markItemDetailsStale id=76651
+11:44:04.938 routerBack
+11:44:04.944 detailsNetworkLoad id=76651
+11:44:05.121 frame1
+11:44:05.238 frame2
+11:44:06.939 refreshNow
+11:44:23.452 exitStart
+11:44:24.328 saveOk
+11:44:24.328 markItemDetailsStale id=76651
+11:44:24.333 routerBack
+11:44:24.424 detailsNetworkLoad id=76651
+11:44:24.527 frame1
+11:44:24.669 frame2
+11:44:26.334 refreshNow
+11:45:30.678 detailsNetworkLoad id=108496
+11:45:30.758 detailsNetworkLoad id=13337
+11:46:17.073 saveOk
+11:46:46.322 saveOk
+11:47:01.065 exitStart
+11:47:01.228 saveOk
+11:47:01.229 markItemDetailsStale id=76651
+11:47:01.235 routerBack
+11:47:01.338 frame1
+11:47:01.656 frame2
+11:47:01.875 detailsNetworkLoad id=76651
+11:47:02.361 detailsNetworkLoad id=108496
+11:47:02.377 detailsNetworkLoad id=13337
+11:47:03.236 refreshNow
+11:48:26.418 saveOk
+11:48:26.418 markItemDetailsStale id=76651
+11:48:28.426 refreshNow
+11:48:52.855 exitStart
+11:48:53.219 saveOk
+11:48:53.219 markItemDetailsStale id=76651
+11:48:53.226 routerBack
+11:48:53.235 detailsNetworkLoad id=76651
+11:48:53.305 frame1
+11:48:53.474 frame2
+11:48:55.227 refreshNow

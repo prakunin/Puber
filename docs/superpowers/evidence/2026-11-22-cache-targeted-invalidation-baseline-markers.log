@@ -1,0 +1,88 @@
+11-22 09:16:57.712 I/PUBERBASE: probe
+11-22 09:19:39.438 I/PUBERBASE: refreshNow
+11-22 09:19:43.451 I/PUBERBASE: detailsNetworkLoad id=108496
+11-22 09:19:43.910 I/PUBERBASE: detailsNetworkLoad id=128062
+11-22 09:19:44.160 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:19:44.379 I/PUBERBASE: detailsNetworkLoad id=125464
+11-22 09:19:45.137 I/PUBERBASE: detailsNetworkLoad id=13337
+11-22 09:19:48.909 I/PUBERBASE: detailsNetworkLoad id=110440
+11-22 09:19:48.955 I/PUBERBASE: detailsNetworkLoad id=109996
+11-22 09:19:50.528 I/PUBERBASE: detailsNetworkLoad id=10244
+11-22 09:19:50.528 I/PUBERBASE: detailsNetworkLoad id=92248
+11-22 09:19:52.237 I/PUBERBASE: detailsNetworkLoad id=123067
+11-22 09:19:52.244 I/PUBERBASE: detailsNetworkLoad id=64567
+11-22 09:20:45.464 I/PUBERBASE: saveFail com.kino.puber.core.error.ApiError$Serialization: Malformed response
+11-22 09:21:15.109 I/PUBERBASE: saveFail com.kino.puber.core.error.ApiError$Serialization: Malformed response
+11-22 09:21:45.115 I/PUBERBASE: saveFail com.kino.puber.core.error.ApiError$Serialization: Malformed response
+11-22 09:22:15.145 I/PUBERBASE: saveFail com.kino.puber.core.error.ApiError$Serialization: Malformed response
+11-22 09:22:19.273 I/PUBERBASE: saveFail com.kino.puber.core.error.ApiError$Serialization: Malformed response
+11-22 09:22:34.118 I/PUBERBASE: refreshNow
+11-22 09:22:56.150 I/PUBERBASE: WINDOW_START_press_play
+11-22 09:23:27.001 I/PUBERBASE: saveOk
+11-22 09:23:27.001 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:23:29.042 I/PUBERBASE: refreshNow
+11-22 09:23:56.770 I/PUBERBASE: saveOk
+11-22 09:23:56.770 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:23:58.808 I/PUBERBASE: refreshNow
+11-22 09:24:26.755 I/PUBERBASE: saveOk
+11-22 09:24:26.755 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:24:28.789 I/PUBERBASE: refreshNow
+11-22 09:24:56.795 I/PUBERBASE: saveOk
+11-22 09:24:56.796 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:24:58.816 I/PUBERBASE: refreshNow
+11-22 09:25:26.786 I/PUBERBASE: saveOk
+11-22 09:25:26.786 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:25:28.817 I/PUBERBASE: refreshNow
+11-22 09:25:56.812 I/PUBERBASE: saveOk
+11-22 09:25:56.812 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:25:58.832 I/PUBERBASE: refreshNow
+11-22 09:26:26.837 I/PUBERBASE: saveOk
+11-22 09:26:26.837 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:26:28.874 I/PUBERBASE: refreshNow
+11-22 09:26:56.876 I/PUBERBASE: saveOk
+11-22 09:26:56.876 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:26:58.891 I/PUBERBASE: refreshNow
+11-22 09:27:26.873 I/PUBERBASE: saveOk
+11-22 09:27:26.873 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:27:28.891 I/PUBERBASE: refreshNow
+11-22 09:27:56.877 I/PUBERBASE: saveOk
+11-22 09:27:56.878 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:27:58.891 I/PUBERBASE: refreshNow
+11-22 09:28:00.932 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:28:03.145 I/PUBERBASE: refreshNow
+11-22 09:28:26.880 I/PUBERBASE: saveOk
+11-22 09:28:26.880 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:28:28.899 I/PUBERBASE: refreshNow
+11-22 09:28:56.921 I/PUBERBASE: saveOk
+11-22 09:28:56.922 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:28:58.935 I/PUBERBASE: refreshNow
+11-22 09:29:06.999 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:29:15.770 I/PUBERBASE: saveOk
+11-22 09:29:15.774 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:29:18.063 I/PUBERBASE: refreshNow
+11-22 09:29:45.407 I/PUBERBASE: saveOk
+11-22 09:29:45.407 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:29:47.475 I/PUBERBASE: refreshNow
+11-22 09:29:49.295 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:30:15.591 I/PUBERBASE: saveOk
+11-22 09:30:15.592 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:30:17.599 I/PUBERBASE: refreshNow
+11-22 09:45:42.534 I/PUBERBASE: RETRY_PRESSED
+11-22 09:45:42.665 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:46:14.014 I/PUBERBASE: saveOk
+11-22 09:46:14.015 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:46:16.105 I/PUBERBASE: refreshNow
+11-22 09:46:16.174 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:46:43.587 I/PUBERBASE: saveOk
+11-22 09:46:43.587 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:46:45.596 I/PUBERBASE: refreshNow
+11-22 09:48:43.832 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:49:15.002 I/PUBERBASE: saveOk
+11-22 09:49:15.003 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:49:17.035 I/PUBERBASE: refreshNow
+11-22 09:49:17.523 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:49:21.531 I/PUBERBASE: BACK_PRESSED
+11-22 09:49:22.351 I/PUBERBASE: saveOk
+11-22 09:49:22.355 I/PUBERBASE: markItemDetailsStale id=76651
+11-22 09:49:22.666 I/PUBERBASE: detailsNetworkLoad id=76651
+11-22 09:49:24.629 I/PUBERBASE: refreshNow

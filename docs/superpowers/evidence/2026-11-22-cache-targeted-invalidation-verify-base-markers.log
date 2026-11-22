@@ -1,0 +1,248 @@
+# PUBERBASE markers only, base 40762767 + shim, device clock
+10:30:19.084 saveOk
+10:30:19.087 markItemDetailsStale id=76651
+10:30:21.148 refreshNow
+10:30:21.854 detailsNetworkLoad id=76651
+10:30:48.922 saveOk
+10:30:48.922 markItemDetailsStale id=76651
+10:30:50.929 refreshNow
+10:39:10.552 detailsNetworkLoad id=76651
+10:39:41.757 saveOk
+10:39:41.757 markItemDetailsStale id=76651
+10:39:43.843 refreshNow
+10:39:44.042 detailsNetworkLoad id=76651
+10:39:58.019 exitStart
+10:39:58.864 saveOk
+10:39:58.865 markItemDetailsStale id=76651
+10:39:58.998 routerBack
+10:39:59.096 detailsNetworkLoad id=76651
+10:39:59.195 frame1
+10:39:59.365 frame2
+10:40:01.002 refreshNow
+10:40:58.287 saveOk
+10:40:58.288 markItemDetailsStale id=76651
+10:41:00.360 refreshNow
+10:41:01.052 detailsNetworkLoad id=76651
+10:41:28.344 saveOk
+10:41:28.345 markItemDetailsStale id=76651
+10:41:30.362 refreshNow
+10:41:58.017 saveOk
+10:41:58.017 markItemDetailsStale id=76651
+10:42:00.031 refreshNow
+10:42:28.016 saveOk
+10:42:28.016 markItemDetailsStale id=76651
+10:42:30.030 refreshNow
+10:42:58.017 saveOk
+10:42:58.018 markItemDetailsStale id=76651
+10:43:00.024 refreshNow
+10:43:28.040 saveOk
+10:43:28.040 markItemDetailsStale id=76651
+10:43:30.062 refreshNow
+10:43:58.057 saveOk
+10:43:58.058 markItemDetailsStale id=76651
+10:44:00.063 refreshNow
+10:44:28.106 saveOk
+10:44:28.107 markItemDetailsStale id=76651
+10:44:30.116 refreshNow
+10:44:58.112 saveOk
+10:44:58.112 markItemDetailsStale id=76651
+10:45:00.131 refreshNow
+10:45:28.101 saveOk
+10:45:28.102 markItemDetailsStale id=76651
+10:45:30.109 refreshNow
+10:45:58.124 saveOk
+10:45:58.124 markItemDetailsStale id=76651
+10:46:00.135 refreshNow
+10:46:28.101 saveOk
+10:46:28.104 markItemDetailsStale id=76651
+10:46:30.110 refreshNow
+10:46:58.117 saveOk
+10:46:58.118 markItemDetailsStale id=76651
+10:47:00.135 refreshNow
+10:47:28.151 saveOk
+10:47:28.154 markItemDetailsStale id=76651
+10:47:30.176 refreshNow
+10:47:58.123 saveOk
+10:47:58.124 markItemDetailsStale id=76651
+10:48:00.131 refreshNow
+10:48:28.157 saveOk
+10:48:28.157 markItemDetailsStale id=76651
+10:48:30.165 refreshNow
+10:48:58.174 saveOk
+10:48:58.174 markItemDetailsStale id=76651
+10:49:00.184 refreshNow
+10:49:28.215 saveOk
+10:49:28.215 markItemDetailsStale id=76651
+10:49:30.219 refreshNow
+10:49:58.222 saveOk
+10:49:58.224 markItemDetailsStale id=76651
+10:50:00.271 refreshNow
+10:50:28.223 saveOk
+10:50:28.228 markItemDetailsStale id=76651
+10:50:30.240 refreshNow
+10:50:58.230 saveOk
+10:50:58.231 markItemDetailsStale id=76651
+10:51:00.238 refreshNow
+10:51:28.231 saveOk
+10:51:28.231 markItemDetailsStale id=76651
+10:51:30.239 refreshNow
+10:51:58.694 saveOk
+10:51:58.694 markItemDetailsStale id=76651
+10:52:00.700 refreshNow
+10:52:28.274 saveOk
+10:52:28.274 markItemDetailsStale id=76651
+10:52:30.278 refreshNow
+10:52:58.266 saveOk
+10:52:58.266 markItemDetailsStale id=76651
+10:53:00.281 refreshNow
+10:53:28.285 saveOk
+10:53:28.286 markItemDetailsStale id=76651
+10:53:30.294 refreshNow
+10:53:58.295 saveOk
+10:53:58.296 markItemDetailsStale id=76651
+10:54:00.317 refreshNow
+10:54:28.282 saveOk
+10:54:28.282 markItemDetailsStale id=76651
+10:54:30.290 refreshNow
+10:54:58.320 saveOk
+10:54:58.321 markItemDetailsStale id=76651
+10:55:00.335 refreshNow
+10:55:28.321 saveOk
+10:55:28.321 markItemDetailsStale id=76651
+10:55:30.327 refreshNow
+10:55:58.329 saveOk
+10:55:58.330 markItemDetailsStale id=76651
+10:56:00.340 refreshNow
+10:56:28.366 saveOk
+10:56:28.367 markItemDetailsStale id=76651
+10:56:30.412 refreshNow
+10:56:58.370 saveOk
+10:56:58.370 markItemDetailsStale id=76651
+10:57:00.382 refreshNow
+10:57:28.420 saveOk
+10:57:28.420 markItemDetailsStale id=76651
+10:57:30.450 refreshNow
+10:57:58.413 saveOk
+10:57:58.414 markItemDetailsStale id=76651
+10:58:00.435 refreshNow
+10:58:01.796 detailsNetworkLoad id=76651
+10:58:04.134 refreshNow
+10:58:28.407 saveOk
+10:58:28.410 markItemDetailsStale id=76651
+10:58:30.431 refreshNow
+10:58:58.435 saveOk
+10:58:58.435 markItemDetailsStale id=76651
+10:59:00.445 refreshNow
+10:59:07.531 detailsNetworkLoad id=76651
+10:59:15.796 saveOk
+10:59:15.797 markItemDetailsStale id=76651
+10:59:17.833 refreshNow
+10:59:46.059 saveOk
+10:59:46.065 markItemDetailsStale id=76651
+10:59:48.105 refreshNow
+10:59:50.766 detailsNetworkLoad id=76651
+11:00:16.093 saveOk
+11:00:16.094 markItemDetailsStale id=76651
+11:00:18.120 refreshNow
+11:00:46.062 saveOk
+11:00:46.063 markItemDetailsStale id=76651
+11:00:48.079 refreshNow
+11:01:16.056 saveOk
+11:01:16.056 markItemDetailsStale id=76651
+11:01:18.071 refreshNow
+11:01:46.072 saveOk
+11:01:46.072 markItemDetailsStale id=76651
+11:01:48.077 refreshNow
+11:02:16.071 saveOk
+11:02:16.071 markItemDetailsStale id=76651
+11:02:18.096 refreshNow
+11:02:46.149 saveOk
+11:02:46.150 markItemDetailsStale id=76651
+11:02:48.165 refreshNow
+11:03:16.115 saveOk
+11:03:16.115 markItemDetailsStale id=76651
+11:03:18.123 refreshNow
+11:03:46.108 saveOk
+11:03:46.108 markItemDetailsStale id=76651
+11:03:48.115 refreshNow
+11:04:16.134 saveOk
+11:04:16.134 markItemDetailsStale id=76651
+11:04:18.142 refreshNow
+11:04:46.165 saveOk
+11:04:46.166 markItemDetailsStale id=76651
+11:04:48.172 refreshNow
+11:05:16.116 saveOk
+11:05:16.116 markItemDetailsStale id=76651
+11:05:18.121 refreshNow
+11:05:46.157 saveOk
+11:05:46.157 markItemDetailsStale id=76651
+11:05:48.166 refreshNow
+11:06:16.180 saveOk
+11:06:16.181 markItemDetailsStale id=76651
+11:06:18.189 refreshNow
+11:06:46.189 saveOk
+11:06:46.189 markItemDetailsStale id=76651
+11:06:48.201 refreshNow
+11:07:16.204 saveOk
+11:07:16.204 markItemDetailsStale id=76651
+11:07:18.211 refreshNow
+11:07:46.223 saveOk
+11:07:46.223 markItemDetailsStale id=76651
+11:07:48.236 refreshNow
+11:08:16.230 saveOk
+11:08:16.230 markItemDetailsStale id=76651
+11:08:18.238 refreshNow
+11:08:46.293 saveOk
+11:08:46.293 markItemDetailsStale id=76651
+11:08:48.297 refreshNow
+11:09:16.290 saveOk
+11:09:16.290 markItemDetailsStale id=76651
+11:09:18.294 refreshNow
+11:09:46.323 saveOk
+11:09:46.324 markItemDetailsStale id=76651
+11:09:48.340 refreshNow
+11:10:16.419 saveOk
+11:10:16.419 markItemDetailsStale id=76651
+11:10:18.447 refreshNow
+11:10:39.865 exitStart
+11:10:40.092 saveOk
+11:10:40.093 markItemDetailsStale id=76651
+11:10:40.098 routerBack
+11:10:40.105 detailsNetworkLoad id=76651
+11:10:40.115 frame1
+11:10:40.297 frame2
+11:10:42.100 refreshNow
+11:10:42.220 detailsNetworkLoad id=108496
+11:10:42.249 detailsNetworkLoad id=13337
+11:11:19.786 exitStart
+11:11:20.918 saveOk
+11:11:20.921 markItemDetailsStale id=76651
+11:11:21.038 routerBack
+11:11:21.091 detailsNetworkLoad id=76651
+11:11:21.255 frame1
+11:11:21.417 frame2
+11:11:23.039 refreshNow
+11:11:45.694 exitStart
+11:11:46.455 saveOk
+11:11:46.456 markItemDetailsStale id=76651
+11:11:46.599 routerBack
+11:11:46.654 detailsNetworkLoad id=76651
+11:11:46.803 frame1
+11:11:47.022 frame2
+11:11:48.600 refreshNow
+11:12:05.495 exitStart
+11:12:06.248 saveOk
+11:12:06.248 markItemDetailsStale id=76651
+11:12:06.384 routerBack
+11:12:06.440 detailsNetworkLoad id=76651
+11:12:06.542 frame1
+11:12:06.654 frame2
+11:12:08.386 refreshNow
+11:12:25.215 exitStart
+11:12:26.119 saveOk
+11:12:26.133 markItemDetailsStale id=76651
+11:12:26.242 routerBack
+11:12:26.272 detailsNetworkLoad id=76651
+11:12:26.413 frame1
+11:12:26.543 frame2
+11:12:28.242 refreshNow
