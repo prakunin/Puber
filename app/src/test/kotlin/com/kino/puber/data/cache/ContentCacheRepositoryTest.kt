@@ -6,12 +6,30 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.util.FakePayloadStore
+import com.kino.puber.util.MainDispatcherExtension
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import org.junit.jupiter.api.extension.RegisterExtension
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -19,6 +37,10 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
 class ContentCacheRepositoryTest {
+
+    @JvmField
+    @RegisterExtension
+    val mainDispatcher = MainDispatcherExtension(StandardTestDispatcher())
 
     private val store = FakePayloadStore()
     private var now = 1_000_000L
@@ -236,8 +258,8 @@ class ContentCacheRepositoryTest {
     fun aPayloadWrittenByAnIncompatibleBuildIsDroppedAndFetchedAgain() = runTest {
         val serializer = ListSerializer(String.serializer())
         subject.getPayload("genres", serializer, 10.minutes) { listOf("Drama") }
-        // Decodes as the string the feed stores, but not as the payload inside it — the feed's own
-        // recovery cannot see that, so without repair every later read fails on the same row.
+        // A row whose JSON is not the payload's shape: the feed must drop it on decode and fetch
+        // again, or every later read fails on the same row.
         store.write(ContentCacheRepository.payloadKey("genres"), "\"not a genre list\"", updatedAt = now)
 
         val restarted = ContentCacheRepository(store = store, clock = { now })
@@ -300,6 +322,323 @@ class ContentCacheRepositoryTest {
         }.toList()
 
         assertEquals(1, loads)
+    }
+
+    @Test
+    fun aListServedFromTheMemoryTierReturnsTheSameDecodedCards() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7), item(8)) }.toList()
+        val first = subject.observeItems("home", CacheTtl.HomeSection) { error("fresh") }.toList()
+        val readsAfterFirst = store.readCount
+
+        val second = subject.observeItems("home", CacheTtl.HomeSection) { error("fresh") }.toList()
+
+        val before = (first.single() as Cached.Value).value
+        val after = (second.single() as Cached.Value).value
+        assertEquals(before.size, after.size)
+        before.indices.forEach { index -> assertSame(before[index], after[index]) }
+        assertEquals(readsAfterFirst, store.readCount)
+    }
+
+    @Test
+    fun detailsServedFromTheMemoryTierAreNotDecodedAgain() = runTest {
+        subject.observeItemDetails(7) { item(7).copy(plot = "Plot") }.toList()
+        val first = subject.observeItemDetails(7) { error("fresh") }.toList()
+        val readsAfterFirst = store.readCount
+
+        val second = subject.observeItemDetails(7) { error("fresh") }.toList()
+
+        assertSame((first.single() as Cached.Value).value, (second.single() as Cached.Value).value)
+        assertEquals(readsAfterFirst, store.readCount)
+    }
+
+    @Test
+    fun aListOnlyInRoomReadsEachRowExactlyOnce() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7), item(8)) }.toList()
+        val reads = mutableMapOf<String, Int>()
+        store.onRead = { key -> reads.merge(key, 1, Int::plus) }
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        restarted.observeItems("home", CacheTtl.HomeSection) { error("fresh") }.toList()
+
+        val expected = listOf(
+            ContentCacheRepository.queryKey("home"),
+            ContentCacheRepository.itemKey(7),
+            ContentCacheRepository.itemKey(8),
+        )
+        assertEquals(expected.associateWith { 1 }, reads)
+    }
+
+    @Test
+    fun detailsOnlyInRoomReadTheItemRowExactlyOnce() = runTest {
+        subject.observeItemDetails(7) { item(7).copy(plot = "Plot") }.toList()
+        val reads = mutableMapOf<String, Int>()
+        store.onRead = { key -> reads.merge(key, 1, Int::plus) }
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        restarted.observeItemDetails(7) { error("fresh") }.toList()
+
+        assertEquals(mapOf(ContentCacheRepository.itemKey(7) to 1), reads)
+    }
+
+    @Test
+    fun aPayloadInTheMemoryTierIsNotDecodedAgain() = runTest {
+        val loaded = CountingSerializer()
+        subject.getPayload("genres", loaded, 10.minutes) { listOf("Drama") }
+        assertEquals(0, loaded.deserializations)
+
+        val fromRoom = CountingSerializer()
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        restarted.getPayload("genres", fromRoom, 10.minutes) { error("fresh") }
+        restarted.getPayload("genres", fromRoom, 10.minutes) { error("fresh") }
+
+        assertEquals(1, fromRoom.deserializations)
+    }
+
+    @Test
+    fun aStaleListRefetchedAfterARoomReadStillRevalidates() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+        now += CacheTtl.HomeSection.inWholeMilliseconds + 1
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = restarted.observeItems("home", CacheTtl.HomeSection) { listOf(item(8)) }.toList()
+
+        assertEquals(
+            listOf(listOf(7), listOf(8)),
+            emissions.map { (it as Cached.Value).value.map(Item::id) },
+        )
+    }
+
+    @Test
+    fun storedRecordsArePlainJsonUnderTheV2Namespace() = runTest {
+        subject.observeItems("list", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+        subject.observeItemPage("page", CacheTtl.HomeSection) { page(8) }.toList()
+        subject.historyFirstPage { historyPage(9) }.toList()
+        subject.getPayload("genres", ListSerializer(String.serializer()), 10.minutes) { listOf("Drama") }
+
+        val keys = listOf(
+            ContentCacheRepository.itemKey(7),
+            ContentCacheRepository.queryKey("list"),
+            ContentCacheRepository.queryKey("page"),
+            ContentCacheRepository.queryKey(CacheKeys.historyPage(1)),
+            ContentCacheRepository.payloadKey("genres"),
+        )
+        keys.forEach { key -> assertTrue(key.startsWith("content:v2:"), key) }
+        val rows = keys.map { key -> Json.parseToJsonElement(store.read(key)!!.payload) }
+
+        assertEquals(item(7), Json.decodeFromJsonElement(Item.serializer(), rows[0].jsonObject.getValue("item")))
+        assertEquals(listOf(7), rows[1].jsonObject.getValue("itemIds").jsonArray.map { it.jsonPrimitive.int })
+        assertEquals(listOf(8), rows[2].jsonObject.getValue("itemIds").jsonArray.map { it.jsonPrimitive.int })
+        val historyEntry = rows[3].jsonObject.getValue("items").jsonArray.single().jsonObject
+        assertEquals(9, historyEntry.getValue("itemId").jsonPrimitive.int)
+        assertEquals(listOf("Drama"), Json.decodeFromJsonElement(ListSerializer(String.serializer()), rows[4]))
+    }
+
+    @Test
+    fun v1RowsAreIgnoredAndRefetchedIntoV2() = runTest {
+        val v1 = mapOf(
+            "content:v1:item:7" to v1ItemRecord(item(7), detailsUpdatedAt = null),
+            "content:v1:item:8" to v1ItemRecord(item(8), detailsUpdatedAt = now),
+            "content:v1:query:home" to """{"itemIds":[7]}""",
+            "content:v1:payload:genres" to """["Drama"]""",
+        )
+        v1.forEach { (key, record) ->
+            store.write(key, Json.encodeToString(String.serializer(), record), updatedAt = now)
+        }
+        val genres = ListSerializer(String.serializer())
+
+        val list = subject.observeItems("home", CacheTtl.HomeSection) {
+            listOf(item(7).copy(title = "Loaded"))
+        }.toList()
+        val details = subject.observeItemDetails(8) { item(8).copy(title = "Loaded") }.toList()
+        val payload = subject.getPayload("genres", genres, 10.minutes) { listOf("Comedy") }
+
+        assertEquals(listOf("Loaded"), list.map { (it as Cached.Value).value.single().title })
+        assertEquals(listOf("Loaded"), details.map { (it as Cached.Value).value.title })
+        assertEquals(listOf("Comedy"), payload)
+        assertTrue(store.read(ContentCacheRepository.queryKey("home"))!!.payload.startsWith("{"))
+        v1.forEach { (key, record) ->
+            assertEquals(Json.encodeToString(String.serializer(), record), store.read(key)?.payload, key)
+        }
+    }
+
+    @Test
+    fun itemTierHoldsSixteenMegabytesOfEncodedJson() = runTest {
+        val plot = "p".repeat(BIG_PLOT_CHARS)
+        val items = (1..BIG_ITEM_COUNT).map { id -> item(id).copy(plot = plot) }
+        subject.observeItems("big", CacheTtl.HomeSection) { items }.toList()
+        val reads = mutableListOf<String>()
+        store.onRead = { key -> reads += key }
+
+        val held = subject.observeItems("big", CacheTtl.HomeSection) { error("fresh") }.toList()
+        val again = subject.observeItems("big", CacheTtl.HomeSection) { error("fresh") }.toList()
+
+        assertEquals(emptyList<String>(), reads)
+        val before = (held.single() as Cached.Value).value
+        val after = (again.single() as Cached.Value).value
+        before.indices.forEach { index -> assertSame(before[index], after[index]) }
+
+        subject.mergeItems(listOf(item(BIG_ITEM_COUNT + 1).copy(plot = plot)))
+        reads.clear()
+        subject.observeItems("big", CacheTtl.HomeSection) { error("fresh") }.toList()
+
+        assertEquals(listOf(ContentCacheRepository.itemKey(1)), reads)
+    }
+
+    @Test
+    fun clearDropsEveryItemFromMemory() = runTest {
+        subject.observeItemDetails(7) { item(7).copy(plot = "Before") }.toList()
+        subject.clear()
+
+        val emissions = subject.observeItemDetails(7) { item(7).copy(plot = "After") }.toList()
+
+        assertEquals(listOf("After"), emissions.map { (it as Cached.Value).value.plot })
+    }
+
+    @Test
+    fun clearDropsEveryListFromMemory() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+        subject.clear()
+
+        val emissions = subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(8)) }.toList()
+
+        assertEquals(listOf(listOf(8)), emissions.map { (it as Cached.Value).value.map(Item::id) })
+    }
+
+    @Test
+    fun clearDropsEveryPageFromMemory() = runTest {
+        subject.observeItemPage("page", CacheTtl.HomeSection) { page(7) }.toList()
+        subject.clear()
+
+        val emissions = subject.observeItemPage("page", CacheTtl.HomeSection) { page(8) }.toList()
+
+        assertEquals(listOf(8), emissions.map { (it as Cached.Value).value.items.single().id })
+    }
+
+    @Test
+    fun clearDropsEveryHistoryPageFromMemory() = runTest {
+        subject.historyFirstPage { historyPage(7) }.toList()
+        subject.clear()
+
+        val emissions = subject.historyFirstPage { historyPage(8) }.toList()
+
+        assertEquals(listOf(8), emissions.map { (it as Cached.Value).value.items.single().item.id })
+    }
+
+    @Test
+    fun clearDropsEveryPayloadFromMemory() = runTest {
+        val genres = ListSerializer(String.serializer())
+        subject.getPayload("genres", genres, 10.minutes) { listOf("Before") }
+        subject.clear()
+
+        val value = subject.getPayload("genres", genres, 10.minutes) { listOf("After") }
+
+        assertEquals(listOf("After"), value)
+    }
+
+    @Test
+    fun invalidateQueryOnAFreshRepositoryRemovesThePayloadRow() = runTest {
+        val genres = ListSerializer(String.serializer())
+        subject.getPayload("genres", genres, 10.minutes) { listOf("Before") }
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        restarted.invalidateQuery("genres")
+
+        assertNull(store.read(ContentCacheRepository.payloadKey("genres")))
+        assertEquals(listOf("After"), restarted.getPayload("genres", genres, 10.minutes) { listOf("After") })
+    }
+
+    @Test
+    fun flowsDecodeAndLoadOnTheInjectedDispatcher() = runTest {
+        withDecodeThread { threads, decode ->
+            val genres = CountingSerializer(threads)
+            val flows = listOf<Pair<String, (ContentCacheRepository) -> Flow<*>>>(
+                "observeItems" to { repo ->
+                    repo.observeItems("l", CacheTtl.HomeSection) { threads += currentThread(); listOf(item(1)) }
+                },
+                "observeItemPage" to { repo ->
+                    repo.observeItemPage("p", CacheTtl.HomeSection) { threads += currentThread(); page(2) }
+                },
+                "historyFirstPage" to { repo ->
+                    repo.historyFirstPage { threads += currentThread(); historyPage(3) }
+                },
+                "observeItemDetails" to { repo ->
+                    repo.observeItemDetails(4) { threads += currentThread(); item(4) }
+                },
+                "observePayload" to { repo ->
+                    repo.observePayload("g", genres, 10.minutes) { threads += currentThread(); listOf("Drama") }
+                },
+            )
+            flows.forEach { (name, flowOf) ->
+                // Cold: the loader and the store write run; warm: a fresh repository reads and decodes.
+                listOf(false, true).forEach { warm ->
+                    threads.clear()
+                    store.onRead = { threads += currentThread() }
+                    flowOf(ContentCacheRepository(store, { now }, decodeDispatcher = decode)).toList()
+                    assertTrue(threads.isNotEmpty(), "$name warm=$warm")
+                    assertEquals(setOf(DECODE_THREAD), threads.toSet(), "$name warm=$warm")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun getPayloadAndOneShotWritesRunOnTheInjectedDispatcher() = runTest {
+        withDecodeThread { threads, decode ->
+            val genres = CountingSerializer(threads)
+            val repo = { ContentCacheRepository(store, { now }, decodeDispatcher = decode) }
+            repo().getPayload("g", genres, 10.minutes) { threads += currentThread(); listOf("Drama") }
+            repo().getPayload("g", genres, 10.minutes) { error("fresh") }
+            store.onRead = { threads += currentThread() }
+            repo().mergeItems(listOf(item(5)))
+            repo().markItemDetailsStale(5)
+            repo().invalidateItemDetails(5)
+
+            assertTrue(threads.size >= 5, threads.toString())
+            assertEquals(setOf(DECODE_THREAD), threads.toSet())
+        }
+    }
+
+    private suspend fun withDecodeThread(
+        block: suspend (threads: MutableList<String>, decode: CoroutineDispatcher) -> Unit,
+    ) {
+        val executor = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, DECODE_THREAD) }
+        try {
+            block(CopyOnWriteArrayList(), executor.asCoroutineDispatcher())
+        } finally {
+            executor.shutdown()
+        }
+    }
+
+    private fun v1ItemRecord(item: Item, detailsUpdatedAt: Long?): String {
+        val itemJson = Json.encodeToString(Item.serializer(), item)
+        val details = detailsUpdatedAt?.let { ""","detailsUpdatedAt":$it""" }.orEmpty()
+        return """{"item":$itemJson,"cardUpdatedAt":$now$details}"""
+    }
+
+    private fun currentThread(): String = Thread.currentThread().name.substringBefore(" @")
+
+    private class CountingSerializer(
+        private val threads: MutableList<String>? = null,
+        private val delegate: KSerializer<List<String>> = ListSerializer(String.serializer()),
+    ) : KSerializer<List<String>> {
+        var deserializations = 0
+            private set
+
+        override val descriptor: SerialDescriptor = delegate.descriptor
+
+        override fun serialize(encoder: Encoder, value: List<String>) = delegate.serialize(encoder, value)
+
+        override fun deserialize(decoder: Decoder): List<String> {
+            deserializations += 1
+            threads?.add(Thread.currentThread().name.substringBefore(" @"))
+            return delegate.deserialize(decoder)
+        }
+    }
+
+    private companion object {
+        const val DECODE_THREAD = "decode"
+        const val BIG_PLOT_CHARS = 1_000_000
+        const val BIG_ITEM_COUNT = 16
     }
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)

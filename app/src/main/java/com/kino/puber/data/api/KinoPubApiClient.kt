@@ -89,6 +89,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -121,6 +122,11 @@ class KinoPubApiClient(
      * a screen with cached content draws it without ever learning whether the refresh arrived.
      */
     private val reachability: EndpointReachability = EndpointReachability(),
+    /**
+     * Response bodies are decoded here, not in the caller's context, which is Main for the view
+     * models that call this client. Read by the public inline [apiCall].
+     */
+    @PublishedApi internal val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -1023,7 +1029,7 @@ class KinoPubApiClient(
         val domain = KinoPubConfig.CURRENT_API_DOMAIN
         return try {
             val response = block().requireSuccessful()
-            Result.success(response.body<T>())
+            Result.success(withContext(decodeDispatcher) { response.body<T>() })
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1045,7 +1051,8 @@ class KinoPubApiClient(
     suspend inline fun <reified T> thirdPartyApiCall(
         block: suspend () -> HttpResponse
     ): Result<T> = try {
-        Result.success(block().requireSuccessful().body<T>())
+        val response = block().requireSuccessful()
+        Result.success(withContext(decodeDispatcher) { response.body<T>() })
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -1170,7 +1177,9 @@ class KinoPubApiClient(
         }
 
         try {
-            json.decodeFromString<T>(responseText)
+            withContext(decodeDispatcher) { json.decodeFromString<T>(responseText) }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (error: Exception) {
             throw ApiError.Serialization(error)
         }

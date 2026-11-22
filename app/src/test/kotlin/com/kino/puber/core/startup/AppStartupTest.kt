@@ -50,7 +50,7 @@ internal class AppStartupTest {
     private val api = mockk<KinoPubApiClient>(relaxed = true)
     private val navigationPreferences = mockk<NavigationPreferencesRepository>(relaxed = true)
     private val watchState = mockk<WatchStateRepository>(relaxed = true)
-    private val contentCache = ContentCacheRepository(FakePayloadStore())
+    private val contentCache = ContentCacheRepository(FakePayloadStore(), decodeDispatcher = Dispatchers.Unconfined)
     private val preferences = mockk<ICryptoPreferenceRepository>(relaxed = true)
     private val domain = mockk<ApiDomainInteractor>(relaxed = true)
 
