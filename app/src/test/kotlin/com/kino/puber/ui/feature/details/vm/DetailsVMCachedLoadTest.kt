@@ -9,15 +9,20 @@ import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.data.api.KinoPubApiClient
+import com.kino.puber.data.api.models.ApiResponse
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.cache.Cached
+import com.kino.puber.data.cache.ContentCacheRepository
+import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.details.DetailsInteractor
 import com.kino.puber.ui.feature.details.model.DetailsAction
 import com.kino.puber.ui.feature.details.model.DetailsScreenParams
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 import com.kino.puber.ui.feature.details.model.DetailsScreenUIMapper
+import com.kino.puber.util.FakePayloadStore
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coEvery
@@ -27,6 +32,7 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -219,6 +225,41 @@ class DetailsVMCachedLoadTest {
         mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(vm.testStateValue is DetailsScreenState.Content)
+    }
+
+    @Test
+    fun afterMarkItemDetailsStale_detailsOpenRevalidatesAndShowsNewProgress() = runTest {
+        // The player's exit marks the entry stale; the next open must show the stored item at once
+        // and then the one the server now reports, with the progress the session left.
+        val before = movie.copy(title = "Movie, before")
+        val after = movie.copy(title = "Movie, after")
+        val api = mockk<KinoPubApiClient>(relaxed = true)
+        coEvery { api.getItemDetails(42) } returnsMany listOf(
+            Result.success(ApiResponse(item = before)),
+            Result.success(ApiResponse(item = after)),
+        )
+        val repository = ItemDetailsRepository(
+            api = api,
+            watchStateRepository = mockk(relaxed = true),
+            contentCache = ContentCacheRepository(
+                store = FakePayloadStore(),
+                clock = { 1_000_000L },
+                decodeDispatcher = mainDispatcher.dispatcher,
+            ),
+        )
+        repository.observeItemDetails(42).toList()
+        repository.markStale(42)
+        every { interactor.observeItemDetails(42) } returns repository.observeItemDetails(42)
+        val seen = mutableListOf<Item>()
+        every { mapper.map(any(), any()) } answers {
+            seen += firstArg<Item>()
+            content()
+        }
+
+        createVM().also { it.testOnStart() }
+        mainDispatcher.dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(before, after), seen.distinct())
     }
 
     private fun content() = DetailsScreenState.Content(

@@ -42,8 +42,14 @@ class FakePayloadStore : PersistentPayloadStore {
         after?.invoke(key)
     }
 
+    /** Fires once [touch] has changed the row, before the caller resumes. */
+    var onTouch: (suspend (String) -> Unit)? = null
+
     override suspend fun touch(key: String, updatedAt: Long) {
+        val after = onTouch
+        onTouch = null
         rows[key]?.let { row -> rows[key] = row.copy(updatedAt = updatedAt) }
+        after?.invoke(key)
     }
 
     override suspend fun writeAll(payloads: Map<String, StoredPayload>) {
@@ -53,8 +59,14 @@ class FakePayloadStore : PersistentPayloadStore {
         hook?.invoke(payloads.keys)
     }
 
+    /** Fires once [remove] has dropped the row, before the caller resumes. */
+    var onRemove: (suspend (String) -> Unit)? = null
+
     override suspend fun remove(key: String) {
+        val after = onRemove
+        onRemove = null
         rows.remove(key)
+        after?.invoke(key)
     }
 
     val removedPrefixes = mutableListOf<String>()
