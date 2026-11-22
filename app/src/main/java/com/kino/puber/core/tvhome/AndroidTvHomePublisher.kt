@@ -1,25 +1,21 @@
 package com.kino.puber.core.tvhome
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import androidx.tvprovider.media.tv.PreviewChannelHelper
-import androidx.tvprovider.media.tv.PreviewChannel
-import androidx.tvprovider.media.tv.PreviewProgram
-import androidx.tvprovider.media.tv.TvContractCompat
-import androidx.tvprovider.media.tv.WatchNextProgram
-import com.kino.puber.R
-import com.kino.puber.MainActivity
 import com.kino.puber.core.contentlink.ContentUriCodec
+import com.kino.puber.core.logger.log
+
+/** The channel logo: the app icon, resolved against the running build's package (dev and stage differ). */
+internal fun channelLogoUri(packageName: String): String = "android.resource://$packageName/mipmap/ic_launcher"
 
 internal class AndroidTvHomePublisher(
-    private val context: Context,
+    private val gateway: TvProviderGateway,
+    private val store: TvHomeStore,
     private val uriCodec: ContentUriCodec,
+    private val channelName: () -> String,
+    private val packageName: String,
+    private val onFailure: (Throwable, String) -> Unit = { error, message ->
+        Unit.log(error, message, tag = LOG_TAG)
+    },
 ) : TvHomePublisher {
-    private val helper = PreviewChannelHelper(context)
-    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     override suspend fun reconcile(programs: List<PublishedProgram>) {
         val channelId = ensureChannel()
@@ -36,81 +32,54 @@ internal class AndroidTvHomePublisher(
 
     override suspend fun clearAccountPrograms() {
         storedPrograms().values.forEach(::delete)
-        preferences.edit { remove(KEY_PROGRAMS) }
+        store.programs = null
     }
 
     private fun ensureChannel(): Long {
-        val storedId = preferences.getLong(KEY_CHANNEL_ID, NO_ID)
-        if (storedId != NO_ID && helper.getPreviewChannel(storedId) != null) return storedId
-        // Two different `toUri` in a row read as a typo: the first is Intent's, which serialises
-        // the intent to a string, and the second parses that string back into a Uri.
-        val appLink = Intent(context, MainActivity::class.java).toUri(Intent.URI_INTENT_SCHEME)
-        val channel = PreviewChannel.Builder()
-            .setDisplayName(context.getString(R.string.tv_home_continue_watching))
-            .setAppLinkIntentUri(appLink.toUri())
-            .build()
-        return helper.publishDefaultChannel(channel).also { channelId ->
-            preferences.edit { putLong(KEY_CHANNEL_ID, channelId) }
+        val storedId = store.channelId
+        if (storedId != null && gateway.channelExists(storedId)) return storedId
+        return gateway.publishChannel(channelName(), null).also { channelId ->
+            store.channelId = channelId
         }
     }
 
-    // androidx.tvprovider marks the builder setters @RestrictTo(LIBRARY_GROUP) even though
-    // assembling programs is the only thing the library is there for; every app that publishes to
-    // the Android TV home row calls them. Suppressed on this function alone rather than disabling
-    // the check, so a genuinely restricted call elsewhere still fails the build.
-    @SuppressLint("RestrictedApi")
     private fun publish(
         channelId: Long,
         program: PublishedProgram,
         stored: StoredProgram?,
     ): StoredProgram {
-        val intentUri = uriCodec.internalUri(program.target).toUri()
-        val preview = PreviewProgram.Builder()
-            .setChannelId(channelId)
-            .setType(TvContractCompat.PreviewPrograms.TYPE_MOVIE)
-            .setTitle(program.title)
-            .setPosterArtUri(program.artworkUri.toUri())
-            .setIntentUri(intentUri)
-            .setInternalProviderId(program.stableKey)
-            .setDurationMillis(program.durationMs.toInt())
-            .setLastPlaybackPositionMillis(program.positionMs.toInt())
-            .build()
-        val watchNext = WatchNextProgram.Builder()
-            .setType(TvContractCompat.PreviewPrograms.TYPE_MOVIE)
-            .setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE)
-            .setTitle(program.title)
-            .setPosterArtUri(program.artworkUri.toUri())
-            .setIntentUri(intentUri)
-            .setInternalProviderId(program.stableKey)
-            .setDurationMillis(program.durationMs.toInt())
-            .setLastPlaybackPositionMillis(program.positionMs.toInt())
-            .setLastEngagementTimeUtcMillis(program.lastEngagementTimeMs)
-            .build()
-
-        val previewId = stored?.previewId?.takeIf { helper.getPreviewProgram(it) != null }
+        val fields = TvProgramFields(
+            stableKey = program.stableKey,
+            title = program.title,
+            artworkUri = program.artworkUri,
+            intentUri = uriCodec.internalUri(program.target),
+            positionMs = program.positionMs,
+            durationMs = program.durationMs,
+            lastEngagementTimeMs = program.lastEngagementTimeMs,
+        )
+        val previewId = stored?.previewId?.takeIf { gateway.previewExists(it) }
         val nextPreviewId = if (previewId == null) {
-            helper.publishPreviewProgram(preview)
+            gateway.publishPreview(channelId, fields)
         } else {
-            helper.updatePreviewProgram(previewId, preview)
+            gateway.updatePreview(previewId, channelId, fields)
             previewId
         }
-        val watchNextId = stored?.watchNextId?.takeIf { helper.getWatchNextProgram(it) != null }
+        val watchNextId = stored?.watchNextId?.takeIf { gateway.watchNextExists(it) }
         val nextWatchNextId = if (watchNextId == null) {
-            helper.publishWatchNextProgram(watchNext)
+            gateway.publishWatchNext(fields)
         } else {
-            helper.updateWatchNextProgram(watchNext, watchNextId)
+            gateway.updateWatchNext(watchNextId, fields)
             watchNextId
         }
         return StoredProgram(nextPreviewId, nextWatchNextId)
     }
 
     private fun delete(program: StoredProgram) {
-        helper.deletePreviewProgram(program.previewId)
-        context.contentResolver.delete(TvContractCompat.buildWatchNextProgramUri(program.watchNextId), null, null)
+        gateway.deletePreview(program.previewId)
+        gateway.deleteWatchNext(program.watchNextId)
     }
 
-    private fun storedPrograms(): Map<String, StoredProgram> = preferences
-        .getString(KEY_PROGRAMS, null)
+    private fun storedPrograms(): Map<String, StoredProgram> = store.programs
         ?.split(ENTRY_SEPARATOR)
         ?.mapNotNull { entry ->
             val pieces = entry.split(FIELD_SEPARATOR)
@@ -123,10 +92,9 @@ internal class AndroidTvHomePublisher(
         .orEmpty()
 
     private fun storePrograms(programs: Map<String, StoredProgram>) {
-        val value = programs.entries.joinToString(ENTRY_SEPARATOR) { (key, ids) ->
+        store.programs = programs.entries.joinToString(ENTRY_SEPARATOR) { (key, ids) ->
             listOf(key, ids.previewId, ids.watchNextId).joinToString(FIELD_SEPARATOR)
         }
-        preferences.edit { putString(KEY_PROGRAMS, value) }
     }
 
     private data class StoredProgram(
@@ -135,10 +103,7 @@ internal class AndroidTvHomePublisher(
     )
 
     private companion object {
-        const val PREFERENCES_NAME = "tv_home_android"
-        const val KEY_CHANNEL_ID = "channel_id"
-        const val KEY_PROGRAMS = "programs"
-        const val NO_ID = -1L
+        const val LOG_TAG = "AndroidTvHomePublisher"
         const val ENTRY_SEPARATOR = ";"
         const val FIELD_SEPARATOR = ","
         const val STORED_FIELD_COUNT = 3
