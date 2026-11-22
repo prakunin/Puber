@@ -4,7 +4,12 @@ import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -76,6 +81,69 @@ class WatchStateDaoTest {
     }
 
     @Test
+    fun aServerRowEqualToTheStoredOneIsNotRewritten() = runTest {
+        val withValues = serverRow(itemId = 11, isFullyWatched = false, updatedAt = 100).copy(
+            progressTime = 30,
+            progressDuration = 120,
+        )
+        val withNulls = serverRow(itemId = 12, isFullyWatched = false, updatedAt = 100).copy(
+            watchedEpisodes = null,
+            totalEpisodes = null,
+        )
+        dao.upsertAllFromServer(listOf(withValues, withNulls))
+
+        val emissions = withContext(Dispatchers.Default) {
+            var seen = 0
+            val first = CompletableDeferred<Unit>()
+            val collector = async {
+                dao.observeAll().collect {
+                    seen += 1
+                    first.complete(Unit)
+                }
+            }
+            first.await()
+            dao.upsertAllFromServer(listOf(withValues, withNulls))
+            delay(SETTLE_MILLIS)
+            collector.cancel()
+            seen
+        }
+
+        assertEquals(1, emissions)
+    }
+
+    @Test
+    fun aServerRowDifferingInAnyWrittenColumnLands() = runTest {
+        val stored = serverRow(itemId = 13, isFullyWatched = false, updatedAt = 100).copy(
+            progressTime = 30,
+            progressDuration = 120,
+        )
+        val variants = listOf(
+            "is_series_like" to stored.copy(isSeriesLike = !stored.isSeriesLike),
+            "is_fully_watched" to stored.copy(isFullyWatched = !stored.isFullyWatched),
+            "watched_episodes" to stored.copy(watchedEpisodes = 4),
+            "watched_episodes to null" to stored.copy(watchedEpisodes = null),
+            "total_episodes" to stored.copy(totalEpisodes = 11),
+            "total_episodes to null" to stored.copy(totalEpisodes = null),
+            "progress_time" to stored.copy(progressTime = 31),
+            "progress_time to null" to stored.copy(progressTime = null),
+            "progress_duration" to stored.copy(progressDuration = 121),
+            "progress_duration to null" to stored.copy(progressDuration = null),
+            "updated_at" to stored.copy(updatedAt = 101),
+            "generation" to stored.copy(generation = stored.generation + 1),
+        )
+        variants.forEach { (column, incoming) ->
+            dao.upsert(listOf(stored))
+            dao.upsertAllFromServer(listOf(incoming))
+            assertEquals(column, incoming, dao.get(stored.itemId))
+        }
+        val fromNull = stored.copy(itemId = 14, progressTime = null, progressDuration = null)
+        dao.upsert(listOf(fromNull))
+        val filled = fromNull.copy(progressTime = 30, progressDuration = 120)
+        dao.upsertAllFromServer(listOf(filled))
+        assertEquals("null to value", filled, dao.get(14))
+    }
+
+    @Test
     fun historyRowsInsertAndKeepTheNewestEntry() = runTest {
         dao.upsertAllFromHistory(listOf(historyRow(itemId = 4, isFullyWatched = true, historySeenAt = 900)))
         dao.upsertAllFromHistory(listOf(historyRow(itemId = 4, isFullyWatched = false, historySeenAt = 100)))
@@ -140,6 +208,10 @@ class WatchStateDaoTest {
         assertEquals(null, dao.get(8))
         assertEquals(9, dao.get(9)!!.itemId)
         assertEquals(10, dao.get(10)!!.itemId)
+    }
+
+    private companion object {
+        const val SETTLE_MILLIS = 1_000L
     }
 
     private fun serverRow(itemId: Int, isFullyWatched: Boolean, updatedAt: Long) = WatchStateEntity(
