@@ -137,13 +137,7 @@ internal class DetailsScreenUIMapper(
             seasonNumber = seasonNumber,
             episodeNumber = episode.number,
             isSeasonWatched = seasonEpisodes.all { it.watched == 1 },
-            progressPercent = episode.watching?.let { watching ->
-                if (watching.duration > 0) {
-                    watching.time.toFloat() / watching.duration.toFloat()
-                } else {
-                    null
-                }
-            },
+            progressPercent = episode.watching.progressFraction(episode.duration),
         )
     }
 
@@ -353,7 +347,7 @@ internal class DetailsScreenUIMapper(
     private fun buildSeriesResumeLine(item: Item): String {
         val next = findFirstUnwatchedEpisode(item)
             ?: return resources.getString(R.string.video_details_resume_finished)
-        val left = next.episode.watching.timeLeft()
+        val left = next.episode.watching.timeLeft(next.episode.duration)
         return if (left != null) {
             resources.getString(
                 R.string.video_details_resume_series,
@@ -371,7 +365,8 @@ internal class DetailsScreenUIMapper(
     }
 
     private fun buildMovieResumeLine(item: Item): String {
-        val left = (item.watching ?: item.videos?.firstOrNull()?.watching).timeLeft()
+        val video = item.videos?.firstOrNull()
+        val left = (video?.watching ?: item.watching).timeLeft(video?.duration ?: item.duration?.total)
         val total = item.duration?.total ?: 0
         return when {
             itemMapper.isItemWatched(item) -> resources.getString(R.string.video_details_resume_finished)
@@ -387,10 +382,26 @@ internal class DetailsScreenUIMapper(
         }
     }
 
-    /** What is left when playback has started. Null when it has not, and the line says so. */
-    private fun WatchingInfo?.timeLeft(): Int? {
-        if (this == null || time <= 0 || duration <= 0) return null
-        return (duration - time).takeIf { left -> left > 0 }
+    /**
+     * What is left when playback has started. Null when it has not, and the line says so.
+     * Item payloads omit [WatchingInfo.duration], so the media's own length stands in for it.
+     */
+    private fun WatchingInfo?.timeLeft(mediaDuration: Int?): Int? {
+        if (this == null) return null
+        val length = length(mediaDuration) ?: return null
+        return (length - time).takeIf { left -> left > 0 }
+    }
+
+    /** Played share of the media, on the same length rule as [timeLeft]. Null when playback has not started. */
+    private fun WatchingInfo?.progressFraction(mediaDuration: Int?): Float? {
+        if (this == null) return null
+        val length = length(mediaDuration) ?: return null
+        return time.toFloat() / length.toFloat()
+    }
+
+    private fun WatchingInfo.length(mediaDuration: Int?): Int? {
+        if (time <= 0) return null
+        return duration.takeIf { it > 0 } ?: mediaDuration?.takeIf { it > 0 }
     }
 
     private fun Item.subtitleCount(): Int {

@@ -9,7 +9,6 @@ import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.api.models.VideoUrl
 import com.kino.puber.data.api.models.WatchingInfo
-import com.kino.puber.data.api.models.WatchingStatus
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
@@ -648,9 +647,7 @@ class PlayerInteractorTest {
 
     @Test
     fun saveWatchingTime_success_doesNotMarkItemDetailsStale() = runTest {
-        coEvery { api.setWatchingTime(42, 1, 120, 2) } returns Result.success(
-            WatchingStatus(id = 42, status = 1, time = 120, season = 2, episode = 1),
-        )
+        coEvery { api.setWatchingTime(42, 1, 120, 2) } returns Result.success(Unit)
         coEvery { itemDetailsRepository.markStale(any()) } returns Unit
 
         interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 120, season = 2)

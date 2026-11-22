@@ -370,15 +370,6 @@ data class DeviceSettings(
 )
 
 @Serializable
-data class WatchingStatus(
-    val id: Int,
-    val status: Int,
-    val time: Int? = null,
-    val season: Int? = null,
-    val episode: Int? = null
-)
-
-@Serializable
 data class WatchingToggleResponse(
     val status: Int,
     val watched: Int? = null,
@@ -556,6 +547,7 @@ data class Episode(
 @Serializable
 data class WatchingInfo(
     val time: Int = 0,
+    /** Absent from item payloads (`videos[]`, `episodes[]`); read the media's own `duration` there. */
     val duration: Int = 0,
     val status: Int = 0, // 0 - not watched, 1 - watched, 2 - will watch
     @SerialName("updated_at") val updatedAt: String? = null
