@@ -1,5 +1,6 @@
 package com.kino.puber.data.repository
 
+import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
@@ -11,6 +12,7 @@ import com.kino.puber.data.db.WatchStateDao
 import com.kino.puber.data.db.WatchStateSyncDao
 import com.kino.puber.data.db.WatchStateSyncEntity
 import com.kino.puber.data.db.WatchStateEntity
+import com.kino.puber.util.FakeResourceProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -596,22 +598,78 @@ class WatchStateRepositoryTest {
     fun movieWithPlaybackProgress_isRecordedAsPartiallyWatched() = runTest {
         val repository = repository(eagerScope())
 
-        repository.recordFromServer(
-            listOf(
-                Item(
-                    id = 3,
-                    title = "Half seen movie",
-                    type = ItemType.MOVIE,
-                    watched = 0,
-                    watching = WatchingInfo(time = 30, duration = 120),
-                )
-            )
-        )
+        repository.recordFromServer(listOf(halfSeenMovie()))
 
         val row = dao.rows.value.single()
         assertFalse(row.isFullyWatched)
         assertEquals(30, row.progressTime)
         assertEquals(120, row.progressDuration)
+    }
+
+    @Test
+    fun resolve_readsAMoviesPositionAndLengthFromItsFirstVideo() = runTest {
+        val repository = repository(eagerScope())
+        val item = halfSeenMovie()
+
+        assertEquals(0.25f, repository.resolve(item)?.progressPercent)
+        val mapper = VideoItemUIMapper(FakeResourceProvider(), watchStateRepository = repository)
+        assertEquals(0.25f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun recordFromServer_keepsAMoviesBarAfterADetailsReadWithoutALength() = runTest {
+        val repository = repository(eagerScope())
+        repository.recordFromHistory(
+            entries = listOf(historyEntry(itemId = 5, type = ItemType.MOVIE, time = 30, duration = 120)),
+            seriesStillInProgress = emptySet(),
+        )
+        now = 100L
+        val item = Item(
+            id = 5,
+            title = "Details read",
+            type = ItemType.MOVIE,
+            watching = WatchingInfo(time = 30),
+            videos = listOf(Video(id = 1, duration = 120)),
+        )
+
+        repository.recordFromServer(listOf(item))
+
+        assertEquals(120, dao.rows.value.single().progressDuration)
+        assertEquals(0.25f, repository.resolve(item)?.progressPercent)
+    }
+
+    @Test
+    fun recordFromServer_takesAMoviesWatchedVerdictFromItsFirstVideo() = runTest {
+        val repository = repository(eagerScope())
+
+        repository.recordFromServer(
+            listOf(
+                Item(
+                    id = 6,
+                    title = "Finished movie",
+                    type = ItemType.MOVIE,
+                    videos = listOf(Video(id = 1, duration = 120, watched = 1)),
+                )
+            )
+        )
+
+        assertTrue(dao.rows.value.single().isFullyWatched)
+    }
+
+    @Test
+    fun resolve_fallsBackToTheIndexForAMovieWhoseVideoCarriesNoWatchFields() = runTest {
+        dao.rows.value = listOf(
+            entity(1, false).copy(isSeriesLike = false, progressTime = 30, progressDuration = 120)
+        )
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+
+        val resolved = repository.resolve(
+            Item(id = 1, title = "Movie", type = ItemType.MOVIE, videos = listOf(Video(id = 1, duration = 120)))
+        )
+
+        assertEquals(repository.get(1), resolved)
+        assertEquals(0.25f, resolved?.progressPercent)
     }
 
     @Test
@@ -674,6 +732,40 @@ class WatchStateRepositoryTest {
 
         assertFalse(dao.rows.value.single().isFullyWatched)
     }
+
+    @Test
+    fun recordFromServer_aNotWatchedFirstVideoReplacesAWatchedHistoryRow() = runTest {
+        val repository = repository(eagerScope())
+        repository.recordFromHistory(
+            entries = listOf(historyEntry(itemId = 7, type = ItemType.MOVIE, time = 120, duration = 120)),
+            seriesStillInProgress = emptySet(),
+        )
+        assertTrue(dao.rows.value.single().isFullyWatched)
+        now = 100L
+
+        repository.recordFromServer(
+            listOf(
+                Item(
+                    id = 7,
+                    title = "Details read",
+                    type = ItemType.MOVIE,
+                    videos = listOf(Video(id = 1, duration = 120, watching = WatchingInfo(status = 0, time = 0))),
+                )
+            )
+        )
+
+        val row = dao.rows.value.single()
+        assertFalse(row.isFullyWatched)
+        assertEquals(0, row.progressTime)
+        assertEquals(120, row.progressDuration)
+    }
+
+    private fun halfSeenMovie() = Item(
+        id = 3,
+        title = "Half seen movie",
+        type = ItemType.MOVIE,
+        videos = listOf(Video(id = 1, duration = 120, watching = WatchingInfo(time = 30))),
+    )
 
     private fun historyEntry(
         itemId: Int,

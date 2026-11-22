@@ -153,7 +153,8 @@ fun ItemType.isSeriesLike(): Boolean = when (this) {
  * For a movie the answer is a flag rather than a count, and the endpoints disagree on where they
  * put it: `watched` where they send one, `watching.status` where they do not. Reading only the
  * first calls a finished movie unwatched, and that verdict then overwrites what the history walk
- * had already worked out about it.
+ * had already worked out about it. The details endpoint puts the same flag on the first video
+ * (`videos[0].watched` or `videos[0].watching.status`), a third place to look.
  *
  * For a series `watched` counts watched episodes, which only proves the account started: what
  * settles it is `new` (how many episodes are still unwatched) or, failing that, the episode count.
@@ -162,9 +163,7 @@ fun ItemType.isSeriesLike(): Boolean = when (this) {
  */
 fun Item.isFullyWatched(): Boolean {
     val watchedCount = watched ?: 0
-    if (!type.isSeriesLike()) {
-        return watchedCount > 0 || watching?.status == WATCHED_STATUS
-    }
+    if (!type.isSeriesLike()) return watchedCount > 0 || isMovieWatchedAnywhere()
     if (watchedCount == 0) return false
 
     val unwatchedEpisodes = new
@@ -175,6 +174,24 @@ fun Item.isFullyWatched(): Boolean {
         else -> false
     }
 }
+
+private fun Item.isMovieWatchedAnywhere(): Boolean {
+    val firstVideo = videos?.firstOrNull()
+    val itemFlag = watching?.status == WATCHED_STATUS
+    val videoFlag = (firstVideo?.watched ?: 0) > 0 || firstVideo?.watching?.status == WATCHED_STATUS
+    return itemFlag || videoFlag
+}
+
+/** Where a movie's playback position sits: its first video when that carries one, else the item. */
+fun Item.moviePosition(): WatchingInfo? = videos?.firstOrNull()?.watching ?: watching
+
+/** A movie's length in seconds: its first video's, else the catalogue total, else unknown. */
+fun Item.movieLength(): Int? =
+    videos?.firstOrNull()?.duration?.takeIf { it > 0 } ?: duration?.total?.takeIf { it > 0 }
+
+/** This position's own length when it has one, else [mediaDuration], else unknown. */
+fun WatchingInfo.lengthOr(mediaDuration: Int?): Int? =
+    duration.takeIf { it > 0 } ?: mediaDuration?.takeIf { it > 0 }
 
 @Serializable
 data class Genre(
