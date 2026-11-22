@@ -56,18 +56,16 @@ class MainActivity : ComponentActivity() {
     // androidx.core's ComponentActivity.dispatchKeyEvent as restricted, but overriding it is the only
     // hook that sees every key, and calling super is its normal contract.
     @SuppressLint("RestrictedApi")
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = dispatchWithProbe(
-        Telemetry.isEnabled,
-        {
-            // D-pad and OK pressed under the startup splash would move or open what the user cannot see.
-            if (coveredKeys.shouldDrop(StartupReveal.isCovered, event.action, event.keyCode)) {
-                true
-            } else {
-                super.dispatchKeyEvent(event)
-            }
-        },
-    ) { handled, dispatchNs ->
-        KeyProbe.onKey(event.action, event.keyCode, event.repeatCount, event.eventTime, dispatchNs, handled)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // D-pad and OK pressed under the startup splash would move or open what the user cannot see.
+        val dropped = coveredKeys.shouldDrop(StartupReveal.isCovered, event.action, event.keyCode)
+        return dispatchWithProbe(
+            Telemetry.isEnabled,
+            dropped,
+            { super.dispatchKeyEvent(event) },
+        ) { handled, wasDropped, ns ->
+            KeyProbe.onKey(event.action, event.keyCode, event.repeatCount, event.eventTime, ns, handled, wasDropped)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

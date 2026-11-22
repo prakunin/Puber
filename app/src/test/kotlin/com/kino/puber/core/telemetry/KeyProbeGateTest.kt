@@ -26,8 +26,8 @@ internal class KeyProbeGateTest {
         Telemetry.resetForTests()
     }
 
-    private fun key(action: Int, repeat: Int, atMs: Long, handled: Boolean = true) =
-        KeyProbe.onKey(action, code, repeat, atMs, ms(atMs), handled)
+    private fun key(action: Int, repeat: Int, atMs: Long, handled: Boolean = true, dropped: Boolean = false) =
+        KeyProbe.onKey(action, code, repeat, atMs, ms(atMs), handled, dropped)
 
     private fun frame(startMs: Long, uiMs: Long) =
         KeyProbe.matcher.onFrame(ms(startMs), ms(uiMs), recorder::record)
@@ -47,6 +47,36 @@ internal class KeyProbeGateTest {
         key(KeyEvent.ACTION_UP, 0, 1_300)
         frame(1_301, 200)
         assertEquals(0, latCount())
+    }
+
+    @Test
+    fun droppedKeyDoesNotBlockTheNextHandledKey() {
+        key(KeyEvent.ACTION_DOWN, 0, 1_000, dropped = true)
+        key(KeyEvent.ACTION_DOWN, 0, 1_100)
+        frame(1_101, 200)
+
+        val lats = recorder.events.filterIsInstance<TelemetryEvent.KeyLat>()
+        assertEquals(1, lats.size)
+        assertEquals(201L, lats.single().latMs)
+    }
+
+    @Test
+    fun droppedFirstDownIsCountedOnceAndRepeatsAreNot() {
+        val marks = StartupMarks(
+            procStartMs = 0,
+            appCreateMs = 0,
+            record = recorder::record,
+            clock = FakeTelemetryClock(),
+        )
+        Telemetry.startupMarks = marks
+
+        key(KeyEvent.ACTION_DOWN, 0, 1_000, dropped = true)
+        key(KeyEvent.ACTION_DOWN, 1, 1_050, dropped = true)
+        key(KeyEvent.ACTION_DOWN, 2, 1_100, dropped = true)
+        key(KeyEvent.ACTION_UP, 0, 1_150, dropped = true)
+        marks.onTimeout()
+
+        assertEquals(1, recorder.events.filterIsInstance<TelemetryEvent.Startup>().single().droppedKeys)
     }
 
     @Test

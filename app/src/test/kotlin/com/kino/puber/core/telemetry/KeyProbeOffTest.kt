@@ -18,21 +18,21 @@ internal class KeyProbeOffTest {
         val code = KeyEvent.KEYCODE_DPAD_DOWN
         repeat(10) { press ->
             val base = press * 100L
-            dispatchWithProbe(enabled, { true }) { handled, ns ->
-                KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, 0, base, ns, handled)
+            dispatchWithProbe(enabled, false, { true }) { handled, dropped, ns ->
+                KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, 0, base, ns, handled, dropped)
             }
             repeat(3) { r ->
-                dispatchWithProbe(enabled, { true }) { handled, ns ->
-                    KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, r + 1, base + r + 1, ns, handled)
+                dispatchWithProbe(enabled, false, { true }) { handled, dropped, ns ->
+                    KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, r + 1, base + r + 1, ns, handled, dropped)
                 }
             }
-            dispatchWithProbe(enabled, { true }) { handled, ns ->
-                KeyProbe.onKey(KeyEvent.ACTION_UP, code, 0, base + 50, ns, handled)
+            dispatchWithProbe(enabled, false, { true }) { handled, dropped, ns ->
+                KeyProbe.onKey(KeyEvent.ACTION_UP, code, 0, base + 50, ns, handled, dropped)
             }
         }
         // End on a press that is still open, so a machine that was fed has a burst to flush.
-        dispatchWithProbe(enabled, { true }) { handled, ns ->
-            KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, 0, 5_000L, ns, handled)
+        dispatchWithProbe(enabled, false, { true }) { handled, dropped, ns ->
+            KeyProbe.onKey(KeyEvent.ACTION_DOWN, code, 0, 5_000L, ns, handled, dropped)
         }
     }
 
@@ -50,10 +50,10 @@ internal class KeyProbeOffTest {
         drainRecorder(recorder)
         assertEquals(0, recorder.events.size)
 
-        // Control: the same feed with the probe on records bursts and a slow answer.
+        // Control: the same feed with the probe on records bursts and a slow answer per press.
         feed(enabled = true)
         drainRecorder(recorder)
         assertEquals(11, recorder.events.count { it is TelemetryEvent.Key })
-        assertEquals(1, recorder.events.count { it is TelemetryEvent.KeyLat })
+        assertEquals(11, recorder.events.count { it is TelemetryEvent.KeyLat })
     }
 }

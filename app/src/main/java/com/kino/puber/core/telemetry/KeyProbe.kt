@@ -6,7 +6,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 private const val IDLE_GAP_MS = 2_000L
 private const val SLOW_MS = 50L
-private const val EXPIRY_NS = 1_000_000_000L
+private const val EXPIRY_NS = 5_000_000_000L
+private const val MAX_PENDING = 16
 private const val NS_PER_MS = 1_000_000L
 
 /**
@@ -64,9 +65,11 @@ internal class KeyBurstMachine(
 }
 
 /**
- * Matches the earliest unanswered handled key to the first frame that started after its dispatch.
- * [arm] runs on the main thread, [onFrame] on the FrameMetrics thread; one immutable [Pending] is
- * swapped atomically, so the two never mix the fields of two presses.
+ * Matches every unanswered handled key to the first frame that started after its dispatch.
+ * [arm] runs on the main thread, [onFrame] on the FrameMetrics thread; the pending keys are one
+ * immutable list swapped atomically, so the two never mix the fields of two presses and a key is
+ * emitted by exactly one frame. At most [MAX_PENDING] keys wait; a key no frame answered within
+ * [EXPIRY_NS] is emitted as expired, without a latency.
  */
 internal class KeyLatencyMatcher(private val nowMs: () -> Long = Telemetry::nowMs) {
     private class Pending(
@@ -76,45 +79,76 @@ internal class KeyLatencyMatcher(private val nowMs: () -> Long = Telemetry::nowM
         val screen: Class<*>?,
     )
 
-    private val pending = AtomicReference<Pending?>(null)
+    private val pending = AtomicReference<List<Pending>>(emptyList())
 
     fun arm(eventMs: Long, dispatchNs: Long, name: KeyName, screen: Class<*>?, handled: Boolean) {
         if (!handled) return
-        val current = pending.get()
-        if (current != null && dispatchNs - current.dispatchNs <= EXPIRY_NS) return
-        pending.compareAndSet(current, Pending(eventMs, dispatchNs, name, screen))
+        val added = Pending(eventMs, dispatchNs, name, screen)
+        while (true) {
+            val current = pending.get()
+            if (current.size >= MAX_PENDING) return
+            if (pending.compareAndSet(current, current + added)) return
+        }
     }
 
     fun onFrame(startNs: Long, uiNs: Long, emit: (TelemetryEvent.KeyLat) -> Unit) {
-        val p = pending.get() ?: return
-        if (startNs >= p.dispatchNs) answer(p, startNs, uiNs, emit)
+        while (true) {
+            val current = pending.get()
+            if (current.isEmpty()) return
+            var answered = 0
+            for (i in current.indices) if (current[i].dispatchNs <= startNs) answered++
+            if (answered == 0) return
+            val remaining = if (answered == current.size) emptyList() else remainingAfter(current, startNs)
+            if (!pending.compareAndSet(current, remaining)) continue
+            for (i in current.indices) if (current[i].dispatchNs <= startNs) answer(current[i], startNs, uiNs, emit)
+            return
+        }
+    }
+
+    private fun remainingAfter(current: List<Pending>, startNs: Long): List<Pending> {
+        val kept = ArrayList<Pending>(current.size)
+        for (i in current.indices) if (current[i].dispatchNs > startNs) kept.add(current[i])
+        return kept
     }
 
     private fun answer(p: Pending, startNs: Long, uiNs: Long, emit: (TelemetryEvent.KeyLat) -> Unit) {
+        val frameMs = uiNs / NS_PER_MS
+        val waitMs = p.dispatchNs / NS_PER_MS - p.eventMs
         if (startNs - p.dispatchNs > EXPIRY_NS) {
-            pending.compareAndSet(p, null)
+            emit(
+                TelemetryEvent.KeyLat(
+                    nowMs(), p.screen, p.name, latMs = null, frameMs = frameMs, expired = true, waitMs = waitMs,
+                ),
+            )
             return
         }
-        if (!pending.compareAndSet(p, null)) return
         val latMs = (startNs + uiNs) / NS_PER_MS - p.eventMs
-        if (latMs > SLOW_MS) emit(TelemetryEvent.KeyLat(nowMs(), p.screen, p.name, latMs, uiNs / NS_PER_MS))
+        if (latMs > SLOW_MS) emit(TelemetryEvent.KeyLat(nowMs(), p.screen, p.name, latMs, frameMs, waitMs = waitMs))
     }
 
     fun clear() {
-        pending.set(null)
+        pending.set(emptyList())
     }
 }
 
-/** All logic of `MainActivity.dispatchKeyEvent`. Returns exactly what [superDispatch] returns. */
+/**
+ * All logic of `MainActivity.dispatchKeyEvent`. Returns exactly what [superDispatch] returns, except
+ * for a [dropped] key (swallowed under the startup splash), which is handled without reaching super.
+ */
 internal inline fun dispatchWithProbe(
     enabled: Boolean,
+    dropped: Boolean,
     superDispatch: () -> Boolean,
-    probe: (handled: Boolean, dispatchNs: Long) -> Unit,
+    probe: (handled: Boolean, dropped: Boolean, dispatchNs: Long) -> Unit,
 ): Boolean {
+    if (dropped) {
+        if (enabled) runCatching { probe(true, true, System.nanoTime()) }
+        return true
+    }
     if (!enabled) return superDispatch()
     val dispatchNs = System.nanoTime()
     val handled = superDispatch()
-    runCatching { probe(handled, dispatchNs) }
+    runCatching { probe(handled, false, dispatchNs) }
     return handled
 }
 
@@ -123,11 +157,23 @@ internal object KeyProbe {
     val matcher = KeyLatencyMatcher()
     private val bursts = KeyBurstMachine()
 
-    fun onKey(action: Int, keyCode: Int, repeat: Int, eventMs: Long, dispatchNs: Long, handled: Boolean) {
+    fun onKey(
+        action: Int,
+        keyCode: Int,
+        repeat: Int,
+        eventMs: Long,
+        dispatchNs: Long,
+        handled: Boolean,
+        dropped: Boolean = false,
+    ) {
         val screen = Telemetry.screen
         bursts.onKey(action, keyCode, repeat, eventMs, screen)
         if (action == KeyEvent.ACTION_DOWN && repeat == 0) {
-            matcher.arm(eventMs, dispatchNs, keyNameOf(keyCode), screen, handled)
+            if (dropped) {
+                Telemetry.startupMarks?.onKeyDropped()
+            } else {
+                matcher.arm(eventMs, dispatchNs, keyNameOf(keyCode), screen, handled)
+            }
         }
     }
 

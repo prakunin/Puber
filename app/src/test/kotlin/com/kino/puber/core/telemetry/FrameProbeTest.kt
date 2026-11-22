@@ -145,7 +145,7 @@ internal class FrameProbeTest {
         assertSame(HomeScreen::class.java, frames.single().screen)
         assertEquals(1, frames.single().frames)
         val keyLat = recorder.events.filterIsInstance<TelemetryEvent.KeyLat>().single()
-        assertEquals(181, keyLat.latMs)
+        assertEquals(181L, keyLat.latMs)
         assertSame(HomeScreen::class.java, keyLat.screen)
         probe.stop()
         assertSame(ScreenScreen::class.java, frames.last().screen)
