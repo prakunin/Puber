@@ -4,6 +4,7 @@ import com.kino.puber.core.ui.model.VideoItemUIMapper
 import com.kino.puber.R
 import com.kino.puber.data.api.models.Audio
 import com.kino.puber.data.api.models.Country
+import com.kino.puber.data.api.models.Duration
 import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
@@ -12,6 +13,7 @@ import com.kino.puber.data.api.models.Season
 import com.kino.puber.data.api.models.Trailer
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.VideoFile
+import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -21,9 +23,10 @@ import org.junit.jupiter.api.Test
 class DetailsScreenUIMapperTest {
 
     private val resources = FakeResourceProvider()
+    private val itemMapper = VideoItemUIMapper(FakeResourceProvider())
     private val mapper = DetailsScreenUIMapper(
         resources = resources,
-        itemMapper = VideoItemUIMapper(FakeResourceProvider()),
+        itemMapper = itemMapper,
     )
 
     @Test
@@ -322,6 +325,93 @@ class DetailsScreenUIMapperTest {
         assertEquals(emptyList<DetailsSeasonUIState>(), mapper.map(movie(trailer = null)).seasons)
     }
 
+    @Test
+    fun `a started movie whose position carries no length shows the time left from the video length`() {
+        val state = mapper.map(movie(trailer = null, videos = listOf(startedVideo())))
+
+        assertEquals(movieLeftLine(5197), state.info.resumeLine)
+    }
+
+    @Test
+    fun `a movie reads its first video's position before an item-level one`() {
+        val state = mapper.map(
+            movie(trailer = null, videos = listOf(startedVideo()), watching = WatchingInfo()),
+        )
+
+        assertEquals(movieLeftLine(5197), state.info.resumeLine)
+    }
+
+    @Test
+    fun `a movie whose video carries no position reads the item-level one`() {
+        val state = mapper.map(
+            movie(
+                trailer = null,
+                videos = listOf(Video(id = 1)),
+                watching = WatchingInfo(time = 1703),
+                duration = Duration(total = 6900),
+            ),
+        )
+
+        assertEquals(movieLeftLine(5197), state.info.resumeLine)
+    }
+
+    @Test
+    fun `a movie with no position says not started with its length`() {
+        val state = mapper.map(
+            movie(trailer = null, videos = listOf(Video(id = 1)), duration = Duration(total = 6900)),
+        )
+
+        assertEquals(
+            resources.getString(
+                R.string.video_details_resume_not_started,
+                with(itemMapper) { 6900.formatDurationWithResources() },
+            ),
+            state.info.resumeLine,
+        )
+    }
+
+    @Test
+    fun `a started episode whose position carries no length shows the time left from the episode length`() {
+        val state = mapper.map(startedEpisodeSeries())
+
+        assertEquals(
+            resources.getString(
+                R.string.video_details_resume_series,
+                1,
+                1,
+                with(itemMapper) { 2073.formatDurationWithResources() },
+            ),
+            state.info.resumeLine,
+        )
+    }
+
+    @Test
+    fun `an episode card fills its bar from the episode length when the position carries none`() {
+        val state = mapper.map(startedEpisodeSeries())
+
+        assertEquals(627f / 2700, state.currentEpisode?.progressPercent)
+    }
+
+    private fun startedVideo() = Video(id = 1, duration = 6900, watching = WatchingInfo(time = 1703))
+
+    private fun movieLeftLine(secondsLeft: Int): String = resources.getString(
+        R.string.video_details_resume_movie,
+        with(itemMapper) { secondsLeft.formatDurationWithResources() },
+    )
+
+    private fun startedEpisodeSeries(): Item = series(
+        trailer = null,
+        seasons = listOf(
+            Season(
+                id = 1,
+                number = 1,
+                episodes = listOf(
+                    Episode(id = 101, number = 1, duration = 2700, watched = 0, watching = WatchingInfo(time = 627)),
+                ),
+            ),
+        ),
+    )
+
     private inline fun <reified T : DetailsButtonUIState> List<DetailsButtonUIState>.count(
         action: DetailsAction,
     ): Int {
@@ -344,6 +434,8 @@ class DetailsScreenUIMapperTest {
         videos: List<Video>? = null,
         cast: String? = null,
         finished: Boolean? = null,
+        watching: WatchingInfo? = null,
+        duration: Duration? = null,
     ): Item {
         return Item(
             id = 1,
@@ -353,6 +445,8 @@ class DetailsScreenUIMapperTest {
             videos = videos,
             cast = cast,
             finished = finished,
+            watching = watching,
+            duration = duration,
         )
     }
 
