@@ -72,6 +72,10 @@ if grep -Eq 'git[[:space:]]+tag[[:space:]]+[^-]|git[[:space:]]+push\b.*(--tags|[
   ask "Creating or pushing a release tag publishes the release and needs its own approval; the merge is not it (docs/release.md)."
 fi
 
+if grep -Eq '(^|[[:space:];&|/])release\.sh[[:space:]]+publish\b' <<<"$bare"; then
+  ask "tools/release.sh publish tags and publishes the release; it needs the owner's explicit go-ahead, the merge is not it (docs/release.md)."
+fi
+
 if grep -Eq 'git[[:space:]]+push\b.*(--force|-f\b)' <<<"$bare"; then
   ask "Force push rewrites shared history."
 fi
