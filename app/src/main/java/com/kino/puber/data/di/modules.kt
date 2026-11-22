@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import androidx.annotation.OptIn
 import com.kino.puber.BuildConfig
 import com.kino.puber.core.session.SessionEventBus
+import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.network.EndpointReachability
@@ -122,7 +123,14 @@ val repositoryModule = module {
         )
     }
     single { get<PuberDatabase>().transactions() }
-    single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
+    single {
+        WatchStateRepository(
+            dao = get(),
+            syncDao = get(),
+            transaction = get(),
+            awaitStartupSettled = get<StartupSettled>()::await,
+        )
+    }
     single<androidx.media3.datasource.cache.Cache> {
         val cacheDir = java.io.File(androidContext().externalCacheDir ?: androidContext().cacheDir, "media_cache")
         SimpleCache(

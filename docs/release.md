@@ -6,9 +6,12 @@ Releases are published by `.github/workflows/release.yml`.
 
 ## The release procedure
 
-The default bump is the next **minor** version: `X.Y.Z` -> `X.(Y+1).0`. A patch
-(`X.Y.(Z+1)`) or a major (`(X+1).0.0`) happens only when the task says so
-explicitly.
+The `release` skill (`.claude/skills/release/`) runs this procedure; the
+mechanical steps are `tools/release.sh prepare | checks | range | status |
+publish`.
+
+The default bump is the next **patch** version: `X.Y.Z` -> `X.Y.(Z+1)`. A minor
+(`X.(Y+1).0`) or a major (`(X+1).0.0`) happens only when the owner asks for it.
 
 1. Fetch `origin/master` and tags, and read `currentVersion` from
    `app/build.gradle.kts` on that base.

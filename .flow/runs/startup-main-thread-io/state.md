@@ -15,7 +15,7 @@ blocked_by: []
 source: startup-splash-preload
 created: 2026-11-21
 migrated:
-updated: 2026-11-21
+updated: 2026-11-22
 ---
 
 ## Next
@@ -31,3 +31,4 @@ Audit item 10 and rest of item 1: two prefs files are read on main before the fi
 
 ## Log
 - 2026-11-21 created (stage idea) from the static perf audit handed to startup-splash-preload (not absorbed by its plan)
+- 2026-11-22 WatchStateRepository item done in cache-decoded-memory-tier (owner Q2): clearAllPending now runs after StartupSettled.await(); the eager watch_state snapshot read stays (Home filters watched items before its first publish). Prefs, StrictMode and largeHeap items remain here

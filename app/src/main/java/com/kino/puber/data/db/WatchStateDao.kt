@@ -16,7 +16,7 @@ data class ItemLastWatched(
 )
 
 /**
- * Two rules hold for every hand-written statement here.
+ * Three rules hold for the hand-written statements here.
  *
  * The insert half must name every NOT NULL column: the defaults on [WatchStateEntity] are Kotlin
  * defaults, not SQL ones, so a column left out of an INSERT fails the constraint rather than
@@ -26,6 +26,9 @@ data class ItemLastWatched(
  * already holds — `updated_at` is when the source was *read*, not when the row was written. Without
  * that, a sync that fetched its data before the user's toggle would still land after it and undo a
  * mark the server had already confirmed.
+ *
+ * A server update that would leave every column it writes equal is skipped, so a sync that learned
+ * nothing new does not make [observeAll] emit again.
  */
 @Dao
 abstract class WatchStateDao {
@@ -140,6 +143,16 @@ abstract class WatchStateDao {
         WHERE item_id = :itemId
           AND is_local_pending = 0
           AND :updatedAt >= updated_at
+          AND (
+            is_series_like IS NOT :isSeriesLike
+            OR is_fully_watched IS NOT :isFullyWatched
+            OR watched_episodes IS NOT :watchedEpisodes
+            OR total_episodes IS NOT :totalEpisodes
+            OR progress_time IS NOT :progressTime
+            OR progress_duration IS NOT :progressDuration
+            OR updated_at IS NOT :updatedAt
+            OR generation IS NOT :generation
+          )
         """
     )
     @Suppress("LongParameterList")

@@ -48,12 +48,16 @@ class WatchStateRepositoryTest {
         total = 10,
     )
 
-    private fun repository(scope: CoroutineScope) = WatchStateRepository(
+    private fun repository(
+        scope: CoroutineScope,
+        awaitStartupSettled: suspend () -> Unit = {},
+    ) = WatchStateRepository(
         dao = dao,
         syncDao = FakeWatchStateSyncDao(),
         transaction = DatabaseTransaction.Direct,
         clock = { now },
         scope = scope,
+        awaitStartupSettled = awaitStartupSettled,
     )
 
     /**
@@ -286,6 +290,57 @@ class WatchStateRepositoryTest {
             // reaching the row afterwards is what strips the flag.
             testScheduler.advanceUntilIdle()
 
+            assertTrue(dao.rows.value.single().isLocalPending)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun clearAllPending_waitsForStartupToSettle() = runTest {
+        dao.rows.value = listOf(
+            WatchStateEntity(
+                itemId = 5,
+                isSeriesLike = false,
+                isFullyWatched = true,
+                updatedAt = 0L,
+                isLocalPending = true,
+            )
+        )
+        val settled = CompletableDeferred<Unit>()
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        try {
+            repository(scope, awaitStartupSettled = settled::await)
+
+            testScheduler.advanceUntilIdle()
+            assertTrue(dao.rows.value.single().isLocalPending)
+            assertEquals(0, dao.clearAllPendingCalls)
+
+            settled.complete(Unit)
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(dao.rows.value.single().isLocalPending)
+            assertEquals(1, dao.clearAllPendingCalls)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun markLocally_completesOnlyAfterTheDeferredCleanup() = runTest {
+        val settled = CompletableDeferred<Unit>()
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        try {
+            val repository = repository(scope, awaitStartupSettled = settled::await)
+
+            val mark = launch { repository.markLocally(itemId = 5, isSeriesLike = false, isFullyWatched = true) }
+            testScheduler.advanceUntilIdle()
+            assertFalse(mark.isCompleted)
+
+            settled.complete(Unit)
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(mark.isCompleted)
             assertTrue(dao.rows.value.single().isLocalPending)
         } finally {
             scope.cancel()
@@ -803,7 +858,10 @@ private class FakeWatchStateDao : WatchStateDao() {
         rows.value = rows.value.filterNot { it.itemId == itemId }
     }
 
+    var clearAllPendingCalls = 0
+
     override suspend fun clearAllPending() {
+        clearAllPendingCalls += 1
         rows.value = rows.value.map { row -> row.copy(isLocalPending = false) }
     }
 

@@ -44,6 +44,7 @@ class WatchStateRepository(
     private val transaction: DatabaseTransaction,
     private val clock: () -> Long = System::currentTimeMillis,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val awaitStartupSettled: suspend () -> Unit = {},
 ) {
 
     val snapshot: StateFlow<Map<Int, WatchState>> = dao.observeAll()
@@ -112,9 +113,10 @@ class WatchStateRepository(
     private val rowsBeforeLocalMark = Collections.synchronizedMap(mutableMapOf<Int, WatchStateEntity?>())
 
     /**
-     * Completes once the flags inherited from a previous process have been cleared. A mark made
-     * before that runs would be caught by the cleanup and lose the protection it exists for, so
-     * [markLocally] waits here rather than assuming the startup coroutine won the race.
+     * Completes once the flags inherited from a previous process have been cleared, which happens
+     * after startup settles ([awaitStartupSettled]). A mark made before that runs would be caught
+     * by the cleanup and lose the protection it exists for, so [markLocally] waits here rather than
+     * assuming the startup coroutine won the race.
      */
     private val inheritedFlagsCleared = CompletableDeferred<Unit>()
 
@@ -124,8 +126,10 @@ class WatchStateRepository(
         }
         scope.launch {
             try {
-                // Nothing in this process marked anything yet, so any pending flag still in the
-                // table belongs to a process that died mid-toggle and can never be resolved.
+                // Held back until startup settles so the write does not compete with the first
+                // frames. Nothing in this process marked anything yet, so any pending flag still in
+                // the table belongs to a process that died mid-toggle and can never be resolved.
+                awaitStartupSettled()
                 dao.clearAllPending()
             } finally {
                 // A cleanup that failed must not leave every later toggle waiting on it.
