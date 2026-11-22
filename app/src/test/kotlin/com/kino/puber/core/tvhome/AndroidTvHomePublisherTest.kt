@@ -116,6 +116,22 @@ internal class AndroidTvHomePublisherTest {
     }
 
     @Test
+    fun storedPreviewIsKeptWhileChannelIsDown() = runTest {
+        publisher.reconcile(listOf(program(1)))
+        val storedPrograms = store.programs
+        val previewId = gateway.previews.keys.single()
+        gateway.channels.clear()
+        gateway.channelFailure = IOException("Failed to add logo")
+
+        publisher.reconcile(listOf(program(1)))
+
+        assertEquals(storedPrograms, store.programs)
+        assertEquals(setOf(previewId), gateway.previews.keys)
+        assertEquals(emptyList<Long>(), gateway.deletedPreviews)
+        assertEquals(1, gateway.publishPreviewCalls)
+    }
+
+    @Test
     fun programRemovedWhileChannelMissingSkipsPreviewDelete() = runTest {
         gateway.channelFailure = IOException("Failed to add logo")
         publisher.reconcile(listOf(program(1)))
