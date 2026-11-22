@@ -1,0 +1,68 @@
+diff --git a/app/src/main/java/com/kino/puber/core/tvhome/TvHomeSyncCoordinator.kt b/app/src/main/java/com/kino/puber/core/tvhome/TvHomeSyncCoordinator.kt
+index dae63938..b33a48e2 100644
+--- a/app/src/main/java/com/kino/puber/core/tvhome/TvHomeSyncCoordinator.kt
++++ b/app/src/main/java/com/kino/puber/core/tvhome/TvHomeSyncCoordinator.kt
+@@ -27,6 +27,7 @@ internal class TvHomeSyncCoordinator(
+     }
+ 
+     suspend fun refreshNow() = reconciliationMutex.withLock {
++        android.util.Log.i("PUBERBASE", "refreshNow")
+         val programs = source.load().getOrElse { error ->
+             log(error, "Failed to load TV home programs")
+             return@withLock
+diff --git a/app/src/main/java/com/kino/puber/data/cache/ContentCacheRepository.kt b/app/src/main/java/com/kino/puber/data/cache/ContentCacheRepository.kt
+index d4118521..312b2654 100644
+--- a/app/src/main/java/com/kino/puber/data/cache/ContentCacheRepository.kt
++++ b/app/src/main/java/com/kino/puber/data/cache/ContentCacheRepository.kt
+@@ -291,6 +291,7 @@ class ContentCacheRepository(
+      * land afterwards and quietly restore the freshness this just took away.
+      */
+     suspend fun markItemDetailsStale(itemId: Int) = withContext(decodeDispatcher) {
++        android.util.Log.i("PUBERBASE", "markItemDetailsStale id=$itemId")
+         val current = readItemRecord(itemId) ?: return@withContext
+         itemFeed.put(
+             key = itemKey(itemId),
+diff --git a/app/src/main/java/com/kino/puber/data/repository/ItemDetailsRepository.kt b/app/src/main/java/com/kino/puber/data/repository/ItemDetailsRepository.kt
+index 3a12c8fd..4bb29485 100644
+--- a/app/src/main/java/com/kino/puber/data/repository/ItemDetailsRepository.kt
++++ b/app/src/main/java/com/kino/puber/data/repository/ItemDetailsRepository.kt
+@@ -94,6 +94,7 @@ class ItemDetailsRepository(
+     }
+ 
+     private suspend fun fetchItem(id: Int): Item {
++        android.util.Log.i("PUBERBASE", "detailsNetworkLoad id=$id")
+         val response = api.getItemDetails(id).getOrThrow()
+         // The envelope's own error field is the only wording the API gives for a refusal it still
+         // answers 200 to; without it this reported "carried no item", which describes the symptom
+diff --git a/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt b/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt
+index cd184b38..d4f2a9d7 100644
+--- a/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt
++++ b/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt
+@@ -271,10 +271,12 @@ internal class PlayerInteractor(
+     }
+ 
+     suspend fun saveWatchingTime(id: Int, videoNumber: Int, time: Int, season: Int? = null) {
+-        api.setWatchingTime(id, videoNumber, time, season).getOrThrow()
++        // BASELINE MEASUREMENT SHIM (uncommitted): server accepts marktime (HTTP 200) but the body fails to decode here
++        api.setWatchingTime(id, videoNumber, time, season).exceptionOrNull()?.let { if (it !is com.kino.puber.core.error.ApiError.Serialization) throw it }
+         // A position write happens every few seconds of playback. Dropping the entry each time is
+         // what kept the details cache from ever being warm for the titles watched most; marking it
+         // stale still guarantees the next open revalidates, but leaves something to draw meanwhile.
++        android.util.Log.i("PUBERBASE", "saveOk")
+         itemDetailsRepository.markStale(id)
+     }
+ 
+diff --git a/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt b/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt
+index 42eda627..508291d5 100644
+--- a/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt
++++ b/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt
+@@ -1907,7 +1907,8 @@ internal class PlayerVM(
+                             markContentChanged(ContentChangeType.PlaybackProgress)
+                         } catch (error: CancellationException) {
+                             throw error
+-                        } catch (_: Throwable) {
++                        } catch (t: Throwable) {
++                            android.util.Log.i("PUBERBASE", "saveFail " + t::class.java.name + ": " + (t.message ?: "").take(200))
+                             PlayerProgressDiagnostics.reportSaveFailure()
+                         }
+                     }
