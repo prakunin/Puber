@@ -2,6 +2,7 @@ package com.kino.puber.core.tvhome
 
 import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.logger.log
+import kotlinx.coroutines.CancellationException
 
 /** The channel logo: the app icon, resolved against the running build's package (dev and stage differ). */
 internal fun channelLogoUri(packageName: String): String = "android.resource://$packageName/mipmap/ic_launcher"
@@ -18,7 +19,15 @@ internal class AndroidTvHomePublisher(
 ) : TvHomePublisher {
 
     override suspend fun reconcile(programs: List<PublishedProgram>) {
-        val channelId = ensureChannel()
+        val channelId = try {
+            ensureChannel()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // Watch Next does not need a channel: keep it published while the channel is unavailable.
+            onFailure(error, "Failed to create TV home channel")
+            null
+        }
         val previous = storedPrograms()
         val next = buildMap {
             programs.forEach { program ->
@@ -38,13 +47,13 @@ internal class AndroidTvHomePublisher(
     private fun ensureChannel(): Long {
         val storedId = store.channelId
         if (storedId != null && gateway.channelExists(storedId)) return storedId
-        return gateway.publishChannel(channelName(), null).also { channelId ->
+        return gateway.publishChannel(channelName(), channelLogoUri(packageName)).also { channelId ->
             store.channelId = channelId
         }
     }
 
     private fun publish(
-        channelId: Long,
+        channelId: Long?,
         program: PublishedProgram,
         stored: StoredProgram?,
     ): StoredProgram {
@@ -57,12 +66,15 @@ internal class AndroidTvHomePublisher(
             durationMs = program.durationMs,
             lastEngagementTimeMs = program.lastEngagementTimeMs,
         )
-        val previewId = stored?.previewId?.takeIf { gateway.previewExists(it) }
-        val nextPreviewId = if (previewId == null) {
-            gateway.publishPreview(channelId, fields)
-        } else {
-            gateway.updatePreview(previewId, channelId, fields)
-            previewId
+        val previewId = stored?.previewId?.takeIf { it != NO_ID && gateway.previewExists(it) }
+        val nextPreviewId = when {
+            previewId != null && channelId != null -> {
+                gateway.updatePreview(previewId, channelId, fields)
+                previewId
+            }
+            previewId != null -> previewId
+            channelId != null -> gateway.publishPreview(channelId, fields)
+            else -> NO_ID
         }
         val watchNextId = stored?.watchNextId?.takeIf { gateway.watchNextExists(it) }
         val nextWatchNextId = if (watchNextId == null) {
@@ -75,7 +87,7 @@ internal class AndroidTvHomePublisher(
     }
 
     private fun delete(program: StoredProgram) {
-        gateway.deletePreview(program.previewId)
+        if (program.previewId != NO_ID) gateway.deletePreview(program.previewId)
         gateway.deleteWatchNext(program.watchNextId)
     }
 
@@ -103,6 +115,7 @@ internal class AndroidTvHomePublisher(
     )
 
     private companion object {
+        const val NO_ID = -1L
         const val LOG_TAG = "AndroidTvHomePublisher"
         const val ENTRY_SEPARATOR = ";"
         const val FIELD_SEPARATOR = ","

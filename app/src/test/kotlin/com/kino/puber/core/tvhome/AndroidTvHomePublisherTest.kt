@@ -2,6 +2,7 @@ package com.kino.puber.core.tvhome
 
 import com.kino.puber.core.contentlink.ContentTarget
 import com.kino.puber.core.contentlink.ContentUriCodec
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -23,6 +24,13 @@ internal class AndroidTvHomePublisherTest {
         packageName = packageName,
         onFailure = { _, message -> failures += message },
     )
+
+    @Test
+    fun channelIsCreatedWithAppIconLogo() = runTest {
+        publisher.reconcile(listOf(program(1)))
+
+        assertEquals(listOf<String?>("android.resource://com.kino.puber.stage/mipmap/ic_launcher"), gateway.logos)
+    }
 
     @Test
     fun channelLogoUriUsesGivenPackage() {
@@ -66,6 +74,25 @@ internal class AndroidTvHomePublisherTest {
     }
 
     @Test
+    fun channelFailureStillPublishesWatchNext() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+
+        publisher.reconcile(listOf(program(1), program(2)))
+
+        assertEquals(2, gateway.watchNext.size)
+        assertEquals(0, gateway.publishPreviewCalls)
+    }
+
+    @Test
+    fun channelFailureIsLoggedOnce() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+
+        publisher.reconcile(listOf(program(1), program(2)))
+
+        assertEquals(1, failures.size)
+    }
+
+    @Test
     fun cancellationFromChannelCreationPropagates() = runTest {
         gateway.channelFailure = CancellationException("cancelled")
 
@@ -73,6 +100,42 @@ internal class AndroidTvHomePublisherTest {
 
         assertTrue(thrown is CancellationException)
         assertEquals(0, gateway.watchNext.size)
+    }
+
+    @Test
+    fun recoveryAfterChannelFailureAddsPreviewsWithoutDuplicatingWatchNext() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+        publisher.reconcile(listOf(program(1), program(2)))
+        gateway.channelFailure = null
+
+        publisher.reconcile(listOf(program(1), program(2)))
+
+        assertEquals(2, gateway.previews.size)
+        assertEquals(2, gateway.watchNext.size)
+        assertEquals(2, gateway.publishWatchNextCalls)
+    }
+
+    @Test
+    fun programRemovedWhileChannelMissingSkipsPreviewDelete() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+        publisher.reconcile(listOf(program(1)))
+
+        publisher.reconcile(emptyList())
+
+        assertEquals(emptyList<Long>(), gateway.deletedPreviews)
+        assertEquals(0, gateway.watchNext.size)
+    }
+
+    @Test
+    fun noIdPreviewIsNotTreatedAsExistingProgram() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+        publisher.reconcile(listOf(program(1)))
+        gateway.channelFailure = null
+
+        publisher.reconcile(listOf(program(1)))
+
+        assertTrue(-1L !in gateway.previewExistsQueries)
+        assertEquals(1, gateway.publishPreviewCalls)
     }
 
     @Test
@@ -91,6 +154,20 @@ internal class AndroidTvHomePublisherTest {
         val entries = store.programs!!.split(";")
         assertEquals(2, entries.size)
         assertTrue(entries.all { it.split(",").size == 3 })
+    }
+
+    @Test
+    fun clearAccountProgramsDeletesAllStoredIncludingNoIdPreview() = runTest {
+        gateway.channelFailure = IOException("Failed to add logo")
+        publisher.reconcile(listOf(program(1)))
+        gateway.channelFailure = null
+        publisher.reconcile(listOf(program(2)))
+        publisher.clearAccountPrograms()
+
+        assertEquals(0, gateway.watchNext.size)
+        assertEquals(0, gateway.previews.size)
+        assertTrue(-1L !in gateway.deletedPreviews)
+        assertEquals(null, store.programs)
     }
 
     private fun program(itemId: Int, key: String = "item-$itemId") = PublishedProgram(
