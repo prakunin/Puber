@@ -4,6 +4,9 @@ import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.api.models.lengthOr
+import com.kino.puber.data.api.models.movieLength
+import com.kino.puber.data.api.models.moviePosition
 import com.kino.puber.data.db.DatabaseTransaction
 import com.kino.puber.data.db.FIRST_GENERATION
 import com.kino.puber.data.db.WatchStateDao
@@ -493,19 +496,27 @@ private fun WatchStateEntity.toWatchState() = WatchState(
     progressDuration = progressDuration,
 )
 
-private fun Item.toWatchStateOrNull(): WatchState? {
+private fun Item.firstVideoCarriesWatchFields(): Boolean {
+    val firstVideo = videos?.firstOrNull()
+    return firstVideo?.watched != null || firstVideo?.watching != null
+}
+
+internal fun Item.toWatchStateOrNull(): WatchState? {
+    val seriesLike = type.isSeriesLike()
     // `total` is an episode count, not watch state: a catalogue item carrying it while omitting
     // watched/new must fall through to the index instead of resolving to a synthetic "not watched".
-    if (watched == null && new == null && watching == null) return null
+    val itemCarriesWatchFields = watched != null || new != null || watching != null
+    if (!itemCarriesWatchFields && (seriesLike || !firstVideoCarriesWatchFields())) return null
 
+    val moviePosition = moviePosition()
     return WatchState(
         itemId = id,
-        isSeriesLike = type.isSeriesLike(),
+        isSeriesLike = seriesLike,
         isFullyWatched = isFullyWatched(),
         watchedEpisodes = watched,
         totalEpisodes = total,
-        progressTime = watching?.time,
-        progressDuration = watching?.duration,
+        progressTime = if (seriesLike) watching?.time else moviePosition?.time,
+        progressDuration = if (seriesLike) watching?.duration else moviePosition?.lengthOr(movieLength()),
     )
 }
 

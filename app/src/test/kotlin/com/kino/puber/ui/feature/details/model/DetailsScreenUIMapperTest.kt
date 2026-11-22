@@ -392,6 +392,31 @@ class DetailsScreenUIMapperTest {
         assertEquals(627f / 2700, state.currentEpisode?.progressPercent)
     }
 
+    @Test
+    fun `a movie whose first video is watched shows the finished line`() {
+        val state = mapper.map(
+            movie(
+                trailer = null,
+                videos = listOf(Video(id = 1, duration = 120, watched = 1, watching = WatchingInfo(time = 118))),
+            ),
+        )
+
+        assertEquals(resources.getString(R.string.video_details_resume_finished), state.info.resumeLine)
+    }
+
+    @Test
+    fun `a movie whose first video has zero length takes the catalogue total for the time left`() {
+        val state = mapper.map(
+            movie(
+                trailer = null,
+                videos = listOf(Video(id = 1, duration = 0, watching = WatchingInfo(time = 30))),
+                duration = Duration(total = 120),
+            ),
+        )
+
+        assertEquals(movieLeftLine(90), state.info.resumeLine)
+    }
+
     private fun startedVideo() = Video(id = 1, duration = 6900, watching = WatchingInfo(time = 1703))
 
     private fun movieLeftLine(secondsLeft: Int): String = resources.getString(

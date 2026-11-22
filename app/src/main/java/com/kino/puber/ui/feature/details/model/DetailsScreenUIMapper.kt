@@ -16,6 +16,9 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.data.api.models.isSeriesLike
+import com.kino.puber.data.api.models.lengthOr
+import com.kino.puber.data.api.models.movieLength
+import com.kino.puber.data.api.models.moviePosition
 
 internal class DetailsScreenUIMapper(
     private val resources: ResourceProvider,
@@ -365,8 +368,7 @@ internal class DetailsScreenUIMapper(
     }
 
     private fun buildMovieResumeLine(item: Item): String {
-        val video = item.videos?.firstOrNull()
-        val left = (video?.watching ?: item.watching).timeLeft(video?.duration ?: item.duration?.total)
+        val left = item.moviePosition().timeLeft(item.movieLength())
         val total = item.duration?.total ?: 0
         return when {
             itemMapper.isItemWatched(item) -> resources.getString(R.string.video_details_resume_finished)
@@ -401,7 +403,7 @@ internal class DetailsScreenUIMapper(
 
     private fun WatchingInfo.length(mediaDuration: Int?): Int? {
         if (time <= 0) return null
-        return duration.takeIf { it > 0 } ?: mediaDuration?.takeIf { it > 0 }
+        return lengthOr(mediaDuration)
     }
 
     private fun Item.subtitleCount(): Int {

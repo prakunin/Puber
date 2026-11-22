@@ -7,11 +7,11 @@ import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.data.api.models.Item
-import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchState
 import com.kino.puber.data.repository.WatchStateRepository
+import com.kino.puber.data.repository.toWatchStateOrNull
 
 /** KinoPub reports its own rating as a 0..100 percentage; the UI shows it on a 0..10 scale. */
 private const val RATING_PERCENT_TO_TEN_SCALE = 10
@@ -108,23 +108,8 @@ class VideoItemUIMapper(
 
     fun isItemWatched(item: Item): Boolean = watchState(item)?.isFullyWatched == true
 
-    private fun watchState(item: Item): WatchState? {
-        return watchStateRepository?.resolve(item) ?: item.toLocalWatchState()
-    }
-
-    /** Fallback for previews and tests constructed without the repository. */
-    private fun Item.toLocalWatchState(): WatchState? {
-        if (watched == null && new == null && watching == null) return null
-        return WatchState(
-            itemId = id,
-            isSeriesLike = type.isSeriesLike(),
-            isFullyWatched = isFullyWatched(),
-            watchedEpisodes = watched,
-            totalEpisodes = total,
-            progressTime = watching?.time,
-            progressDuration = watching?.duration,
-        )
-    }
+    private fun watchState(item: Item): WatchState? =
+        watchStateRepository?.resolve(item) ?: item.toWatchStateOrNull()
 
     fun buildRatings(item: Item): List<RatingUIState> = buildList {
         item.kinopoiskRating?.takeIf { it.isValidRating() }?.let { add(RatingUIState.KP(it)) }

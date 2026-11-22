@@ -24,6 +24,20 @@ class ItemWatchStateTest {
     }
 
     @Test
+    fun movie_isFinishedWhenItsFirstVideoWasWatched() {
+        assertTrue(movie(watched = null, video = Video(id = 1, watched = 1)).isFullyWatched())
+        assertFalse(movie(watched = null, video = Video(id = 1, watched = 0)).isFullyWatched())
+    }
+
+    @Test
+    fun movie_isFinishedWhenItsFirstVideoStatusIsWatched() {
+        val watchedVideo = Video(id = 1, watching = WatchingInfo(status = WATCHED_STATUS))
+        val openVideo = Video(id = 1, watching = WatchingInfo(status = 0))
+        assertTrue(movie(watched = null, video = watchedVideo).isFullyWatched())
+        assertFalse(movie(watched = null, video = openVideo).isFullyWatched())
+    }
+
+    @Test
     fun series_isDecidedByTheNumberOfUnwatchedEpisodes() {
         assertTrue(series(watched = 10, new = 0, total = 10).isFullyWatched())
         assertFalse(series(watched = 3, new = 7, total = 10).isFullyWatched())
@@ -42,12 +56,13 @@ class ItemWatchStateTest {
         assertFalse(series(watched = 3, new = null, total = null).isFullyWatched())
     }
 
-    private fun movie(watched: Int?, status: Int? = null) = Item(
+    private fun movie(watched: Int?, status: Int? = null, video: Video? = null) = Item(
         id = 1,
         title = "Movie",
         type = ItemType.MOVIE,
         watched = watched,
         watching = status?.let { WatchingInfo(time = 0, duration = 0, status = it) },
+        videos = video?.let(::listOf),
     )
 
     private fun series(watched: Int?, new: Int?, total: Int?) = Item(

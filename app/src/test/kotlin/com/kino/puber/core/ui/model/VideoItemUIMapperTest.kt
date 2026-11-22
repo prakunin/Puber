@@ -9,6 +9,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.Posters
 import com.kino.puber.data.api.models.Season
+import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -111,10 +112,35 @@ class VideoItemUIMapperTest {
     fun mapShortItem_progress_forPartiallyWatchedMovie() {
         val item = testItem(
             type = ItemType.MOVIE,
-            watched = 0,
-            watching = WatchingInfo(time = 30, duration = 120),
+            videos = listOf(Video(id = 1, duration = 120, watching = WatchingInfo(time = 30))),
         )
         assertEquals(0.25f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_forMovieWithItemLevelPositionUsesTheVideoLength() {
+        val item = testItem(
+            type = ItemType.MOVIE,
+            watching = WatchingInfo(time = 30),
+            videos = listOf(Video(id = 1, duration = 120)),
+        )
+        assertEquals(0.25f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_forMovieWithItemLevelPositionFallsBackToTheTotalDuration() {
+        val item = testItem(
+            type = ItemType.MOVIE,
+            watching = WatchingInfo(time = 30),
+            duration = Duration(total = 120),
+        )
+        assertEquals(0.25f, mapper.mapShortItem(item).progressPercent)
+    }
+
+    @Test
+    fun mapShortItem_progress_null_whenMovieHasNoLengthAnywhere() {
+        val item = testItem(type = ItemType.MOVIE, watching = WatchingInfo(time = 30))
+        assertEquals(null, mapper.mapShortItem(item).progressPercent)
     }
 
     @Test
@@ -124,13 +150,16 @@ class VideoItemUIMapperTest {
     }
 
     @Test
-    fun mapShortItem_progress_null_whenMovieIsWatched() {
+    fun mapShortItem_progress_null_whenMoviesVideoIsWatched() {
         val item = testItem(
             type = ItemType.MOVIE,
-            watched = 1,
-            watching = WatchingInfo(time = 120, duration = 120),
+            videos = listOf(
+                Video(id = 1, duration = 120, watched = 1, watching = WatchingInfo(time = 118)),
+            ),
         )
-        assertEquals(null, mapper.mapShortItem(item).progressPercent)
+        val mapped = mapper.mapShortItem(item)
+        assertEquals(true, mapped.isWatched)
+        assertEquals(null, mapped.progressPercent)
     }
 
     // endregion
@@ -303,6 +332,7 @@ class VideoItemUIMapperTest {
         subscribed: Boolean? = null,
         inWatchlist: Boolean? = null,
         bookmarks: List<Bookmark>? = null,
+        videos: List<Video>? = null,
     ) = Item(
         id = id,
         title = title,
@@ -323,5 +353,6 @@ class VideoItemUIMapperTest {
         subscribed = subscribed,
         inWatchlist = inWatchlist,
         bookmarks = bookmarks,
+        videos = videos,
     )
 }
