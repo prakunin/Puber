@@ -4,6 +4,8 @@ import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.StartupSlot
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -16,13 +18,20 @@ import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.ui.feature.update.model.UpdatePromptAction
 import com.kino.puber.ui.feature.update.model.UpdatePromptViewState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import java.io.File
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+
+/** Confirm presses are ignored this long after the automatic prompt appears over a screen the user is already using. */
+internal val UPDATE_PROMPT_INPUT_GUARD: Duration = 500.milliseconds
 
 internal class UpdatePromptVM(
     router: AppRouter,
     override val errorHandler: ErrorHandler,
     private val updateInteractor: IAppUpdateInteractor,
     private val updateCheckCoordinator: AppUpdateCheckCoordinator,
+    private val startupSettled: StartupSettled,
     private val resources: ResourceProvider,
 ) : PuberVM<UpdatePromptViewState>(router) {
 
@@ -33,6 +42,7 @@ internal class UpdatePromptVM(
     private var manualCheckRequestId: Long = 0L
     private var downloadJob: Job? = null
     private var downloadRequestId: Long = 0L
+    private var inputGuardActive = false
 
     override fun onStart() {
         launch {
@@ -46,10 +56,14 @@ internal class UpdatePromptVM(
         }
 
         launch {
+            startupSettled.awaitSlot(StartupSlot.UpdateCheck)
             updateInteractor.checkForUpdate(BuildConfig.VERSION_NAME)
                 .onSuccess { update ->
-                    if (update != null && update.tagName != dismissedTagName) {
-                        updateViewState(UpdatePromptViewState.Available(update))
+                    if (update != null &&
+                        update.tagName != dismissedTagName &&
+                        stateValue == UpdatePromptViewState.Hidden
+                    ) {
+                        showAutomaticPrompt(update)
                     }
                 }
             // Automatic check failures are intentionally silent.
@@ -158,7 +172,19 @@ internal class UpdatePromptVM(
         return manualCheckRequestId == requestId && stateValue == UpdatePromptViewState.Checking
     }
 
+    private fun showAutomaticPrompt(update: AvailableUpdate) {
+        inputGuardActive = true
+        updateViewState(UpdatePromptViewState.Available(update))
+        launch {
+            delay(UPDATE_PROMPT_INPUT_GUARD)
+            inputGuardActive = false
+        }
+    }
+
     private fun startDownloadFromCurrentState() {
+        if (inputGuardActive) {
+            return
+        }
         val update = when (val state = stateValue) {
             is UpdatePromptViewState.Available -> state.update
             is UpdatePromptViewState.Error -> state.update

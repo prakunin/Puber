@@ -3,6 +3,10 @@ package com.kino.puber.ui.feature.main.vm
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.StartupSlot
+import com.kino.puber.core.startup.settledStartup
+import com.kino.puber.core.startup.unsettledStartup
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -21,6 +25,7 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -58,12 +63,25 @@ internal class MainVMWatchStateSyncTest {
     }
 
     @Test
+    fun onStart_doesNotSyncWatchStateBeforeStartupSettles() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync, startupSettled = unsettledStartup(CoroutineScope(dispatcher)))
+
+        vm.testOnStart()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        coVerify(exactly = 0) { sync.syncIfStale(any()) }
+        vm.testCancelScope()
+    }
+
+    @Test
     fun onStart_syncsWatchStateOnceTheStartupBurstHasPassed() = runTest(dispatcher) {
         val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
         val vm = vm(sync)
 
         vm.testOnStart()
-        advanceTimeBy(MainVM.StartupSyncDelay.inWholeMilliseconds + 1)
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
         runCurrent()
 
         coVerify(exactly = 1) { sync.syncIfStale(any()) }
@@ -100,7 +118,7 @@ internal class MainVMWatchStateSyncTest {
 
         vm.testOnStart()
         vm.onAction(MainAction.Resumed)
-        advanceTimeBy(MainVM.StartupSyncDelay.inWholeMilliseconds + 1)
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
         runCurrent()
 
         coVerify(exactly = 1) { sync.syncIfStale(any()) }
@@ -114,7 +132,7 @@ internal class MainVMWatchStateSyncTest {
         val vm = vm(sync)
 
         vm.testOnStart()
-        advanceTimeBy(MainVM.StartupSyncDelay.inWholeMilliseconds + 1)
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
         runCurrent()
 
         vm.onAction(MainAction.Resumed)
@@ -124,7 +142,10 @@ internal class MainVMWatchStateSyncTest {
         vm.testCancelScope()
     }
 
-    private fun vm(watchStateSyncInteractor: WatchStateSyncInteractor): MainVM {
+    private fun vm(
+        watchStateSyncInteractor: WatchStateSyncInteractor,
+        startupSettled: StartupSettled = settledStartup(CoroutineScope(dispatcher)),
+    ): MainVM {
         val screens = mockk<Screens>(relaxed = true)
         val router = mockk<AppRouter>(relaxed = true)
         every { router.screens } returns screens
@@ -165,6 +186,7 @@ internal class MainVMWatchStateSyncTest {
             navigationPreferencesRepository = preferences,
             deviceInfoInteractor = deviceInfoInteractor,
             watchStateSyncInteractor = watchStateSyncInteractor,
+            startupSettled = startupSettled,
         )
     }
 }

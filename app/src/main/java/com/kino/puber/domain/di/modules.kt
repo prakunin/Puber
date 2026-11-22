@@ -1,6 +1,9 @@
 package com.kino.puber.domain.di
 
+import com.kino.puber.core.coroutine.AppCoroutineScope
 import com.kino.puber.core.lifecycle.AppForegroundState
+import com.kino.puber.core.startup.AppStartup
+import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.data.api.network.HttpEndpointProbe
 import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.api.network.diagnostics.OkHttpBoundedDownloader
@@ -17,6 +20,7 @@ import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.diagnostics.NetworkDiagnosticsInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.update.AppUpdateCheckCoordinator
 import com.kino.puber.domain.interactor.update.AppUpdateInteractor
@@ -24,6 +28,7 @@ import com.kino.puber.domain.interactor.update.IAppUpdateInteractor
 import com.kino.puber.domain.interactor.watchstate.CardDisplayChanges
 import com.kino.puber.domain.interactor.watchstate.RecentlyPlayedOrder
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
+import okhttp3.DnsCache
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -39,12 +44,14 @@ val interactorModule = module {
     singleOf(::WatchLaterBookmarkInteractor)
     singleOf(::SavedItemInteractor)
     single {
+        val dnsCache = get<DnsCache>()
         ApiDomainInteractor(
             preferences = get(),
             contentCache = get(),
             probe = HttpEndpointProbe(get()),
             reachability = get(),
             detailsPrefetcher = get(),
+            evictDnsCache = { dnsCache.evictAll() },
         )
     }
     single {
@@ -72,6 +79,29 @@ val interactorModule = module {
         DetailsPrefetcher(
             details = get(),
             foreground = get(),
+            awaitSettled = get<StartupSettled>()::await,
+        )
+    }
+    single { AppCoroutineScope() }
+    single { StartupSettled(scope = get<AppCoroutineScope>()) }
+    // Providers, not instances: resolving AppStartup on the main thread must not build the interactors
+    // (and with them half the graph), only the work it starts on IO does.
+    single {
+        AppStartup(
+            domainInteractor = { get() },
+            preferences = get(),
+            homeInteractor = {
+                HomeInteractor(
+                    api = get(),
+                    watchLaterBookmarkInteractor = get(),
+                    bookmarkFolders = get(),
+                    navigationPreferencesRepository = get(),
+                    watchStateRepository = get(),
+                    contentCache = get(),
+                    recentlyPlayedOrder = get(),
+                )
+            },
+            scope = get<AppCoroutineScope>(),
         )
     }
 }

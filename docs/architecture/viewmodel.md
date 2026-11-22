@@ -45,6 +45,7 @@ failures into state, such as `FavoriteVM`, leaves it null and never calls
 | `onAction(action)` | final: records the `act` telemetry event, then calls `handleAction(action)` |
 | `handleAction(action)` | `protected open`, the old `onAction` body; always end the `when` with `else -> super.handleAction(action)` |
 | `onBackPressed()` | routes back through `AppRouter` |
+| `revealsOnContentState` | `protected open val`, default `true`: publishing a `StartupContentState` lifts the startup splash (`core/startup/StartupReveal.kt`); Home overrides it and reveals on its launch-focus outcome |
 
 ## Errors
 

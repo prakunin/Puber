@@ -204,6 +204,24 @@ class ContentCacheRepositoryTest {
     }
 
     @Test
+    fun listWhoseItemRowsWereSweptRefetchesThem() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7), item(8)) }.toList()
+        // Only the list row is newer than the item rows, so a cap of one keeps it and drops them.
+        store.touch(ContentCacheRepository.queryKey("home"), now + 1)
+        store.sweep(olderThan = 0, keepNewest = 1)
+
+        var loads = 0
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = restarted.observeItems("home", CacheTtl.HomeSection) {
+            loads += 1
+            listOf(item(7), item(8))
+        }.toList()
+
+        assertEquals(1, loads)
+        assertEquals(listOf(7, 8), (emissions.last() as Cached.Value).value.map(Item::id))
+    }
+
+    @Test
     fun detailsOverACardOnlyRecordReportTheFailureInsteadOfEmittingNothing() = runTest {
         // Browsing home caches the card; opening the title offline has nothing to draw from it, so a
         // quiet RefreshFailed would leave the details screen spinning with no error and no retry.
@@ -229,7 +247,7 @@ class ContentCacheRepositoryTest {
     }
 
     @Test
-    fun firstUseRemovesLegacyCacheRowsWithoutTouchingUnrelatedStorage() = runTest {
+    fun firstUseLeavesLegacyRowsToTheMigration() = runTest {
         val legacyKeys = listOf(
             "home:hot",
             "item:7",
@@ -243,8 +261,9 @@ class ContentCacheRepositoryTest {
 
         subject.getPayload("probe", String.serializer(), 10.minutes) { "fresh" }
 
-        legacyKeys.forEach { key -> assertNull(store.read(key), key) }
+        legacyKeys.forEach { key -> assertEquals("legacy", store.read(key)?.payload, key) }
         assertEquals("keep", store.read("unrelated")?.payload)
+        assertTrue(store.removedPrefixes.isEmpty())
     }
 
     @Test

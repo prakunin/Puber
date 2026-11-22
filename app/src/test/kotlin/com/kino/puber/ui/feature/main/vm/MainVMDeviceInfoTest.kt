@@ -3,6 +3,10 @@ package com.kino.puber.ui.feature.main.vm
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.StartupSlot
+import com.kino.puber.core.startup.settledStartup
+import com.kino.puber.core.startup.unsettledStartup
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -19,10 +23,12 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -46,9 +52,24 @@ internal class MainVMDeviceInfoTest {
         val vm = vm(deviceInfoInteractor)
 
         vm.testOnStart()
+        advanceTimeBy(StartupSlot.DeviceInfo.offset.inWholeMilliseconds + 1)
         runCurrent()
 
         verify(exactly = 1) { deviceInfoInteractor.setDeviceInformation() }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun onStart_doesNotReportDeviceInformationBeforeStartupSettles() = runTest(dispatcher) {
+        val deviceInfoInteractor = mockk<IDeviceInfoInteractor>()
+        every { deviceInfoInteractor.setDeviceInformation() } returns flowOf(Unit)
+        val vm = vm(deviceInfoInteractor, startupSettled = unsettledStartup(CoroutineScope(dispatcher)))
+
+        vm.testOnStart()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        verify(exactly = 0) { deviceInfoInteractor.setDeviceInformation() }
         vm.testCancelScope()
     }
 
@@ -61,6 +82,7 @@ internal class MainVMDeviceInfoTest {
         val vm = vm(deviceInfoInteractor)
 
         vm.testOnStart()
+        advanceTimeBy(StartupSlot.DeviceInfo.offset.inWholeMilliseconds + 1)
         runCurrent()
 
         assertEquals(TabType.Home, vm.testStateValue.selectedTab)
@@ -68,7 +90,10 @@ internal class MainVMDeviceInfoTest {
         vm.testCancelScope()
     }
 
-    private fun vm(deviceInfoInteractor: IDeviceInfoInteractor): MainVM {
+    private fun vm(
+        deviceInfoInteractor: IDeviceInfoInteractor,
+        startupSettled: StartupSettled = settledStartup(CoroutineScope(dispatcher)),
+    ): MainVM {
         val screens = mockk<Screens>(relaxed = true)
         val router = mockk<AppRouter>(relaxed = true)
         every { router.screens } returns screens
@@ -106,6 +131,7 @@ internal class MainVMDeviceInfoTest {
             navigationPreferencesRepository = preferences,
             deviceInfoInteractor = deviceInfoInteractor,
             watchStateSyncInteractor = mockk(relaxed = true),
+            startupSettled = startupSettled,
         )
     }
 }

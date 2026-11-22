@@ -3,6 +3,10 @@ package com.kino.puber.ui.feature.main.vm
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.House
+import com.kino.puber.core.startup.StartupSettled
+import com.kino.puber.core.startup.settledStartup
+import com.kino.puber.core.startup.unsettledStartup
+import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
@@ -21,11 +25,13 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -75,6 +81,7 @@ internal class MainVMRefreshLifecycleTest {
             navigationPreferencesRepository = mockk(relaxed = true),
             deviceInfoInteractor = deviceInfoInteractor(),
             watchStateSyncInteractor = mockk(relaxed = true),
+            startupSettled = settledStartup(CoroutineScope(dispatcher)),
         )
         val historyTab = MainTab(
             type = TabType.History,
@@ -105,6 +112,48 @@ internal class MainVMRefreshLifecycleTest {
     }
 
     @Test
+    fun onStart_doesNotRequestTvHomeRefreshBeforeStartupSettles() = runTest(dispatcher) {
+        val coordinator = mockk<TvHomeSyncCoordinator>(relaxed = true)
+        val vm = vmWithCoordinator(coordinator, unsettledStartup(CoroutineScope(dispatcher)))
+
+        vm.testOnStart()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        verify(exactly = 0) { coordinator.requestRefresh(any()) }
+        vm.testCancelScope()
+    }
+
+    private fun vmWithCoordinator(
+        coordinator: TvHomeSyncCoordinator,
+        startupSettled: StartupSettled,
+    ): MainVM {
+        val router = mockk<AppRouter>(relaxed = true)
+        every { router.screens } returns mockk<Screens>(relaxed = true)
+        val mapper = mockk<MainUIMapper>()
+        every { mapper.buildViewState(any()) } returns mainState(TabType.Home)
+        every { mapper.buildTabContent(any(), any()) } answers { puberTab(firstArg(), secondArg()) }
+        val preferences = mockk<NavigationPreferencesRepository>(relaxed = true)
+        every { preferences.contentPreferences } returns MutableStateFlow(
+            ContentPreferences(
+                showAnime = true,
+                hideWatched = false,
+                showWatchedIndicators = true,
+            )
+        )
+        return MainVM(
+            router = router,
+            mainUIMapper = mapper,
+            tabRouter = mockk<TabRouter>(relaxed = true),
+            navigationPreferencesRepository = preferences,
+            deviceInfoInteractor = deviceInfoInteractor(),
+            watchStateSyncInteractor = mockk(relaxed = true),
+            startupSettled = startupSettled,
+            tvHomeSyncCoordinator = coordinator,
+        )
+    }
+
+    @Test
     fun hidingTheSelectedSection_fallsBackAndOpensModeStartTab() = runTest(dispatcher) {
         val preferences = MutableStateFlow(
             ContentPreferences(
@@ -129,7 +178,15 @@ internal class MainVMRefreshLifecycleTest {
         val tabRouter = mockk<TabRouter>(relaxed = true)
         val openedTabs = mutableListOf<PuberTab>()
         every { tabRouter.openTab(capture(openedTabs)) } returns Unit
-        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
+        val vm = MainVM(
+            router,
+            mapper,
+            tabRouter,
+            repository,
+            deviceInfoInteractor(),
+            mockk(relaxed = true),
+            settledStartup(CoroutineScope(dispatcher)),
+        )
 
         vm.testOnStart()
         runCurrent()
@@ -169,7 +226,15 @@ internal class MainVMRefreshLifecycleTest {
             puberTab(firstArg(), secondArg())
         }
         val tabRouter = mockk<TabRouter>(relaxed = true)
-        val vm = MainVM(router, mapper, tabRouter, repository, deviceInfoInteractor(), mockk(relaxed = true))
+        val vm = MainVM(
+            router,
+            mapper,
+            tabRouter,
+            repository,
+            deviceInfoInteractor(),
+            mockk(relaxed = true),
+            settledStartup(CoroutineScope(dispatcher)),
+        )
 
         vm.testOnStart()
         runCurrent()

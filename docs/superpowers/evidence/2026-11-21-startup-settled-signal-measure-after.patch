@@ -1,0 +1,37 @@
+diff --git a/app/src/main/java/com/kino/puber/core/startup/StartupSettled.kt b/app/src/main/java/com/kino/puber/core/startup/StartupSettled.kt
+index 06382a64..fe05678a 100644
+--- a/app/src/main/java/com/kino/puber/core/startup/StartupSettled.kt
++++ b/app/src/main/java/com/kino/puber/core/startup/StartupSettled.kt
+@@ -34,17 +34,17 @@ internal class StartupSettled(
+ 
+     fun onActivityCreated(restored: Boolean) {
+         if (restored) {
+-            settled.complete(Unit)
++            if (settled.complete(Unit)) android.util.Log.i("SettledMeasure", "settled restored")
+         } else if (!settled.isCompleted && fallbackArmed.compareAndSet(false, true)) {
+             scope.launch {
+                 delay(fallback)
+-                settled.complete(Unit)
++                if (settled.complete(Unit)) android.util.Log.i("SettledMeasure", "settled fallback")
+             }
+         }
+     }
+ 
+     fun onSplashGone() {
+-        settled.complete(Unit)
++        if (settled.complete(Unit)) android.util.Log.i("SettledMeasure", "settled splash")
+     }
+ 
+     suspend fun await() {
+diff --git a/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt b/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
+index 8b369a5a..7a1b10b8 100644
+--- a/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
++++ b/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
+@@ -535,6 +535,7 @@ internal class HomeVM(
+                 publishedThrough.value = upTo
+                 return@withLock
+             }
++            android.util.Log.i("SettledMeasure", "homePublish")
+             updateViewState(
+                 HomeViewState.Content(
+                     heroItems = mapped.heroItems,

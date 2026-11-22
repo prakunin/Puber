@@ -1,0 +1,17 @@
+LENS: edge  ROUND: 1  BASE: a22c03bc
+
+### F1 [minor] The 256 MB media cap never applies for anyone who doesn't trigger a warm-up
+- Where: /home/user1/orca/workspaces/Puber/cache-storage-bounds/app/src/main/java/com/kino/puber/data/di/modules.kt:79 (`MEDIA_CACHE_SIZE_BYTES = 256L * MIB`), together with /home/user1/orca/workspaces/Puber/cache-storage-bounds/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackController.kt:417,647-664 (main factory is now read-only)
+- Problem: `LeastRecentlyUsedCacheEvictor` frees space only when something writes (`onStartFile` / `onSpanAdded`), not when the cache opens. After this change the next-episode warm-up is the only writer. An existing `media_cache` from the old build therefore stays at its old size until a warm-up runs, and a warm-up runs only for a series episode that has a next episode. The spec accepts eviction "on the next write" (Decisions, Media cap). It does not cover the case where no write ever comes. AC-3 only tests the case with a warm-up.
+- Failure scenario: an upgraded install whose `media_cache` is full at 512 MB (the baseline measured 526360 KB on the emulator). The user then watches only films, or series up to their last episode. The main player no longer writes, so the evictor never runs and `media_cache` stays at about 514 MB indefinitely. That is twice the new cap, and these bytes were written by the old main player, which the new main player mostly never reads back.
+- Fix: when the `SimpleCache` single is created, if `cache.cacheSpace > MEDIA_CACHE_SIZE_BYTES`, trim it once. Either remove resources through `cache.keys` / `removeResource` until the size is under the cap, or delete the cache content once on upgrade (it can be rebuilt). Also add a device check (M3 without step 4) where the size must drop with no warm-up.
+
+### F2 [minor] `dataSourceFactory` is still written but nothing reads it any more
+- Where: /home/user1/orca/workspaces/Puber/cache-storage-bounds/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackController.kt:202, :418, :594
+- Problem: `warmUpNext` was the only reader (`dataSourceFactory ?: createDataSourceFactory()`). It now builds its own writing factory. The field is set in `prepare` and cleared in `release()` and is never read. The `dataSourceFactory` at :488 is a parameter with the same name, not the field.
+- Failure scenario: no runtime failure. A later reader could pick up the main player's read-only factory, expecting the shared writing one it used to be, and silently lose warm-up caching.
+- Fix: delete the field and its two assignments.
+
+### Unproven
+- /home/user1/orca/workspaces/Puber/cache-storage-bounds/app/src/main/java/com/kino/puber/data/cache/CachedPayloadSweeper.kt:47: `isForeground` is a `StateFlow` collected on `Dispatchers.IO`, so an ON_STOP followed quickly by ON_START (activity recreate, fast Home-and-back) can be merged into one value and skip a sweep. This only matters if a missed ON_STOP sweep can leave the table above the cap for a long time. Nothing shows that happens: the next ON_STOP sweeps anyway.
+- /home/user1/orca/workspaces/Puber/cache-storage-bounds/app/src/main/java/com/kino/puber/data/db/CachedPayloadDao.kt:35: when rows have the same `updated_at` (`writeAll` stamps a whole page with one `clock()`), the 2,000-row cut can split a page in an arbitrary order. That only matters if `queryNeedsRefetch` did not force a reload for a partly missing page, and it does force one.

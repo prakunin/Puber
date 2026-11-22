@@ -95,4 +95,58 @@ class CachedPayloadDaoTest {
 
         assertNull(dao.read("item:1"))
     }
+
+    @Test
+    fun deleteOlderThanRemovesOnlyRowsBeforeTheCutoff() = runTest {
+        val cutoff = 1_000L
+        dao.upsert(CachedPayloadEntity(key = "before", payload = "b", updatedAt = cutoff - 1))
+        dao.upsert(CachedPayloadEntity(key = "at", payload = "a", updatedAt = cutoff))
+        dao.upsert(CachedPayloadEntity(key = "after", payload = "c", updatedAt = cutoff + 1))
+
+        dao.deleteOlderThan(cutoff)
+
+        assertNull(dao.read("before"))
+        assertEquals(CachedPayloadEntity("at", "a", cutoff), dao.read("at"))
+        assertEquals(CachedPayloadEntity("after", "c", cutoff + 1), dao.read("after"))
+    }
+
+    @Test
+    fun deleteBeyondNewestKeepsTheNewestRows() = runTest {
+        (1..5).forEach { n -> dao.upsert(CachedPayloadEntity("k$n", "p$n", updatedAt = n * 100L)) }
+
+        dao.deleteBeyondNewest(keepNewest = 3)
+
+        assertNull(dao.read("k1"))
+        assertNull(dao.read("k2"))
+        assertEquals("p3", dao.read("k3")?.payload)
+        assertEquals("p4", dao.read("k4")?.payload)
+        assertEquals("p5", dao.read("k5")?.payload)
+    }
+
+    @Test
+    fun deleteBeyondNewestWithFewerRowsThanTheCapDeletesNothing() = runTest {
+        dao.upsert(CachedPayloadEntity("k1", "p1", updatedAt = 100))
+        dao.upsert(CachedPayloadEntity("k2", "p2", updatedAt = 200))
+
+        dao.deleteBeyondNewest(keepNewest = 3)
+
+        assertEquals("p1", dao.read("k1")?.payload)
+        assertEquals("p2", dao.read("k2")?.payload)
+    }
+
+    @Test
+    fun deleteBeyondNewestKeepsARowWrittenAfterTheAgeStep() = runTest {
+        dao.upsert(CachedPayloadEntity("k1", "p1", updatedAt = 100))
+        dao.upsert(CachedPayloadEntity("k2", "p2", updatedAt = 200))
+        dao.upsert(CachedPayloadEntity("k3", "p3", updatedAt = 300))
+
+        dao.deleteOlderThan(50)
+        dao.upsert(CachedPayloadEntity("fresh", "pf", updatedAt = 400))
+        dao.deleteBeyondNewest(keepNewest = 3)
+
+        assertNull(dao.read("k1"))
+        assertEquals("pf", dao.read("fresh")?.payload)
+        assertEquals("p2", dao.read("k2")?.payload)
+        assertEquals("p3", dao.read("k3")?.payload)
+    }
 }

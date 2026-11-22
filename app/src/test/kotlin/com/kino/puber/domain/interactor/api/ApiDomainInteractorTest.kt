@@ -14,7 +14,13 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -22,7 +28,13 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 internal class ApiDomainInteractorTest {
 
@@ -32,6 +44,8 @@ internal class ApiDomainInteractorTest {
     private var reachableDomains = emptySet<String>()
     private val probeCalls = mutableListOf<String>()
     private var now = 1_000_000L
+    private var evictCalls = 0
+    private var evictFailure: Throwable? = null
     private val reachability = EndpointReachability(clock = { now })
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
@@ -42,6 +56,10 @@ internal class ApiDomainInteractorTest {
         },
         reachability = reachability,
         detailsPrefetcher = detailsPrefetcher,
+        evictDnsCache = {
+            evictCalls++
+            evictFailure?.let { throw it }
+        },
     )
 
     private var domainOverride: String? = null
@@ -64,6 +82,8 @@ internal class ApiDomainInteractorTest {
         )
         reachableDomains = emptySet()
         probeCalls.clear()
+        evictCalls = 0
+        evictFailure = null
     }
 
     private fun endpointFor(domain: String) = ApiEndpointPreset(
@@ -98,6 +118,46 @@ internal class ApiDomainInteractorTest {
     }
 
     @Test
+    fun resetToDefault_evictsTheDnsCacheBeforeReturning() = runTest {
+        interactor.resetToDefault()
+
+        assertEquals(1, evictCalls)
+    }
+
+    @Test
+    fun saveCustomDomain_evictsTheDnsCacheBeforeReturning() = runTest {
+        interactor.saveCustomDomain("api.custom.example")
+
+        assertEquals(1, evictCalls)
+    }
+
+    /** A stale resolver answer is no reason to leave the other caches stale or to strand the caller. */
+    @Test
+    fun resetToDefault_stillClearsContentCacheAndPrefetcherWhenDnsEvictFails() = runTest {
+        evictFailure = IllegalStateException("resolver gone")
+
+        val state = interactor.resetToDefault()
+
+        assertEquals("service-kp.test", state.domain)
+        coVerify(exactly = 1) { contentCache.clear() }
+        coVerify(exactly = 1) { detailsPrefetcher.invalidate() }
+    }
+
+    @Test
+    fun autoResolve_failoverToAMirror_evictsTheDnsCache() = runTest {
+        reachableDomains = setOf("service-kp.test")
+        interactor.autoResolveWorkingDomain()
+        interactor.autoResolveWorkingDomain()
+        assertEquals(0, evictCalls)
+
+        reachableDomains = setOf("api.alador.test")
+        reachability.markUnreachable(KinoPubConfig.CURRENT_API_DOMAIN)
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(1, evictCalls)
+    }
+
+    @Test
     fun saveCustomDomain_completesEvenWhenTheContentCacheFailsToClear() = runTest {
         coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
@@ -124,6 +184,168 @@ internal class ApiDomainInteractorTest {
         interactor.autoResolveWorkingDomain()
 
         assertEquals(listOf("service-kp.test"), probeCalls)
+    }
+
+    /** Like Dispatchers.Main.immediate: resumes inline on its own thread, posts to it from any other. */
+    private class ImmediateThreadDispatcher : CoroutineDispatcher() {
+        private val executor = Executors.newSingleThreadExecutor()
+        private val thread = executor.submit<Thread> { Thread.currentThread() }.get()
+
+        override fun isDispatchNeeded(context: CoroutineContext) = Thread.currentThread() !== thread
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) = executor.execute(block)
+
+        /** Returns once every task posted so far has run, that is, once the coroutines on it have suspended. */
+        fun idle() {
+            executor.submit {}.get()
+        }
+
+        fun shutdown() {
+            executor.shutdownNow()
+        }
+    }
+
+    private fun interactorWith(probe: EndpointProbe) = ApiDomainInteractor(
+        preferences = preferences,
+        contentCache = contentCache,
+        probe = probe,
+        reachability = reachability,
+        detailsPrefetcher = detailsPrefetcher,
+        evictDnsCache = { evictCalls++ },
+    )
+
+    /**
+     * The startup warm-up and the Home screen both resolve the domain within the same moment; the second
+     * caller must join the walk in flight and answer with its result, not probe again. The first caller
+     * is held inside its probe until the second has joined, so no timing is involved.
+     */
+    @Test
+    fun autoResolve_concurrentCallersShareOneProbe() = runTest {
+        val concurrentProbeCalls = Collections.synchronizedList(mutableListOf<String>())
+        val probing = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val sharing = interactorWith(
+            EndpointProbe { endpoint ->
+                concurrentProbeCalls += endpoint.domain
+                probing.countDown()
+                release.await()
+                endpoint.domain == "service-kp.test"
+            },
+        )
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { sharing.autoResolveWorkingDomain() }
+        probing.await()
+        val second = async(start = CoroutineStart.UNDISPATCHED) { sharing.autoResolveWorkingDomain() }
+        release.countDown()
+        val results = listOf(first, second).awaitAll()
+
+        assertEquals(listOf("service-kp.test"), concurrentProbeCalls.toList())
+        results.forEach { result ->
+            val success = result as? ApiDomainAutoResolveResult.Success ?: error("Expected Success, got $result")
+            assertFalse(success.changed)
+        }
+    }
+
+    /** A failed walk is shared too: nothing is recorded for an unreachable domain, so a late caller would repeat it. */
+    @Test
+    fun autoResolve_concurrentCallersShareAWalkThatFoundNothing() = runTest {
+        val concurrentProbeCalls = Collections.synchronizedList(mutableListOf<String>())
+        val probing = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val sharing = interactorWith(
+            EndpointProbe { endpoint ->
+                concurrentProbeCalls += endpoint.domain
+                probing.countDown()
+                release.await()
+                false
+            },
+        )
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { sharing.autoResolveWorkingDomain() }
+        probing.await()
+        val second = async(start = CoroutineStart.UNDISPATCHED) { sharing.autoResolveWorkingDomain() }
+        release.countDown()
+        val results = listOf(first, second).awaitAll()
+
+        assertEquals(listOf("service-kp.test", "api.alador.test"), concurrentProbeCalls.toList())
+        results.forEach { assertEquals(ApiDomainAutoResolveResult.NotFound, it) }
+    }
+
+    @Test
+    fun autoResolve_walksAgainOnceTheSharedWalkHasFinished() = runTest {
+        interactor.autoResolveWorkingDomain()
+        interactor.autoResolveWorkingDomain()
+
+        assertEquals(
+            listOf("service-kp.test", "api.alador.test", "service-kp.test", "api.alador.test"),
+            probeCalls,
+        )
+    }
+
+    /**
+     * Both callers run on one immediate dispatcher, as two Home loads do on Dispatchers.Main.immediate:
+     * the owner's failure resumes the joiner inline, so it must find the slot already empty and walk
+     * itself instead of re-joining the dead walk. A third call afterwards walks again.
+     */
+    @Test
+    fun autoResolve_joinerWalksItselfWhenTheOwnerFailsAndAThirdCallWalksAgain() = runBlocking {
+        val main = ImmediateThreadDispatcher()
+        val probing = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val probeCount = AtomicInteger()
+        val retrying = interactorWith(
+            EndpointProbe {
+                if (probeCount.incrementAndGet() == 1) {
+                    probing.countDown()
+                    release.await()
+                    error("owner probe failed")
+                }
+                false
+            },
+        )
+
+        try {
+            withTimeout(10.seconds) {
+                val owner = async(main) { runCatching { retrying.autoResolveWorkingDomain() } }
+                probing.await()
+                val joiner = async(main) { retrying.autoResolveWorkingDomain() }
+                main.idle()
+                release.countDown()
+
+                assertTrue(owner.await().isFailure)
+                assertEquals(ApiDomainAutoResolveResult.NotFound, joiner.await())
+                val probesAfterJoiner = probeCount.get()
+                assertEquals(
+                    ApiDomainAutoResolveResult.NotFound,
+                    async(main) { retrying.autoResolveWorkingDomain() }.await(),
+                )
+                assertTrue(probeCount.get() > probesAfterJoiner)
+            }
+        } finally {
+            main.shutdown()
+        }
+    }
+
+    /** The walk can take seconds; a domain the user sets meanwhile is newer than what the walk found. */
+    @Test
+    fun autoResolve_doesNotOverwriteADomainSetWhileItWalks() = runTest {
+        lateinit var walking: ApiDomainInteractor
+        walking = interactorWith(
+            EndpointProbe { endpoint ->
+                if (endpoint.domain == "service-kp.test") {
+                    runBlocking { walking.saveCustomDomain("api.custom.example") }
+                }
+                endpoint.domain == "api.alador.test"
+            },
+        )
+
+        val result = walking.autoResolveWorkingDomain()
+
+        val success = result as? ApiDomainAutoResolveResult.Success ?: error("Expected Success, got $result")
+        assertEquals("api.custom.example", success.state.domain)
+        assertFalse(success.changed)
+        verify(exactly = 0) { preferences.saveApiDomain("api.alador.test") }
+        assertEquals("api.custom.example", domainOverride)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.telemetry.StartupContentState
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.ui.feature.player.model.FocusTarget
@@ -10,7 +11,7 @@ import com.kino.puber.ui.feature.player.vm.PlaybackControl
 internal sealed interface PlayerViewState {
     data object Loading : PlayerViewState
     data class Error(val message: String) : PlayerViewState
-    data class Content(val content: PlayerContentState) : PlayerViewState
+    data class Content(val content: PlayerContentState) : PlayerViewState, StartupContentState
 }
 
 @Immutable

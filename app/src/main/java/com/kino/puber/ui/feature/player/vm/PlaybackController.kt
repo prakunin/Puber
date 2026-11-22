@@ -39,6 +39,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
+import com.kino.puber.data.api.network.NetworkStats
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
@@ -49,6 +50,7 @@ import com.kino.puber.ui.feature.player.model.isOff
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
+import timber.log.Timber
 
 internal interface PlaybackControl {
     enum class StreamRecovery {
@@ -198,7 +200,6 @@ internal class PlaybackController(
     private var targetBufferBytes = 0
 
     private val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
-    private var dataSourceFactory: DataSource.Factory? = null
 
     val player: ExoPlayer? get() = exoPlayer
     override val currentPosition: Long get() = exoPlayer?.currentPosition ?: 0L
@@ -413,10 +414,7 @@ internal class PlaybackController(
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        val sourceFactory = createDataSourceFactory()
-        dataSourceFactory = sourceFactory
-
-        val mediaSourceFactory = createMediaSourceFactory(sourceFactory)
+        val mediaSourceFactory = createMediaSourceFactory(createDataSourceFactory(writeToCache = false))
 
         val player = ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
@@ -590,7 +588,6 @@ internal class PlaybackController(
         }
         exoPlayer = null
         trackSelector = null
-        dataSourceFactory = null
         currentStreamUrl = null
         currentStreamType = null
         currentItemHasSideLoads = false
@@ -623,7 +620,7 @@ internal class PlaybackController(
         player.playWhenReady = true
     }
 
-    private fun createDataSourceFactory(): DataSource.Factory {
+    private fun createDataSourceFactory(writeToCache: Boolean): DataSource.Factory {
         val builder = okHttpClient.newBuilder()
             .connectTimeout(
                 PlaybackNetworkTuning.CONNECT_TIMEOUT_SECONDS,
@@ -636,27 +633,46 @@ internal class PlaybackController(
         if (useFastDns) {
             builder.dns(okhttp3.Dns.SYSTEM)
         }
+        NetworkStats.factoryOrNull("player")?.let(builder::eventListenerFactory)
         val playerClient = builder.build()
         val httpFactory = OkHttpDataSource.Factory(playerClient)
             .setUserAgent("Puber/${BuildConfig.VERSION_NAME} (Android)")
-        return CacheDataSource.Factory()
+        val factory = CacheDataSource.Factory()
             .setCache(mediaCache)
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .setCacheWriteDataSinkFactory(cacheWriteSink(mediaCache, writeToCache))
+        if (!writeToCache && BuildConfig.DEBUG) {
+            factory.setEventListener(
+                object : CacheDataSource.EventListener {
+                    override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
+                        Timber.d(
+                            "onCachedBytesRead cacheSize=%d cachedBytesRead=%d",
+                            cacheSizeBytes,
+                            cachedBytesRead,
+                        )
+                    }
+
+                    override fun onCacheIgnored(reason: Int) = Unit
+                },
+            )
+        }
+        return factory
     }
 
     /**
      * A second, surface-less player whose only job is to make ExoPlayer fetch the next episode's
-     * playlist and first segments through the same [CacheDataSource], so they land in the shared
-     * cache. Nothing of it survives: once it reports ready the bytes are on disk and the player is
-     * released, and the real [prepare] reads them back instead of opening a cold connection.
+     * playlist and first segments through a writing [CacheDataSource] of its own, so they land in
+     * the shared cache; the main player only reads that cache. Nothing of it survives: once it
+     * reports ready the bytes are on disk and the player is released, and the real [prepare] reads
+     * them back instead of opening a cold connection.
      */
     override fun warmUpNext(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         if (warmUpStreamUrl == stream.url) return
         cancelWarmUp()
         warmUpStreamUrl = stream.url
 
-        val sourceFactory = dataSourceFactory ?: createDataSourceFactory()
+        val sourceFactory = createDataSourceFactory(writeToCache = true)
         val loadControl = DefaultLoadControl.Builder()
             .setAllocator(DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
             .setBufferDurationsMs(

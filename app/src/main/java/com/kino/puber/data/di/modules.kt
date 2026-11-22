@@ -4,10 +4,14 @@ package com.kino.puber.data.di
 
 import android.net.ConnectivityManager
 import androidx.annotation.OptIn
+import com.kino.puber.BuildConfig
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.network.EndpointReachability
+import com.kino.puber.data.cache.CachedPayloadSweeper
+import com.kino.puber.data.cache.MEDIA_CACHE_SIZE_BYTES
+import com.kino.puber.data.cache.mediaCacheTrimAction
 import com.kino.puber.data.repository.AppUpdateDownloader
 import com.kino.puber.data.repository.AppUpdateInstaller
 import com.kino.puber.data.repository.AppUpdatePreferencesRepository
@@ -38,27 +42,33 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.api.IntroDbAppApiClient
 import com.kino.puber.data.api.TheIntroDbApiClient
 import com.kino.puber.data.api.TmdbApiClient
+import okhttp3.DnsCache
 import okhttp3.OkHttpClient
-import com.kino.puber.data.api.network.DnsOverHttpsFactory
+import com.kino.puber.data.api.network.HttpStack
+import com.kino.puber.data.api.network.NetworkStats
+import com.kino.puber.data.api.network.createImageHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
 
+/** The Ktor client Coil fetches images with: the shared stack, no KinoPub plugins or auth. */
+val ImageHttpClientQualifier = named("imageHttpClient")
+
 val apiModule = module {
     single { SessionEventBus() }
     // Shared: the client is what reports a domain going quiet, the domain interactor is what acts
     // on it. Neither can see the other, so the verdict itself is the thing they hold in common.
     single { EndpointReachability() }
-    single {
-        OkHttpClient.Builder()
-            .dns(DnsOverHttpsFactory.create())
-            .build()
-    }
+    single { HttpStack.create(if (BuildConfig.DEBUG) NetworkStats::factory else null) }
+    single<OkHttpClient> { get<HttpStack>().client }
+    single<DnsCache> { get<HttpStack>().dnsCache }
+    single(ImageHttpClientQualifier) { createImageHttpClient(get(), NetworkStats.factoryOrNull("image")) }
     single {
         KinoPubApiClient(
             okHttpClient = get(),
@@ -73,9 +83,6 @@ val apiModule = module {
     singleOf(::TheIntroDbApiClient)
     singleOf(::IntroDbAppApiClient)
 }
-
-private const val MIB = 1024L * 1024L
-private const val MEDIA_CACHE_SIZE_BYTES = 512L * MIB
 
 val repositoryModule = module {
     single { ContentSharer(androidContext()) }
@@ -105,6 +112,15 @@ val repositoryModule = module {
     single { get<PuberDatabase>().watchStateSyncDao() }
     single { get<PuberDatabase>().cachedPayloadDao() }
     single<PersistentPayloadStore> { RoomPersistentPayloadStore(dao = get()) }
+    single {
+        val mediaCache = lazy { get<androidx.media3.datasource.cache.Cache>() }
+        CachedPayloadSweeper(
+            store = get(),
+            foreground = get(),
+            scope = CachedPayloadSweeper.defaultScope(),
+            trimMediaCache = mediaCacheTrimAction(mediaCache),
+        )
+    }
     single { get<PuberDatabase>().transactions() }
     single { WatchStateRepository(dao = get(), syncDao = get(), transaction = get()) }
     single<androidx.media3.datasource.cache.Cache> {

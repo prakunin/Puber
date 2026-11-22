@@ -35,6 +35,14 @@ internal class DispatchWithProbeTest {
     }
 
     @Test
+    fun aKeyDroppedBySuperIsStillProbed() {
+        var seen: Boolean? = null
+        val result = dispatchWithProbe(true, { true }) { handled, _ -> seen = handled }
+        assertTrue(result)
+        assertEquals(true, seen)
+    }
+
+    @Test
     fun probeThatThrowsCannotChangeTheReturnValueOrBreakDispatch() {
         for (value in listOf(true, false)) {
             val result = dispatchWithProbe(true, { value }) { _, _ -> error("telemetry bug") }

@@ -18,6 +18,7 @@ updated: 2026-10-12
 
 ## Next
 From the code-quality-audit report (full scope there): BP-5; refactor, S, best practices. Device: smoke
+Absorbed into startup-splash-preload (owner decision 2026-11-21): the warm-up owner introduces the shared application scope there.
 
 ## Open questions
 | ID | Question | Blocks | Status | Answer |
@@ -30,3 +31,4 @@ From the code-quality-audit report (full scope there): BP-5; refactor, S, best p
 ## Log
 - 2026-10-12 created on the board (stage idea)
 - 2026-10-12 migrated from the former board file (board stage `idea` -> `idea`); the board row Notes are copied verbatim into ## Next
+- 2026-11-21 absorbed into startup-splash-preload (brief Q2)

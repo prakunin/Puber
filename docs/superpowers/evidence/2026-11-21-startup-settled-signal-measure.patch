@@ -1,0 +1,12 @@
+diff --git a/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt b/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
+index aa8d4ffc..e5fb449a 100644
+--- a/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
++++ b/app/src/main/java/com/kino/puber/ui/feature/home/vm/HomeVM.kt
+@@ -509,6 +509,7 @@ internal class HomeVM(
+             // over it would resurrect rows the clear specifically exists to drop.
+             return@withLock
+         }
++        android.util.Log.i("SettledMeasure", "homePublish")
+         updateViewState(
+             HomeViewState.Content(
+                 heroItems = mapped.heroItems,
