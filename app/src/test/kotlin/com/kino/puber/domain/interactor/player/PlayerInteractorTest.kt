@@ -647,7 +647,7 @@ class PlayerInteractorTest {
     // region cache invalidation
 
     @Test
-    fun saveWatchingTime_success_marksItemDetailsCacheStale() = runTest {
+    fun saveWatchingTime_success_doesNotMarkItemDetailsStale() = runTest {
         coEvery { api.setWatchingTime(42, 1, 120, 2) } returns Result.success(
             WatchingStatus(id = 42, status = 1, time = 120, season = 2, episode = 1),
         )
@@ -656,6 +656,16 @@ class PlayerInteractorTest {
         interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 120, season = 2)
 
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, 2) }
+        coVerify(exactly = 0) { itemDetailsRepository.markStale(any()) }
+        coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+    }
+
+    @Test
+    fun markItemDetailsStale_marksTheRepositoryEntryStale() = runTest {
+        coEvery { itemDetailsRepository.markStale(any()) } returns Unit
+
+        interactor.markItemDetailsStale(42)
+
         coVerify(exactly = 1) { itemDetailsRepository.markStale(42) }
         coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
     }
@@ -676,21 +686,6 @@ class PlayerInteractorTest {
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, null) }
         coVerify(exactly = 0) { itemDetailsRepository.markStale(any()) }
         coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
-    }
-
-    @Test
-    fun saveWatchingTimeMarksTheDetailsStaleInsteadOfDroppingThem() = runTest {
-        // A position is saved every few seconds while playing. Dropping the entry each time is why
-        // the details cache never survived long enough to spare the user a spinner.
-        coEvery { api.setWatchingTime(any(), any(), any(), any()) } returns Result.success(
-            WatchingStatus(id = 42, status = 1, time = 30, season = null, episode = 1),
-        )
-        coEvery { itemDetailsRepository.markStale(any()) } returns Unit
-
-        interactor.saveWatchingTime(id = 42, videoNumber = 1, time = 30)
-
-        coVerify(exactly = 1) { itemDetailsRepository.markStale(42) }
-        coVerify(exactly = 0) { itemDetailsRepository.invalidate(42) }
     }
 
     @Test

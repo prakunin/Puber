@@ -16,9 +16,13 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
+// The key-record cases share this file's feed and superseded-load helpers.
+@Suppress("LargeClass")
 class CachedFeedTest {
 
     private val store = FakePayloadStore()
@@ -796,4 +800,159 @@ class CachedFeedTest {
 
     @Serializable
     private data class Boxed(val value: Int)
+
+    // region key records
+
+    enum class Site { Load, Put, PutAll, MarkStale, Invalidate, Peek, PeekAll }
+
+    @Test
+    fun afterEveryOperationSettles_theFeedHoldsNoKeyRecord() = runTest {
+        val subject = feed()
+        val keys = (0 until 100).map { "k$it" }
+
+        keys.forEach { subject.load(it) { "loaded" }.toList() }
+        now += 11.minutes.inWholeMilliseconds
+        keys.forEach { subject.load(it) { "reloaded" }.toList() }
+        keys.forEach { subject.put(it, "put") }
+        subject.putAll(keys.associateWith { "putAll" })
+        keys.forEach { subject.peek(it) }
+        subject.peekAll(keys)
+        keys.forEach { subject.markStale(it) }
+        keys.forEach { subject.invalidate(it) }
+        subject.invalidateNamespace()
+        runCurrent()
+
+        assertEquals(0, subject.keyRecordCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(Site::class)
+    fun whileAnOperationIsInFlight_itsKeyHasARecord(site: Site) = runTest {
+        val subject = feed()
+        var insideCount = -1
+        if (site != Site.Load) store.write("k", "\"v\"", now)
+
+        when (site) {
+            Site.Load -> subject.load("k") {
+                insideCount = subject.keyRecordCount
+                "v"
+            }.toList()
+            Site.Put -> {
+                store.onWriteAll = { insideCount = subject.keyRecordCount }
+                subject.put("k", "v")
+            }
+            Site.PutAll -> {
+                store.onWriteAll = { insideCount = subject.keyRecordCount }
+                subject.putAll(mapOf("k" to "v"))
+            }
+            Site.MarkStale -> {
+                store.onTouch = { insideCount = subject.keyRecordCount }
+                subject.markStale("k")
+            }
+            Site.Invalidate -> {
+                store.onRemove = { insideCount = subject.keyRecordCount }
+                subject.invalidate("k")
+            }
+            Site.Peek -> {
+                store.onRead = { insideCount = subject.keyRecordCount }
+                subject.peek("k")
+            }
+            Site.PeekAll -> {
+                store.onRead = { insideCount = subject.keyRecordCount }
+                subject.peekAll(listOf("k"))
+            }
+        }
+
+        assertEquals(1, insideCount)
+        assertEquals(0, subject.keyRecordCount)
+    }
+
+    @Test
+    fun aFailedOrCancelledLoadReleasesItsKeyRecord() = runTest {
+        val subject = feed()
+
+        assertThrows<IllegalStateException> {
+            subject.load("failing") { throw IllegalStateException("load failed") }.toList()
+        }
+        assertEquals(0, subject.keyRecordCount)
+
+        val started = CompletableDeferred<Unit>()
+        val never = CompletableDeferred<Unit>()
+        val loading = async {
+            subject.load("cancelled") {
+                started.complete(Unit)
+                never.await()
+                "unreachable"
+            }.toList()
+        }
+        started.await()
+        assertEquals(1, subject.keyRecordCount)
+        loading.cancel()
+        runCurrent()
+
+        assertEquals(0, subject.keyRecordCount)
+    }
+
+    @Test
+    fun aShortOperationOnTheSameKeyDoesNotRemoveTheRecordOfAnInFlightLoad() = runTest {
+        val subject = feed()
+
+        runSupersededLoad(subject) {
+            subject.peek("k")
+            subject.putAll(mapOf("k" to "other"))
+            assertEquals(1, subject.keyRecordCount)
+            subject.invalidate("k")
+        }
+        runCurrent()
+
+        assertNull(store.read("k"))
+        assertEquals(0, subject.keyRecordCount)
+    }
+
+    @Test
+    fun aKeyWhoseRecordWasRemovedGuardsTheNextRaceAsBefore() = runTest {
+        val subject = feed()
+        subject.put("k", "first")
+        subject.invalidate("k")
+        assertEquals(0, subject.keyRecordCount)
+
+        runSupersededLoad(subject) { subject.invalidate("k") }
+        assertNull(store.read("k"))
+
+        // The superseded flight above left its retry parked in this feed's memory tier, so the second
+        // race runs on a fresh feed over the same store.
+        val next = feed()
+        next.load("k") { "first" }.toList()
+        assertEquals(0, next.keyRecordCount)
+        now += 11.minutes.inWholeMilliseconds
+        runSupersededLoad(next) { next.markStale("k") }
+
+        assertEquals("\"first\"", store.read("k")?.payload)
+        val age = now - (store.read("k")?.updatedAt ?: 0L)
+        assertTrue(age > 10.minutes.inWholeMilliseconds) { "the entry was made fresh again, age was $age" }
+    }
+
+    @Test
+    fun aNamespaceDropDuringALoadKeepsTheRecordUntilTheLoadEnds() = runTest {
+        val subject = CachedFeed(
+            store = store,
+            serializer = String.serializer(),
+            ttl = 10.minutes,
+            keyPrefix = "k",
+            clock = { now },
+        )
+        var insideCount = -1
+
+        runSupersededLoad(subject) {
+            subject.invalidateNamespace()
+            insideCount = subject.keyRecordCount
+        }
+        runCurrent()
+
+        assertEquals(1, insideCount)
+        assertEquals(0, subject.keyRecordCount)
+        assertNull(store.read("k"))
+    }
+
+    // endregion
 }

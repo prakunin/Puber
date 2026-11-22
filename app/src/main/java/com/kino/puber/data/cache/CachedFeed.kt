@@ -1,5 +1,6 @@
 package com.kino.puber.data.cache
 
+import androidx.annotation.VisibleForTesting
 import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.StoredPayload
@@ -83,53 +84,81 @@ class CachedFeed<V : Any>(
     private val seenGeneration = AtomicLong(store.generation)
 
     /**
-     * How many times each key, and the namespace as a whole, has been superseded.
-     *
-     * The store's generation only moves on a full wipe, so it says nothing about a single key being
-     * invalidated. Without a per-key counter, an [invalidate] that lands while a load is out has no
-     * effect on that load: the loader finishes with a payload from before the invalidation and writes
-     * it back stamped with the current clock, and the next read takes it for fresh. The user toggling
-     * a bookmark against a title whose details are being revalidated in the background is exactly
-     * that sequence.
+     * One record per key that some operation currently holds, so the maps stay as large as the work
+     * in flight rather than as the set of keys ever seen. A record lives exactly as long as some
+     * operation holds an [Epoch] of it; an absent record reads as all zeros, which is also what a
+     * recreated one starts from, so a comparison never spans a removal.
      */
-    private val keyEpochs = ConcurrentHashMap<String, Long>()
-
-    /**
-     * How many times each key was *destroyed* — [invalidate], [markStale], a namespace drop or a
-     * store wipe — as opposed to merely written over by a competing writer.
-     *
-     * [keyEpochs] alone cannot tell the two apart, and the difference decides whether a writer whose
-     * barrier moved underneath it may delete the row. Only a destruction may: two [putAll] calls
-     * that overlap on one key are both writing legitimate values, so a writer that reads a moved
-     * barrier and deletes would erase the other's row and leave every list referencing it dangling.
-     */
-    private val keyInvalidations = ConcurrentHashMap<String, Long>()
-
-    /**
-     * Which write last claimed each key.
-     *
-     * A writer may take its own row back out when a destruction crossed its database write, but only
-     * its own: a writer that landed after that destruction answered a later question, and its row is
-     * the one every list written alongside it names. [keyInvalidations] cannot separate the two — it
-     * says a destruction happened, never whether a write landed after it — so without this ticket a
-     * writer that resumes late deletes whatever row happens to be there.
-     *
-     * Never cleared, unlike [keyEpochs]: a ticket has to stay comparable across a namespace drop, or
-     * a writer that crossed one could no longer tell whether it still owns the row.
-     */
-    private val keyWrites = ConcurrentHashMap<String, Long>()
-
-    /**
-     * The write ticket held by the last write that also destroyed what it replaced.
-     *
-     * Ownership alone cannot settle these. A destroying write takes a ticket like any other, so a
-     * writer that crossed it reads "someone else owns the row" and leaves it — even when its own
-     * row is the one that landed last, which puts the state the destroying write discarded straight
-     * back. Comparing against this instead answers the question that actually matters: has anything
-     * legitimate been written since the destruction, or is the row still the one it left behind?
-     */
-    private val keySupersedeWrites = ConcurrentHashMap<String, Long>()
+    private val keyRecords = ConcurrentHashMap<String, KeyRecord>()
     private val namespaceEpoch = AtomicLong(0L)
+
+    /** The number of keys an operation holds right now; zero once everything has settled. */
+    @VisibleForTesting
+    internal val keyRecordCount: Int get() = keyRecords.size
+
+    private data class KeyRecord(
+        val holders: Int = 0,
+        /**
+         * How many times the key has been superseded.
+         *
+         * The store's generation only moves on a full wipe, so it says nothing about a single key
+         * being invalidated. Without a per-key counter, an [invalidate] that lands while a load is
+         * out has no effect on that load: the loader finishes with a payload from before the
+         * invalidation and writes it back stamped with the current clock, and the next read takes it
+         * for fresh. The user toggling a bookmark against a title whose details are being
+         * revalidated in the background is exactly that sequence.
+         */
+        val epoch: Long = 0L,
+        /**
+         * How many times the key was *destroyed* — [invalidate], [markStale], a namespace drop or a
+         * store wipe — as opposed to merely written over by a competing writer.
+         *
+         * [epoch] alone cannot tell the two apart, and the difference decides whether a writer whose
+         * barrier moved underneath it may delete the row. Only a destruction may: two [putAll] calls
+         * that overlap on one key are both writing legitimate values, so a writer that reads a moved
+         * barrier and deletes would erase the other's row and leave every list referencing it
+         * dangling.
+         */
+        val invalidations: Long = 0L,
+        /**
+         * Which write last claimed the key.
+         *
+         * A writer may take its own row back out when a destruction crossed its database write, but
+         * only its own: a writer that landed after that destruction answered a later question, and
+         * its row is the one every list written alongside it names. [invalidations] cannot separate
+         * the two — it says a destruction happened, never whether a write landed after it — so
+         * without this ticket a writer that resumes late deletes whatever row happens to be there.
+         */
+        val writes: Long = 0L,
+        /**
+         * The write ticket held by the last write that also destroyed what it replaced.
+         *
+         * Ownership alone cannot settle these. A destroying write takes a ticket like any other, so
+         * a writer that crossed it reads "someone else owns the row" and leaves it — even when its
+         * own row is the one that landed last, which puts the state the destroying write discarded
+         * straight back. Comparing against this instead answers the question that actually matters:
+         * has anything legitimate been written since the destruction, or is the row still the one it
+         * left behind?
+         */
+        val supersedeWrite: Long = 0L,
+    )
+
+    /** Holds a record for every key in [keys] while [block] runs, however it ends. */
+    private inline fun <T> holding(keys: Collection<String>, block: () -> T): T {
+        val held = keys.distinct()
+        held.forEach { key ->
+            keyRecords.compute(key) { _, record -> (record ?: KeyRecord()).let { it.copy(holders = it.holders + 1) } }
+        }
+        try {
+            return block()
+        } finally {
+            held.forEach { key ->
+                keyRecords.compute(key) { _, record ->
+                    record?.takeIf { it.holders > 1 }?.let { it.copy(holders = it.holders - 1) }
+                }
+            }
+        }
+    }
 
     /**
      * Everything that can make a load's result obsolete while it is out on the network.
@@ -171,87 +200,89 @@ class CachedFeed<V : Any>(
         ttl: Duration = defaultTtl,
         loader: suspend () -> V,
     ): Flow<Cached<V>> = flow {
-        dropMemoryTierIfStoreWasWiped()
+        holding(listOf(key)) {
+            dropMemoryTierIfStoreWasWiped()
 
-        val cached = readCached(key = key, force = force, ttl = ttl)
-        if (cached != null) {
-            emit(cached)
-            if (!cached.isStale) return@flow
-        }
-        // Once the store generation moves, even a cached value emitted before the loader began is
-        // no longer a fallback: it belongs to the session or domain that was just cleared.
-        //
-        // The generation is captured here as well as watched inside the loop, because the loop only
-        // reaches its own check when the loader returns. A loader that throws -- the wipe was a
-        // logout, so the credentials it used have just been rejected -- would otherwise leave this
-        // flag as it started, and the failure would be reported as one to shrug off.
-        val generationWhenCachedWasRead = store.generation
-        var cachedStillBelongsToCurrentGeneration = cached != null
-        // Computed here and emitted below rather than inside the try: an emit runs the downstream
-        // collector, and this one writes to Room. A collector that throws would be caught by the
-        // catch below, which would then emit a second time — masking the real error behind a
-        // RefreshFailed and tripping Flow's exception-transparency check on top of it.
-        val outcome = try {
-            var fresh: Stamped<V>
-            var generationMoved: Boolean
-            do {
-                fresh = loadFresh(key = key, force = force, ttl = ttl) {
-                    // Captured where the fetch begins, so it answers "was this key invalidated while I
-                    // was away?". A retry the in-flight cache issues after an invalidation runs this
-                    // lambda again and captures the new epoch, so legitimate reloads still write.
-                    val epoch = epochOf(key)
-                    val value = loader()
-                    val updatedAt = clock()
-                    val payload = json.encodeToString(serializer, value)
-                    var discardValue = false
-                    val settled = epochOf(key)
-                    if (settled == epoch) {
-                        store.write(
-                            key = key,
-                            payload = payload,
+            val cached = readCached(key = key, force = force, ttl = ttl)
+            if (cached != null) {
+                emit(cached)
+                if (!cached.isStale) return@flow
+            }
+            // Once the store generation moves, even a cached value emitted before the loader began is
+            // no longer a fallback: it belongs to the session or domain that was just cleared.
+            //
+            // The generation is captured here as well as watched inside the loop, because the loop only
+            // reaches its own check when the loader returns. A loader that throws -- the wipe was a
+            // logout, so the credentials it used have just been rejected -- would otherwise leave this
+            // flag as it started, and the failure would be reported as one to shrug off.
+            val generationWhenCachedWasRead = store.generation
+            var cachedStillBelongsToCurrentGeneration = cached != null
+            // Computed here and emitted below rather than inside the try: an emit runs the downstream
+            // collector, and this one writes to Room. A collector that throws would be caught by the
+            // catch below, which would then emit a second time — masking the real error behind a
+            // RefreshFailed and tripping Flow's exception-transparency check on top of it.
+            val outcome = try {
+                var fresh: Stamped<V>
+                var generationMoved: Boolean
+                do {
+                    fresh = loadFresh(key = key, force = force, ttl = ttl) {
+                        // Captured where the fetch begins, so it answers "was this key invalidated while I
+                        // was away?". A retry the in-flight cache issues after an invalidation runs this
+                        // lambda again and captures the new epoch, so legitimate reloads still write.
+                        val epoch = epochOf(key)
+                        val value = loader()
+                        val updatedAt = clock()
+                        val payload = json.encodeToString(serializer, value)
+                        var discardValue = false
+                        val settled = epochOf(key)
+                        if (settled == epoch) {
+                            store.write(
+                                key = key,
+                                payload = payload,
+                                updatedAt = updatedAt,
+                            )
+                            // A store mutation can land while the database write is suspended, after
+                            // the guard above passed. The old result must not survive in either tier —
+                            // though the row goes only when this writer still owns it, since a newer
+                            // writer's row is a real value and every list naming this key points at it.
+                            val settledAfterWrite = epochOf(key)
+                            if (settledAfterWrite.supersedesWrite(epoch)) store.remove(key)
+                            discardValue = settledAfterWrite != epoch
+                        } else if (settled.generation != epoch.generation) {
+                            discardValue = true
+                        }
+                        // The generation travels with the exact flight value that won. A cache wipe does
+                        // not directly invalidate an in-memory flight, so checking a shared flag here
+                        // would either publish that old-session value or accidentally discard a valid
+                        // retry issued after a key-level invalidation.
+                        Stamped(
+                            value = value,
                             updatedAt = updatedAt,
+                            generation = epoch.generation,
+                            discardValue = discardValue,
+                            encodedLength = payload.length,
                         )
-                        // A store mutation can land while the database write is suspended, after
-                        // the guard above passed. The old result must not survive in either tier —
-                        // though the row goes only when this writer still owns it, since a newer
-                        // writer's row is a real value and every list naming this key points at it.
-                        val settledAfterWrite = epochOf(key)
-                        if (settledAfterWrite.supersedesWrite(epoch)) store.remove(key)
-                        discardValue = settledAfterWrite != epoch
-                    } else if (settled.generation != epoch.generation) {
-                        discardValue = true
                     }
-                    // The generation travels with the exact flight value that won. A cache wipe does
-                    // not directly invalidate an in-memory flight, so checking a shared flag here
-                    // would either publish that old-session value or accidentally discard a valid
-                    // retry issued after a key-level invalidation.
-                    Stamped(
-                        value = value,
-                        updatedAt = updatedAt,
-                        generation = epoch.generation,
-                        discardValue = discardValue,
-                        encodedLength = payload.length,
-                    )
-                }
-                if (fresh.discardValue) detachSupersededValue(key)
-                generationMoved = fresh.generation != store.generation
-                if (generationMoved) {
-                    // Nothing emitted before the wipe is a fallback for the new session. Retry the
-                    // loader under its generation; if that fails, surface the failure instead of
-                    // leaving the previous account's cached value on screen.
-                    detachSupersededValue(key)
-                    cachedStillBelongsToCurrentGeneration = false
-                }
-            } while (generationMoved)
-            Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Throwable) {
-            val wipedWhileLoading = store.generation != generationWhenCachedWasRead
-            if (!cachedStillBelongsToCurrentGeneration || wipedWhileLoading) throw error
-            Cached.RefreshFailed(error)
+                    if (fresh.discardValue) detachSupersededValue(key)
+                    generationMoved = fresh.generation != store.generation
+                    if (generationMoved) {
+                        // Nothing emitted before the wipe is a fallback for the new session. Retry the
+                        // loader under its generation; if that fails, surface the failure instead of
+                        // leaving the previous account's cached value on screen.
+                        detachSupersededValue(key)
+                        cachedStillBelongsToCurrentGeneration = false
+                    }
+                } while (generationMoved)
+                Cached.Value(fresh.value, isStale = false, updatedAt = fresh.updatedAt)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                val wipedWhileLoading = store.generation != generationWhenCachedWasRead
+                if (!cachedStillBelongsToCurrentGeneration || wipedWhileLoading) throw error
+                Cached.RefreshFailed(error)
+            }
+            emit(outcome)
         }
-        emit(outcome)
     }
 
     /**
@@ -262,27 +293,31 @@ class CachedFeed<V : Any>(
      * slightly stale screen for a spinner.
      */
     suspend fun markStale(key: String, ttl: Duration = defaultTtl) {
-        supersedeKey(key)
-        memory.remove(key)
-        try {
-            store.touch(key = key, updatedAt = clock() - ttl.inWholeMilliseconds - 1)
-        } finally {
-            // A reader can start after the first barrier but before the suspending store mutation
-            // settles. The second barrier rejects that reader's snapshot as well.
+        holding(listOf(key)) {
             supersedeKey(key)
             memory.remove(key)
+            try {
+                store.touch(key = key, updatedAt = clock() - ttl.inWholeMilliseconds - 1)
+            } finally {
+                // A reader can start after the first barrier but before the suspending store mutation
+                // settles. The second barrier rejects that reader's snapshot as well.
+                supersedeKey(key)
+                memory.remove(key)
+            }
         }
     }
 
     /** Drops the entry, so the next [load] has nothing to emit before the network answers. */
     suspend fun invalidate(key: String) {
-        supersedeKey(key)
-        memory.remove(key)
-        try {
-            store.remove(key)
-        } finally {
+        holding(listOf(key)) {
             supersedeKey(key)
             memory.remove(key)
+            try {
+                store.remove(key)
+            } finally {
+                supersedeKey(key)
+                memory.remove(key)
+            }
         }
     }
 
@@ -299,10 +334,12 @@ class CachedFeed<V : Any>(
         readCurrentGenerationFromMemory(key)?.let { current ->
             return Cached.Value(current.value, isStale = false, updatedAt = current.updatedAt)
         }
-        val epoch = epochOf(key)
-        val stored = readUsable(key) ?: return null
-        if (epochOf(key) != epoch) return null
-        return Cached.Value(stored.value, isStale = false, updatedAt = stored.updatedAt)
+        return holding(listOf(key)) {
+            val epoch = epochOf(key)
+            val stored = readUsable(key) ?: return@holding null
+            if (epochOf(key) != epoch) return@holding null
+            Cached.Value(stored.value, isStale = false, updatedAt = stored.updatedAt)
+        }
     }
 
     /** Reads several independent entries with one persistent-store lookup on a cold start. */
@@ -318,16 +355,18 @@ class CachedFeed<V : Any>(
             }
             current == null
         }
-        val epochs = missing.associateWith(::epochOf)
-        store.readAll(missing).forEach { (key, stored) ->
-            val epoch = epochs.getValue(key)
-            if (epochOf(key) != epoch) return@forEach
-            val usable = decodeUsable(key, stored) ?: return@forEach
-            val selected = promoteToMemory(key, usable, epoch, HardCeiling) ?: return@forEach
-            if (epochOf(key) == epoch) {
-                result[key] = Cached.Value(selected.value, isStale = false, updatedAt = selected.updatedAt)
-            } else {
-                memory.remove(key)
+        holding(missing) {
+            val epochs = missing.associateWith(::epochOf)
+            store.readAll(missing).forEach { (key, stored) ->
+                val epoch = epochs.getValue(key)
+                if (epochOf(key) != epoch) return@forEach
+                val usable = decodeUsable(key, stored) ?: return@forEach
+                val selected = promoteToMemory(key, usable, epoch, HardCeiling) ?: return@forEach
+                if (epochOf(key) == epoch) {
+                    result[key] = Cached.Value(selected.value, isStale = false, updatedAt = selected.updatedAt)
+                } else {
+                    memory.remove(key)
+                }
             }
         }
         return result
@@ -349,47 +388,47 @@ class CachedFeed<V : Any>(
     suspend fun putAll(values: Map<String, V>, updatedAt: Long = clock(), supersede: Boolean = false) {
         if (values.isEmpty()) return
         dropMemoryTierIfStoreWasWiped()
-        values.keys.forEach { key ->
-            if (supersede) keyInvalidations.merge(key, 1L, Long::plus)
-            val ticket = advanceKey(key)
-            if (supersede) keySupersedeWrites[key] = ticket
-            memory.remove(key)
-        }
-        val epochs = values.keys.associateWith(::epochOf)
-        val payloads = values.mapValues { (_, value) -> json.encodeToString(serializer, value) }
-        store.writeAll(
-            payloads.mapValues { (_, payload) -> StoredPayload(payload = payload, updatedAt = updatedAt) }
-        )
-        values.forEach { (key, value) ->
-            val epoch = epochs.getValue(key)
-            val settled = epochOf(key)
-            when {
-                settled == epoch -> {
-                    memory.put(
-                        key,
-                        Stamped(
-                            value,
-                            updatedAt,
-                            generation = epoch.generation,
-                            encodedLength = payloads.getValue(key).length,
-                        ),
-                        ttl = HardCeiling,
-                    )
-                    if (epochOf(key) != epoch) memory.remove(key)
+        holding(values.keys) {
+            values.keys.forEach { key ->
+                advanceKey(key, supersede)
+                memory.remove(key)
+            }
+            val epochs = values.keys.associateWith(::epochOf)
+            val payloads = values.mapValues { (_, value) -> json.encodeToString(serializer, value) }
+            store.writeAll(
+                payloads.mapValues { (_, payload) -> StoredPayload(payload = payload, updatedAt = updatedAt) }
+            )
+            values.forEach { (key, value) ->
+                val epoch = epochs.getValue(key)
+                val settled = epochOf(key)
+                when {
+                    settled == epoch -> {
+                        memory.put(
+                            key,
+                            Stamped(
+                                value,
+                                updatedAt,
+                                generation = epoch.generation,
+                                encodedLength = payloads.getValue(key).length,
+                            ),
+                            ttl = HardCeiling,
+                        )
+                        if (epochOf(key) != epoch) memory.remove(key)
+                    }
+                    settled.supersedesWrite(epoch) -> {
+                        // An invalidate or session wipe crossed the database write, and this row is
+                        // still the one it left behind. The payload belongs to the superseded snapshot
+                        // and must not be handed to the next reader.
+                        store.remove(key)
+                        memory.remove(key)
+                    }
+                    // Someone else has written this key since — item payloads are shared, so two
+                    // sections loading concurrently collide on every title they have in common, and a
+                    // reload after an invalidate lands here too. Their row is the current one; dropping
+                    // only the memory claim lets the next reader take whatever settled in the store,
+                    // whereas a delete would leave every list naming this key pointing at nothing.
+                    else -> memory.remove(key)
                 }
-                settled.supersedesWrite(epoch) -> {
-                    // An invalidate or session wipe crossed the database write, and this row is
-                    // still the one it left behind. The payload belongs to the superseded snapshot
-                    // and must not be handed to the next reader.
-                    store.remove(key)
-                    memory.remove(key)
-                }
-                // Someone else has written this key since — item payloads are shared, so two
-                // sections loading concurrently collide on every title they have in common, and a
-                // reload after an invalidate lands here too. Their row is the current one; dropping
-                // only the memory claim lets the next reader take whatever settled in the store,
-                // whereas a delete would leave every list naming this key pointing at nothing.
-                else -> memory.remove(key)
             }
         }
     }
@@ -406,30 +445,45 @@ class CachedFeed<V : Any>(
         }
     }
 
-    private fun epochOf(key: String): Epoch = Epoch(
-        generation = store.generation,
-        key = keyEpochs[key] ?: 0L,
-        namespace = namespaceEpoch.get(),
-        invalidation = keyInvalidations[key] ?: 0L,
-        write = keyWrites[key] ?: 0L,
-        supersedeWrite = keySupersedeWrites[key] ?: 0L,
-    )
+    private fun epochOf(key: String): Epoch {
+        val record = keyRecords[key]
+        return Epoch(
+            generation = store.generation,
+            key = record?.epoch ?: 0L,
+            namespace = namespaceEpoch.get(),
+            invalidation = record?.invalidations ?: 0L,
+            write = record?.writes ?: 0L,
+            supersedeWrite = record?.supersedeWrite ?: 0L,
+        )
+    }
 
     /** Barrier for a destructive change: in-flight values become unwritable, and their rows go. */
     private fun supersedeKey(key: String) {
-        keyInvalidations.merge(key, 1L, Long::plus)
-        keyEpochs.merge(key, 1L, Long::plus)
+        keyRecords.compute(key) { _, record ->
+            (record ?: KeyRecord()).let { it.copy(epoch = it.epoch + 1, invalidations = it.invalidations + 1) }
+        }
     }
 
     /**
      * Barrier for a competing write: in-flight values must not be written, but nothing is lost.
      *
      * Takes the key's next write ticket, which is what later makes this writer's row distinguishable
-     * from one a newer writer put there.
+     * from one a newer writer put there. A [supersede] write is also a destruction, and remembers its
+     * ticket as the one a later writer is compared against.
      */
-    private fun advanceKey(key: String): Long {
-        keyEpochs.merge(key, 1L, Long::plus)
-        return keyWrites.merge(key, 1L, Long::plus) ?: 1L
+    private fun advanceKey(key: String, supersede: Boolean): Long {
+        var ticket = 0L
+        keyRecords.compute(key) { _, record ->
+            val current = record ?: KeyRecord()
+            ticket = current.writes + 1
+            current.copy(
+                epoch = current.epoch + 1,
+                invalidations = if (supersede) current.invalidations + 1 else current.invalidations,
+                writes = ticket,
+                supersedeWrite = if (supersede) ticket else current.supersedeWrite,
+            )
+        }
+        return ticket
     }
 
     private fun supersedeNamespace() {
@@ -437,8 +491,6 @@ class CachedFeed<V : Any>(
         // is working on need not have an entry in the map yet — and a key epoch it never saw could
         // not supersede it.
         namespaceEpoch.incrementAndGet()
-        keyEpochs.clear()
-        keyInvalidations.clear()
     }
 
     /**
