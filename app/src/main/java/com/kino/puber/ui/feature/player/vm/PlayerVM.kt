@@ -1928,8 +1928,8 @@ internal class PlayerVM(
                             markContentChanged(ContentChangeType.PlaybackProgress)
                         } catch (error: CancellationException) {
                             throw error
-                        } catch (_: Throwable) {
-                            PlayerProgressDiagnostics.reportSaveFailure()
+                        } catch (error: Throwable) {
+                            PlayerProgressDiagnostics.reportSaveFailure(error::class)
                         }
                     }
                 } finally {

@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.core.error.ApiError
 import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.data.api.models.SkipSegmentType
 import com.kino.puber.domain.interactor.player.StreamCandidate
@@ -185,10 +186,10 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         val privateItemId = 424_242
         val privateTitle = "Private watched title"
         val privateTime = "private-watching-time"
-        val failure = IllegalStateException(
+        val cause = IllegalStateException(
             "Failed to save $privateTitle for item=$privateItemId at time=$privateTime",
         )
-        coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } throws failure
+        coEvery { interactor.saveWatchingTime(42, 1, 0, 1) } throws ApiError.Serialization(cause)
         val logTree = CollectingLogTree()
         val vm = startedVM()
 
@@ -206,7 +207,9 @@ internal class PlayerVMPlaybackFlowTest : PlayerVMTestFixture() {
         assertFalse(output.contains(privateItemId.toString()), output)
         assertFalse(output.contains(privateTitle), output)
         assertFalse(output.contains(privateTime), output)
-        assertFalse(output.contains(failure.message.orEmpty()), output)
+        assertTrue(output.contains("Serialization"), output)
+        assertFalse(output.contains(cause.message.orEmpty()), output)
+        assertFalse(output.contains("Malformed response"), output)
         verifyEmptyContentChangeResult()
     }
 

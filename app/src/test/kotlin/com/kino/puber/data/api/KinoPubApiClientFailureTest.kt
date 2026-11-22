@@ -17,6 +17,7 @@ import io.mockk.unmockkStatic
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -107,6 +108,72 @@ internal class KinoPubApiClientFailureTest {
         }
 
         assertEquals("/v1/items", path.get())
+    }
+
+    @Test
+    fun aMarkTimeAnswerWithOnlyAStatusIsASuccessAndCarriesThePosition(@TempDir cacheDir: Path) = runTest {
+        val query = AtomicReference<String>()
+
+        withServer(
+            path = "/v1/watching/marktime",
+            handler = { exchange ->
+                query.set(exchange.requestURI.rawQuery)
+                exchange.respond(status = 200, body = """{"status":200}""")
+            },
+        ) { baseUrl ->
+            val result = client(cacheDir, baseUrl).setWatchingTime(42, 1, 120, 2)
+
+            assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
+        }
+
+        val sent = query.get().split("&").associate { it.substringBefore("=") to it.substringAfter("=") }
+        assertEquals(mapOf("id" to "42", "video" to "1", "time" to "120", "season" to "2"), sent)
+    }
+
+    @Test
+    fun anEmptyMarkTimeAnswerIsASuccess(@TempDir cacheDir: Path) = runTest {
+        withServer(
+            path = "/v1/watching/marktime",
+            handler = { exchange -> exchange.respond(status = 200, body = "{}") },
+        ) { baseUrl ->
+            val result = client(cacheDir, baseUrl).setWatchingTime(42, 1, 120, 2)
+
+            assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
+        }
+    }
+
+    @Test
+    fun aMarkTimeAnswerWithExtraFieldsIsASuccess(@TempDir cacheDir: Path) = runTest {
+        withServer(
+            path = "/v1/watching/marktime",
+            handler = { exchange ->
+                exchange.respond(status = 200, body = """{"status":200,"id":42,"time":120}""")
+            },
+        ) { baseUrl ->
+            val result = client(cacheDir, baseUrl).setWatchingTime(42, 1, 120, 2)
+
+            assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
+        }
+    }
+
+    @Test
+    fun aMarkTimeServerErrorIsAFailureAndIsSentOnce(@TempDir cacheDir: Path) = runTest {
+        val requests = AtomicInteger()
+
+        withServer(
+            path = "/v1/watching/marktime",
+            handler = { exchange ->
+                requests.incrementAndGet()
+                exchange.respond(status = 500, body = """{"error":"x"}""")
+            },
+        ) { baseUrl ->
+            val error = client(cacheDir, baseUrl).setWatchingTime(42, 1, 120, 2).exceptionOrNull()
+
+            val http = assertInstanceOf(ApiError.Http::class.java, error)
+            assertEquals(500, http.statusCode)
+        }
+
+        assertEquals(1, requests.get())
     }
 
     private fun client(

@@ -52,7 +52,6 @@ import com.kino.puber.data.api.models.TranslationType
 import com.kino.puber.data.api.models.UserInfo
 import com.kino.puber.data.api.models.VoiceAuthor
 import com.kino.puber.data.api.models.VoteResult
-import com.kino.puber.data.api.models.WatchingStatus
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.api.models.WatchlistToggleResponse
 import android.net.ConnectivityManager
@@ -454,7 +453,7 @@ class KinoPubApiClient(
      */
     suspend fun setWatchingTime(
         id: Int, videoNumber: Int, time: Int, season: Int? = null
-    ): Result<WatchingStatus> = apiCall {
+    ): Result<Unit> = apiCall {
         httpClient.get("${mainApiBaseUrl()}watching/marktime") {
             parameter("id", id)
             parameter("video", videoNumber)
