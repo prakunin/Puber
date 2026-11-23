@@ -10,8 +10,15 @@ import java.util.concurrent.atomic.AtomicReference
 internal const val LINE_WAIT_AFTER_REVEAL_MS = 5_000L
 
 /**
+ * The same bound when the line also waits for the profile status: ProfileInstaller reports it about
+ * 5 s after the process starts, so the plain bound could write `prof` as absent on a fast start.
+ */
+internal const val LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS = 7_000L
+
+/**
  * Primitive marks of one cold start; emits exactly one `startup` line. First content and reveal must
- * be in, then one of: the reveal was forced; [LINE_WAIT_AFTER_REVEAL_MS] passed since the reveal;
+ * be in, then one of: the reveal was forced; [LINE_WAIT_AFTER_REVEAL_MS] ([LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS]
+ * when [awaitProfileStatus]) passed since the reveal;
  * ready was marked and every image held at ready has ended. The fallback timer writes whatever was
  * reached. Gate marks arrive inside the gate lock, so they never emit directly: each hands the check
  * to [schedule], which production runs on the telemetry executor.
@@ -22,6 +29,7 @@ internal class StartupMarks(
     private val record: (TelemetryEvent.Startup) -> Unit,
     private val clock: TelemetryClock,
     private val schedule: (delayMs: Long, task: () -> Unit) -> Unit = { _, task -> task() },
+    private val awaitProfileStatus: Boolean = false,
 ) {
     private val appComposedMs = AtomicLong(NOT_REACHED)
     private val firstContentMs = AtomicLong(NOT_REACHED)
@@ -33,6 +41,7 @@ internal class StartupMarks(
     private val readyDrainedMs = AtomicLong(NOT_REACHED)
     private val revealCause = AtomicReference<RevealCause?>(null)
     private val revealInFlight = AtomicInteger(NOT_REACHED.toInt())
+    private val profileStatus = AtomicInteger(NOT_REACHED.toInt())
     private val droppedKeys = AtomicInteger(0)
     private val boundPassed = AtomicBoolean(false)
     private val emitted = AtomicBoolean(false)
@@ -50,7 +59,7 @@ internal class StartupMarks(
     fun markRevealed() {
         if (!revealedMs.compareAndSet(NOT_REACHED, clock.elapsedMs())) return
         scheduleCheck()
-        schedule(LINE_WAIT_AFTER_REVEAL_MS) {
+        schedule(if (awaitProfileStatus) LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS else LINE_WAIT_AFTER_REVEAL_MS) {
             boundPassed.set(true)
             emitWhenComplete()
         }
@@ -83,6 +92,12 @@ internal class StartupMarks(
         readyReqMs.compareAndSet(NOT_REACHED, clock.elapsedMs())
     }
 
+    /** Keeps the first value only; a status after the line was written changes nothing. */
+    fun markProfileStatus(code: Int) {
+        if (!profileStatus.compareAndSet(NOT_REACHED.toInt(), code)) return
+        scheduleCheck()
+    }
+
     fun onKeyDropped() {
         droppedKeys.incrementAndGet()
     }
@@ -95,7 +110,8 @@ internal class StartupMarks(
         if (firstContentMs.get() == NOT_REACHED || revealedMs.get() == NOT_REACHED) return
         val readyComplete = readyMs.get() != NOT_REACHED &&
             readyInFlight.get() != NOT_REACHED.toInt() &&
-            (readyInFlight.get() == 0 || readyDrainedMs.get() != NOT_REACHED)
+            (readyInFlight.get() == 0 || readyDrainedMs.get() != NOT_REACHED) &&
+            (!awaitProfileStatus || profileStatus.get() != NOT_REACHED.toInt())
         if (revealCause.get() == RevealCause.FORCED || boundPassed.get() || readyComplete) emit()
     }
 
@@ -117,6 +133,7 @@ internal class StartupMarks(
                 readyDrainedMs = readyDrainedMs.reached(),
                 droppedKeys = droppedKeys.get(),
                 readyReqMs = readyReqMs.reached(),
+                profileStatus = profileStatus.reached(),
             ),
         )
     }

@@ -56,6 +56,17 @@ internal class ManualTelemetryExecutor : TelemetryExecutor {
         runAll()
     }
 
+    /** Runs only the tasks scheduled with no delay; timers (fallbacks, bounds) stay pending. */
+    fun runImmediateScheduled() {
+        while (true) {
+            val due = scheduled.filter { it.first == 0L }
+            if (due.isEmpty()) break
+            scheduled.removeAll(due)
+            due.forEach { inWriter(it.second) }
+        }
+        runAll()
+    }
+
     private fun inWriter(task: () -> Unit) {
         running = true
         try {
