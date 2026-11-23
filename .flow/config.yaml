@@ -24,6 +24,8 @@ roles:
   review_extra:
     - agent: ux-designer
       when: "track ui, or the diff touches Compose layout"
+    - agent: state-path-reviewer
+      when: "the diff changes how a ViewModel handles a UI action or writes state, a list refresh or cache that feeds a screen, focus handling, or an overlay or context menu"
 escalate_also:
   - "the work needs a physical TV (adb-physical-devices), an uninstall, a data clear, a downgrade or a replaced signer"
   - "an install fails: it blocks the change and is never a reason to uninstall or clear data"

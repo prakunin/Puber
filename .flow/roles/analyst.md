@@ -34,6 +34,15 @@ or when an AC only shows up at runtime. Documentation, prompts, repo metadata
 and tests that leave production sources alone do not. Decide this before
 looking at what hardware is free.
 
+## Bugs in state or focus
+
+When a bug is "an action does nothing", "an item comes back", "focus jumps or
+is lost", trace the action before naming a root cause: from the composable's
+`onAction` through `handleAction` and every call in order, with what each one
+writes and what arrives later (response, flow emission, paging refresh). Name
+the call that undoes the earlier one, or the node focus was sent to that is no
+longer composed. The `state-path-reviewer` agent uses the same trace at review.
+
 ## ACs
 
 Each AC is checkable by a unit test or by an observation on the TV (D-pad

@@ -18,11 +18,22 @@ below). Lens `blind` never reads this file.
 4. **Compose performance**: unstable lambdas or collections passed to hot
    composables, state read in composition that belongs in layout or draw,
    `Lazy*` items without keys, work in composition that belongs in the VM, IO
-   on the main thread.
+   on the main thread. Also: `remember` whose keys miss a value the block
+   reads (stale result after the input changes), and objects or lambdas
+   allocated inline in the arguments of a hot or lazy-item composable.
+   `List`, `Map` and `Set` are stable here
+   (`config/compose/compiler_config.conf`); do not flag them.
 5. **Conventions**: pure content composables, strings in resources, versions
    from the catalog, API access only through `KinoPubApiClient`.
 6. **Structure**: duplication of an existing helper (name it), dead code the
    change leaves behind, a file growing a second responsibility.
+7. **Silent failures**: an empty `catch`, or `runCatching { }` /
+   `getOrNull()` / `?: emptyList()` that turns a network, parse or storage
+   error into an empty or default value with no log and no error state, so the
+   screen shows "nothing" instead of an error; a catch-all that also catches
+   `CancellationException`; an error logged without the id or request it
+   concerns; a fallback that keeps showing stale data with no signal. A
+   deliberate fallback is fine when the code or a comment says why.
 
 Anything detekt already owns is out.
 
