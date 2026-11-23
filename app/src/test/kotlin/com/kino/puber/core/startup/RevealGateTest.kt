@@ -8,6 +8,24 @@ import org.junit.jupiter.api.Test
 internal class RevealGateTest {
     private var now = 10_000L
     private val gate = RevealGate(clock = { now })
+    private val frames = mutableListOf<() -> Unit>()
+    private val graces = mutableListOf<Pair<Long, () -> Unit>>()
+    private val graceObserved = RecordingRevealObserver()
+    private val graceGate = RevealGate(
+        clock = { now },
+        afterFrame = { frames += it },
+        observer = graceObserved,
+        graceMs = 123,
+        scheduleGrace = { delay, task -> graces += delay to task },
+    )
+
+    private fun runFrames() {
+        val due = frames.toList()
+        frames.clear()
+        due.forEach { it() }
+    }
+
+    private fun revealedLog() = graceObserved.log.filter { it.startsWith("revealed") }
 
     @Test
     fun remainingCapMs_countsFromBegin() {
@@ -245,9 +263,146 @@ internal class RevealGateTest {
         framed.onImageFinished(a)
         assertEquals(listOf("ready:2"), observed.log)
         framed.onImageFinished(b)
-        assertEquals(listOf("ready:2", "drained"), observed.log)
+        assertEquals(listOf("ready:2", "drained", "revealed:READY:1"), observed.log)
+        assertFalse(framed.covered.value)
         framed.onImageFinished(c)
-        assertEquals(listOf("ready:2", "drained", "idle", "revealed:READY:0"), observed.log)
+        assertEquals(listOf("ready:2", "drained", "revealed:READY:1"), observed.log)
+    }
+
+    @Test
+    fun graceAfterHeldDrained_changesNothing() {
+        val a = Any()
+        val b = Any()
+        graceGate.begin()
+        graceGate.onImageStarted(a)
+        graceGate.onImageStarted(b)
+        graceGate.markReady()
+        runFrames()
+        graceGate.onImageFinished(a)
+        graceGate.onImageFinished(b)
+        val before = graceObserved.log.toList()
+        assertEquals(listOf("ready:2", "idle", "drained", "revealed:READY:0"), before)
+
+        graces.single().second()
+
+        assertEquals(before, graceObserved.log)
+        assertFalse(graceGate.covered.value)
+    }
+
+    @Test
+    fun graceWithHeldInFlight_revealsWithCauseGrace() {
+        val a = Any()
+        val b = Any()
+        graceGate.begin()
+        graceGate.onImageStarted(a)
+        graceGate.onImageStarted(b)
+        graceGate.markReady()
+        runFrames()
+        graceGate.onImageFinished(a)
+        assertTrue(graceGate.covered.value)
+
+        graces.single().second()
+
+        assertFalse(graceGate.covered.value)
+        assertEquals("revealed:GRACE:1", graceObserved.log.last())
+        graceGate.onImageFinished(b)
+        assertEquals(listOf("revealed:GRACE:1"), revealedLog())
+    }
+
+    @Test
+    fun markReady_withHeldRequests_armsOneGraceOfGraceMs() {
+        graceGate.begin()
+        graceGate.onImageStarted(Any())
+        graceGate.markReady()
+        runFrames()
+        graceGate.markReady()
+        runFrames()
+
+        assertEquals(listOf(123L), graces.map { it.first })
+    }
+
+    @Test
+    fun markReady_withNothingHeld_armsNoGrace() {
+        graceGate.begin()
+        graceGate.markReady()
+        runFrames()
+
+        assertTrue(graces.isEmpty())
+        assertEquals(listOf("revealed:READY:0"), revealedLog())
+    }
+
+    @Test
+    fun graceFromBeforeAnotherBegin_isDropped() {
+        val a = Any()
+        graceGate.begin()
+        graceGate.onImageStarted(a)
+        graceGate.markReady()
+        runFrames()
+        val stale = graces.single().second
+        graceGate.begin()
+        graceGate.markReady()
+        runFrames()
+        assertTrue(graceGate.covered.value)
+
+        stale()
+
+        assertTrue(graceGate.covered.value)
+    }
+
+    @Test
+    fun graceAfterCapReveal_keepsCauseCap() {
+        graceGate.begin()
+        graceGate.onImageStarted(Any())
+        graceGate.markReady()
+        runFrames()
+        graceGate.onCap()
+
+        graces.single().second()
+
+        assertEquals(listOf("revealed:CAP:1"), revealedLog())
+    }
+
+    @Test
+    fun capAfterGraceReveal_keepsCauseGrace() {
+        graceGate.begin()
+        graceGate.onImageStarted(Any())
+        graceGate.markReady()
+        runFrames()
+        graces.single().second()
+
+        graceGate.onCap()
+        graceGate.revealNow()
+
+        assertEquals(listOf("revealed:GRACE:1"), revealedLog())
+        assertFalse(graceGate.covered.value)
+    }
+
+    @Test
+    fun markReadyBeforeAnotherBegin_armsNoGrace() {
+        graceGate.begin()
+        graceGate.onImageStarted(Any())
+        graceGate.markReady()
+        graceGate.begin()
+
+        runFrames()
+
+        assertTrue(graces.isEmpty())
+        assertTrue(graceGate.covered.value)
+    }
+
+    @Test
+    fun graceAfterReset_isDropped() {
+        graceGate.begin()
+        graceGate.onImageStarted(Any())
+        graceGate.markReady()
+        runFrames()
+        val stale = graces.single().second
+        graceGate.reset()
+        graceGate.begin()
+
+        stale()
+
+        assertTrue(graceGate.covered.value)
     }
 
     @Test
