@@ -111,6 +111,34 @@ internal class PlayerVMInvalidationTest : PlayerVMTestFixture() {
         }
 
     @Test
+    fun backPressed_requestsAWatchStateCatchUpAfterTheFlushBeforeBack() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            val vm = startedWithCoordinator()
+
+            try {
+                trackerSave()
+
+                exit(vm)
+
+                coVerifyOrder {
+                    interactor.markItemDetailsStale(42)
+                    interactor.requestWatchStateCatchUp()
+                    router.back(RESULT_CONTENT_CHANGED, any())
+                }
+            } finally {
+                vm.testCancelScope()
+            }
+        }
+
+    @Test
+    fun backPressed_withoutSuccessfulSave_stillRequestsACatchUp() {
+        failEverySave()
+        exit(startedWithCoordinator())
+
+        verify(exactly = 1) { interactor.requestWatchStateCatchUp() }
+    }
+
+    @Test
     fun backPressed_withoutSuccessfulSave_marksAndRefreshesNothing() {
         failEverySave()
         exit(startedWithCoordinator())

@@ -1,11 +1,14 @@
 package com.kino.puber.domain.interactor.watchstate
 
+import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.logger.log
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.ApiResponseList
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.PaginatedResponse
+import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.SyncWindowKind
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
 import kotlinx.coroutines.CancellationException
@@ -19,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -43,11 +48,15 @@ data class WatchStateSyncProgress(
 class WatchStateSyncInteractor(
     private val api: KinoPubApiClient,
     private val repository: WatchStateRepository,
+    private val itemDetails: ItemDetailsRepository,
     private val clock: () -> Long = System::currentTimeMillis,
     private val staleAfter: Duration = 1.hours,
     private val minTimeBetweenRuns: Duration = 5.minutes,
     private val reconcileAfter: Duration = 7.days,
     private val pauseBetweenChunks: Duration = 20.seconds,
+    private val catchUpFloor: Duration = 60.seconds,
+    private val catchUpMutex: Mutex = Mutex(),
+    private val maxCatchUpPages: Int = MAX_CATCH_UP_PAGES,
     private val requestScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     /**
      * Held at the boundary between chunks while the app is off screen. A walk is minutes long, so
@@ -73,6 +82,16 @@ class WatchStateSyncInteractor(
      * runs out within one app session, not to survive it.
      */
     private var lastRunAt: Long? = null
+
+    /** When the last catch-up started; spaces catch-ups out within one session, like [lastRunAt]. */
+    @Volatile
+    private var lastCatchUpAt: Long? = null
+
+    /** Set by an unfloored request that found a catch-up running, so that run goes round once more. */
+    private val rerunRequested = AtomicBoolean()
+
+    /** Series already asked about this session, so a series the server keeps unfinished costs one request. */
+    private val detailsCheckedIds: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
     /**
      * Refreshes the index when the last sync is older than [staleAfter]. Returns true when rows
@@ -135,6 +154,160 @@ class WatchStateSyncInteractor(
         }
     }
 
+    /** Fire-and-forget [catchUp], owned by this application-wide interactor rather than the caller. */
+    fun requestCatchUp(respectFloor: Boolean = true) {
+        requestScope.launch {
+            try {
+                catchUp(respectFloor)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                log(error, "Failed to catch up the watch state")
+            }
+        }
+    }
+
+    /**
+     * Folds the history entries newer than the bookmark into the index, whatever the walk is doing
+     * and however recently the index was synced. Touches neither the walk's cursor nor the prune.
+     *
+     * With [respectFloor], a call within [catchUpFloor] of the last catch-up does nothing. Without
+     * it (player exit) the call cannot be dropped: one that finds a run in flight leaves a note, and
+     * that run goes round once more. Returns true only when a run reached its end in the session it
+     * started in.
+     */
+    @Suppress("ReturnCount")
+    suspend fun catchUp(respectFloor: Boolean = true): Boolean {
+        val lastAt = lastCatchUpAt
+        if (respectFloor && lastAt != null && clock() - lastAt < catchUpFloor.inWholeMilliseconds) {
+            return false
+        }
+        // The note goes up before the lock is tried, with no suspension point in between: the holder
+        // sees it in its loop or in the check after its unlock, whichever it reaches first.
+        if (!respectFloor) rerunRequested.set(true)
+        if (!catchUpMutex.tryLock()) return false
+        var result = holdCatchUpLock()
+        // A note left after the loop's last look but before the unlock failed its tryLock; whoever
+        // left it relies on this check.
+        while (rerunRequested.get() && catchUpMutex.tryLock()) {
+            result = holdCatchUpLock()
+        }
+        return result
+    }
+
+    private suspend fun holdCatchUpLock(): Boolean {
+        var result: Boolean
+        try {
+            do {
+                rerunRequested.set(false)
+                result = runCatchUp()
+            } while (rerunRequested.get())
+        } finally {
+            catchUpMutex.unlock()
+        }
+        return result
+    }
+
+    @Suppress("ReturnCount")
+    private suspend fun runCatchUp(): Boolean {
+        // Without a bookmark there is nothing to be newer than; reading from the top would be the
+        // whole history, which is the walk's job.
+        if (repository.syncCursor().historyNewestSeen == 0L) return false
+        lastCatchUpAt = clock()
+        awaitForeground()
+        val generation = this.generation
+        val observedAt = clock()
+        val mark = repository.syncCursor().historyNewestSeen
+
+        val series = fetch { api.getWatchingList(onlySubscribed = false) } ?: return false
+        val movies = fetch { api.getWatchingMovies() }
+        val read = readHistoryNewerThan(mark) ?: return false
+        val newer = read.entries
+        val seriesIds = series.map(Item::id).toSet()
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        try {
+            if (newer.isNotEmpty()) {
+                // A read cut short leaves the mark where it was: the entries between what was read
+                // and the mark are unread, and raising it would hide them for good.
+                val newest = if (read.complete) newer.maxOf { it.lastSeenOrZero() } else mark
+                repository.recordCatchUpPage(newer, seriesIds, observedAt, newest)
+                if (!sessionSurvived(generation)) return false
+            }
+            repository.recordFromServer(series, observedAt)
+            if (!sessionSurvived(generation)) return false
+            repository.recordInProgress(movies.orEmpty(), observedAt)
+            if (!sessionSurvived(generation)) return false
+            refreshSeriesThatLeftTheList(seriesIds)
+            return sessionSurvived(generation)
+        } finally {
+            repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        }
+    }
+
+    /**
+     * What a catch-up read. [complete] is false when it stopped before reaching the mark or the end
+     * of the history — at the page cap, or on a response that did not advance.
+     */
+    private class CatchUpRead(val entries: List<History>, val complete: Boolean)
+
+    /**
+     * The entries newer than [mark], or null when a page failed. Nothing is written until every
+     * page is in, so a failure leaves the bookmark where it was. An empty page stops nothing, as in
+     * the walk. History comes newest first, so a page holding any entry at or below the mark holds
+     * the boundary and is the last one.
+     */
+    private suspend fun readHistoryNewerThan(mark: Long): CatchUpRead? {
+        val newer = mutableListOf<History>()
+        var orderTail: Long? = null
+        var page = 1
+        var complete = false
+        run pages@{
+            repeat(maxCatchUpPages) {
+                val response = api.getHistoryData(page, SYNC_HISTORY_PAGE_SIZE).getOrNull() ?: return null
+                // A server that answers an earlier page than asked would send this loop round forever.
+                if (response.pagination.current < page) return@pages
+                orderTail = logHistoryOrder(response.pagination.current, response.items, orderTail)
+                newer += response.items.filter { it.lastSeenOrZero() > mark }
+                val caughtUp = response.items.any { it.lastSeenOrZero() <= mark }
+                if (caughtUp || response.pagination.current >= response.pagination.total) {
+                    complete = true
+                    return@pages
+                }
+                page = response.pagination.current + 1
+            }
+        }
+        return CatchUpRead(newer, complete)
+    }
+
+    /**
+     * A series that finished on another device drops out of the watching list, and the history
+     * keeps no word of it, so the index would show it unfinished until something opened it. Asks
+     * the server about the few most recently played ones that are unfinished here yet absent from
+     * the list.
+     */
+    private suspend fun refreshSeriesThatLeftTheList(stillListed: Set<Int>) {
+        // A series back in the list is the list's again; if it leaves later it is worth a new look.
+        detailsCheckedIds.removeAll(stillListed)
+        val playedAt = repository.lastWatchedAt()
+        val candidates = repository.snapshot.value.values
+            .filter { state ->
+                state.isSeriesLike &&
+                    !state.isFullyWatched &&
+                    state.itemId !in stillListed &&
+                    state.itemId !in detailsCheckedIds &&
+                    ((state.watchedEpisodes ?: 0) > 0 || state.itemId in playedAt)
+            }
+            .sortedByDescending { playedAt[it.itemId] ?: 0L }
+            .take(MAX_DETAILS_PER_CATCH_UP)
+        candidates.forEach { state ->
+            // Remembered only once the answer is in, so a failed request is asked again next time.
+            runCatchingCancellable { itemDetails.refresh(state.itemId) }
+                .onSuccess { detailsCheckedIds += state.itemId }
+                .onFailure { error -> log(error, "Failed to refresh a series for the catch-up") }
+        }
+    }
+
     private suspend fun runSync(force: Boolean, rebuild: Boolean, maxIndexAge: Duration): Boolean {
         if (!force && !isRunDue(clock(), repository.syncCursor(), maxIndexAge)) return false
 
@@ -154,11 +327,11 @@ class WatchStateSyncInteractor(
         // Held open for the whole walk, so the chunk writes below settle as one change rather than
         // one per chunk. Without it the pauses between chunks are far enough apart to clear the
         // repository's debounce, and every chunk would cost each open screen a re-map or a re-page.
-        repository.beginSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
         try {
             return indexAccount(now, cursor, rebuild)
         } finally {
-            repository.endSyncWindow()
+            repository.endSyncWindow(SyncWindowKind.WALK)
         }
     }
 
@@ -273,6 +446,8 @@ class WatchStateSyncInteractor(
         mutableProgress.value = WatchStateSyncProgress()
         // A new account has to be indexed now, not after the previous one's run has cooled off.
         lastRunAt = null
+        lastCatchUpAt = null
+        detailsCheckedIds.clear()
         // The bookmark lives in the same database as the rows, so one wipe takes both.
         repository.clear()
     }
@@ -350,6 +525,7 @@ class WatchStateSyncInteractor(
         var pagesRead = 0
         val pending = mutableListOf<History>()
         var pagesPending = 0
+        var orderTail: Long? = null
 
         /**
          * Stores what has accumulated, with the bookmark that covers exactly those pages. Returns
@@ -371,7 +547,8 @@ class WatchStateSyncInteractor(
         while (pagesRead < MAX_HISTORY_PAGES_PER_RUN) {
             // Whatever has been read so far is still true and its cursor still describes it, so the
             // remainder is written by the flush below rather than re-fetched by the next run.
-            val response = api.getHistoryData(page).getOrNull() ?: break
+            val response = api.getHistoryData(page, SYNC_HISTORY_PAGE_SIZE).getOrNull() ?: break
+            orderTail = logHistoryOrder(response.pagination.current, response.items, orderTail)
             mutableProgress.value = WatchStateSyncProgress(
                 isSyncing = true,
                 currentPage = response.pagination.current,
@@ -476,10 +653,29 @@ class WatchStateSyncInteractor(
         )
     }
 
+    /**
+     * Logs, in debug builds only, whether a page continues the newest-first order the catch-up's
+     * stop rule relies on. Carries no timestamp, id or title. Returns the page's last `last_seen`,
+     * or [previousTail] for an empty page.
+     */
+    private fun logHistoryOrder(page: Int, entries: List<History>, previousTail: Long?): Long? {
+        val seen = entries.map { it.lastSeenOrZero() }
+        val ordered = seen.zipWithNext().all { (a, b) -> a >= b } &&
+            (previousTail == null || seen.firstOrNull()?.let { it <= previousTail } != false)
+        log("history order page=$page entries=${entries.size} ordered=$ordered")
+        return seen.lastOrNull() ?: previousTail
+    }
+
     private suspend fun fetch(request: suspend () -> Result<ApiResponseList<Item>>): List<Item>? =
         request().getOrNull()?.items
 
     private companion object {
+        /** Entries per history page; the server's maximum, so a deep walk takes fewer requests. */
+        const val SYNC_HISTORY_PAGE_SIZE = 50
+
+        /** Series one catch-up may ask the server about, newest played first. */
+        const val MAX_DETAILS_PER_CATCH_UP = 10
+
         /**
          * How far one run will walk. A deep history is covered across several runs rather than in
          * one burst, so a cold start is never spent entirely on catching up.
@@ -505,5 +701,11 @@ class WatchStateSyncInteractor(
         const val RESUME_OVERLAP_PAGES = 2
     }
 }
+
+/**
+ * Pages one catch-up reads before it stops: 1,000 pages of 50 is 50,000 entries, far more than an
+ * account plays between two catch-ups. Past it the rest is left to the next catch-up or the walk.
+ */
+internal const val MAX_CATCH_UP_PAGES = 1_000
 
 private fun History.lastSeenOrZero(): Long = updated?.toLongOrNull() ?: 0L

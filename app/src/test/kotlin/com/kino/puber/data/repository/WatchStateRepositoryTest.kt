@@ -32,13 +32,16 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
+@Suppress("LargeClass")
 class WatchStateRepositoryTest {
 
     /** Enough chunks that "one change per chunk" and "one per walk" cannot be confused. */
     private val chunksInAWalk = 3
 
     private val dao = FakeWatchStateDao()
+    private val syncDao = FakeWatchStateSyncDao()
     private var now = 42L
+    private var windowNow = 42L
 
     /** An item carrying watch fields, which is what makes the index actually record a row for it. */
     private fun watchingItem(id: Int) = Item(
@@ -55,9 +58,10 @@ class WatchStateRepositoryTest {
         awaitStartupSettled: suspend () -> Unit = {},
     ) = WatchStateRepository(
         dao = dao,
-        syncDao = FakeWatchStateSyncDao(),
+        syncDao = syncDao,
         transaction = DatabaseTransaction.Direct,
         clock = { now },
+        windowClock = { windowNow },
         scope = scope,
         awaitStartupSettled = awaitStartupSettled,
     )
@@ -112,17 +116,312 @@ class WatchStateRepositoryTest {
         testScheduler.advanceUntilIdle()
         val beforeWalk = repository.version.value
 
-        repository.beginSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
         repeat(chunksInAWalk) { chunk ->
             repository.recordFromServer(listOf(watchingItem(id = chunk + 1)))
             testScheduler.advanceUntilIdle()
         }
         val duringWalk = repository.version.value
-        repository.endSyncWindow()
+        repository.endSyncWindow(SyncWindowKind.WALK)
         testScheduler.advanceUntilIdle()
 
         assertEquals(beforeWalk, duringWalk)
         assertEquals(beforeWalk + 1, repository.version.value)
+    }
+
+    /** A catch-up inside a walk's window must not leave its change waiting for the walk's end. */
+    @Test
+    fun syncWindow_publishesACatchUpsChangeWhileAWalksWindowIsStillOpen() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp + 1, whileWalkIsOpen)
+    }
+
+    /**
+     * Room publishes after the write commits, so a catch-up's window can close before the emission
+     * that carries its rows. That emission must still go out at once, not wait for the walk.
+     */
+    @Test
+    fun syncWindow_publishesACatchUpsChangeThatRoomEmitsAfterItsWindowClosed() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        dao.emissionsFlowing.value = false
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+        val beforeEmission = repository.version.value
+        dao.emissionsFlowing.value = true
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp, beforeEmission)
+        assertEquals(beforeCatchUp + 1, whileWalkIsOpen)
+    }
+
+    /**
+     * A catch-up that changed nothing pays out nothing, and what the walk holds stays held for the
+     * walk's own end.
+     */
+    @Test
+    fun syncWindow_aCatchUpThatChangedNothingDoesNotPayOutTheWalksHeldChange() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeWalk = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.recordFromServer(listOf(watchingItem(id = 1)))
+        testScheduler.advanceUntilIdle()
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+        val afterEmptyCatchUp = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeWalk, afterEmptyCatchUp)
+        assertEquals(beforeWalk + 1, repository.version.value)
+    }
+
+    /** Ownership is by kind: a catch-up window opened before the walk's pays out its own change. */
+    @Test
+    fun syncWindow_publishesACatchUpsChangeWhenItsWindowOpenedBeforeTheWalks() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        testScheduler.advanceUntilIdle()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp + 1, whileWalkIsOpen)
+    }
+
+    /**
+     * A catch-up writes more than once, so the emission of its last write can land after its window
+     * closed and already paid a tick for the first. That one must not be held with the walk.
+     */
+    @Test
+    fun syncWindow_publishesALateLastEmissionAfterTheCatchUpAlreadyPaidATick() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        testScheduler.advanceUntilIdle()
+        dao.emissionsFlowing.value = false
+        repository.recordFromServer(listOf(watchingItem(id = 2)))
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+        dao.emissionsFlowing.value = true
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp + 2, whileWalkIsOpen)
+    }
+
+    @Test
+    fun syncWindow_publishesTheCatchUpsLateEmissionWhenAWalkOpensRightAfterItClosed() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        dao.emissionsFlowing.value = false
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        dao.emissionsFlowing.value = true
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp + 1, whileWalkIsOpen)
+    }
+
+    /**
+     * A catch-up that wrote nothing leaves no emission to own: once its window has passed, a walk's
+     * first changing chunk is held like any other.
+     */
+    @Test
+    fun syncWindow_aNoChangeCatchUpDoesNotLetAWalksFirstChunkThrough() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        windowNow += 10_000L
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.recordFromServer(listOf(watchingItem(id = 1)))
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeCatchUp, whileWalkIsOpen)
+        assertEquals(beforeCatchUp + 1, repository.version.value)
+    }
+
+    /** The window is measured on its own monotonic clock: the wall clock stepping back must not stretch it. */
+    @Test
+    fun syncWindow_aWallClockStepBackDoesNotKeepTheCatchUpWindowOpen() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        now -= 10_000L
+        windowNow += 10_000L
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.recordFromServer(listOf(watchingItem(id = 1)))
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeCatchUp, whileWalkIsOpen)
+        assertEquals(beforeCatchUp + 1, repository.version.value)
+    }
+
+    /**
+     * A catch-up that already paid a tick for what it held still owns its last in-flight emission
+     * when a walk opens right after it closed.
+     */
+    @Test
+    fun syncWindow_publishesTheLastEmissionOfACatchUpThatHeldAChangeWhenAWalkOpensRightAfter() = runTest {
+        val repository = repository(eagerScope())
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        testScheduler.advanceUntilIdle()
+        dao.emissionsFlowing.value = false
+        repository.recordFromServer(listOf(watchingItem(id = 2)))
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        dao.emissionsFlowing.value = true
+        testScheduler.advanceUntilIdle()
+        val whileWalkIsOpen = repository.version.value
+        repository.endSyncWindow(SyncWindowKind.WALK)
+
+        assertEquals(beforeCatchUp + 2, whileWalkIsOpen)
+    }
+
+    /** A catch-up that found nothing new has nothing to announce, whatever window it ran in. */
+    @Test
+    fun syncWindow_announcesNothingForACatchUpThatChangedNothing() = runTest {
+        val repository = repository(eagerScope())
+        val entries = listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100))
+        repository.recordCatchUpPage(entries, emptySet(), now, newestSeen = 1_000L)
+        testScheduler.advanceUntilIdle()
+        val beforeCatchUp = repository.version.value
+
+        repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+        repository.recordCatchUpPage(entries, emptySet(), now, newestSeen = 1_000L)
+        repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(beforeCatchUp, repository.version.value)
+    }
+
+    @Test
+    fun recordCatchUpPage_writesTheRowsAndRaisesTheMarkTogether() = runTest {
+        val repository = repository(eagerScope())
+        syncDao.upsert(WatchStateSyncEntity(historyNewestSeen = 500L))
+
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+
+        assertEquals(listOf(9), dao.rows.value.map { it.itemId })
+        assertEquals(1_000L, repository.syncCursor().historyNewestSeen)
+    }
+
+    @Test
+    fun recordCatchUpPage_rowsCarryTheCurrentGenerationAndSurviveAPrune() = runTest {
+        val repository = repository(eagerScope())
+        syncDao.upsert(WatchStateSyncEntity(generation = 3L))
+
+        repository.recordCatchUpPage(
+            listOf(historyEntry(itemId = 9, type = ItemType.MOVIE, time = 50, duration = 100)),
+            emptySet(),
+            now,
+            newestSeen = 1_000L,
+        )
+        repository.pruneStaleRows(3L)
+
+        assertEquals(listOf(9), dao.rows.value.map { it.itemId })
+        assertEquals(3L, dao.rows.value.single().generation)
+    }
+
+    @Test
+    fun saveSyncCursor_neverLowersTheHistoryMark() = runTest {
+        val repository = repository(eagerScope())
+        repository.saveSyncCursor(WatchStateSyncCursor(historyNewestSeen = 900L))
+
+        repository.saveSyncCursor(WatchStateSyncCursor(historyNewestSeen = 800L, historyResumePage = 4))
+
+        val stored = repository.syncCursor()
+        assertEquals(900L, stored.historyNewestSeen)
+        assertEquals(4, stored.historyResumePage)
     }
 
     /** A walk that wrote nothing has nothing to announce when it ends. */
@@ -132,8 +431,8 @@ class WatchStateRepositoryTest {
         testScheduler.advanceUntilIdle()
         val beforeWalk = repository.version.value
 
-        repository.beginSyncWindow()
-        repository.endSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
+        repository.endSyncWindow(SyncWindowKind.WALK)
         testScheduler.advanceUntilIdle()
 
         assertEquals(beforeWalk, repository.version.value)
@@ -148,7 +447,7 @@ class WatchStateRepositoryTest {
     fun syncWindow_stillPublishesTheUsersOwnMarkAtOnce() = runTest {
         val repository = repository(eagerScope())
         testScheduler.advanceUntilIdle()
-        repository.beginSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
         repository.recordFromServer(listOf(watchingItem(id = 1)))
         testScheduler.advanceUntilIdle()
         val beforeMark = repository.version.value
@@ -157,7 +456,7 @@ class WatchStateRepositoryTest {
         testScheduler.advanceUntilIdle()
 
         assertTrue(repository.version.value > beforeMark)
-        repository.endSyncWindow()
+        repository.endSyncWindow(SyncWindowKind.WALK)
     }
 
     /**
@@ -169,7 +468,7 @@ class WatchStateRepositoryTest {
     fun syncWindow_waitsForTheIndexToShowTheMarkBeforeAnnouncingIt() = runTest {
         val repository = repository(eagerScope())
         testScheduler.advanceUntilIdle()
-        repository.beginSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
         val beforeMark = repository.version.value
 
         dao.emissionsFlowing.value = false
@@ -184,7 +483,7 @@ class WatchStateRepositoryTest {
 
         assertTrue(repository.version.value > beforeMark)
         assertTrue(repository.snapshot.value.getValue(7).isFullyWatched)
-        repository.endSyncWindow()
+        repository.endSyncWindow(SyncWindowKind.WALK)
     }
 
     /**
@@ -198,7 +497,7 @@ class WatchStateRepositoryTest {
     fun syncWindow_doesNotMistakeAWalksEmissionForTheUsersMark() = runTest {
         val repository = repository(eagerScope())
         testScheduler.advanceUntilIdle()
-        repository.beginSyncWindow()
+        repository.beginSyncWindow(SyncWindowKind.WALK)
 
         // The mark registers what it will write, then stalls before the row lands.
         dao.holdUserWrites()
@@ -221,7 +520,7 @@ class WatchStateRepositoryTest {
 
         assertTrue(repository.version.value > beforeChunk)
         assertTrue(repository.snapshot.value.getValue(7).isFullyWatched)
-        repository.endSyncWindow()
+        repository.endSyncWindow(SyncWindowKind.WALK)
     }
 
     @Test
@@ -982,6 +1281,11 @@ private class FakeWatchStateSyncDao : WatchStateSyncDao {
 
     override suspend fun upsert(entity: WatchStateSyncEntity) {
         row.value = entity
+    }
+
+    override suspend fun raiseHistoryNewestSeen(seen: Long, id: Int) {
+        val stored = row.value ?: return
+        if (stored.historyNewestSeen < seen) row.value = stored.copy(historyNewestSeen = seen)
     }
 
     override suspend fun clear() {

@@ -400,9 +400,9 @@ class KinoPubApiClient(
     /**
      * Get history data with pagination
      */
-    suspend fun getHistoryData(page: Int): Result<PaginatedResponse<History>> =
+    suspend fun getHistoryData(page: Int, perPage: Int? = null): Result<PaginatedResponse<History>> =
         apiCall<HistoryPageResponse> {
-            httpClient.fetchHistoryPage(page, mainApiBaseUrl())
+            httpClient.fetchHistoryPage(page, mainApiBaseUrl(), perPage)
         }.map(HistoryPageResponse::toModel)
 
     /**

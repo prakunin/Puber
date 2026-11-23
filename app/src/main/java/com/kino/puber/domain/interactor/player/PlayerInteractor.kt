@@ -9,6 +9,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import com.kino.puber.domain.model.SubtitlePreference
 import com.kino.puber.domain.model.SubtitleSize
 import com.kino.puber.domain.model.BufferPreset
@@ -61,10 +62,12 @@ private data class EpisodeCursor(
     val episodeIndex: Int,
 )
 
+@Suppress("TooManyFunctions")
 internal class PlayerInteractor(
     private val api: KinoPubApiClient,
     private val itemDetailsRepository: ItemDetailsRepository,
     private val playerPreferencesRepository: PlayerPreferencesRepository,
+    private val watchStateSync: WatchStateSyncInteractor,
 ) {
 
     suspend fun getItemDetails(id: Int): Item {
@@ -273,6 +276,12 @@ internal class PlayerInteractor(
     suspend fun saveWatchingTime(id: Int, videoNumber: Int, time: Int, season: Int? = null) {
         api.setWatchingTime(id, videoNumber, time, season).getOrThrow()
     }
+
+    /**
+     * Asks for a watch-state catch-up that is never floored: leaving the player is the moment what
+     * was just played has to reach the index, and a second exit within the minute is as real as the first.
+     */
+    fun requestWatchStateCatchUp() = watchStateSync.requestCatchUp(respectFloor = false)
 
     suspend fun markItemDetailsStale(id: Int) {
         itemDetailsRepository.markStale(id)

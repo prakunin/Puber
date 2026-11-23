@@ -35,7 +35,7 @@ class PuberDatabaseMigrationTest {
         file = file,
         driver = AndroidSQLiteDriver(),
         databaseClass = PuberDatabase::class,
-        autoMigrationSpecs = listOf(LegacyPayloadCleanup()),
+        autoMigrationSpecs = listOf(LegacyPayloadCleanup(), HistoryPageSizeMigration()),
     )
 
     @Before
@@ -87,6 +87,41 @@ class PuberDatabaseMigrationTest {
     }
 
     @Test
+    fun migrate4To5RescalesTheResumePageOfAnUnfinishedWalk() = runTest {
+        helper.createDatabase(4).use { connection ->
+            insertSyncRow(connection, walkDone = 0, resumePage = 26)
+        }
+
+        helper.runMigrationsAndValidate(5).use { connection ->
+            connection.prepare(
+                "SELECT history_resume_page, last_sync_at, history_newest_seen, generation, " +
+                    "history_total_items FROM watch_state_sync WHERE id = 1",
+            ).use { st ->
+                assertEquals(true, st.step())
+                assertEquals(11L, st.getLong(0))
+                assertEquals(5L, st.getLong(1))
+                assertEquals(900L, st.getLong(2))
+                assertEquals(2L, st.getLong(3))
+                assertEquals(777L, st.getLong(4))
+            }
+        }
+    }
+
+    @Test
+    fun migrate4To5LeavesAFinishedWalkAlone() = runTest {
+        helper.createDatabase(4).use { connection ->
+            insertSyncRow(connection, walkDone = 1, resumePage = 26)
+        }
+
+        helper.runMigrationsAndValidate(5).use { connection ->
+            connection.prepare("SELECT history_resume_page FROM watch_state_sync WHERE id = 1").use { st ->
+                assertEquals(true, st.step())
+                assertEquals(26L, st.getLong(0))
+            }
+        }
+    }
+
+    @Test
     fun productionBuilderOpensAV3DatabaseWithoutDroppingWatchState() = runTest {
         helper.createDatabase(3).use { connection -> insertWatchState(connection, itemId = 42) }
 
@@ -96,6 +131,14 @@ class PuberDatabaseMigrationTest {
         } finally {
             database.close()
         }
+    }
+
+    private fun insertSyncRow(connection: SQLiteConnection, walkDone: Int, resumePage: Int) {
+        connection.execSQL(
+            "INSERT INTO watch_state_sync (id, last_sync_at, history_newest_seen, " +
+                "full_history_walk_done, history_resume_page, generation, last_reconciled_at, " +
+                "history_total_items) VALUES (1, 5, 900, $walkDone, $resumePage, 2, NULL, 777)",
+        )
     }
 
     private fun insertPayload(connection: SQLiteConnection, key: String, payload: String, at: Long) {

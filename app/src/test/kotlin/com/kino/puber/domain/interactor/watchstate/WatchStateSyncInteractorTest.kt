@@ -9,15 +9,27 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.repository.ItemDetailsRepository
+import com.kino.puber.data.repository.SyncWindowKind
+import com.kino.puber.data.repository.WatchState
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.WatchStateSyncCursor
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
+import io.mockk.verifyOrder
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -31,7 +43,9 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
+@Suppress("LargeClass")
 class WatchStateSyncInteractorTest {
 
     /** Long enough that a case can tell "still parked" from "moved on" by advancing past it. */
@@ -42,6 +56,9 @@ class WatchStateSyncInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
     private val repository = mockk<WatchStateRepository>(relaxed = true)
+    private val itemDetails = mockk<ItemDetailsRepository>(relaxed = true)
+    private val snapshot = MutableStateFlow<Map<Int, WatchState>>(emptyMap())
+    private var lastWatched: Map<Int, Long> = emptyMap()
     private var now = 1_000L
 
     /**
@@ -53,6 +70,7 @@ class WatchStateSyncInteractorTest {
     private val interactor = WatchStateSyncInteractor(
         api = api,
         repository = repository,
+        itemDetails = itemDetails,
         clock = { now },
         staleAfter = 1.hours,
         // The cooldown between runs has its own test; here it would only stop back-to-back calls
@@ -69,6 +87,11 @@ class WatchStateSyncInteractorTest {
         coEvery { repository.saveSyncCursor(any()) } answers { cursor = firstArg() }
         coEvery { repository.recordHistoryPage(any(), any(), any(), any()) } answers { cursor = arg(3) }
         coEvery { repository.clear() } answers { cursor = WatchStateSyncCursor() }
+        every { repository.snapshot } returns snapshot
+        coEvery { repository.lastWatchedAt() } answers { lastWatched }
+        coEvery { repository.recordCatchUpPage(any(), any(), any(), any()) } answers {
+            cursor = cursor.copy(historyNewestSeen = maxOf(cursor.historyNewestSeen, arg<Long>(3)))
+        }
         coEvery { api.getWatchingList(onlySubscribed = false) } returns success()
         coEvery { api.getWatchingMovies() } returns success()
         stubHistory(pages = 1)
@@ -92,6 +115,24 @@ class WatchStateSyncInteractorTest {
     }
 
     @Test
+    fun sync_holdsAWalkWindowAroundTheWalk() = runTest {
+        assertTrue(interactor.syncIfStale())
+
+        verifyOrder {
+            repository.beginSyncWindow(SyncWindowKind.WALK)
+            repository.endSyncWindow(SyncWindowKind.WALK)
+        }
+        verify(exactly = 0) { repository.beginSyncWindow(SyncWindowKind.CATCH_UP) }
+    }
+
+    @Test
+    fun theWalkReadsFiftyEntriesAPage() = runTest {
+        assertTrue(interactor.syncIfStale())
+
+        coVerify(exactly = 1) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
     fun sync_exposesLastHistoryPageProgress() = runTest {
         stubHistory(pages = 3)
 
@@ -112,7 +153,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale())
 
-        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { api.getHistoryData(any(), any()) }
         coVerify(exactly = 0) { repository.recordHistoryPage(any(), any(), any(), any()) }
     }
 
@@ -161,7 +202,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale())
 
-        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { api.getHistoryData(any(), any()) }
         coVerify(exactly = 0) { repository.recordHistoryPage(any(), any(), any(), any()) }
         assertFalse(cursor.fullHistoryWalkDone)
         assertNull(cursor.lastSyncAt)
@@ -221,13 +262,13 @@ class WatchStateSyncInteractorTest {
         runCurrent()
 
         // One chunk goes out, and then the walk waits rather than reaching for the next page.
-        coVerify(exactly = 1) { api.getHistoryData(15) }
-        coVerify(exactly = 0) { api.getHistoryData(16) }
+        coVerify(exactly = 1) { api.getHistoryData(15, 50) }
+        coVerify(exactly = 0) { api.getHistoryData(16, 50) }
 
         advanceTimeBy(chunkPause.inWholeMilliseconds + 1)
         runCurrent()
 
-        coVerify(exactly = 1) { api.getHistoryData(16) }
+        coVerify(exactly = 1) { api.getHistoryData(16, 50) }
     }
 
     /** The pause spreads the walk out; it must not cost it pages. */
@@ -242,7 +283,7 @@ class WatchStateSyncInteractorTest {
         advanceTimeBy(pastEveryPause)
         runCurrent()
 
-        coVerify(exactly = 1) { api.getHistoryData(20) }
+        coVerify(exactly = 1) { api.getHistoryData(20, 50) }
         assertTrue(cursor.fullHistoryWalkDone)
     }
 
@@ -267,8 +308,8 @@ class WatchStateSyncInteractorTest {
         runCurrent()
 
         // The chunk in flight was finished; nothing past the boundary went out.
-        coVerify(exactly = 1) { api.getHistoryData(15) }
-        coVerify(exactly = 0) { api.getHistoryData(16) }
+        coVerify(exactly = 1) { api.getHistoryData(15, 50) }
+        coVerify(exactly = 0) { api.getHistoryData(16, 50) }
     }
 
     /**
@@ -289,7 +330,7 @@ class WatchStateSyncInteractorTest {
 
         coVerify(exactly = 0) { api.getWatchingList(any()) }
         coVerify(exactly = 0) { api.getWatchingMovies() }
-        coVerify(exactly = 0) { api.getHistoryData(any()) }
+        coVerify(exactly = 0) { api.getHistoryData(any(), any()) }
     }
 
     /** Parking has to be a wait, not an end: coming back continues the walk where it stopped. */
@@ -307,7 +348,7 @@ class WatchStateSyncInteractorTest {
         advanceTimeBy(pastEveryPause)
         runCurrent()
 
-        coVerify(exactly = 1) { api.getHistoryData(20) }
+        coVerify(exactly = 1) { api.getHistoryData(20, 50) }
         assertTrue(cursor.fullHistoryWalkDone)
     }
 
@@ -326,7 +367,7 @@ class WatchStateSyncInteractorTest {
         assertFalse(interactor.syncIfStale())
 
         // Having waited would have let the first walk run on; it is still parked where it was.
-        coVerify(exactly = 0) { api.getHistoryData(16) }
+        coVerify(exactly = 0) { api.getHistoryData(16, 50) }
     }
 
     /**
@@ -373,7 +414,7 @@ class WatchStateSyncInteractorTest {
 
         // Walking from the copy read before parking would have made this a full pass and read both
         // pages; from the bookmark on disk, page 1 already says it has caught up.
-        coVerify(exactly = 0) { api.getHistoryData(2) }
+        coVerify(exactly = 0) { api.getHistoryData(2, 50) }
     }
 
     /**
@@ -387,7 +428,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale(force = true))
 
-        coVerify(exactly = 0) { api.getHistoryData(2) }
+        coVerify(exactly = 0) { api.getHistoryData(2, 50) }
         assertTrue(cursor.fullHistoryWalkDone)
     }
 
@@ -412,6 +453,7 @@ class WatchStateSyncInteractorTest {
         val paced = WatchStateSyncInteractor(
             api = api,
             repository = repository,
+            itemDetails = itemDetails,
             clock = { now },
             staleAfter = 1.hours,
             minTimeBetweenRuns = 5.minutes,
@@ -436,7 +478,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale(force = true, rebuild = true))
 
-        coVerify(exactly = 1) { api.getHistoryData(3) }
+        coVerify(exactly = 1) { api.getHistoryData(3, 50) }
         assertTrue(cursor.fullHistoryWalkDone)
     }
 
@@ -501,7 +543,7 @@ class WatchStateSyncInteractorTest {
     @Test
     fun aWalkInterruptedMidBatchStillWritesWhatItHadRead() = runTest {
         stubHistory(pages = 20)
-        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("interrupted"))
+        coEvery { api.getHistoryData(3, 50) } returns Result.failure(IllegalStateException("interrupted"))
         val written = mutableListOf<List<History>>()
         coEvery {
             repository.recordHistoryPage(capture(written), any(), any(), any())
@@ -552,12 +594,13 @@ class WatchStateSyncInteractorTest {
         val interactor = WatchStateSyncInteractor(
             api = api,
             repository = repository,
+            itemDetails = itemDetails,
             clock = { now },
             staleAfter = 1.hours,
             minTimeBetweenRuns = 5.minutes,
         )
         stubHistory(pages = 4)
-        coEvery { api.getHistoryData(2) } returns Result.failure(IllegalStateException("interrupted"))
+        coEvery { api.getHistoryData(2, 50) } returns Result.failure(IllegalStateException("interrupted"))
         assertTrue(interactor.syncIfStale())
         assertNull(cursor.lastSyncAt)
 
@@ -573,6 +616,7 @@ class WatchStateSyncInteractorTest {
         val interactor = WatchStateSyncInteractor(
             api = api,
             repository = repository,
+            itemDetails = itemDetails,
             clock = { now },
             staleAfter = 1.hours,
             minTimeBetweenRuns = 5.minutes,
@@ -632,7 +676,7 @@ class WatchStateSyncInteractorTest {
         // at the end would delete them.
         val interactor = reconcilingInteractor()
         stubHistory(pages = 4)
-        coEvery { api.getHistoryData(2) } returns Result.failure(IllegalStateException("interrupted"))
+        coEvery { api.getHistoryData(2, 50) } returns Result.failure(IllegalStateException("interrupted"))
         assertTrue(interactor.syncIfStale())
         assertFalse(cursor.fullHistoryWalkDone)
 
@@ -646,6 +690,7 @@ class WatchStateSyncInteractorTest {
     private fun reconcilingInteractor() = WatchStateSyncInteractor(
         api = api,
         repository = repository,
+        itemDetails = itemDetails,
         clock = { now },
         staleAfter = 1.hours,
         minTimeBetweenRuns = Duration.ZERO,
@@ -671,7 +716,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale())
 
-        (1..4).forEach { page -> coVerify(exactly = 1) { api.getHistoryData(page) } }
+        (1..4).forEach { page -> coVerify(exactly = 1) { api.getHistoryData(page, 50) } }
         assertTrue(cursor.fullHistoryWalkDone)
     }
 
@@ -679,7 +724,7 @@ class WatchStateSyncInteractorTest {
     fun interruptedWalk_resumesFromWhereItStopped() = runTest {
         // The walk spans hundreds of requests; a killed app must not send it back to page 1.
         stubHistory(pages = 4)
-        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("killed"))
+        coEvery { api.getHistoryData(3, 50) } returns Result.failure(IllegalStateException("killed"))
         assertTrue(interactor.syncIfStale())
         assertFalse(cursor.fullHistoryWalkDone)
         assertEquals(3, cursor.historyResumePage)
@@ -689,13 +734,13 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(cursor.fullHistoryWalkDone)
         // The resume overlaps a couple of pages, so page 1 is read again rather than skipped past.
-        coVerify(exactly = 2) { api.getHistoryData(3) }
+        coVerify(exactly = 2) { api.getHistoryData(3, 50) }
     }
 
     @Test
     fun interruptedWalk_keepsWhatItAlreadyRead() = runTest {
         stubHistory(pages = 4)
-        coEvery { api.getHistoryData(3) } returns Result.failure(IllegalStateException("killed"))
+        coEvery { api.getHistoryData(3, 50) } returns Result.failure(IllegalStateException("killed"))
 
         assertTrue(interactor.syncIfStale())
 
@@ -712,8 +757,8 @@ class WatchStateSyncInteractorTest {
         assertTrue(interactor.syncIfStale(force = true))
 
         // Page 1 holds the newest entries, which the first walk already folded in.
-        coVerify(exactly = 2) { api.getHistoryData(1) }
-        coVerify(exactly = 1) { api.getHistoryData(2) }
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+        coVerify(exactly = 1) { api.getHistoryData(2, 50) }
     }
 
     @Test
@@ -722,13 +767,13 @@ class WatchStateSyncInteractorTest {
         // new entries reach.
         stubHistory(pages = 3)
         assertTrue(interactor.syncIfStale())
-        coEvery { api.getHistoryData(1) } returns Result.success(
+        coEvery { api.getHistoryData(1, 50) } returns Result.success(
             PaginatedResponse(items = emptyList(), pagination = Pagination(current = 1, perpage = 20, total = 3))
         )
 
         assertTrue(interactor.syncIfStale(force = true))
 
-        coVerify(exactly = 2) { api.getHistoryData(2) }
+        coVerify(exactly = 2) { api.getHistoryData(2, 50) }
     }
 
     @Test
@@ -740,7 +785,7 @@ class WatchStateSyncInteractorTest {
 
         assertTrue(interactor.syncIfStale(force = true))
 
-        coVerify(exactly = 2) { api.getHistoryData(2) }
+        coVerify(exactly = 2) { api.getHistoryData(2, 50) }
     }
 
     @Test
@@ -786,7 +831,7 @@ class WatchStateSyncInteractorTest {
 
     @Test
     fun sync_doesNotStampTheClockWhenTheHistoryFails() = runTest {
-        coEvery { api.getHistoryData(any()) } returns Result.failure(IllegalStateException("boom"))
+        coEvery { api.getHistoryData(any(), any()) } returns Result.failure(IllegalStateException("boom"))
 
         assertTrue(interactor.syncIfStale())
         assertTrue(interactor.syncIfStale())
@@ -815,8 +860,529 @@ class WatchStateSyncInteractorTest {
         assertTrue(interactor.syncIfStale())
 
         assertTrue(cursor.fullHistoryWalkDone)
-        coVerify(exactly = 2) { api.getHistoryData(3) }
+        coVerify(exactly = 2) { api.getHistoryData(3, 50) }
     }
+
+    // ---- catch-up ----
+
+    /** An index the previous run left complete, synced a minute ago and sure of everything up to [mark]. */
+    private fun indexKnownUpTo(mark: Long) {
+        cursor = WatchStateSyncCursor(
+            lastSyncAt = now - 1.minutes.inWholeMilliseconds,
+            historyNewestSeen = mark,
+            fullHistoryWalkDone = true,
+        )
+    }
+
+    /** One list of `last_seen` stamps per page, page 1 first; entries are told apart by their stamp. */
+    private fun stubPages(vararg pages: List<Long>) {
+        pages.forEachIndexed { index, stamps ->
+            val page = index + 1
+            coEvery { api.getHistoryData(page, 50) } returns Result.success(
+                PaginatedResponse(
+                    items = stamps.mapIndexed { i, stamp -> historyEntry(itemId = page * 100 + i, lastSeen = stamp) },
+                    pagination = Pagination(current = page, perpage = 50, total = pages.size, totalItems = 0),
+                )
+            )
+        }
+    }
+
+    private fun stubNewerPages(count: Int) {
+        (1..count).forEach { page ->
+            coEvery { api.getHistoryData(page, 50) } returns Result.success(
+                PaginatedResponse(
+                    items = listOf(historyEntry(itemId = page, lastSeen = 100_000L - page)),
+                    pagination = Pagination(current = page, perpage = 50, total = count, totalItems = count),
+                )
+            )
+        }
+    }
+
+    private fun catchUpInteractor(
+        scope: CoroutineScope = CoroutineScope(Job()),
+        floor: Duration = 60.seconds,
+        mutex: Mutex = Mutex(),
+        pause: Duration = Duration.ZERO,
+        maxPages: Int = 1_000,
+    ) = WatchStateSyncInteractor(
+        api = api,
+        repository = repository,
+        itemDetails = itemDetails,
+        clock = { now },
+        staleAfter = 1.hours,
+        minTimeBetweenRuns = Duration.ZERO,
+        pauseBetweenChunks = pause,
+        catchUpFloor = floor,
+        catchUpMutex = mutex,
+        maxCatchUpPages = maxPages,
+        requestScope = scope,
+    )
+
+    private fun inProgressSeries(vararg ids: Int) {
+        snapshot.value = ids.associateWith {
+            WatchState(itemId = it, isSeriesLike = true, isFullyWatched = false, watchedEpisodes = 3)
+        }
+    }
+
+    @Test
+    fun catchUp_readsPastTheMarkOverAnIndexSyncedWithinTheHour() = runTest {
+        now = 10_000_000L
+        indexKnownUpTo(995)
+        stubPages(listOf(1000, 999), listOf(998, 997), listOf(996, 996), listOf(995, 990), listOf(980))
+
+        assertTrue(interactor.catchUp())
+
+        (1..4).forEach { page -> coVerify(exactly = 1) { api.getHistoryData(page, 50) } }
+        coVerify(exactly = 0) { api.getHistoryData(5, 50) }
+        coVerify(exactly = 1) { api.getWatchingList(onlySubscribed = false) }
+        coVerify(exactly = 1) { api.getWatchingMovies() }
+        val written = slot<List<History>>()
+        val newest = slot<Long>()
+        coVerify(exactly = 1) { repository.recordCatchUpPage(capture(written), any(), any(), capture(newest)) }
+        assertEquals(listOf("1000", "999", "998", "997", "996", "996"), written.captured.map { it.updated })
+        assertEquals(1000L, newest.captured)
+    }
+
+    @Test
+    fun catchUp_holdsACatchUpWindowAroundItsWrites() = runTest {
+        now = 10_000_000L
+        indexKnownUpTo(995)
+        stubPages(listOf(1000, 999), listOf(995))
+
+        assertTrue(interactor.catchUp())
+
+        verifyOrder {
+            repository.beginSyncWindow(SyncWindowKind.CATCH_UP)
+            repository.endSyncWindow(SyncWindowKind.CATCH_UP)
+        }
+        verify(exactly = 0) { repository.beginSyncWindow(SyncWindowKind.WALK) }
+    }
+
+    @Test
+    fun catchUp_sendsNothingOverAnIndexWithNoMark() = runTest {
+        assertFalse(interactor.catchUp())
+
+        coVerify(exactly = 0) { api.getWatchingList(any()) }
+        coVerify(exactly = 0) { api.getHistoryData(any(), any()) }
+    }
+
+    @Test
+    fun catchUp_doesNotTreatAnEmptyPageAsHavingCaughtUp() = runTest {
+        indexKnownUpTo(995)
+        stubPages(listOf(1000), emptyList(), listOf(999), listOf(990))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 1) { api.getHistoryData(3, 50) }
+    }
+
+    @Test
+    fun catchUp_runsNothingWithoutTheSerialsList() = runTest {
+        indexKnownUpTo(995)
+        stubPages(listOf(1000))
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns Result.failure(IllegalStateException("boom"))
+
+        assertFalse(interactor.catchUp())
+
+        coVerify(exactly = 0) { api.getHistoryData(any(), any()) }
+        coVerify(exactly = 0) { repository.recordCatchUpPage(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { repository.recordInProgress(any(), any()) }
+    }
+
+    @Test
+    fun catchUp_keepsGoingWhenOnlyTheMoviesListFails() = runTest {
+        indexKnownUpTo(995)
+        stubPages(listOf(1000))
+        coEvery { api.getWatchingMovies() } returns Result.failure(IllegalStateException("boom"))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 1) { repository.recordCatchUpPage(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun catchUp_readsFromPageOneWhileAWalkIsParkedBetweenChunks() = runTest {
+        val paced = pacedInteractor()
+        stubHistory(pages = 20)
+        backgroundScope.launch { paced.syncIfStale() }
+        runCurrent()
+        coVerify(exactly = 1) { api.getHistoryData(1, 50) }
+        coVerify(exactly = 0) { api.getHistoryData(16, 50) }
+
+        val timeBeforeCatchUp = testScheduler.currentTime
+
+        assertTrue(paced.catchUp())
+
+        // A catch-up that queued behind the walk's lock would only return once virtual time had
+        // run past the walk's pause, and would have read page 16 after it.
+        assertEquals(timeBeforeCatchUp, testScheduler.currentTime)
+        coVerify(exactly = 0) { api.getHistoryData(16, 50) }
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_leavesTheWalkCursorAndThePruneAlone() = runTest {
+        val before = WatchStateSyncCursor(
+            historyNewestSeen = 995,
+            fullHistoryWalkDone = false,
+            historyResumePage = 10,
+            generation = 3,
+        )
+        cursor = before
+        stubPages(listOf(1000), listOf(990))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 0) { repository.saveSyncCursor(any()) }
+        coVerify(exactly = 0) { repository.pruneStaleRows(any()) }
+        assertEquals(before.copy(historyNewestSeen = 1000), cursor)
+    }
+
+    @Test
+    fun aWalkResumedAfterACatchUpStillWalksFromItsBookmark() = runTest {
+        val paced = pacedInteractor()
+        stubHistory(pages = 20)
+        backgroundScope.launch { paced.syncIfStale() }
+        runCurrent()
+        assertTrue(paced.catchUp())
+
+        advanceTimeBy(chunkPause.inWholeMilliseconds + 1)
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(16, 50) }
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_readsThirtyFivePagesWithoutStandingDownBetweenChunks() = runTest {
+        val paced = catchUpInteractor(pause = chunkPause)
+        indexKnownUpTo(100)
+        stubNewerPages(35)
+
+        backgroundScope.launch { paced.catchUp() }
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(35, 50) }
+    }
+
+    @Test
+    fun catchUp_stopsOnThePageThatHoldsTheMark() = runTest {
+        indexKnownUpTo(995)
+        stubPages(listOf(1000, 990), listOf(980))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 0) { api.getHistoryData(2, 50) }
+    }
+
+    @Test
+    fun catchUp_stopsAtThePageCapAndKeepsTheMarkWhereItWas() = runTest {
+        val capped = catchUpInteractor(maxPages = 3)
+        indexKnownUpTo(100)
+        stubNewerPages(10)
+
+        assertTrue(capped.catchUp())
+
+        coVerify(exactly = 0) { api.getHistoryData(4, 50) }
+        coVerify(exactly = 1) { repository.recordCatchUpPage(match { it.size == 3 }, any(), any(), 100L) }
+        assertEquals(100L, cursor.historyNewestSeen)
+    }
+
+    @Test
+    fun catchUp_stopsWhenThePaginationDoesNotAdvance() = runTest {
+        indexKnownUpTo(100)
+        val stuck = Result.success(
+            PaginatedResponse(
+                items = listOf(historyEntry(itemId = 1, lastSeen = 50_000L)),
+                pagination = Pagination(current = 1, perpage = 50, total = 5, totalItems = 5),
+            )
+        )
+        coEvery { api.getHistoryData(1, 50) } returns stuck
+        coEvery { api.getHistoryData(2, 50) } returnsMany listOf(stuck, Result.failure(IllegalStateException("loop")))
+
+        interactor.catchUp()
+
+        coVerify(exactly = 1) { api.getHistoryData(2, 50) }
+        coVerify(exactly = 0) { api.getHistoryData(3, 50) }
+        assertEquals(100L, cursor.historyNewestSeen)
+    }
+
+    @Test
+    fun catchUp_readsPastTheWalksPageBudget() = runTest {
+        indexKnownUpTo(100)
+        stubNewerPages(310)
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 1) { api.getHistoryData(310, 50) }
+    }
+
+    @Test
+    fun catchUp_writesNoHistoryAndKeepsTheMarkWhenAPageFails() = runTest {
+        indexKnownUpTo(100)
+        stubNewerPages(5)
+        coEvery { api.getHistoryData(3, 50) } returns Result.failure(IllegalStateException("boom"))
+
+        assertFalse(interactor.catchUp())
+
+        coVerify(exactly = 0) { repository.recordCatchUpPage(any(), any(), any(), any()) }
+        assertEquals(100L, cursor.historyNewestSeen)
+    }
+
+    @Test
+    fun catchUp_asksDetailsForASeriesThatLeftTheWatchingList() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7)
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 1) { itemDetails.refresh(7) }
+    }
+
+    @Test
+    fun catchUp_leavesASeriesStillInTheWatchingListToTheList() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7)
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success(item(id = 7, type = ItemType.SERIAL))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 0) { itemDetails.refresh(any()) }
+    }
+
+    @Test
+    fun catchUp_skipsASeriesThatWasOnlyBrowsed() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        snapshot.value = mapOf(7 to WatchState(itemId = 7, isSeriesLike = true, isFullyWatched = false))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 0) { itemDetails.refresh(any()) }
+    }
+
+    @Test
+    fun catchUp_asksDetailsForASeriesOncePerProcess() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7)
+
+        assertTrue(interactor.catchUp(respectFloor = false))
+        assertTrue(interactor.catchUp(respectFloor = false))
+        coVerify(exactly = 1) { itemDetails.refresh(7) }
+
+        interactor.invalidate()
+        indexKnownUpTo(100)
+        assertTrue(interactor.catchUp(respectFloor = false))
+
+        coVerify(exactly = 2) { itemDetails.refresh(7) }
+    }
+
+    @Test
+    fun catchUp_asksAgainAboutASeriesWhoseRefreshFailed() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7)
+        coEvery { itemDetails.refresh(7) } throws IllegalStateException("boom") andThen
+            item(id = 7, type = ItemType.SERIAL)
+
+        assertTrue(interactor.catchUp(respectFloor = false))
+        assertTrue(interactor.catchUp(respectFloor = false))
+
+        coVerify(exactly = 2) { itemDetails.refresh(7) }
+    }
+
+    @Test
+    fun catchUp_asksAgainAboutASeriesThatReturnedToTheListAndLeftIt() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7)
+        assertTrue(interactor.catchUp(respectFloor = false))
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success(item(id = 7, type = ItemType.SERIAL))
+        assertTrue(interactor.catchUp(respectFloor = false))
+        coVerify(exactly = 1) { itemDetails.refresh(7) }
+        coEvery { api.getWatchingList(onlySubscribed = false) } returns success()
+
+        assertTrue(interactor.catchUp(respectFloor = false))
+
+        coVerify(exactly = 2) { itemDetails.refresh(7) }
+    }
+
+    @Test
+    fun catchUp_asksDetailsForTheTenMostRecentlyPlayedSeriesAtMost() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(*(1..12).toList().toIntArray())
+        lastWatched = (1..12).associateWith { it * 10L }
+
+        assertTrue(interactor.catchUp())
+
+        (3..12).forEach { id -> coVerify(exactly = 1) { itemDetails.refresh(id) } }
+        coVerify(exactly = 0) { itemDetails.refresh(1) }
+        coVerify(exactly = 0) { itemDetails.refresh(2) }
+    }
+
+    @Test
+    fun catchUp_carriesOnPastAFailedDetailsRequest() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        inProgressSeries(7, 8)
+        lastWatched = mapOf(7 to 20L, 8 to 10L)
+        coEvery { itemDetails.refresh(7) } throws IllegalStateException("boom")
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 1) { itemDetails.refresh(8) }
+    }
+
+    @Test
+    fun catchUp_aFlooredRequestWithinAMinuteSendsNothing() = runTest {
+        now = 10_000_000L
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        assertTrue(interactor.catchUp())
+
+        now += 59.seconds.inWholeMilliseconds
+        assertFalse(interactor.catchUp())
+        coVerify(exactly = 1) { api.getHistoryData(1, 50) }
+
+        now += 1.seconds.inWholeMilliseconds
+        assertTrue(interactor.catchUp())
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_withoutTheFloorRunsInsideTheMinute() = runTest {
+        now = 10_000_000L
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        assertTrue(interactor.catchUp())
+
+        now += 1.seconds.inWholeMilliseconds
+
+        assertTrue(interactor.catchUp(respectFloor = false))
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_anUnflooredRequestDuringARunGetsOneMoreRun() = runTest {
+        // While the first run is suspended on page 1, an unfloored request cannot start a second
+        // one; it leaves a note, and the run in flight goes round again.
+        val gate = CompletableDeferred<Unit>()
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        val page = Result.success(
+            PaginatedResponse(
+                items = listOf(historyEntry(itemId = 1, lastSeen = 50)),
+                pagination = Pagination(current = 1, perpage = 50, total = 1, totalItems = 1),
+            )
+        )
+        coEvery { api.getHistoryData(1, 50) } coAnswers {
+            gate.await()
+            page
+        }
+        val running = catchUpInteractor(scope = backgroundScope)
+        backgroundScope.launch { running.catchUp() }
+        runCurrent()
+
+        running.requestCatchUp(respectFloor = false)
+        runCurrent()
+        gate.complete(Unit)
+        runCurrent()
+
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+
+        // The request that lands between the loop's last look at the note and the unlock: the real
+        // unlock has not happened yet, so tryLock fails, and only the check after it can save the run.
+        val real = Mutex()
+        lateinit var wrapped: WatchStateSyncInteractor
+        var second: Boolean? = null
+        var unlocks = 0
+        val racing = object : Mutex by real {
+            override fun unlock(owner: Any?) {
+                if (unlocks++ == 0) {
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        second = wrapped.catchUp(respectFloor = false)
+                    }
+                }
+                real.unlock(owner)
+            }
+        }
+        wrapped = catchUpInteractor(scope = backgroundScope, mutex = racing)
+
+        assertTrue(wrapped.catchUp())
+
+        assertEquals(false, second)
+        coVerify(exactly = 4) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_aFlooredRequestDuringARunIsDropped() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        indexKnownUpTo(100)
+        val page = Result.success(
+            PaginatedResponse(
+                items = listOf(historyEntry(itemId = 1, lastSeen = 50)),
+                pagination = Pagination(current = 1, perpage = 50, total = 1, totalItems = 1),
+            )
+        )
+        coEvery { api.getHistoryData(1, 50) } coAnswers {
+            gate.await()
+            page
+        }
+        val running = catchUpInteractor(scope = backgroundScope, floor = Duration.ZERO)
+        backgroundScope.launch { running.catchUp() }
+        runCurrent()
+
+        running.requestCatchUp(respectFloor = true)
+        runCurrent()
+        gate.complete(Unit)
+        runCurrent()
+
+        coVerify(exactly = 1) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_throwsAwayWhatItWroteWhenTheSessionEndedMidRun() = runTest {
+        indexKnownUpTo(995)
+        stubPages(listOf(1000))
+        coEvery { api.getWatchingList(onlySubscribed = false) } coAnswers {
+            interactor.invalidate()
+            success()
+        }
+
+        assertFalse(interactor.catchUp())
+
+        coVerify(exactly = 1) { repository.recordCatchUpPage(any(), any(), any(), any()) }
+        coVerify(exactly = 2) { repository.clear() }
+    }
+
+    @Test
+    fun invalidate_letsTheNextCatchUpRunInsideTheFloor() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(50))
+        assertTrue(interactor.catchUp())
+
+        interactor.invalidate()
+        indexKnownUpTo(100)
+
+        assertTrue(interactor.catchUp())
+        coVerify(exactly = 2) { api.getHistoryData(1, 50) }
+    }
+
+    @Test
+    fun catchUp_writesNoHistoryWhenNothingIsNewerThanTheMark() = runTest {
+        indexKnownUpTo(100)
+        stubPages(listOf(100, 50))
+
+        assertTrue(interactor.catchUp())
+
+        coVerify(exactly = 0) { repository.recordCatchUpPage(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { itemDetails.refresh(any()) }
+    }
+
 
     /**
      * Page 1 carries the newest entries, so `last_seen` decreases as the page number grows — the
@@ -826,6 +1392,7 @@ class WatchStateSyncInteractorTest {
     private fun pacedInteractor(awaitForeground: suspend () -> Unit = {}) = WatchStateSyncInteractor(
         api = api,
         repository = repository,
+        itemDetails = itemDetails,
         clock = { now },
         staleAfter = 1.hours,
         minTimeBetweenRuns = Duration.ZERO,
@@ -835,7 +1402,7 @@ class WatchStateSyncInteractorTest {
 
     private fun stubHistory(pages: Int, lastSeenBase: Long = 1_000L) {
         (1..pages).forEach { page ->
-            coEvery { api.getHistoryData(page) } returns Result.success(
+            coEvery { api.getHistoryData(page, 50) } returns Result.success(
                 PaginatedResponse(
                     items = listOf(historyEntry(itemId = page, lastSeen = lastSeenBase - page)),
                     pagination = Pagination(

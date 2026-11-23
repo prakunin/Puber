@@ -1,5 +1,6 @@
 package com.kino.puber.data.repository
 
+import android.os.SystemClock
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isFullyWatched
@@ -46,6 +47,7 @@ class WatchStateRepository(
     private val syncDao: WatchStateSyncDao,
     private val transaction: DatabaseTransaction,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val windowClock: () -> Long = SystemClock::elapsedRealtime,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val awaitStartupSettled: suspend () -> Unit = {},
 ) {
@@ -92,8 +94,29 @@ class WatchStateRepository(
      * to give. Whether to publish is a single decision and is taken as one.
      */
     private val windowLock = Any()
-    private var openSyncWindows = 0
-    private var syncChangeHeld = false
+    private var openWalkWindows = 0
+    private var openCatchUpWindows = 0
+
+    /** A change that landed while a walk's window was open; the walk's to pay out at its end. */
+    private var walkChangeHeld = false
+
+    /** A change that landed while a catch-up's window was open; the catch-up's to pay out at its close. */
+    private var catchUpChangeHeld = false
+
+    /**
+     * Until when the next emission is a catch-up's, in [windowClock] milliseconds, a monotonic
+     * clock so a wall-clock step cannot stretch or cut the window; [NO_DEADLINE] when none
+     * is. Armed on every catch-up close, because the database may not have published its last write
+     * yet and a walk may already be open. Before the deadline the next emission goes out whatever
+     * the walk is doing.
+     *
+     * A deadline rather than a flag: a catch-up that wrote nothing never gets an emission, and a
+     * flag would then wait for the walk's first changing chunk and announce it early.
+     * [CATCH_UP_EMISSION_WINDOW_MS] is far above Room's invalidation latency (tens of milliseconds)
+     * and below a walk's first chunk, which needs its watching lists and a history page over the
+     * network first.
+     */
+    private var catchUpEmissionDeadline = NO_DEADLINE
 
     /**
      * Marks the user has made that the index has not shown yet: item id to the `isFullyWatched` the
@@ -156,12 +179,21 @@ class WatchStateRepository(
             val aMarkLanded = marksAwaitingIndex.entries.removeAll { (itemId, expected) ->
                 index[itemId]?.isFullyWatched == expected
             }
+            if (aMarkLanded) catchUpEmissionDeadline = NO_DEADLINE
             when {
                 // The user is waiting on this one, and this is the first moment the index actually
                 // shows it — so it goes out whatever a walk happens to be doing.
                 aMarkLanded -> true
-                openSyncWindows > 0 -> {
-                    syncChangeHeld = true
+                openCatchUpWindows > 0 -> {
+                    catchUpChangeHeld = true
+                    false
+                }
+                catchUpEmissionDeadline != NO_DEADLINE && windowClock() <= catchUpEmissionDeadline -> {
+                    catchUpEmissionDeadline = NO_DEADLINE
+                    true
+                }
+                openWalkWindows > 0 -> {
+                    walkChangeHeld = true
                     false
                 }
                 else -> true
@@ -171,34 +203,57 @@ class WatchStateRepository(
     }
 
     /**
-     * Opens a window over a server sync walk, within which its own writes do not reach
-     * [settledChanges]. Must be paired with [endSyncWindow].
+     * Opens a window over a server sync, within which its own writes do not reach [settledChanges].
+     * Must be paired with [endSyncWindow] of the same [kind].
      *
      * This is about the *server* rebuilding the index behind the user's back, which is why it is
-     * scoped to the walk rather than applied to every write: what the user does to the index is
+     * scoped to the sync rather than applied to every write: what the user does to the index is
      * something they are waiting to see, and [expectUserMark] keeps that immediate even with a
      * walk in flight.
+     *
+     * Ownership is by [kind], not by nesting: a catch-up's window pays out its own change whether
+     * it opened before or after the walk's.
      */
-    fun beginSyncWindow() {
-        synchronized(windowLock) { openSyncWindows += 1 }
+    fun beginSyncWindow(kind: SyncWindowKind) {
+        synchronized(windowLock) {
+            when (kind) {
+                SyncWindowKind.WALK -> openWalkWindows += 1
+                SyncWindowKind.CATCH_UP -> openCatchUpWindows += 1
+            }
+        }
     }
 
     /**
-     * Closes the window and pays out the one tick the walk earned, if it wrote anything at all.
+     * Closes the window and pays out the one tick it earned, if it wrote anything at all. A walk
+     * pays out what landed while only its window was open. A catch-up pays out what landed while its
+     * own was open — never the walk's held change — and, while a walk is still open, also the next
+     * emission, so a catch-up inside a walk is not left waiting for the walk's end.
      *
-     * Runs for a walk that was cancelled or gave up as much as for one that finished: the rows it
+     * Runs for a sync that was cancelled or gave up as much as for one that finished: the rows it
      * did write are durable either way, so the screens showing them are owed the signal regardless
-     * of how the walk ended.
+     * of how it ended.
      */
-    fun endSyncWindow() {
+    fun endSyncWindow(kind: SyncWindowKind) {
         val publish = synchronized(windowLock) {
-            openSyncWindows -= 1
-            if (openSyncWindows > 0) {
-                false
-            } else {
-                val held = syncChangeHeld
-                syncChangeHeld = false
-                held
+            when (kind) {
+                SyncWindowKind.WALK -> {
+                    openWalkWindows -= 1
+                    if (openWalkWindows > 0) {
+                        false
+                    } else {
+                        catchUpEmissionDeadline = NO_DEADLINE
+                        walkChangeHeld.also { walkChangeHeld = false }
+                    }
+                }
+                SyncWindowKind.CATCH_UP -> {
+                    openCatchUpWindows -= 1
+                    if (openCatchUpWindows > 0) {
+                        false
+                    } else {
+                        catchUpEmissionDeadline = windowClock() + CATCH_UP_EMISSION_WINDOW_MS
+                        catchUpChangeHeld.also { catchUpChangeHeld = false }
+                    }
+                }
             }
         }
         if (publish) mutableVersion.update { it + 1 }
@@ -375,7 +430,16 @@ class WatchStateRepository(
     /** How far the sync has already got. Defaults describe an index that has never been filled. */
     suspend fun syncCursor(): WatchStateSyncCursor = syncDao.get()?.toCursor() ?: WatchStateSyncCursor()
 
-    suspend fun saveSyncCursor(cursor: WatchStateSyncCursor) = syncDao.upsert(cursor.toEntity())
+    suspend fun saveSyncCursor(cursor: WatchStateSyncCursor) = transaction.run { writeCursor(cursor) }
+
+    /**
+     * The mark only ever rises: a walk saves the cursor it read at its start, and a catch-up may
+     * have raised the mark since, so storing that cursor as is would lower it.
+     */
+    private suspend fun writeCursor(cursor: WatchStateSyncCursor) {
+        val stored = syncDao.get()?.historyNewestSeen ?: 0L
+        syncDao.upsert(cursor.copy(historyNewestSeen = maxOf(stored, cursor.historyNewestSeen)).toEntity())
+    }
 
     /**
      * Stores one page of history together with the bookmark that says it was read.
@@ -390,7 +454,22 @@ class WatchStateRepository(
         cursor: WatchStateSyncCursor,
     ) = transaction.run {
         recordFromHistory(entries, seriesStillInProgress, observedAt)
-        saveSyncCursor(cursor)
+        writeCursor(cursor)
+    }
+
+    /**
+     * Stores the entries a catch-up read past the mark and raises the mark to the newest of them,
+     * in one transaction, for the reason [recordHistoryPage] does. Touches nothing else of the
+     * cursor, so a walk parked between chunks keeps its bookmark.
+     */
+    suspend fun recordCatchUpPage(
+        entries: List<History>,
+        seriesStillInProgress: Set<Int>,
+        observedAt: Long,
+        newestSeen: Long,
+    ) = transaction.run {
+        recordFromHistory(entries, seriesStillInProgress, observedAt)
+        syncDao.raiseHistoryNewestSeen(newestSeen)
     }
 
     suspend fun clear() = transaction.run {
@@ -401,6 +480,8 @@ class WatchStateRepository(
 
     private companion object {
         val SETTLE_DELAY = 2.seconds
+        const val CATCH_UP_EMISSION_WINDOW_MS = 1_000L
+        const val NO_DEADLINE = Long.MIN_VALUE
     }
 }
 
@@ -519,6 +600,9 @@ internal fun Item.toWatchStateOrNull(): WatchState? {
         progressDuration = if (seriesLike) watching?.duration else moviePosition?.lengthOr(movieLength()),
     )
 }
+
+/** Which sync a window belongs to; each pays out its own change. */
+enum class SyncWindowKind { WALK, CATCH_UP }
 
 /**
  * How far the watch-state sync has got, as the interactor works with it.

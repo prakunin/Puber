@@ -12,7 +12,8 @@ import io.ktor.http.isSuccess
 internal suspend fun HttpClient.fetchHistoryPage(
     page: Int,
     baseUrl: String,
-): HttpResponse = get(HistoryRequest.page(page), baseUrl)
+    perPage: Int? = null,
+): HttpResponse = get(HistoryRequest.page(page, perPage), baseUrl)
 
 internal suspend fun HttpClient.clearHistoryMedia(
     mediaId: Int,

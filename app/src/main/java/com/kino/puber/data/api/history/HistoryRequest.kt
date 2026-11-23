@@ -13,11 +13,18 @@ internal class HistoryRequest private constructor(
     companion object {
         const val NO_STORE_CACHE_CONTROL = "no-store"
 
-        fun page(page: Int): HistoryRequest {
+        /** The server's largest page. */
+        private const val MAX_PER_PAGE = 50
+
+        fun page(page: Int, perPage: Int? = null): HistoryRequest {
             require(page > 0) { "History page must be positive" }
+            require(perPage == null || perPage in 1..MAX_PER_PAGE) { "History perpage must be within 1..$MAX_PER_PAGE" }
             return HistoryRequest(
                 path = "history",
-                query = mapOf("page" to page.toString()),
+                query = buildMap {
+                    put("page", page.toString())
+                    if (perPage != null) put("perpage", perPage.toString())
+                },
                 cacheControl = NO_STORE_CACHE_CONTROL,
             )
         }

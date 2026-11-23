@@ -97,6 +97,39 @@ internal class KinoPubApiClientHistoryTest {
     }
 
     @Test
+    fun getHistoryData_sendsPerPageWhenGiven(
+        @TempDir cacheDir: Path,
+    ) = runTest {
+        val request = AtomicReference<CapturedRequest>()
+        withServer(
+            path = "/v1/history",
+            handler = { exchange ->
+                request.set(exchange.capture())
+                exchange.respond(
+                    status = 200,
+                    body = """
+                        {
+                          "history": [],
+                          "pagination": {
+                            "current": 3,
+                            "perpage": 50,
+                            "total": 3,
+                            "total_items": 0
+                          }
+                        }
+                    """.trimIndent(),
+                )
+            },
+        ) { baseUrl ->
+            val result = client(cacheDir, baseUrl).getHistoryData(page = 3, perPage = 50)
+
+            assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
+        }
+
+        assertEquals("page=3&perpage=50", request.get().query)
+    }
+
+    @Test
     fun clearExactMediaHistory_non2xxFailsBeforeUnitConversion(
         @TempDir cacheDir: Path,
     ) = runTest {

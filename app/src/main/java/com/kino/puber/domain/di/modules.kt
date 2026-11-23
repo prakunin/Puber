@@ -66,6 +66,7 @@ val interactorModule = module {
         WatchStateSyncInteractor(
             api = get(),
             repository = get(),
+            itemDetails = get(),
             awaitForeground = get<AppForegroundState>()::awaitForeground,
         )
     }
