@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.navigation.PuberScreen
 import com.kino.puber.core.ui.navigation.PuberTab
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.navigation.TabRouter
+import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.data.preferences.ContentPreferences
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
@@ -22,10 +23,13 @@ import com.kino.puber.ui.feature.main.model.MainUIMapper
 import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.domain.model.TabType
 import com.kino.puber.util.MainDispatcherExtension
+import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -142,6 +146,114 @@ internal class MainVMWatchStateSyncTest {
         vm.testCancelScope()
     }
 
+    @Test
+    fun onStart_catchesUpBeforeTheStaleSyncOnceTheStartupBurstHasPassed() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+
+        vm.testOnStart()
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
+        runCurrent()
+
+        coVerifyOrder {
+            sync.catchUp(true)
+            sync.syncIfStale(any())
+        }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun onStart_doesNotCatchUpWhileTheStartupRequestsAreStillOut() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+
+        vm.testOnStart()
+        runCurrent()
+
+        coVerify(exactly = 0) { sync.catchUp(any()) }
+        coVerify(exactly = 0) { sync.requestCatchUp(any()) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun resumed_requestsAFlooredCatchUpOnceTheStartupBurstHasPassed() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+        vm.testOnStart()
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
+        runCurrent()
+
+        vm.onAction(MainAction.Resumed)
+        runCurrent()
+
+        coVerify(exactly = 1) { sync.requestCatchUp(true) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun resumed_requestsACatchUpEvenWhileAWalkJobIsInFlight() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        coEvery { sync.syncIfStale(any()) } coAnswers { awaitCancellation() }
+        val vm = vm(sync)
+        vm.testOnStart()
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
+        runCurrent()
+
+        vm.onAction(MainAction.Resumed)
+        runCurrent()
+
+        coVerify(exactly = 1) { sync.requestCatchUp(true) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun tabSelected_requestsAFlooredCatchUpForMoviesAndSeries() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+        vm.testOnStart()
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
+        runCurrent()
+
+        vm.onAction(CommonAction.ItemSelected(tab(TabType.Movies)))
+        vm.onAction(CommonAction.ItemSelected(tab(TabType.Series)))
+        runCurrent()
+
+        coVerify(exactly = 2) { sync.requestCatchUp(true) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun tabSelected_requestsNoCatchUpForOtherTabs() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+        vm.testOnStart()
+        advanceTimeBy(StartupSlot.WatchState.offset.inWholeMilliseconds + 1)
+        runCurrent()
+
+        vm.onAction(CommonAction.ItemSelected(tab(TabType.Home)))
+        vm.onAction(CommonAction.ItemSelected(tab(TabType.Collections)))
+        runCurrent()
+
+        coVerify(exactly = 0) { sync.requestCatchUp(any()) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun tabSelected_requestsNoCatchUpBeforeTheStartupSlot() = runTest(dispatcher) {
+        val sync = mockk<WatchStateSyncInteractor>(relaxed = true)
+        val vm = vm(sync)
+        vm.testOnStart()
+        runCurrent()
+
+        vm.onAction(CommonAction.ItemSelected(tab(TabType.Series)))
+        runCurrent()
+
+        coVerify(exactly = 0) { sync.requestCatchUp(any()) }
+        vm.testCancelScope()
+    }
+
+    private fun tab(type: TabType) = MainTab(type = type, icon = PhosphorIcons.Duotone.House)
+
     private fun vm(
         watchStateSyncInteractor: WatchStateSyncInteractor,
         startupSettled: StartupSettled = settledStartup(CoroutineScope(dispatcher)),
@@ -161,6 +273,7 @@ internal class MainVMWatchStateSyncTest {
             selectedTab = TabType.Home,
         )
         every { mapper.buildViewState(any()) } returns state
+        every { mapper.updateSelectedTab(any(), any()) } returns state
         every { mapper.buildTabContent(any(), any()) } answers {
             val screen = mockk<PuberScreen>()
             every { screen.key } returns "HomeScreen"

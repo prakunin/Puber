@@ -84,13 +84,22 @@ internal class MainVM(
      * So the wait belongs to the first run rather than to the trigger that asked for it, and a
      * trigger arriving while a run is in flight is dropped: the run under way is already the one it
      * would have started, and whether a later one is due at all is the interactor's decision.
+     *
+     * The catch-up, which reads only what is newer than the index and is floored by the interactor,
+     * is the exception: the first run does it before the walk, and later triggers ask for it
+     * whatever the walk is doing.
      */
     private fun syncWatchState() {
+        // Past the startup burst only, and ahead of the job check below: a walk can be parked or in
+        // flight for minutes, which is exactly when what another device played is waiting to be read.
+        if (startupSlotServed) watchStateSyncInteractor.requestCatchUp(respectFloor = true)
         if (watchStateSyncJob?.isActive == true) return
         watchStateSyncJob = launch {
             if (!startupSlotServed) {
                 startupSettled.awaitSlot(StartupSlot.WatchState)
                 startupSlotServed = true
+                runCatchingCancellable { watchStateSyncInteractor.catchUp(respectFloor = true) }
+                    .onFailure { error -> log(error, "Failed to catch up the watch state") }
             }
             runCatchingCancellable { watchStateSyncInteractor.syncIfStale() }
                 .onFailure { error -> log(error, "Failed to sync watch state") }
@@ -124,6 +133,9 @@ internal class MainVM(
             mainUIMapper.updateSelectedTab(state = this, item)
         }
         tabRouter.openTab(buildTabContent(item.type))
+        if (startupSlotServed && item.type in CATCH_UP_TABS) {
+            watchStateSyncInteractor.requestCatchUp(respectFloor = true)
+        }
     }
 
     private fun onTabRefresh(item: MainTab) {
@@ -189,6 +201,9 @@ internal class MainVM(
     }
 
     internal companion object {
+        /** Tabs whose grids hide watched titles, so entering one is a moment the index has to be current. */
+        val CATCH_UP_TABS = setOf(TabType.Movies, TabType.Series)
+
         val ANIME_FILTERED_TABS = setOf(
             TabType.Home,
             TabType.Movies,

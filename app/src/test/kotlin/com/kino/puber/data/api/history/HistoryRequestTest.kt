@@ -16,6 +16,19 @@ class HistoryRequestTest {
     }
 
     @Test
+    fun page_addsPerPageWhenGiven() {
+        val request = HistoryRequest.page(page = 3, perPage = 50)
+
+        assertEquals(mapOf("page" to "3", "perpage" to "50"), request.query)
+    }
+
+    @Test
+    fun page_rejectsAPerPageOutsideOneToFifty() {
+        assertThrows(IllegalArgumentException::class.java) { HistoryRequest.page(page = 1, perPage = 0) }
+        assertThrows(IllegalArgumentException::class.java) { HistoryRequest.page(page = 1, perPage = 51) }
+    }
+
+    @Test
     fun clearExactMedia_buildsVerifiedMediaRequest() {
         val request = HistoryRequest.clearExactMedia(mediaId = 73001)
 

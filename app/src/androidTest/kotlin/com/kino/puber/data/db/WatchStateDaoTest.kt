@@ -214,6 +214,18 @@ class WatchStateDaoTest {
         const val SETTLE_MILLIS = 1_000L
     }
 
+    @Test
+    fun raiseHistoryNewestSeenNeverLowersTheMark() = runTest {
+        val syncDao = database.watchStateSyncDao()
+        syncDao.upsert(WatchStateSyncEntity(historyNewestSeen = 900))
+
+        syncDao.raiseHistoryNewestSeen(800)
+        assertEquals(900L, syncDao.get()!!.historyNewestSeen)
+
+        syncDao.raiseHistoryNewestSeen(950)
+        assertEquals(950L, syncDao.get()!!.historyNewestSeen)
+    }
+
     private fun serverRow(itemId: Int, isFullyWatched: Boolean, updatedAt: Long) = WatchStateEntity(
         itemId = itemId,
         isSeriesLike = true,

@@ -17,6 +17,9 @@ interface WatchStateSyncDao {
     @Upsert
     suspend fun upsert(entity: WatchStateSyncEntity)
 
+    @Query("UPDATE watch_state_sync SET history_newest_seen = :seen WHERE id = :id AND history_newest_seen < :seen")
+    suspend fun raiseHistoryNewestSeen(seen: Long, id: Int = WatchStateSyncEntity.SINGLE_ROW_ID)
+
     @Query("DELETE FROM watch_state_sync")
     suspend fun clear()
 }

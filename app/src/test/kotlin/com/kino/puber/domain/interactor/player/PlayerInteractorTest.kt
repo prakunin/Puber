@@ -12,10 +12,12 @@ import com.kino.puber.data.api.models.WatchingInfo
 import com.kino.puber.data.api.models.WatchingToggleResponse
 import com.kino.puber.data.repository.ItemDetailsRepository
 import com.kino.puber.data.repository.PlayerPreferencesRepository
+import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -30,6 +32,7 @@ class PlayerInteractorTest {
     private val api = mockk<KinoPubApiClient>()
     private val itemDetailsRepository = mockk<ItemDetailsRepository>()
     private val playerPreferencesRepository = mockk<PlayerPreferencesRepository>()
+    private val watchStateSync = mockk<WatchStateSyncInteractor>(relaxed = true)
 
     private lateinit var interactor: PlayerInteractor
 
@@ -74,7 +77,7 @@ class PlayerInteractorTest {
     @BeforeEach
     fun setup() {
         every { playerPreferencesRepository.preferSurroundAudio } returns false
-        interactor = PlayerInteractor(api, itemDetailsRepository, playerPreferencesRepository)
+        interactor = PlayerInteractor(api, itemDetailsRepository, playerPreferencesRepository, watchStateSync)
     }
 
     // region isSeriesType
@@ -655,6 +658,13 @@ class PlayerInteractorTest {
         coVerify(exactly = 1) { api.setWatchingTime(42, 1, 120, 2) }
         coVerify(exactly = 0) { itemDetailsRepository.markStale(any()) }
         coVerify(exactly = 0) { itemDetailsRepository.invalidate(any()) }
+    }
+
+    @Test
+    fun requestWatchStateCatchUp_asksForAnUnflooredCatchUp() {
+        interactor.requestWatchStateCatchUp()
+
+        verify(exactly = 1) { watchStateSync.requestCatchUp(respectFloor = false) }
     }
 
     @Test

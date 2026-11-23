@@ -2032,6 +2032,9 @@ internal class PlayerVM(
             awaitPendingMutations()
             backgroundFlushJob?.join()
             flushOwedInvalidation()
+            // Unconditional: whatever played on this device, or on another while the screen was up,
+            // is read back into the watch-state index even when no save of ours succeeded.
+            interactor.requestWatchStateCatchUp()
             router.back(RESULT_CONTENT_CHANGED, contentChanges)
         }
     }

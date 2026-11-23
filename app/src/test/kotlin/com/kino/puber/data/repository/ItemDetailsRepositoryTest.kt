@@ -244,6 +244,18 @@ class ItemDetailsRepositoryTest {
         assertThrows<IllegalStateException> { repository.refresh(42) }
     }
 
+    @Test
+    fun refreshRecordsTheFreshVerdictInTheWatchStateIndex() = runTest {
+        // The catch-up leans on this: a refreshed series carries the server's current verdict, and
+        // the index only learns it because refresh goes through the recording read path.
+        val fetched = Item(id = 42, title = "Series", type = ItemType.SERIAL)
+        givenApiReturns(fetched)
+
+        repository.refresh(42)
+
+        coVerify(exactly = 1) { watchStateRepository.recordFromServer(listOf(fetched), any()) }
+    }
+
     private fun givenApiReturns(value: Item) {
         coEvery { api.getItemDetails(value.id) } returns Result.success(ApiResponse(item = value))
     }
