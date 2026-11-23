@@ -70,6 +70,14 @@ internal class TelemetryEncoder(
         event.appComposedMs?.let { put("app_composed", it - event.procStartMs) }
         event.firstContentMs?.let { put("first_content", it - event.procStartMs) }
         event.revealedMs?.let { put("revealed", it - event.procStartMs) }
+        event.cause?.let { put("cause", it.wire) }
+        event.readyReqMs?.let { put("ready_req", it - event.procStartMs) }
+        event.readyMs?.let { put("ready", it - event.procStartMs) }
+        event.imagesIdleMs?.let { put("img_idle", it - event.procStartMs) }
+        event.readyDrainedMs?.let { put("ready_drained", it - event.procStartMs) }
+        event.inFlight?.let { put("in_flight", it) }
+        event.readyInFlight?.let { put("ready_in_flight", it) }
+        put("dropped_keys", event.droppedKeys)
     }
 
     private fun JsonObjectBuilder.putNav(event: TelemetryEvent.Nav) {
@@ -113,8 +121,10 @@ internal class TelemetryEncoder(
 
     private fun JsonObjectBuilder.putKeyLat(event: TelemetryEvent.KeyLat) {
         put("key", event.key.wire)
-        put("lat_ms", event.latMs)
+        event.latMs?.let { put("lat_ms", it) }
+        if (event.expired) put("expired", true)
         put("frame_ms", event.frameMs)
+        event.waitMs?.let { put("wait_ms", it) }
     }
 
     private fun JsonObjectBuilder.putMem(event: TelemetryEvent.Mem) {

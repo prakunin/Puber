@@ -1,6 +1,7 @@
 package com.kino.puber.core.telemetry
 
 import android.view.KeyEvent
+import com.kino.puber.core.startup.RevealCause
 
 internal const val UNCAPPED = Int.MAX_VALUE
 
@@ -134,6 +135,14 @@ internal sealed interface TelemetryEvent {
         val appComposedMs: Long?,
         val firstContentMs: Long?,
         val revealedMs: Long? = null,
+        val cause: RevealCause? = null,
+        val readyMs: Long? = null,
+        val imagesIdleMs: Long? = null,
+        val inFlight: Int? = null,
+        val readyInFlight: Int? = null,
+        val readyDrainedMs: Long? = null,
+        val droppedKeys: Int = 0,
+        val readyReqMs: Long? = null,
     ) : TelemetryEvent {
         override val type get() = TelemetryEventType.STARTUP
     }
@@ -203,13 +212,19 @@ internal sealed interface TelemetryEvent {
         override val type get() = TelemetryEventType.KEY
     }
 
-    /** A key whose first answering frame ended more than 50 ms after the key's event time. */
+    /**
+ * A key whose first answering frame ended more than 50 ms after the key's event time, or, with
+ * [expired], that no frame answered within five seconds ([latMs] is then null).
+ */
     data class KeyLat(
         override val t: Long,
         override val screen: Class<*>?,
         val key: KeyName,
-        val latMs: Long,
+        val latMs: Long?,
         val frameMs: Long,
+        val expired: Boolean = false,
+        /** Key event time to `dispatchKeyEvent`, both on `CLOCK_MONOTONIC`. */
+        val waitMs: Long? = null,
     ) : TelemetryEvent, ScreenScoped {
         override val type get() = TelemetryEventType.KEY_LAT
     }

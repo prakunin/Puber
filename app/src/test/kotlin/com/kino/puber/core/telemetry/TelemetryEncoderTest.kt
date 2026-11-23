@@ -1,7 +1,9 @@
 package com.kino.puber.core.telemetry
 
+import com.kino.puber.core.startup.RevealCause
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,7 +31,7 @@ internal class TelemetryEncoderTest {
             ),
         TelemetryEventType.STARTUP to (
             TelemetryEvent.Startup(2_000, 100, 150, 300, 900) to
-                setOf("proc_start", "app_create", "app_composed", "first_content")
+                setOf("proc_start", "app_create", "app_composed", "first_content", "dropped_keys")
             ),
         TelemetryEventType.NAV to (
             TelemetryEvent.Nav(2_000, NavCmd.PUSH, HomeScreen::class.java, ScreenScreen::class.java) to
@@ -131,9 +133,84 @@ internal class TelemetryEncoderTest {
     }
 
     @Test
+    fun startupWritesRevealCauseAndImageFields() {
+        val json = encoder.encode(
+            TelemetryEvent.Startup(
+                t = 2_000,
+                procStartMs = 100,
+                appCreateMs = 150,
+                appComposedMs = 300,
+                firstContentMs = 900,
+                revealedMs = 1_400,
+                cause = RevealCause.CAP,
+                readyMs = 1_000,
+                imagesIdleMs = 1_200,
+                inFlight = 3,
+                readyInFlight = 5,
+                readyDrainedMs = 1_250,
+                droppedKeys = 2,
+            ),
+            "",
+        )
+        assertEquals("cap", json.getValue("cause").jsonPrimitive.content)
+        assertEquals(900L, json.getValue("ready").jsonPrimitive.long)
+        assertEquals(1_100L, json.getValue("img_idle").jsonPrimitive.long)
+        assertEquals(1_150L, json.getValue("ready_drained").jsonPrimitive.long)
+        assertEquals(3L, json.getValue("in_flight").jsonPrimitive.long)
+        assertEquals(5L, json.getValue("ready_in_flight").jsonPrimitive.long)
+        assertEquals(2L, json.getValue("dropped_keys").jsonPrimitive.long)
+    }
+
+    @Test
+    fun startupOmitsImageFieldsNotReached() {
+        val json = encoder.encode(
+            TelemetryEvent.Startup(2_000, 100, 150, 300, 900, 1_400, cause = RevealCause.READY),
+            "",
+        )
+        assertEquals(
+            envelope + setOf(
+                "proc_start", "app_create", "app_composed", "first_content", "revealed", "cause", "dropped_keys",
+            ),
+            json.keys,
+        )
+    }
+
+    @Test
+    fun startupWritesReadyRequested() {
+        val with = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, 300, 900, 1_400, readyReqMs = 1_200), "")
+        assertEquals(1_100L, with.getValue("ready_req").jsonPrimitive.long)
+
+        val without = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, 300, 900, 1_400, readyReqMs = null), "")
+        assertTrue("ready_req" !in without.keys)
+    }
+
+    @Test
+    fun keyLatWritesWaitMs() {
+        val lat = TelemetryEvent.KeyLat(2_000, HomeScreen::class.java, KeyName.DPAD_DOWN, 90, 40, waitMs = 12)
+        val expired = TelemetryEvent.KeyLat(
+            2_000, HomeScreen::class.java, KeyName.DPAD_DOWN, null, 40, expired = true, waitMs = 12,
+        )
+        assertEquals(12L, encoder.encode(lat, "").getValue("wait_ms").jsonPrimitive.long)
+        assertEquals(12L, encoder.encode(expired, "").getValue("wait_ms").jsonPrimitive.long)
+
+        val none = TelemetryEvent.KeyLat(2_000, HomeScreen::class.java, KeyName.DPAD_DOWN, 90, 40, waitMs = null)
+        assertTrue("wait_ms" !in encoder.encode(none, "").keys)
+    }
+
+    @Test
+    fun keyLatExpiredOmitsLatMs() {
+        val json = encoder.encode(
+            TelemetryEvent.KeyLat(2_000, HomeScreen::class.java, KeyName.DPAD_DOWN, null, 40, expired = true),
+            "",
+        )
+        assertEquals(envelope + setOf("key", "frame_ms", "expired"), json.keys)
+        assertEquals(true, json.getValue("expired").jsonPrimitive.boolean)
+    }
+
+    @Test
     fun startupOmitsMarksNotReached() {
         val json = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, null, null), "")
-        assertEquals(envelope + setOf("proc_start", "app_create"), json.keys)
+        assertEquals(envelope + setOf("proc_start", "app_create", "dropped_keys"), json.keys)
     }
 
     @Test

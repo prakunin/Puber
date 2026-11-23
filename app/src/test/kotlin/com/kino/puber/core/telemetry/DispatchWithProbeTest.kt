@@ -13,7 +13,7 @@ internal class DispatchWithProbeTest {
     fun offCallsSuperOnceAndNeverTheProbe() {
         for (value in listOf(true, false)) {
             log.clear()
-            val result = dispatchWithProbe(false, { log += "super"; value }) { _, _ -> log += "probe" }
+            val result = dispatchWithProbe(false, false, { log += "super"; value }) { _, _, _ -> log += "probe" }
             assertEquals(value, result)
             assertEquals(listOf("super"), log)
         }
@@ -24,7 +24,7 @@ internal class DispatchWithProbeTest {
         for (value in listOf(true, false)) {
             log.clear()
             var seen: Boolean? = null
-            val result = dispatchWithProbe(true, { log += "super"; value }) { handled, _ ->
+            val result = dispatchWithProbe(true, false, { log += "super"; value }) { handled, _, _ ->
                 log += "probe"
                 seen = handled
             }
@@ -35,17 +35,28 @@ internal class DispatchWithProbeTest {
     }
 
     @Test
-    fun aKeyDroppedBySuperIsStillProbed() {
-        var seen: Boolean? = null
-        val result = dispatchWithProbe(true, { true }) { handled, _ -> seen = handled }
-        assertTrue(result)
-        assertEquals(true, seen)
+    fun droppedKeyReturnsTrueWithoutCallingSuper() {
+        for (enabled in listOf(true, false)) {
+            log.clear()
+            val result = dispatchWithProbe(enabled, true, { log += "super"; false }) { _, _, _ -> }
+            assertTrue(result, "enabled $enabled")
+            assertEquals(emptyList<String>(), log, "enabled $enabled")
+        }
+    }
+
+    @Test
+    fun droppedKeyIsProbedAsDropped() {
+        var seen: Pair<Boolean, Boolean>? = null
+        dispatchWithProbe(true, true, { false }) { handled, dropped, _ -> seen = handled to dropped }
+        assertEquals(true to true, seen)
+        dispatchWithProbe(true, false, { true }) { handled, dropped, _ -> seen = handled to dropped }
+        assertEquals(true to false, seen)
     }
 
     @Test
     fun probeThatThrowsCannotChangeTheReturnValueOrBreakDispatch() {
         for (value in listOf(true, false)) {
-            val result = dispatchWithProbe(true, { value }) { _, _ -> error("telemetry bug") }
+            val result = dispatchWithProbe(true, false, { value }) { _, _, _ -> error("telemetry bug") }
             assertEquals(value, result)
         }
     }
@@ -54,10 +65,10 @@ internal class DispatchWithProbeTest {
     fun superThatThrowsPropagatesAndProbeIsNotCalled() {
         var probed = false
         assertThrows(IllegalStateException::class.java) {
-            dispatchWithProbe(true, { error("dispatch failed") }) { _, _ -> probed = true }
+            dispatchWithProbe(true, false, { error("dispatch failed") }) { _, _, _ -> probed = true }
         }
         assertFalse(probed)
-        assertTrue(dispatchWithProbe(true, { true }) { _, _ -> probed = true })
+        assertTrue(dispatchWithProbe(true, false, { true }) { _, _, _ -> probed = true })
         assertTrue(probed)
     }
 }
