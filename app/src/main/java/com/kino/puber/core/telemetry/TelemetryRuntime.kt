@@ -28,6 +28,7 @@ internal class TelemetryRuntime(
     private val probes: List<TelemetryProbe> = emptyList(),
     private val mainPost: (Runnable) -> Unit = { it.run() },
     private val isMainThread: () -> Boolean = { true },
+    private val profileStatus: ProfileStatusSource = ProfileStatusSource.None,
 ) : SessionLogController {
 
     private var tree: TelemetryErrorTree? = null
@@ -53,6 +54,7 @@ internal class TelemetryRuntime(
         val marks = startup?.invoke() ?: return
         Telemetry.startupMarks = marks
         sink.schedule(STARTUP_FALLBACK_MS) { marks.onTimeout() }
+        profileStatus.onStatus { code -> sink.schedule(0) { marks.markProfileStatus(code) } }
     }
 
     @Synchronized
@@ -156,6 +158,7 @@ internal class TelemetryRuntime(
                 probes,
                 mainPost = { main.post(it) },
                 isMainThread = { Looper.myLooper() === Looper.getMainLooper() },
+                profileStatus = ProfileVerifierStatusSource,
             )
             Telemetry.install(sink, SystemTelemetryClock)
             Telemetry.installController(runtime)
@@ -166,6 +169,7 @@ internal class TelemetryRuntime(
                     sink::record,
                     SystemTelemetryClock,
                     sink::schedule,
+                    awaitProfileStatus = true,
                 )
             }
             app.registerActivityLifecycleCallbacks(callbacks)

@@ -53,6 +53,7 @@ help:
 	@echo "  make check       unit tests, detekt and android lint"
 	@echo "  make coverage    unit-test coverage report"
 	@echo "  make itest       instrumented tests on \$$DEVICE only, keeping its login"
+	@echo "  make baseline-profile  regenerate baseline profiles on \$$DEVICE only"
 	@echo "  make auth-save   save this device's KinoPub pairing"
 	@echo "  make auth-restore  put a saved pairing back"
 
@@ -123,7 +124,7 @@ check:
 ITEST_ADB_PORT ?= 5038
 ITEST_ADB = ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(ADB)
 
-.PHONY: itest auth-save auth-restore
+.PHONY: itest baseline-profile auth-save auth-restore
 
 itest: require-device build
 	@$(ITEST_ADB) start-server >/dev/null 2>&1
@@ -134,6 +135,48 @@ itest: require-device build
 		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
 		$(if $(TESTS),-Pandroid.testInstrumentationRunnerArguments.class=$(TESTS),) \
 		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit $$status
+
+# Baseline profile generation drives the app through UiAutomator on a device, so it gets the same
+# private adb server as itest.
+baseline-profile: require-device
+	@$(ITEST_ADB) start-server >/dev/null 2>&1
+	@$(ITEST_ADB) disconnect >/dev/null 2>&1 || true
+	@case "$(DEVICE)" in *:*) $(ITEST_ADB) connect $(DEVICE) >/dev/null;; esac
+	@for i in $$(seq 1 30); do \
+		$(ITEST_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" && break; \
+		sleep 2; \
+	done; \
+	$(ITEST_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" \
+		|| { echo "$(DEVICE) did not show up on the private adb server within 60 s"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@serials=$$($(ITEST_ADB) devices | sed -n '2,$$p' | awk 'NF {print $$1}'); \
+	for s in $$serials; do \
+		[ "$$s" = "$(DEVICE)" ] || { echo "refused: the private adb server lists $$s besides $(DEVICE)"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }; \
+	done
+	@sdk=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.build.version.sdk | tr -d '\r'); \
+	[ "$${sdk:-0}" -ge 34 ] 2>/dev/null \
+		|| { echo "refused: $(DEVICE) is API '$$sdk'; generation needs API 34 or newer, where the benchmark reset keeps app data"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@qemu=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.boot.qemu | tr -d '\r'); \
+	kqemu=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.kernel.qemu | tr -d '\r'); \
+	hw=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.hardware | tr -d '\r'); \
+	[ "$$qemu" = 1 ] || [ "$$kqemu" = 1 ] || [ "$$hw" = ranchu ] \
+		|| { echo "refused: $(DEVICE) is not an emulator (ro.boot.qemu=$$qemu ro.kernel.qemu=$$kqemu ro.hardware=$$hw)"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@echo "baseline profile run sees:"; $(ITEST_ADB) devices | sed -n '2,$$p'
+	@# The target APK embeds the checked-in profile; with every rule marked H the compile reset between
+	@# journeys flaked, so generate against an S/P-only copy and restore it if the run fails.
+	@f=app/src/main/generated/baselineProfiles/baseline-prof.txt; \
+	cp $$f $$f.bak; \
+	trap 'mv -f $$f.bak $$f; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 130' INT TERM; \
+	sed -E -i '/->/ s/^H([SP]*L)/\1/' $$f; \
+	ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(GRADLE) :app:generateBaselineProfile \
+		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; \
+	if [ $$status -eq 0 ]; then \
+		sed -E -i '/->/ s/^([SP]*)L/H\1L/' $$f; rm -f $$f.bak; \
+	else \
+		mv -f $$f.bak $$f; \
+	fi; \
+	trap - INT TERM; \
+	exit $$status
 
 # The pairing itself, saved and put back. `make itest` is meant to keep it, but
 # anything that uninstalls the app still drops it, and re-pairing needs both the

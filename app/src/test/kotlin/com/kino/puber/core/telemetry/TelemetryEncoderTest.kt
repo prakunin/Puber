@@ -214,6 +214,12 @@ internal class TelemetryEncoderTest {
     }
 
     @Test
+    fun startupWritesProfWhenKnown() {
+        val json = encoder.encode(TelemetryEvent.Startup(2_000, 100, 150, 300, 900, profileStatus = 327_680), "")
+        assertEquals(327_680L, json.getValue("prof").jsonPrimitive.long)
+    }
+
+    @Test
     fun errFramesAreAnArrayOfAtMostFive() {
         val json: JsonObject = encoder.encode(TelemetryEvent.Err(2_000, ErrSource.UNCAUGHT, RuntimeException("x")), "")
         val frames: JsonArray = json.getValue("frames").jsonArray

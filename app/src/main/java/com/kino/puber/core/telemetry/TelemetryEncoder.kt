@@ -78,6 +78,7 @@ internal class TelemetryEncoder(
         event.inFlight?.let { put("in_flight", it) }
         event.readyInFlight?.let { put("ready_in_flight", it) }
         put("dropped_keys", event.droppedKeys)
+        event.profileStatus?.let { put("prof", it) }
     }
 
     private fun JsonObjectBuilder.putNav(event: TelemetryEvent.Nav) {

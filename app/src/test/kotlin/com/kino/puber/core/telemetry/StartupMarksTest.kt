@@ -19,6 +19,15 @@ internal class StartupMarksTest {
         schedule = { delayMs, task -> queued += delayMs to task },
     )
 
+    private val awaitedMarks = StartupMarks(
+        procStartMs = 100,
+        appCreateMs = 200,
+        record = out::add,
+        clock = clock,
+        schedule = { delayMs, task -> queued += delayMs to task },
+        awaitProfileStatus = true,
+    )
+
     private fun runQueued(delayMs: Long? = null) {
         val due = queued.filter { delayMs == null || it.first == delayMs }
         queued.removeAll(due)
@@ -276,5 +285,62 @@ internal class StartupMarksTest {
 
         marks.markFirstContent()
         assertEquals(1, out.size)
+    }
+
+    @Test
+    fun readyLineWaitsForProfileStatusWhenAwaited() {
+        awaitedMarks.markFirstContent()
+        awaitedMarks.markRevealed()
+        awaitedMarks.markReady(0)
+        runQueued(0)
+        assertEquals(0, out.size)
+
+        awaitedMarks.markProfileStatus(327_680)
+        runQueued(0)
+
+        assertEquals(327_680, out.single().profileStatus)
+    }
+
+    @Test
+    fun boundEmitsWithoutProfileStatusWhenAwaited() {
+        awaitedMarks.markFirstContent()
+        awaitedMarks.markRevealed()
+        awaitedMarks.markReady(0)
+        runQueued(0)
+        assertEquals(0, out.size)
+        assertEquals(listOf(LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS), queued.map { it.first })
+
+        runQueued(LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS)
+
+        assertNull(out.single().profileStatus)
+    }
+
+    @Test
+    fun forcedRevealEmitsWithoutProfileStatusWhenAwaited() {
+        awaitedMarks.markFirstContent()
+        awaitedMarks.markRevealed()
+        awaitedMarks.markRevealCause(RevealCause.FORCED, 0)
+        runQueued(0)
+
+        assertNull(out.single().profileStatus)
+    }
+
+    @Test
+    fun profileStatusKeepsTheFirstValue() {
+        awaitedMarks.markProfileStatus(1)
+        awaitedMarks.markProfileStatus(2)
+        awaitedMarks.onTimeout()
+
+        assertEquals(1, out.single().profileStatus)
+    }
+
+    @Test
+    fun readyLineEmitsWithoutProfileStatusByDefault() {
+        queuedMarks.markFirstContent()
+        queuedMarks.markRevealed()
+        queuedMarks.markReady(0)
+        runQueued(0)
+
+        assertNull(out.single().profileStatus)
     }
 }

@@ -91,55 +91,44 @@ app/src/main/generated/baselineProfiles/baseline-prof.txt
 app/src/main/generated/baselineProfiles/startup-prof.txt
 ```
 
+Every non-debuggable variant, `prodRelease` included, packages them as `assets/dexopt/baseline.prof` and
+`assets/dexopt/baseline.profm`, so an app update carries the profile to the device.
+
 ## Refresh Baseline Profiles
 
-Regenerating profiles installs a build on a real device, drives it through the
-OAuth device-code flow, and rewrites files that are checked in - ask before
+Refresh before every release whose diff touches startup, Home, Details or the player, and at least every minor
+release. Regenerating installs a build on a device, drives it, and rewrites files that are checked in - ask before
 starting it, and never fold it into an unrelated change.
 
-Use the helper script:
+One command, on one named emulator (the dev flavor, `com.kino.puber.stage`, is the only one that generates). Take
+`PUBER_CLIENT_SECRET`, `PUBER_API_DOMAIN` and `TMDB_READ_ACCESS_TOKEN` from the main checkout's `.env` into that
+command's environment only:
 
 ```bash
-./tools/generate-baseline-profile.sh
+DEVICE=host.docker.internal:5555 ./tools/generate-baseline-profile.sh
 ```
 
-On the first run, if no tokens are provided and `.todo/baseline-profile-auth.env` does not exist, the script:
+It runs `make baseline-profile`, which talks to a private adb server that sees only `$DEVICE`, so no other device is
+touched. The device must be an emulator with API 34 or newer: there the benchmark library resets the app in place and
+keeps its data, and the make target refuses anything else.
 
-1. Installs `devNonMinifiedRelease`.
-2. Starts the app with the normal OAuth device-code flow.
-3. Waits while you enter the code manually.
-4. Exports tokens through a provider that is registered only for `devNonMinifiedRelease` and `prodNonMinifiedRelease`.
-5. Stores tokens locally in `.todo/baseline-profile-auth.env` with file mode `600`.
-6. Runs `./gradlew :app:generateBaselineProfile`.
+The script first checks that `$DEVICE` is reachable (`adb connect` for a host:port serial, `get-state` is `device`),
+is an emulator and runs API 34 or newer; otherwise it exits 2 before installing anything.
 
-On later runs, the script reuses `.todo/baseline-profile-auth.env`, so you do not need to authorize again while the
-refresh token remains valid.
+The playback journey opens the player on the first Home item and leaves it, which saves a watch position: every
+generation writes one position to the paired KinoPub account. Run it on an account where that is acceptable.
 
-You can also bypass the cached file by providing tokens explicitly:
+The refresh marks every method rule in `baseline-prof.txt` hot (`H`): on API 29 the `speed-profile` compile
+builds only hot methods, so rules left as `S` or `P` do not shorten startup.
 
-```bash
-PUBER_BASELINE_ACCESS_TOKEN="..." \
-PUBER_BASELINE_REFRESH_TOKEN="..." \
-./tools/generate-baseline-profile.sh
-```
+Generation runs against an `S`/`P`-only copy of `baseline-prof.txt`: the make target strips the `H` first, because
+the all-`H` profile embedded in the target APK coincided with `Failed to compile` flakes between journeys. A failed
+run restores the checked-in file; a successful one marks the new file `H`.
 
-Optional values:
-
-```bash
-PUBER_BASELINE_USERNAME="..." \
-PUBER_BASELINE_API_DOMAIN="..." \
-./tools/generate-baseline-profile.sh
-```
-
-The helper ultimately passes these values to the profile instrumentation tests:
-
-```bash
-./gradlew :app:generateBaselineProfile \
-  -Pandroid.testInstrumentationRunnerArguments.puber.baselineProfile.accessToken="$PUBER_BASELINE_ACCESS_TOKEN" \
-  -Pandroid.testInstrumentationRunnerArguments.puber.baselineProfile.refreshToken="$PUBER_BASELINE_REFRESH_TOKEN"
-```
-
-The profile auth receiver/provider are not packaged in `prodRelease`.
+`com.kino.puber.stage` must be paired once. If it is not, the script installs `devNonMinifiedRelease` over the existing
+one with `tools/android-apk-install-preserve` (app data kept), starts it and waits while you enter the code. A failed
+install stops the script; it never uninstalls or clears data. Generation never writes tokens. The auth provider is not
+packaged in `prodRelease`.
 
 ## Verification
 
@@ -150,14 +139,3 @@ Run:
 ./gradlew :app:testProdDebugUnitTest
 ./gradlew :app:assembleProdRelease
 ```
-
-To sanity-check that the generated profile is available to the benchmark APK on an emulator, run:
-
-```bash
-./gradlew :baselineprofile:connectedDevBenchmarkReleaseAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.kino.puber.baselineprofile.StartupBenchmarks#startupWithProfile \
-  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
-```
-
-Use this only as a packaging/install check. Startup timing from an emulator is not representative; use a physical device
-for meaningful benchmark numbers.

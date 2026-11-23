@@ -143,6 +143,7 @@ internal sealed interface TelemetryEvent {
         val readyDrainedMs: Long? = null,
         val droppedKeys: Int = 0,
         val readyReqMs: Long? = null,
+        val profileStatus: Int? = null,
     ) : TelemetryEvent {
         override val type get() = TelemetryEventType.STARTUP
     }

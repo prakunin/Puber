@@ -433,7 +433,14 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation(libs.androidx.profileinstaller)
-    baselineProfile(project(":baselineprofile"))
+}
+
+// The plugin creates the per-variant baselineProfile configurations after this block runs. Only
+// the dev flavor generates: its package is the one the generator can drive.
+configurations.configureEach {
+    if (name == "devReleaseBaselineProfile") {
+        dependencies.add(project.dependencies.create(project(":baselineprofile")))
+    }
 }
 
 baselineProfile {

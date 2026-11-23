@@ -3,6 +3,10 @@ package com.kino.puber.ui.feature.player.component
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.Lifecycle
 import cafe.adriel.voyager.core.screen.ScreenKey
 import com.kino.puber.core.di.DIScope
@@ -73,6 +77,7 @@ internal data class PlayerScreen(private val params: PlayerScreenParams) : Fulls
             state = state,
             onAction = onAction,
             exoPlayer = exoPlayer,
+            modifier = Modifier.semantics { testTagsAsResourceId = true }.testTag("player"),
         )
 
         val message by vm.collectMessage()

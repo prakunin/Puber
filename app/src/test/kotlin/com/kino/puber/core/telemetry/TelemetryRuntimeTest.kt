@@ -42,9 +42,21 @@ internal class TelemetryRuntimeTest {
         Telemetry.resetForTests()
     }
 
+    private class FakeProfileStatusSource : ProfileStatusSource {
+        var asked = 0
+        var callback: ((Int) -> Unit)? = null
+
+        override fun onStatus(callback: (Int) -> Unit) {
+            asked++
+            this.callback = callback
+        }
+    }
+
+    private val profileSource = FakeProfileStatusSource()
+
     private fun build() {
         sink = TelemetrySink(clock, store, executor, { testSessionInfo }, sid = "deadbeef")
-        runtime = TelemetryRuntime(prefs.sharedPreferences, clock, sink)
+        runtime = TelemetryRuntime(prefs.sharedPreferences, clock, sink, profileStatus = profileSource)
     }
 
     private fun trees() = Timber.forest().filterIsInstance<TelemetryErrorTree>()
@@ -281,5 +293,52 @@ internal class TelemetryRuntimeTest {
         executor.runRepeating()
 
         assertEquals(1, lines().count { it.str("type") == "startup" })
+    }
+
+    @Test
+    fun coldStartStartupLineCarriesProfileStatusFromSource() {
+        prefs.values[key] = clock.wall
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule, awaitProfileStatus = true) }
+        executor.runAll()
+        val marks = checkNotNull(Telemetry.startupMarks)
+        marks.markFirstContent()
+        marks.markRevealed()
+        marks.markReady(0)
+        executor.runImmediateScheduled()
+        executor.runRepeating()
+        assertEquals(0, lines().count { it.str("type") == "startup" })
+
+        checkNotNull(profileSource.callback)(327_680)
+        executor.runImmediateScheduled()
+        executor.runRepeating()
+
+        val startup = lines().single { it.str("type") == "startup" }
+        assertEquals("327680", startup.getValue("prof").toString())
+    }
+
+    @Test
+    fun offStartNeverAsksProfileStatus() {
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule, awaitProfileStatus = true) }
+
+        assertEquals(0, profileSource.asked)
+    }
+
+    @Test
+    fun profileStatusReachesMarksOnlyThroughTheTelemetryExecutor() {
+        prefs.values[key] = clock.wall
+        runtime.start { StartupMarks(0, 0, sink::record, clock, sink::schedule, awaitProfileStatus = true) }
+        executor.runAll()
+        val marks = checkNotNull(Telemetry.startupMarks)
+        marks.markFirstContent()
+        marks.markRevealed()
+        marks.markReady(0)
+        executor.runImmediateScheduled()
+
+        // A direct write would already be in the marks, so a forced emit would carry it.
+        checkNotNull(profileSource.callback)(327_680)
+        marks.onTimeout()
+        executor.runRepeating()
+
+        assertTrue(lines().single { it.str("type") == "startup" }.str("prof") != "327680")
     }
 }
