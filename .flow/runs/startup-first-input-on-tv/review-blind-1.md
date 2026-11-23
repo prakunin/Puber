@@ -1,0 +1,17 @@
+LENS: blind  ROUND: 1  BASE: c506d0bd
+### F1 [minor] A handled key that draws nothing gets the latency of a later key's frame
+- Where: app/src/main/java/com/kino/puber/core/telemetry/KeyProbe.kt:83-110 (`arm` / `onFrame` / `answer`)
+- Problem: The old matcher kept one pending key and replaced it once it was more than 1 s old. A key no frame answered was therefore dropped without being reported. Now every handled key waits in the list for up to 5 s. When any frame finally comes, `onFrame` answers every pending key dispatched before it. A key that caused no redraw is then reported as a slow key, with a `lat_ms` that is really the time until an unrelated later key drew something. The updated test `noFrameMeansNoLine` locks this in: it expects `[1101, 601, 100]`, where the old code reported only `100`.
+- Failure scenario: On an idle screen the user presses a D-pad key or Back. The key is handled but nothing changes on screen, so no frame is drawn. 1.2 s later another press moves focus and draws a frame. The log then gets a `key_lat` line for the first key with `lat_ms` near 1200, which looks like a long main-thread stall. These lines skew the key-latency data this change is meant to measure. Until a frame clears the list, up to 16 such keys pile up, and after that new handled keys are silently not armed.
+- Fix: When a key is armed, drop pending keys older than the previous key's dispatch that no frame has answered, or emit them as expired. Or limit answering to keys dispatched after the previous frame's start. Either way, a key with no frame of its own must not be given a later frame's time as its latency.
+
+### F2 [nit] `dropped_keys` is always written in production, but the encoder test models the field as optional
+- Where: app/src/main/java/com/kino/puber/core/telemetry/StartupMarks.kt:118 (`droppedKeys = droppedKeys.get()`); app/src/test/kotlin/com/kino/puber/core/telemetry/TelemetryEncoderTest.kt `startupOmitsImageFieldsNotReached`
+- Problem: `StartupMarks.emit` always passes a non-null count, so every real `startup` line carries `dropped_keys: 0`. The encoder test builds `Startup` with the default `droppedKeys = null` and asserts the key set without `dropped_keys`. It checks a shape production never writes.
+- Failure scenario: A consumer written from the tests expects `dropped_keys` to be absent when nothing was dropped, but the device logs always contain it.
+- Fix: Make `droppedKeys` non-null on `TelemetryEvent.Startup`, or write `null` when the count is 0. Then make the test match.
+
+### Unproven
+- app/src/main/java/com/kino/puber/core/telemetry/StartupMarks.kt:50-57 The `startup` line now waits up to 5 s after the reveal (it used to be written at the reveal). If recording is switched off or the process dies in that window, the line is lost. This becomes real if anything shows a session ending or `setEnabled(false)` running within 5 s of a cold-start reveal.
+- app/src/main/java/com/kino/puber/core/telemetry/KeyProbe.kt:88 `MAX_PENDING = 16`. During a stall with no frames, the 17th and later handled keys are silently not measured. This becomes real if device logs show more than 16 key presses in one stall without frames.
+- app/src/main/java/com/kino/puber/core/startup/RevealGate.kt:122-128 Observer callbacks (`Telemetry.startupMarks?.mark*` → `ScheduledThreadPoolExecutor.schedule`) run inside the gate lock before `state.value` is set. If one threw, the covered state would not update. This becomes real only if the telemetry pool can reject tasks; it is never shut down today.
