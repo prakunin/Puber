@@ -1,11 +1,15 @@
 package com.kino.puber.baselineprofile
 
-import android.os.Bundle
+import android.os.Build
+import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,28 +25,38 @@ class BaselineProfileGenerator {
         get() = InstrumentationRegistry.getArguments().getString("targetAppId")
             ?: error("targetAppId not found in instrumentation args")
 
+    @Before
+    fun requireInPlaceReset() {
+        check(Build.VERSION.SDK_INT >= 34) {
+            "Below API 34 without root the benchmark library uninstalls the target before each journey, " +
+                "which drops the pairing; generate on an emulator with API 34 or newer."
+        }
+    }
+
     @Test
     fun startupProfile() = baselineProfileRule.collect(
         packageName = packageName,
         includeInStartupProfile = true,
     ) {
         pressHome()
-        seedAuthState()
         startActivityAndWait()
         device.waitForIdle()
+        // Outlast the splash reveal cap (REVEAL_CAP_MS in core/startup/RevealGate.kt) so the late frames are profiled.
+        Thread.sleep(REVEAL_CAP_WAIT_MS)
+        device.waitForIdle()
+        requirePairedApp()
     }
 
     @Test
     fun browseAndDetailsProfile() = baselineProfileRule.collect(
         packageName = packageName,
     ) {
-        seedAuthState()
         startActivityAndWait()
         device.waitForIdle()
         Thread.sleep(2000)
 
-        // TopTabs: focus starts on TabRow (Home tab)
-        // DOWN → enter content area (HeroCarousel / first LazyRow)
+        // Side rail: focus starts in Home content
+        // DOWN → move into the first row below the hero
         device.pressDPadDown()
         device.waitForIdle()
 
@@ -72,130 +86,138 @@ class BaselineProfileGenerator {
         // BACK → main screen
         device.pressBack()
         device.waitForIdle()
+        requirePairedApp()
     }
 
     @Test
-    fun tabNavigationProfile() = baselineProfileRule.collect(
+    fun railNavigationProfile() = baselineProfileRule.collect(
         packageName = packageName,
+        maxIterations = RAIL_MAX_ITERATIONS,
     ) {
-        seedAuthState()
         startActivityAndWait()
         device.waitForIdle()
         Thread.sleep(2000)
 
-        // TopTabs: focus starts on TabRow (Home tab)
-        // RIGHT through tabs: Home → Movies → Series → Collections
-        repeat(3) {
-            device.pressDPadRight()
-            device.waitForIdle()
-            Thread.sleep(1000)
-        }
-
-        // DOWN → enter content of Collections tab
-        device.pressDPadDown()
+        // Side rail: LEFT from content opens the ModalNavigationDrawer
+        device.pressDPadLeft()
         device.waitForIdle()
 
-        repeat(3) {
+        // Every rail entry: DOWN to the next one, OK to open it, back to the rail. Search moves focus
+        // into its text field, where LEFT no longer reaches the rail, so it is left with BACK. After
+        // each entry the rail must show the next title; a journey that lost its place fails here
+        // instead of profiling fewer tabs.
+        RAIL_TITLE_RES.forEachIndexed { index, _ ->
             device.pressDPadDown()
-            device.waitForIdle()
-        }
-
-        // BACK → returns to TabRow (BackHandler: content → tabRow)
-        device.pressBack()
-        device.waitForIdle()
-
-        // LEFT back: Collections → Series → Movies → Home
-        repeat(3) {
-            device.pressDPadLeft()
+            device.pressDPadCenter()
             device.waitForIdle()
             Thread.sleep(1000)
+            if (index == SEARCH_INDEX) device.pressBack() else device.pressDPadLeft()
+            device.waitForIdle()
+            val expectedTitle = RAIL_TITLE_RES.getOrNull(index + 1) ?: RAIL_TITLE_RES[index]
+            if (index == SEARCH_INDEX && !railShows(expectedTitle)) {
+                // The first BACK only closed the keyboard.
+                device.pressBack()
+                device.waitForIdle()
+            }
+            check(railShows(expectedTitle)) {
+                "The rail did not reopen after entry ${index + 1} of $RAIL_ENTRIES; the journey lost its place"
+            }
         }
 
-        // DOWN into Home content + scroll
-        device.pressDPadDown()
+        // Back to Home, RIGHT into its content, scroll
+        repeat(RAIL_ENTRIES) {
+            device.pressDPadUp()
+        }
+        device.pressDPadCenter()
+        device.waitForIdle()
+        Thread.sleep(1000)
+        device.pressDPadRight()
         device.waitForIdle()
 
         repeat(5) {
             device.pressDPadDown()
             device.waitForIdle()
         }
+        requirePairedApp()
     }
 
-    private fun MacrobenchmarkScope.seedAuthState() {
-        val authArgs = BaselineProfileAuthArgs.from(InstrumentationRegistry.getArguments())
-
-        // Macrobenchmark may reinstall or clear target app data between test methods on some devices.
-        // Re-seeding tokens in every scenario keeps generated profiles focused on authenticated CUJs.
-        val output = device.executeShellCommand(
-            buildString {
-                append("am broadcast --receiver-foreground ")
-                append("-n ${packageName}/$AUTH_RECEIVER_CLASS ")
-                append("-a $ACTION_SEED_AUTH ")
-                append("--es $EXTRA_ACCESS_TOKEN ${authArgs.accessToken.shellQuote()} ")
-                append("--es $EXTRA_REFRESH_TOKEN ${authArgs.refreshToken.shellQuote()} ")
-                authArgs.username?.let { append("--es $EXTRA_USERNAME ${it.shellQuote()} ") }
-                authArgs.apiDomain?.let { append("--es $EXTRA_API_DOMAIN ${it.shellQuote()} ") }
-            }
-        )
-
-        check(output.contains("result=-1")) {
-            "Failed to seed baseline profile auth state. Broadcast output: $output"
-        }
-    }
-
-    private data class BaselineProfileAuthArgs(
-        val accessToken: String,
-        val refreshToken: String,
-        val username: String?,
-        val apiDomain: String?,
+    /**
+     * Opens the player on the first Home item. Leaving the player saves a watch position
+     * (`PlayerVM.exitPlayer`), so every run of this journey writes to the paired KinoPub account
+     * (docs/release.md, Refresh Baseline Profiles).
+     */
+    @Test
+    fun playbackProfile() = baselineProfileRule.collect(
+        packageName = packageName,
     ) {
-        companion object {
-            fun from(arguments: Bundle): BaselineProfileAuthArgs {
-                val accessToken = arguments.getString(ARG_ACCESS_TOKEN)
-                val refreshToken = arguments.getString(ARG_REFRESH_TOKEN)
-                require(!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
-                    """
-                    Baseline profile generation requires authenticated KinoPub tokens.
-                    Run ./tools/generate-baseline-profile.sh and complete the device-code login once,
-                    or pass -Pandroid.testInstrumentationRunnerArguments.$ARG_ACCESS_TOKEN and
-                    -Pandroid.testInstrumentationRunnerArguments.$ARG_REFRESH_TOKEN manually.
-                    """.trimIndent()
-                }
+        startActivityAndWait()
+        device.waitForIdle()
+        Thread.sleep(2000)
 
-                return BaselineProfileAuthArgs(
-                    accessToken = accessToken,
-                    refreshToken = refreshToken,
-                    username = arguments.getString(ARG_USERNAME)?.takeIf(String::isNotBlank),
-                    apiDomain = arguments.getString(ARG_API_DOMAIN)?.takeIf(String::isNotBlank),
-                )
-            }
+        // DOWN into Home content, OK → DetailsScreen
+        device.pressDPadDown()
+        device.waitForIdle()
+        device.pressDPadCenter()
+        device.waitForIdle()
+        Thread.sleep(2000)
+
+        // OK on the initially focused Play action → PlayerScreen
+        device.pressDPadCenter()
+        check(device.wait(Until.hasObject(By.res(PLAYER_RES_ID)), PLAYER_WAIT_MS)) {
+            "The player screen (resource id $PLAYER_RES_ID) did not appear after OK on Play"
+        }
+        Thread.sleep(5000)
+
+        // BACK → Details, BACK → main screen
+        repeat(2) {
+            device.pressBack()
+            device.waitForIdle()
+        }
+        requirePairedApp()
+    }
+
+    /**
+     * The generator never writes tokens. The app must already be paired on the device; the
+     * benchmark library resets it in place on API 34 and above, which keeps app data.
+     */
+    private fun MacrobenchmarkScope.requirePairedApp() {
+        val output = device.executeShellCommand("content query --uri content://$packageName.profile.auth/tokens")
+        val paired = Regex("name=access_token, value_base64=\\S+").containsMatchIn(output) &&
+            Regex("name=refresh_token, value_base64=\\S+").containsMatchIn(output)
+        Log.i(LOG_TAG, "journey end: paired=$paired")
+        check(paired) {
+            "The app is not paired on this device; pair it once (docs/release.md, Refresh Baseline Profiles). " +
+                "The generator never writes tokens."
         }
     }
 
-    private fun String.shellQuote(): String = buildString {
-        append('\'')
-        this@shellQuote.forEach { char ->
-            if (char == '\'') {
-                append("'\\''")
-            } else {
-                append(char)
-            }
-        }
-        append('\'')
+    private fun MacrobenchmarkScope.railShows(titleRes: String): Boolean {
+        val resources = InstrumentationRegistry.getInstrumentation().context.packageManager
+            .getResourcesForApplication(packageName)
+        val id = resources.getIdentifier(titleRes, "string", packageName)
+        check(id != 0) { "string resource $titleRes not found in $packageName" }
+        return device.wait(Until.hasObject(By.text(resources.getString(id))), RAIL_WAIT_MS)
     }
 
     private companion object {
-        private const val AUTH_RECEIVER_CLASS = "com.kino.puber.profile.BaselineProfileAuthReceiver"
-        private const val ACTION_SEED_AUTH = "com.kino.puber.profile.SEED_AUTH"
+        private const val LOG_TAG = "PuberGen"
 
-        private const val EXTRA_ACCESS_TOKEN = "access_token"
-        private const val EXTRA_REFRESH_TOKEN = "refresh_token"
-        private const val EXTRA_USERNAME = "username"
-        private const val EXTRA_API_DOMAIN = "api_domain"
-
-        private const val ARG_ACCESS_TOKEN = "puber.baselineProfile.accessToken"
-        private const val ARG_REFRESH_TOKEN = "puber.baselineProfile.refreshToken"
-        private const val ARG_USERNAME = "puber.baselineProfile.username"
-        private const val ARG_API_DOMAIN = "puber.baselineProfile.apiDomain"
+        private const val REVEAL_CAP_WAIT_MS = 3_000L
+        // Rail order after Home: Search, Favourites, History, Movies, Series, 4K (TabType, enabled tabs).
+        private val RAIL_TITLE_RES = listOf(
+            "main_tabs_search",
+            "main_tabs_favorites",
+            "main_tabs_history",
+            "main_tabs_movies",
+            "main_tabs_series",
+            "main_tabs_f4k",
+        )
+        // The journey takes about 30 s per iteration; the default 15 ran past 7 minutes on the emulator.
+        private const val RAIL_MAX_ITERATIONS = 5
+        private val RAIL_ENTRIES = RAIL_TITLE_RES.size
+        private const val SEARCH_INDEX = 0
+        private const val RAIL_WAIT_MS = 5_000L
+        private const val PLAYER_RES_ID = "player"
+        private const val PLAYER_WAIT_MS = 15_000L
     }
 }

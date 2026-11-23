@@ -35,7 +35,10 @@ internal class BaselineProfileAuthProvider : ContentProvider() {
         return cursor
     }
 
-    override fun onCreate(): Boolean = true
+    override fun onCreate(): Boolean {
+        context?.let(AuthEventLog::install)
+        return true
+    }
 
     override fun getType(uri: Uri): String? = null
 

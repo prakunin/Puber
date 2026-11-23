@@ -158,9 +158,9 @@ internal class CryptoPreferenceRepository(
     }
 
     companion object {
-        private const val PREFS_NAME = "KINOPUBER_SECURE_PREFS"
-        private const val ACCESS_TOKEN_KEY_NAME = "KINOPUBER_ACCESS_TOKEN"
-        private const val REFRESH_TOKEN_KEY_NAME = "KINOPUBER_REFRESH_TOKEN"
+        internal const val PREFS_NAME = "KINOPUBER_SECURE_PREFS"
+        internal const val ACCESS_TOKEN_KEY_NAME = "KINOPUBER_ACCESS_TOKEN"
+        internal const val REFRESH_TOKEN_KEY_NAME = "KINOPUBER_REFRESH_TOKEN"
         private const val USERNAME_KEY_NAME = "KINOPUBER_USERNAME_KEY_NAME"
         private const val API_DOMAIN_KEY_NAME = "KINOPUBER_API_DOMAIN"
         private const val SECURITY_KEY_ALIAS = "SECURITY_KEY_ALIAS"
