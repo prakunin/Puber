@@ -22,6 +22,14 @@ internal const val LINE_WAIT_AFTER_REVEAL_WITH_PROFILE_MS = 7_000L
  * ready was marked and every image held at ready has ended. The fallback timer writes whatever was
  * reached. Gate marks arrive inside the gate lock, so they never emit directly: each hands the check
  * to [schedule], which production runs on the telemetry executor.
+ *
+ * Image fields on the line: `ready_in_flight` is the count held at ready; `ready_drained` is when the last
+ * of them ended. `in_flight` is the count still running at the reveal, and `img_idle` the last time the
+ * in-flight set became empty. The reveal waits only for the held requests, so `in_flight` can be above 0
+ * for cause `ready` (requests started after ready) and is always above 0 for `grace` (the held requests
+ * still running), and `img_idle` can predate ready
+ * or be absent (the gate reports idle only before the reveal). Read the wait for images from
+ * `ready_in_flight` and `ready_drained`, not from `in_flight` and `img_idle`.
  */
 internal class StartupMarks(
     private val procStartMs: Long,

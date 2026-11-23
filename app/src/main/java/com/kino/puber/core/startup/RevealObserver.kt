@@ -5,6 +5,7 @@ internal enum class RevealCause(val wire: String) {
     READY("ready"),
     CAP("cap"),
     FORCED("forced"),
+    GRACE("grace"),
 }
 
 /**
@@ -19,13 +20,13 @@ internal interface RevealObserver {
     /** Content is ready and the frame wait is over; [inFlight] image requests are held. */
     fun onReady(inFlight: Int)
 
-    /** The set of image requests in flight became empty. */
+    /** The set of image requests in flight became empty; reported only before the reveal, so a reveal need not follow one. */
     fun onImagesIdle()
 
     /** Every request held at ready has ended. */
     fun onHeldDrained()
 
-    /** The splash was lifted by [cause] with [inFlight] image requests still running. */
+    /** The splash was lifted by [cause] with [inFlight] image requests still running; can be above 0 for `READY` (requests started after ready) and is always above 0 for `GRACE` (held requests still running). */
     fun onRevealed(cause: RevealCause, inFlight: Int)
 
     object None : RevealObserver {

@@ -230,6 +230,24 @@ internal class StartupMarksTest {
     }
 
     @Test
+    fun graceRevealLineWaitsForHeldDrain() {
+        queuedMarks.markFirstContent()
+        queuedMarks.markRevealCause(RevealCause.GRACE, 2)
+        queuedMarks.markRevealed()
+        queuedMarks.markReady(2)
+        runQueued(0)
+        assertEquals(0, out.size)
+
+        clock.elapsed = 1_300
+        queuedMarks.markHeldDrained()
+        runQueued(0)
+
+        val startup = out.single()
+        assertEquals(RevealCause.GRACE, startup.cause)
+        assertEquals(1_300L, startup.readyDrainedMs)
+    }
+
+    @Test
     fun forcedRevealEmitsWithoutReady() {
         queuedMarks.markRevealCause(RevealCause.FORCED, 0)
         queuedMarks.markFirstContent()

@@ -162,6 +162,32 @@ internal class TelemetryEncoderTest {
     }
 
     @Test
+    fun startupWritesGraceCause() {
+        val json = encoder.encode(
+            TelemetryEvent.Startup(
+                t = 2_000,
+                procStartMs = 100,
+                appCreateMs = 150,
+                appComposedMs = 300,
+                firstContentMs = 900,
+                revealedMs = 1_400,
+                cause = RevealCause.GRACE,
+                readyMs = 1_000,
+                imagesIdleMs = 1_200,
+                inFlight = 3,
+                readyInFlight = 5,
+                readyDrainedMs = 1_250,
+                droppedKeys = 2,
+            ),
+            "",
+        )
+        assertEquals("grace", json.getValue("cause").jsonPrimitive.content)
+        assertEquals(900L, json.getValue("ready").jsonPrimitive.long)
+        assertEquals(1_150L, json.getValue("ready_drained").jsonPrimitive.long)
+        assertEquals(3L, json.getValue("in_flight").jsonPrimitive.long)
+    }
+
+    @Test
     fun startupOmitsImageFieldsNotReached() {
         val json = encoder.encode(
             TelemetryEvent.Startup(2_000, 100, 150, 300, 900, 1_400, cause = RevealCause.READY),

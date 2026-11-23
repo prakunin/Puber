@@ -7,11 +7,14 @@ import java.util.Collections
 import java.util.IdentityHashMap
 
 internal const val REVEAL_CAP_MS = 2_500L
+internal const val REVEAL_GRACE_MS = 300L
 
 /**
- * Whether the startup splash still covers the app, and how long the cap leaves it. Image requests
- * are tracked by identity, so a request that ends twice cannot release another one. [observer] is
- * told the edges the startup telemetry records, from inside the gate lock.
+ * Whether the startup splash still covers the app, and how long the cap leaves it. Once ready takes
+ * effect, the splash waits for the image requests in flight at that moment, at most [graceMs];
+ * requests started later do not hold it. Image requests are tracked by identity, so a request that
+ * ends twice cannot release another one. [observer] is told the edges the startup telemetry
+ * records, from inside the gate lock.
  */
 internal class RevealGate(
     private val clock: () -> Long,
@@ -19,6 +22,12 @@ internal class RevealGate(
     /** Runs the block once the screen has been drawn; a ready mark waits for it. */
     private val afterFrame: (() -> Unit) -> Unit = { it() },
     private val observer: RevealObserver = RevealObserver.None,
+    private val graceMs: Long = REVEAL_GRACE_MS,
+    /**
+     * Queues [task] to run after `delayMs`; called inside the gate lock, so it must only enqueue and
+     * never run `task` inline.
+     */
+    private val scheduleGrace: (delayMs: Long, task: () -> Unit) -> Unit = { _, _ -> },
 ) {
     private val state = MutableStateFlow(false)
     val covered: StateFlow<Boolean> = state.asStateFlow()
@@ -47,9 +56,9 @@ internal class RevealGate(
     }
 
     /**
-     * The landing screen has content; the splash still waits for the images in flight. The mark
-     * counts from the next drawn frame, so the screen's composition has issued its image requests
-     * before they are looked at. A mark made before a later begin() or reset() is dropped.
+     * The landing screen has content; the splash still waits for the images in flight when the mark
+     * takes effect, at most [graceMs]. The mark counts from the next drawn frame, so the screen's
+     * composition has issued its image requests before they are looked at. A mark made before a later begin() or reset() is dropped.
      */
     fun markReady() {
         val markedIn = synchronized(lock) {
@@ -63,10 +72,15 @@ internal class RevealGate(
                     if (begun) {
                         held.addAll(inFlight)
                         observer.onReady(held.size)
+                        if (forcedCause == null && held.isNotEmpty()) scheduleGrace(graceMs) { onGrace(markedIn) }
                     }
                 }
             }
         }
+    }
+
+    private fun onGrace(armedIn: Int) = update {
+        if (generation == armedIn && ready && forcedCause == null) forcedCause = RevealCause.GRACE
     }
 
     fun onCap() = update { if (forcedCause == null) forcedCause = RevealCause.CAP }
@@ -106,7 +120,7 @@ internal class RevealGate(
     // begin() (a restored start) is still reported once, though it never covered anything.
     private inline fun update(change: () -> Unit) = synchronized(lock) {
         change()
-        val covers = begun && forcedCause == null && !revealedOnce && !(ready && inFlight.isEmpty())
+        val covers = begun && forcedCause == null && !revealedOnce && !(ready && held.isEmpty())
         val reportable = begun || forcedCause != null
         if (!covers && reportable && !revealedOnce) {
             revealedOnce = true
