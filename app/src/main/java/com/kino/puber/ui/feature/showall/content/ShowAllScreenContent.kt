@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
@@ -31,18 +32,24 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
+import com.kino.puber.core.ui.uikit.component.LocalTvDialogFocusRestorer
+import com.kino.puber.core.ui.uikit.component.TvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
-import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemHorizontal
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemPoster
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 
-private const val GRID_COLUMNS = 3
-private const val LOAD_MORE_THRESHOLD = 12
+internal const val SHOW_ALL_GRID_COLUMNS = 6
+private val GridContentPadding = 16.dp
+private val GridColumnSpacing = 12.dp
+private val GridRowSpacing = 16.dp
+private const val LOAD_MORE_ROWS = 4
+private const val LOAD_MORE_THRESHOLD = LOAD_MORE_ROWS * SHOW_ALL_GRID_COLUMNS
 private const val RESTORE_FOCUS_ATTEMPTS = 3
 
 @Composable
@@ -85,6 +92,18 @@ private fun ShowAllContentBody(
     val restoreFocus = remember { FocusRequester() }
     val focusMemory = rememberGridFocusMemory(state.items, restoreFocus, mainContentFocus)
 
+    // Closing the menu puts focus back on the card that opened it; without a restorer focus falls
+    // to the side rail.
+    val dialogFocusRestorer = remember(mainContentFocus) {
+        TvDialogFocusRestorer(
+            onDialogOpening = { runCatching { mainContentFocus.saveFocusedChild() } },
+            onDialogClosed = {
+                val restored = runCatching { mainContentFocus.restoreFocusedChild() }.getOrDefault(false)
+                if (!restored) runCatching { mainContentFocus.requestFocus() }
+            },
+        )
+    }
+
     val shouldLoadMore by remember {
         derivedStateOf {
             val totalItemsCount = gridState.layoutInfo.totalItemsCount
@@ -94,47 +113,50 @@ private fun ShowAllContentBody(
         }
     }
 
-    LaunchedEffect(shouldLoadMore) {
+    // Keyed on the size too: a page smaller than the threshold leaves the flag true after an append.
+    LaunchedEffect(shouldLoadMore, state.items.size) {
         if (shouldLoadMore) {
             onAction(CommonAction.LoadMore)
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(GRID_COLUMNS),
-            state = gridState,
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(mainContentFocus)
-                .onFocusChanged { focusMemory.onGridFocusChanged(it.hasFocus) },
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(32.dp),
-        ) {
-            itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
-                val clickCallback = remember(item.id) { { onAction(CommonAction.ItemSelected(item)) } }
-                VideoItemHorizontal(
-                    state = item,
-                    modifier = Modifier
-                        .then(
-                            if (item.id == focusMemory.restoreId) {
-                                Modifier.focusRequester(restoreFocus)
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .onFocusChanged { if (it.hasFocus) focusMemory.onCardFocused(item.id, index) },
-                    onClick = clickCallback,
-                    onContextMenu = { contextMenuItem = item },
-                )
+    CompositionLocalProvider(LocalTvDialogFocusRestorer provides dialogFocusRestorer) {
+        Box(Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(SHOW_ALL_GRID_COLUMNS),
+                state = gridState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(mainContentFocus)
+                    .onFocusChanged { focusMemory.onGridFocusChanged(it.hasFocus) },
+                contentPadding = PaddingValues(GridContentPadding),
+                horizontalArrangement = Arrangement.spacedBy(GridColumnSpacing),
+                verticalArrangement = Arrangement.spacedBy(GridRowSpacing),
+            ) {
+                itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
+                    val clickCallback = remember(item.id) { { onAction(CommonAction.ItemSelected(item)) } }
+                    VideoItemPoster(
+                        state = item,
+                        modifier = Modifier
+                            .then(
+                                if (item.id == focusMemory.restoreId) {
+                                    Modifier.focusRequester(restoreFocus)
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .onFocusChanged { if (it.hasFocus) focusMemory.onCardFocused(item.id, index) },
+                        onClick = clickCallback,
+                        onContextMenu = { contextMenuItem = item },
+                    )
+                }
             }
+            VideoItemContextMenuDialog(
+                item = contextMenuItem,
+                onDismiss = { contextMenuItem = null },
+                onAction = onAction,
+            )
         }
-        VideoItemContextMenuDialog(
-            item = contextMenuItem,
-            onDismiss = { contextMenuItem = null },
-            onAction = onAction,
-        )
     }
 }
 
