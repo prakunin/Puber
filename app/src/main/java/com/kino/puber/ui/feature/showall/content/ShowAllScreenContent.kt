@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.showall.content
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +47,7 @@ import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 
 internal const val SHOW_ALL_GRID_COLUMNS = 6
 private val GridContentPadding = 16.dp
+private val GridTopPadding = 8.dp
 private val GridColumnSpacing = 12.dp
 private val GridRowSpacing = 16.dp
 private const val LOAD_MORE_ROWS = 4
@@ -54,28 +56,32 @@ private const val RESTORE_FOCUS_ATTEMPTS = 3
 
 @Composable
 internal fun ShowAllScreenContent(
+    title: String,
     state: ShowAllViewState,
     onAction: (UIAction) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        when (state) {
-            ShowAllViewState.Loading -> FullScreenProgressIndicator()
-            ShowAllViewState.Empty -> Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(stringResource(R.string.empty_state))
+    Column(modifier = Modifier.fillMaxSize()) {
+        ShowAllHeader(title)
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when (state) {
+                ShowAllViewState.Loading -> FullScreenProgressIndicator()
+                ShowAllViewState.Empty -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.empty_state))
+                }
+                is ShowAllViewState.Error -> Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(state.message)
+                }
+                is ShowAllViewState.Content -> ShowAllContentBody(
+                    state = state,
+                    onAction = onAction,
+                )
             }
-            is ShowAllViewState.Error -> Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(state.message)
-            }
-            is ShowAllViewState.Content -> ShowAllContentBody(
-                state = state,
-                onAction = onAction,
-            )
         }
     }
 }
@@ -129,7 +135,12 @@ private fun ShowAllContentBody(
                     .fillMaxSize()
                     .focusRequester(mainContentFocus)
                     .onFocusChanged { focusMemory.onGridFocusChanged(it.hasFocus) },
-                contentPadding = PaddingValues(GridContentPadding),
+                contentPadding = PaddingValues(
+                    start = GridContentPadding,
+                    top = GridTopPadding,
+                    end = GridContentPadding,
+                    bottom = GridContentPadding,
+                ),
                 horizontalArrangement = Arrangement.spacedBy(GridColumnSpacing),
                 verticalArrangement = Arrangement.spacedBy(GridRowSpacing),
             ) {

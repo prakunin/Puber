@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isFocused
@@ -24,6 +26,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+private const val TestTitle = "Фильмы · Новинки"
+
 class ShowAllScreenContentFocusTest {
 
     @get:Rule
@@ -34,12 +38,48 @@ class ShowAllScreenContentFocusTest {
     }
 
     @Test
+    fun showAllHeaderShowsTheTitleAndFirstFocusStaysOnTheFirstCard() {
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(items),
+                        onAction = {},
+                    )
+                }
+            }
+        }
+        awaitAnyFocus()
+
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed().assert(!isFocused())
+        composeRule.onNodeWithText(items.first().title).assertIsFocused()
+    }
+
+    @Test
+    fun showAllHeaderIsShownInLoadingAndErrorStates() {
+        var state by mutableStateOf<ShowAllViewState>(ShowAllViewState.Loading)
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(title = TestTitle, state = state, onAction = {})
+                }
+            }
+        }
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed()
+
+        state = ShowAllViewState.Error("boom")
+
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed()
+    }
+
+    @Test
     fun showAllFocusReturnsToTheFocusedCardAfterReentry() {
         val restoration = StateRestorationTester(composeRule)
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -65,7 +105,7 @@ class ShowAllScreenContentFocusTest {
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -101,7 +141,7 @@ class ShowAllScreenContentFocusTest {
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(shown), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(shown), onAction = {})
                 }
             }
         }
@@ -129,7 +169,7 @@ class ShowAllScreenContentFocusTest {
         composeRule.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(shown), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(shown), onAction = {})
                 }
             }
         }
@@ -154,7 +194,7 @@ class ShowAllScreenContentFocusTest {
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides active) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -181,7 +221,8 @@ class ShowAllScreenContentFocusTest {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
                     ShowAllScreenContent(
-                        ShowAllViewState.Content(shown),
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(shown),
                         onAction = { if (it == CommonAction.LoadMore) loadMoreCount++ },
                     )
                 }

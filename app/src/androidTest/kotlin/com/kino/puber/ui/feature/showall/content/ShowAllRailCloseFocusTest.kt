@@ -59,6 +59,8 @@ import org.junit.Test
  * `FlowComponent` wire them. Closing the rail with RIGHT must give focus back to the card the user
  * left, not to whatever the tab box's default focus search finds after the handoff's grace frames.
  */
+private const val TestTitle = "Фильмы · Новинки"
+
 class ShowAllRailCloseFocusTest {
 
     @get:Rule
@@ -283,7 +285,7 @@ private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>) {
                             .focusRestorer()
                             .focusGroup(),
                     ) {
-                        ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                        ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                         if (host.popupShown) {
                             Box(Modifier.size(1.dp).testTag(PopupTag).focusable())
                         }
