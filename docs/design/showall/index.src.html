@@ -115,6 +115,32 @@ body{
 /* Заголовок над сеткой: закреплён, не фокусируется, одна строка с многоточием. */
 .ghead{position:absolute;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500;color:var(--p-onsurface,#E6E1E5)}
 
+/* ── catalogue-filters: шапка с кнопками и боковая панель ─── */
+.fhead{position:absolute;display:flex;align-items:center;white-space:nowrap;z-index:2}
+.fhead .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;flex:none;color:var(--p-onsurface)}
+.fbtn{display:flex;align-items:center;justify-content:center;flex:none;border-radius:9999px;font-weight:500;
+  border-style:solid;transform-origin:50% 50%;white-space:nowrap;cursor:pointer}
+.fbtn svg{display:block;flex:none}
+.fsum{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--p-onsurfacevariant)}
+.fscrim{position:absolute;top:0;bottom:0;right:0;z-index:6}
+.fpanel{position:absolute;right:0;z-index:7;overflow:hidden;font-family:var(--roboto)}
+.fpanel .rim{position:absolute;inset:0;pointer-events:none;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.fpanel .ptitle{position:absolute;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;color:var(--p-onsurface)}
+.fpanel .plist{position:absolute;overflow:hidden}
+.fpanel .psheet{position:absolute;left:0;right:0}
+.prow{position:absolute;left:0;right:0;display:flex;align-items:center;cursor:pointer;color:var(--p-onsurface)}
+.prow .l{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.prow .tr{flex:none;white-space:nowrap}
+.prow.ro{cursor:default}
+.psec{position:absolute;white-space:nowrap;font-weight:600;color:rgba(202,196,208,.78)}
+.pspin{border-radius:50%;border-style:solid;border-color:rgba(208,188,255,.22);border-top-color:#D0BCFF;
+  animation:pspin .9s linear infinite;flex:none;box-sizing:border-box}
+@keyframes pspin{to{transform:rotate(360deg)}}
+.fempty{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.rail .ri.ff{background:#E6E1E5;border-radius:9999px}
+.rail .ri.ff svg{filter:invert(1);opacity:1}
+
 .guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono);z-index:9}
 .guides .v{position:absolute;top:0;bottom:0;width:2px}
 .guides .h{position:absolute;left:0;right:0;height:2px}
@@ -158,7 +184,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
 .reset:hover{color:var(--text);border-color:var(--accent)}
 .reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.pspin{animation:none}}
 </style>
 
 <div class="top">
@@ -167,7 +193,9 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
     значки CC / AC3 / HD / 4K, пилюли рейтингов KinoPub / Кинопоиск / IMDb, русское и оригинальное название.
     48 карточек и их поля — из кэша приложения на TV-боксе, постеры — posters.medium с CDN. Меню — по кадру
     с бокса. Сетка открывается на согласованных 2026-11-24 числах; заголовок над ней — стартовые
-    значения прогона catalogue-browse-all, ещё не выкручен.</div>
+    значения прогона catalogue-browse-all, ещё не выкручен. Сцена «catalogue-filters» — шапка browse-сетки
+    с кнопками «Фильтры» и «Сброс», сводкой фильтра и боковой панелью сортировки и жанра; стартовые значения
+    прогона catalogue-filters, тоже не выкручены.</div>
   <div class="readout" id="scaleOut"></div>
 </div>
 
@@ -186,6 +214,10 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
     <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> — по плиткам сетки, как пульт. Из первой колонки
     влево на устройстве открывается меню; вниз из предпоследнего ряда в неполный последний — на последнюю
     плитку. Кликните по стенду, чтобы он начал ловить стрелки, или кликните по плитке.
+    В сцене «catalogue-filters»: из первого ряда <kbd>↑</kbd> — на «Фильтры», <kbd>←</kbd> с «Фильтры» — в меню,
+    <kbd>→</kbd> — на «Сброс»; <kbd>Enter</kbd> — OK (открыть панель, войти в страницу, выбрать значение),
+    <kbd>Esc</kbd> — Back (страница → корень → панель закрывается и применяет фильтр, фокус на «Фильтры»).
+    В панели <kbd>←</kbd> <kbd>→</kbd> заперты, как в TvDialogOverlay.
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
     <button class="reset" id="reset">Вернуть стартовые значения</button>
@@ -275,6 +307,14 @@ const START = {
   focusW:2, focusScale:1.05, progressH:3,
   /* catalogue-browse-all: закреплённый заголовок над сеткой (design-ux.md, Element B). */
   hdrTop:12, hdrSp:16, hdrLine:20, hdrLeft:16, hdrToGrid:8,
+  /* catalogue-filters: шапка [заголовок] 16 [Фильтры] 8 [Сброс] 12 [сводка] и боковая панель
+     (.flow/runs/catalogue-filters/design-ux.md, Element A и B). Стартовые значения, не выкручены. */
+  fHdrTop:10, fRowH:24, fToGrid:8, fGapTitle:16, fGapReset:8, fGapSummary:12,
+  fBtnPadH:12, fLblSp:11, fLblLine:16, fSumSp:11, fSumLine:16, fIconSz:15, fIconGap:6, fFocusScale:1.1,
+  fPanelMin:240, fPanelMax:420, fPanelMaxH:500, fCorner:20, fPadS:20, fPadT:20, fPadE:20, fPadB:16,
+  fTitleSp:14, fTitleLine:18, fTitleGap:12, fSecSp:11, fSecLine:14,
+  fRowMin:40, fRowPadH:12, fRowPadV:6, fRowRadius:12, fRowSp:14, fRowLine:18, fTrailSp:13, fCheck:18,
+  fScrimA:62, fEmptyGap:12,
 };
 
 const CONTROLS = [
@@ -337,6 +377,49 @@ const CONTROLS = [
    note:"16 = поле сетки: заголовок на одном краю с первой колонкой"},
   {g:"Заголовок", k:"hdrToGrid", n:"заголовок → сетка", min:0, max:32, step:1, u:"dp",
    note:"contentPadding сетки сверху; не меньше выноса фокуса (237 × 0,025 ≈ 6 dp), иначе сетка срежет плитку первого ряда"},
+
+  {g:"Фильтры: шапка", k:"fHdrTop", n:"поле над рядом", min:0, max:11, step:0.5, u:"dp",
+   note:"было 12; больше 11 нельзя: при 12 второй ряд кончается ровно на 540 с выносом фокуса"},
+  {g:"Фильтры: шапка", k:"fRowH", n:"высота ряда = кнопки", min:16, max:40, step:1, u:"dp",
+   note:"компактная кнопка, как вход «Все …» (BrowseAllEntry 24 dp); заголовок центрирован в ряду"},
+  {g:"Фильтры: шапка", k:"fToGrid", n:"ряд → сетка", min:0, max:32, step:1, u:"dp",
+   note:"contentPadding сетки сверху; не меньше выноса фокуса плитки (≈ 6 dp)"},
+  {g:"Фильтры: шапка", k:"fGapTitle", n:"заголовок → «Фильтры»", min:0, max:48, step:1, u:"dp"},
+  {g:"Фильтры: шапка", k:"fGapReset", n:"«Фильтры» → «Сброс»", min:0, max:32, step:1, u:"dp"},
+  {g:"Фильтры: шапка", k:"fGapSummary", n:"«Сброс» → сводка", min:0, max:32, step:1, u:"dp"},
+  {g:"Фильтры: шапка", k:"fBtnPadH", n:"поле кнопки по бокам", min:4, max:24, step:1, u:"dp",
+   note:"EntryHorizontalPadding 12 в BrowseAllEntry"},
+  {g:"Фильтры: шапка", k:"fLblSp", n:"кегль надписи", min:8, max:16, step:0.5, u:"sp", note:"labelLarge 11 / 16 sp Medium, как у входа «Все …»"},
+  {g:"Фильтры: шапка", k:"fLblLine", n:"интерлиньяж надписи", min:10, max:24, step:1, u:"sp"},
+  {g:"Фильтры: шапка", k:"fSumSp", n:"кегль сводки", min:8, max:16, step:0.5, u:"sp", note:"Regular, onSurfaceVariant #CAC4D0, одна строка"},
+  {g:"Фильтры: шапка", k:"fSumLine", n:"интерлиньяж сводки", min:10, max:24, step:1, u:"sp"},
+  {g:"Фильтры: шапка", k:"fIconSz", n:"значок воронки", min:10, max:20, step:0.5, u:"dp", note:"виден со switch «значок» = вкл; Phosphor Funnel, как значки content-стенда"},
+  {g:"Фильтры: шапка", k:"fIconGap", n:"значок → надпись", min:0, max:12, step:0.5, u:"dp", note:"ButtonDefaults.IconSpacing в tv-material3 — 8"},
+  {g:"Фильтры: шапка", k:"fFocusScale", n:"увеличение под фокусом", min:1, max:1.2, step:0.01, u:"×", note:"ButtonDefaults.scale: focusedScale 1.1"},
+
+  {g:"Фильтры: панель", k:"fPanelMin", n:"ширина: минимум", min:160, max:420, step:4, u:"dp", note:"PanelMinWidth 240; панель по самой длинной строке, IntrinsicSize.Max"},
+  {g:"Фильтры: панель", k:"fPanelMax", n:"ширина: максимум", min:240, max:560, step:4, u:"dp", note:"PanelMaxWidth 420; в плеере не выкручивался"},
+  {g:"Фильтры: панель", k:"fPanelMaxH", n:"высота: максимум", min:240, max:540, step:4, u:"dp", note:"540 − 2 × 20; длиннее — список листается под заголовком"},
+  {g:"Фильтры: панель", k:"fCorner", n:"скругление (слева)", min:0, max:40, step:1, u:"dp", note:"PanelCornerRadius 20, только topStart / bottomStart"},
+  {g:"Фильтры: панель", k:"fPadS", n:"поле слева", min:0, max:40, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fPadT", n:"поле сверху", min:0, max:40, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fPadE", n:"поле справа", min:0, max:40, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fPadB", n:"поле снизу", min:0, max:40, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fTitleSp", n:"заголовок: кегль", min:10, max:22, step:0.5, u:"sp", note:"titleMedium 14 / 18 sp SemiBold"},
+  {g:"Фильтры: панель", k:"fTitleLine", n:"заголовок: интерлиньяж", min:12, max:28, step:1, u:"sp"},
+  {g:"Фильтры: панель", k:"fTitleGap", n:"заголовок → строки", min:0, max:24, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fSecSp", n:"раздел: кегль", min:8, max:16, step:0.5, u:"sp", note:"PlayerPanelSectionHeader 11 / 14 sp, поле 8 сверху / 4 снизу"},
+  {g:"Фильтры: панель", k:"fSecLine", n:"раздел: интерлиньяж", min:10, max:20, step:1, u:"sp"},
+  {g:"Фильтры: панель", k:"fRowMin", n:"строка: высота", min:28, max:56, step:1, u:"dp", note:"PlayerPanelItem heightIn(min = 40)"},
+  {g:"Фильтры: панель", k:"fRowPadH", n:"строка: поле по бокам", min:4, max:24, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fRowPadV", n:"строка: поле сверху / снизу", min:0, max:16, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fRowRadius", n:"строка: скругление", min:0, max:24, step:1, u:"dp"},
+  {g:"Фильтры: панель", k:"fRowSp", n:"строка: кегль", min:10, max:20, step:0.5, u:"sp", note:"14 / 18 sp Medium"},
+  {g:"Фильтры: панель", k:"fRowLine", n:"строка: интерлиньяж", min:12, max:28, step:1, u:"sp"},
+  {g:"Фильтры: панель", k:"fTrailSp", n:"значение справа: кегль", min:9, max:18, step:0.5, u:"sp", note:"13 sp, 76 % цвета строки"},
+  {g:"Фильтры: панель", k:"fCheck", n:"галочка", min:12, max:24, step:1, u:"dp", note:"Icons.Default.Check 18 dp primary"},
+  {g:"Фильтры: панель", k:"fScrimA", n:"затемнение под панелью", min:0, max:100, step:1, u:"%", note:"TvDialogOverlay DialogScrimAlpha 0.62, как у контекстного меню на этой сетке"},
+  {g:"Фильтры: панель", k:"fEmptyGap", n:"пусто: текст → «Сброс»", min:0, max:32, step:1, u:"dp"},
 ];
 
 const FOCUS_COLOURS = {
@@ -349,6 +432,18 @@ const FOCUS_COLOURS = {
 const HEADER_TEXTS = [["k4","Всё в 4К"],["concerts","Все концерты"],["shelf","Фильмы · Новинки"]];
 
 const SWITCHES = [
+
+  {k:"scene",  n:"сцена", opts:[["grid","сетка (согласовано)"],["filters","catalogue-filters"]]},
+  {k:"fGrid",  n:"фильтры: сетка", opts:[["browse","вход «Все …» (кнопки)"],["shelf","полка (только заголовок)"]]},
+  {k:"fPreset",n:"фильтр", opts:[["none","нет"],["dramaYear","Драма · по году ↓"],["ratingAsc","по рейтингу ↑"],["drama","Драма"]]},
+  {k:"fPanel", n:"панель", opts:[["closed","закрыта"],["root","корень"],["sort","Сортировка"],["genre","Жанр"]]},
+  {k:"fGenres",n:"жанры", opts:[["loaded","загружены"],["loading","загрузка"],["error","ошибка"]]},
+  {k:"fOrder", n:"порядок", opts:[["reset","[Фильтры] [Сброс] [сводка]"],["summary","[Фильтры] [сводка] [Сброс]"]]},
+  {k:"fPick",  n:"выбор жанра", opts:[["stay","остаётся на странице"],["root","возвращает в корень"]]},
+  {k:"fIcon",  n:"«Фильтры»", opts:[["off","без значка"],["on","со значком"]]},
+  {k:"fBtn",   n:"«Фильтры» / «Сброс»", opts:[["filledOutlined","заливка / контур"],["filledFilled","заливка / заливка"],["outlinedOutlined","контур / контур"]]},
+  {k:"fScrim", n:"затемнение", opts:[["flat","ровное 62 %"],["gradient","градиент плеера"]]},
+  {k:"fEmpty", n:"выдача", opts:[["cards","карточки"],["empty","пусто"]]},
   {k:"set",    n:"раздел", opts:Object.keys(SETS).map(k => [k, SETS[k].title])},
   {k:"header", n:"заголовок", opts:[["on","над сеткой"],["off","нет (как сейчас)"]]},
   {k:"hdrText",n:"текст заголовка", opts:HEADER_TEXTS},
@@ -395,6 +490,8 @@ const DEFAULTS = {
   set:"k4", focusC:"border", flags:"data", hd4k:"green", pills:"two", names:"reserve",
   tier:"medium", scroll:"edge", year:"line", marks:"on", guides:"off",
   header:"on", hdrText:"k4",
+  scene:"filters", fGrid:"browse", fPreset:"dramaYear", fPanel:"closed", fGenres:"loaded", fOrder:"reset",
+  fPick:"stay", fIcon:"off", fBtn:"filledOutlined", fScrim:"flat", fEmpty:"cards",
 };
 const S = {...DEFAULTS};
 const FOCUS = {set:"k4", index:0, scroll:0};
@@ -458,6 +555,9 @@ function geom(){
   g.hdrOn = S.header === "on";
   g.hdrH = g.hdrOn ? g.hdrTop + g.hdrLine : 0;
   g.gridTop = g.hdrOn ? g.hdrToGrid : g.padTop;
+  /* catalogue-filters: шапка — ряд высотой с кнопку, заголовок по центру ряда. */
+  g.filters = S.scene === "filters";
+  if (g.filters){ g.hdrOn = true; g.hdrH = g.fHdrTop + g.fRowH; g.gridTop = g.fToGrid; }
   g.viewH = H - g.hdrH;
   return g;
 }
@@ -512,7 +612,7 @@ function railHTML(g){
     /* Пилюля выбранной вкладки на кадре бокса: x 8–119 px, 48 dp высотой, #1E1B23. */
     const on = i === active;
     const w = 56, h = on ? 48 : pitch;
-    return '<div class="ri' + (on ? " on" : "") + '" title="' + esc(t[1]) + '" style="left:' + px(4) + 'px;width:' + px(w) +
+    return '<div class="ri' + (on ? " on" : "") + (on && S.scene === "filters" && FF.zone === "rail" ? " ff" : "") + '" title="' + esc(t[1]) + '" style="left:' + px(4) + 'px;width:' + px(w) +
       'px;top:' + px(cy - h / 2) + 'px;height:' + px(h) + 'px">' + glyph + '</div>';
   }).join("");
   return '<div class="rail" style="width:' + px(g.railW) + 'px">' + items + '</div>';
@@ -640,7 +740,7 @@ function gridHTML(g, rows){
   let out = "";
   rows.forEach(row => row.tiles.forEach((t, c) => {
     const i = row.start + c;
-    out += tileHTML(list[i], i, c, row, t, g, i === FOCUS.index);
+    out += tileHTML(list[i], i, c, row, t, g, i === FOCUS.index && gridHasFocus());
   }));
   return '<div class="grid" style="left:' + px(g.contentX) + 'px;width:' + px(g.contentW) + 'px;top:' + px(g.hdrH) + 'px"><div class="sheet" style="top:' +
     (-px(FOCUS.scroll)) + 'px;height:' + px(g.contentH) + 'px">' + out + '</div></div>';
@@ -650,6 +750,7 @@ function headerText(){ return (HEADER_TEXTS.find(t => t[0] === S.hdrText) || HEA
 
 /* ShowAllHeader: Text(SectionTitleStyle, maxLines 1, Ellipsis) с полем сверху и слева. */
 function headerHTML(g){
+  if (g.filters) return fHeaderHTML(g);
   if (!g.hdrOn) return "";
   return '<div class="ghead" style="left:' + px(g.contentX + g.hdrLeft) + 'px;top:' + px(g.hdrTop) + 'px;width:' +
     px(g.contentW - 2 * g.hdrLeft) + 'px;height:' + px(g.hdrLine) + 'px;font-size:' + px(g.hdrSp) + 'px;line-height:' +
@@ -689,13 +790,401 @@ function render(){
   const rows = layoutRows(g);
   lastRows = rows;
   bringIntoView(g, rows);
-  st.insertAdjacentHTML("beforeend", gridHTML(g, rows) + headerHTML(g) + railHTML(g) + guidesHTML(g, rows));
+  st.insertAdjacentHTML("beforeend", (emptyGrid() ? emptyHTML(g) : gridHTML(g, rows)) + headerHTML(g) + railHTML(g) +
+    filtersOverlayHTML(g) + guidesHTML(g, rows));
   st.querySelectorAll("[data-i]").forEach(el => el.addEventListener("click", ev => {
-    ev.preventDefault(); FOCUS.index = Number(el.dataset.i); render();
+    ev.preventDefault(); if (FF.zone === "panel") return; FOCUS.index = Number(el.dataset.i); FF.zone = "grid"; render();
+  }));
+  /* Клик по кнопке шапки — фокус на неё; клик по строке панели — фокус и OK. */
+  st.querySelectorAll("[data-fz]").forEach(el => el.addEventListener("click", ev => {
+    ev.preventDefault(); if (FF.zone === "panel") return; FF.zone = el.dataset.fz; render();
+  }));
+  st.querySelectorAll("[data-prow]").forEach(el => el.addEventListener("click", ev => {
+    ev.preventDefault(); FF.idx = Number(el.dataset.prow); filtersKey("ok"); paintSwitches(); render();
   }));
   paintConsole(g);
   paintSpec(g, rows);
   remember();
+}
+
+
+/* ── catalogue-filters ─────────────────────────────────────────────────────
+   Шапка browse-сетки: [заголовок] 16 [Фильтры] 8 [Сброс] 12 [сводка] в одном ряду 24 dp.
+   Панель — справа поверх сетки, в TvDialogOverlay (затемнение 62 %), сделана как панель настроек
+   плеера (PlayerSidePanel.kt): корень с двумя дверями, у каждой своя страница значений.
+   Фильтр применяется при закрытии панели; на стенде выдача не меняется — карточки те же. */
+const SORT_FIELDS = [["updated","по обновлению"],["created","по дате добавления"],["year","по году"],
+  ["rating","по рейтингу"],["views","по просмотрам"]];
+const SORT_DIRS = [["desc","по убыванию","↓"],["asc","по возрастанию","↑"]];
+/* Жанры для type=movie: на боксе 30 штук (api-check, 2026-11-24), среди них «Аниме» (25) и «Драма» (9);
+   полного списка в evidence нет, остальные названия — правдоподобные, не снятые с бокса.
+   «Аниме» скрыт, пока «Показывать аниме» выключено (brief.md#AC-9). */
+const GENRES = ["Биография","Боевик","Вестерн","Военный","Детектив","Детский","Документальный","Драма",
+  "Игра","Исторический","Комедия","Концерт","Короткометражка","Криминал","Мелодрама","Музыка","Мультфильм",
+  "Мюзикл","Новости","Приключения","Реальное ТВ","Семейный","Спорт","Ток-шоу","Триллер","Ужасы",
+  "Фантастика","Фильм-нуар","Фэнтези"];
+const FILTER_DEFAULT = {sort:"updated", dir:"desc", genre:null};
+const PRESETS = {
+  none:      {sort:"updated", dir:"desc", genre:null},
+  dramaYear: {sort:"year",    dir:"desc", genre:"Драма"},
+  ratingAsc: {sort:"rating",  dir:"asc",  genre:null},
+  drama:     {sort:"updated", dir:"desc", genre:"Драма"},
+};
+const FF = {zone:"grid", applied:{...PRESETS.dramaYear}, draft:{...PRESETS.dramaYear}, idx:0, scroll:0,
+  lastGrid:0, railFrom:"filters", retryTimer:0};
+
+function sameFilter(a, b){ return a.sort === b.sort && a.dir === b.dir && a.genre === b.genre; }
+function isActive(f){ return !sameFilter(f, FILTER_DEFAULT); }
+function sortLabel(f){
+  return SORT_FIELDS.find(s => s[0] === f.sort)[1] + " " + SORT_DIRS.find(d => d[0] === f.dir)[2];
+}
+/* Сводка: жанр, потом сортировка — только если она не по умолчанию; части через « · ». */
+function summaryOf(f){
+  const parts = [];
+  if (f.genre) parts.push(f.genre);
+  if (!(f.sort === FILTER_DEFAULT.sort && f.dir === FILTER_DEFAULT.dir)) parts.push(sortLabel(f));
+  return parts.join(" · ");
+}
+function presetOf(f){ return Object.keys(PRESETS).find(k => sameFilter(PRESETS[k], f)) || ""; }
+function filtersOn(){ return S.scene === "filters"; }
+function browseGrid(){ return filtersOn() && S.fGrid === "browse"; }
+function emptyGrid(){ return filtersOn() && S.fEmpty === "empty"; }
+function gridHasFocus(){ return !filtersOn() || FF.zone === "grid"; }
+function resetShown(){ return browseGrid() && isActive(FF.applied); }
+
+/* playerGlass(Strong, elevation 20): полупрозрачные тональные слои вместо размытия.
+   Compose compositeOver двух полупрозрачных цветов, дословно. */
+function over(fg, fa, bg, ba){
+  const a = fa + ba * (1 - fa);
+  const c = fg.map((v, i) => Math.round((v * fa + bg[i] * ba * (1 - fa)) / a));
+  return "rgba(" + c.join(",") + "," + a.toFixed(3) + ")";
+}
+const C_ON = [230,225,229], C_SURF = [0,0,0], C_PRI = [208,188,255];
+function glassCSS(){
+  const sA = 0.72, hA = 0.15;
+  const bg = "linear-gradient(to bottom right," + over(C_ON, hA, C_SURF, sA) + " 0%," +
+    over(C_PRI, 0.055, C_SURF, sA + 0.04) + " 38%,rgba(0,0,0," + Math.min(sA + 0.12, 0.88).toFixed(2) + ") 100%)";
+  const rim = "linear-gradient(to bottom right,rgba(230,225,229,.32) 0%,rgba(208,188,255,.18) 42%,rgba(230,225,229,.07) 100%)";
+  return {bg, rim};
+}
+
+/* Ширина текста настоящим шрифтом, в dp. */
+let measureCtx = null;
+function textW(text, sp, weight, trackSp){
+  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+  measureCtx.font = (weight || 400) + " " + (sp * 10) + "px Roboto, 'Helvetica Neue', Arial, sans-serif";
+  return measureCtx.measureText(text).width / 10 + (trackSp || 0) * text.length;
+}
+
+/* ── шапка ── */
+const FUNNEL = "M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z";
+/* tv-material3 ButtonDefaults / OutlinedButtonDefaults, как у входа «Все …» на стенде каталога. */
+function fButtonHTML(g, id, label, outlined, focused, icon){
+  const bw = outlined ? (focused ? 1.65 : 1.5) : 0;
+  const bc = outlined ? (focused ? "#CAC4D0" : "rgba(202,196,208,.4)") : "transparent";
+  const bg = focused ? "#E6E1E5" : (outlined ? "transparent" : "rgba(73,69,79,.8)");
+  const fg = focused ? "#313033" : "rgba(230,225,229,.8)";
+  const ic = icon ? '<svg viewBox="0 0 256 256" width="' + px(g.fIconSz) + '" height="' + px(g.fIconSz) + '" fill="' + fg +
+    '" aria-hidden="true" style="margin-right:' + px(g.fIconGap) + 'px"><path d="' + FUNNEL + '"/></svg>' : "";
+  return '<div class="fbtn" data-fz="' + id + '" style="height:' + px(g.fRowH) + 'px;padding:0 ' + px(g.fBtnPadH) +
+    'px;font-size:' + px(g.fLblSp) + 'px;line-height:' + px(g.fLblLine) + 'px;' + tracking(0.1) + ';background:' + bg +
+    ';color:' + fg + ';border-width:' + px(bw) + 'px;border-color:' + bc + ';' +
+    (focused ? 'transform:scale(' + g.fFocusScale + ');position:relative;z-index:2;' : '') + '">' + ic + esc(label) + '</div>';
+}
+function spacer(dp){ return '<div style="flex:none;width:' + px(dp) + 'px"></div>'; }
+
+function fHeaderHTML(g){
+  const left = g.contentX + g.hdrLeft;
+  const title = '<div class="t" style="max-width:' + px((g.contentW - 2 * g.hdrLeft) * 0.5) + 'px;font-size:' + px(g.hdrSp) +
+    'px;line-height:' + px(g.hdrLine) + 'px;height:' + px(g.hdrLine) + 'px;letter-spacing:' + px(0.15) + 'px">' + esc(headerText()) + '</div>';
+  let row = title;
+  if (browseGrid()){
+    const [fs, rs] = {filledOutlined:[false, true], filledFilled:[false, false], outlinedOutlined:[true, true]}[S.fBtn];
+    const filters = fButtonHTML(g, "filters", "Фильтры", fs, FF.zone === "filters", S.fIcon === "on");
+    const active = isActive(FF.applied);
+    const reset = active ? fButtonHTML(g, "reset", "Сброс", rs, FF.zone === "reset", false) : "";
+    const sum = active ? '<div class="fsum" style="font-size:' + px(g.fSumSp) + 'px;line-height:' + px(g.fSumLine) + 'px;' +
+      tracking(0.2) + '">' + esc(summaryOf(FF.applied)) + '</div>' : "";
+    row += spacer(g.fGapTitle) + filters;
+    if (active){
+      row += S.fOrder === "reset"
+        ? spacer(g.fGapReset) + reset + spacer(g.fGapSummary) + sum
+        : spacer(g.fGapSummary) + sum + spacer(g.fGapReset) + reset;
+    }
+  }
+  return '<div class="fhead" style="left:' + px(left) + 'px;top:' + px(g.fHdrTop) + 'px;height:' + px(g.fRowH) +
+    'px;width:' + px(g.contentW - 2 * g.hdrLeft) + 'px">' + row + '</div>';
+}
+
+/* Отфильтрованная пустая выдача: текст, 12 dp, контурный «Сброс». Без фильтра — как сейчас. */
+function emptyHTML(g){
+  const active = isActive(FF.applied);
+  const text = active ? "Ничего не найдено. Активен фильтр: " + summaryOf(FF.applied) : "Ничего не найдено";
+  const btn = active && browseGrid()
+    ? '<div style="height:' + px(g.fEmptyGap) + 'px"></div>' + fButtonHTML(g, "emptyReset", "Сброс", true, FF.zone === "emptyReset", false)
+    : "";
+  const top = g.hdrH + g.gridTop;
+  return '<div class="fempty" style="left:' + px(g.contentX + g.padH) + 'px;width:' + px(g.contentW - 2 * g.padH) + 'px;top:' +
+    px(top) + 'px;height:' + px(H - top - g.padTop) + 'px"><div style="font-size:' + px(14) + 'px;line-height:' + px(20) +
+    'px;color:var(--p-onsurfacevariant);' + tracking(0.25) + '">' + esc(text) + '</div>' + btn + '</div>';
+}
+
+/* ── панель ── */
+function pageTitle(page){ return {root:"Фильтры", sort:"Сортировка", genre:"Жанр"}[page]; }
+function pageItems(page){
+  const d = FF.draft, out = [];
+  if (page === "root"){
+    out.push({k:"row", label:"Сортировка", trail:sortLabel(d), act:"door:sort"});
+    out.push({k:"row", label:"Жанр", trail:d.genre || "Все жанры", act:"door:genre"});
+  } else if (page === "sort"){
+    out.push({k:"sec", label:"Поле"});
+    SORT_FIELDS.forEach(s => out.push({k:"row", label:s[1], sel:d.sort === s[0], act:"sort:" + s[0]}));
+    out.push({k:"sec", label:"Порядок"});
+    SORT_DIRS.forEach(s => out.push({k:"row", label:s[1], sel:d.dir === s[0], act:"dir:" + s[0]}));
+  } else if (page === "genre"){
+    if (S.fGenres === "loading") out.push({k:"loading", label:"Загружаем жанры"});
+    else if (S.fGenres === "error"){
+      out.push({k:"ro", label:"Не удалось загрузить жанры"});
+      out.push({k:"row", label:"Повторить", act:"retry"});
+    } else {
+      out.push({k:"row", label:"Все жанры", sel:d.genre === null, act:"genre:"});
+      GENRES.forEach(t => out.push({k:"row", label:t, sel:d.genre === t, act:"genre:" + t}));
+    }
+  }
+  return out;
+}
+function focusables(items){ return items.map((it, i) => it.k === "row" ? i : -1).filter(i => i >= 0); }
+
+function panelLayout(g, page){
+  const items = pageItems(page);
+  const rowH = Math.max(g.fRowMin, g.fRowLine + 2 * g.fRowPadV);
+  const secH = 8 + g.fSecLine + 4;
+  let y = 0, wMax = textW(pageTitle(page), g.fTitleSp, 600, 0.15);
+  for (const it of items){
+    it.y = y;
+    if (it.k === "sec"){ it.h = secH; wMax = Math.max(wMax, 12 + textW(it.label, g.fSecSp, 600, 0.8)); }
+    else {
+      it.h = rowH;
+      let w = 2 * g.fRowPadH + textW(it.label, g.fRowSp, 500, 0.15);
+      if (it.k === "loading") w += 20 + 12;
+      if (it.trail) w += 16 + textW(it.trail, g.fTrailSp, 400, 0.25);
+      if (it.sel) w += 12 + g.fCheck;
+      wMax = Math.max(wMax, w);
+    }
+    y += it.h;
+  }
+  const listH = y;
+  const head = g.fPadT + g.fTitleLine + g.fTitleGap;
+  const minW = Math.min(g.fPanelMin, g.fPanelMax);
+  const natural = g.fPadS + wMax + g.fPadE;
+  const w = clamp(Math.ceil(natural), minW, g.fPanelMax);
+  const fullH = head + listH + g.fPadB;
+  const h = Math.min(fullH, g.fPanelMaxH, H);
+  return {items, rowH, listH, head, w, natural, fullH, h, viewH:h - head - g.fPadB};
+}
+
+function rowHTML(g, it, i, focused){
+  const sel = !!it.sel;
+  const bg = focused ? "rgba(230,225,229,.30)" : (sel ? "rgba(208,188,255,.16)" : "transparent");
+  const lab = '<div class="l" style="font-size:' + px(g.fRowSp) + 'px;line-height:' + px(g.fRowLine) + 'px;' + tracking(0.15) + '">' + esc(it.label) + '</div>';
+  const spin = it.k === "loading" ? '<div class="pspin" style="width:' + px(20) + 'px;height:' + px(20) + 'px;border-width:' + px(2) +
+    'px;margin-right:' + px(12) + 'px"></div>' : "";
+  const trail = it.trail ? '<div class="tr" style="margin-left:' + px(16) + 'px;font-size:' + px(g.fTrailSp) + 'px;line-height:' +
+    px(g.fRowLine) + 'px;color:rgba(230,225,229,.76);' + tracking(0.25) + '">' + esc(it.trail) + '</div>' : "";
+  const check = sel ? '<svg viewBox="0 0 24 24" width="' + px(g.fCheck) + '" height="' + px(g.fCheck) + '" fill="#D0BCFF" aria-hidden="true" style="flex:none;margin-left:' +
+    px(12) + 'px"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' : "";
+  const ro = it.k !== "row";
+  return '<div class="prow' + (ro ? " ro" : "") + '"' + (ro ? "" : ' data-prow="' + i + '"') + ' style="top:' + px(it.y) + 'px;height:' + px(it.h) +
+    'px;padding:0 ' + px(g.fRowPadH) + 'px;border-radius:' + px(g.fRowRadius) + 'px;background:' + bg + ';' +
+    (it.k === "ro" ? "color:rgba(202,196,208,.78);" : "") + '">' + spin + lab + trail + check + '</div>';
+}
+
+function filtersOverlayHTML(g){
+  if (!filtersOn() || S.fPanel === "closed") return "";
+  const page = S.fPanel;
+  const L = panelLayout(g, page);
+  const fIdx = focusables(L.items);
+  FF.idx = fIdx.length ? (fIdx.includes(FF.idx) ? FF.idx : fIdx[0]) : -1;
+  /* Список листается до края: строка под фокусом ровно входит в окно. */
+  const maxScroll = Math.max(0, L.listH - L.viewH);
+  const cur = L.items[FF.idx];
+  if (cur){
+    if (cur.y < FF.scroll) FF.scroll = cur.y;
+    if (cur.y + cur.h > FF.scroll + L.viewH) FF.scroll = cur.y + cur.h - L.viewH;
+  }
+  FF.scroll = clamp(FF.scroll, 0, maxScroll);
+  const scrim = S.fScrim === "flat"
+    ? "rgba(0,0,0," + (g.fScrimA / 100).toFixed(2) + ")"
+    : "linear-gradient(to right,transparent 0%,transparent 52%,rgba(0,0,0,.42) 100%)";
+  const glass = glassCSS();
+  const top = (H - L.h) / 2;
+  const rows = L.items.map((it, i) => it.k === "sec"
+    ? '<div class="psec" style="top:' + px(it.y + 8) + 'px;left:' + px(12) + 'px;font-size:' + px(g.fSecSp) + 'px;line-height:' +
+      px(g.fSecLine) + 'px;letter-spacing:' + px(0.8) + 'px">' + esc(it.label) + '</div>'
+    : rowHTML(g, it, i, i === FF.idx && FF.zone === "panel")).join("");
+  return '<div class="fscrim" style="left:' + px(g.contentX) + 'px;background:' + scrim + '"></div>' +
+    '<div class="fpanel" style="top:' + px(top) + 'px;width:' + px(L.w) + 'px;height:' + px(L.h) + 'px;border-radius:' + px(g.fCorner) + 'px 0 0 ' +
+      px(g.fCorner) + 'px;background:' + glass.bg + ';box-shadow:0 ' + px(8) + 'px ' + px(40) + 'px rgba(0,0,0,.6),0 0 ' + px(20) + 'px rgba(0,0,0,.82)">' +
+    '<div class="rim" style="padding:' + px(1) + 'px;border-radius:inherit;background:' + glass.rim + '"></div>' +
+    '<div class="ptitle" style="left:' + px(g.fPadS) + 'px;right:' + px(g.fPadE) + 'px;top:' + px(g.fPadT) + 'px;font-size:' + px(g.fTitleSp) +
+      'px;line-height:' + px(g.fTitleLine) + 'px;' + tracking(0.15) + '">' + esc(pageTitle(page)) + '</div>' +
+    '<div class="plist" style="left:' + px(g.fPadS) + 'px;right:' + px(g.fPadE) + 'px;top:' + px(L.head) + 'px;height:' + px(L.viewH) + 'px">' +
+      '<div class="psheet" style="top:' + (-px(FF.scroll)) + 'px;height:' + px(L.listH) + 'px">' + rows + '</div></div>' +
+    '</div>';
+}
+
+/* ── пульт сцены ── */
+function openPanel(){
+  FF.draft = {...FF.applied};
+  S.fPanel = "root"; FF.zone = "panel"; FF.idx = 0; FF.scroll = 0;
+}
+function goPage(page){
+  S.fPanel = page; FF.scroll = 0;
+  const items = pageItems(page);
+  const sel = items.findIndex(it => it.sel);
+  FF.idx = sel >= 0 ? sel : (focusables(items)[0] ?? 0);
+}
+/* Закрытие применяет черновик, если он отличается; фокус остаётся на «Фильтры». */
+function closePanel(){
+  const changed = !sameFilter(FF.draft, FF.applied);
+  if (changed){
+    FF.applied = {...FF.draft};
+    S.fPreset = presetOf(FF.applied);
+    FOCUS.index = 0; FOCUS.scroll = 0; FF.lastGrid = 0;   /* новая выдача с первой страницы */
+  }
+  S.fPanel = "closed"; FF.zone = "filters";
+}
+function resetFilter(){
+  FF.applied = {...FILTER_DEFAULT}; FF.draft = {...FILTER_DEFAULT};
+  S.fPreset = "none"; FOCUS.index = 0; FOCUS.scroll = 0; FF.lastGrid = 0;
+  FF.zone = "filters";   /* кнопка уходит; фокус — на «Фильтры», не в меню */
+}
+function panelAct(act){
+  const [kind, val] = [act.slice(0, act.indexOf(":") < 0 ? act.length : act.indexOf(":")), act.slice(act.indexOf(":") + 1)];
+  if (act === "retry"){
+    S.fGenres = "loading"; FF.idx = 0;
+    clearTimeout(FF.retryTimer);
+    FF.retryTimer = setTimeout(() => { if (S.fGenres === "loading"){ S.fGenres = "loaded"; if (S.fPanel === "genre") goPage("genre"); paintSwitches(); render(); } }, 1200);
+    return;
+  }
+  if (kind === "door"){ FF.rootFrom = val === "sort" ? 0 : 1; goPage(val); return; }
+  if (kind === "sort") FF.draft.sort = val;
+  if (kind === "dir") FF.draft.dir = val;
+  if (kind === "genre"){
+    FF.draft.genre = val || null;
+    if (S.fPick === "root"){ S.fPanel = "root"; FF.idx = 1; FF.scroll = 0; }
+  }
+}
+function filtersKey(dir){
+  if (FF.zone === "panel"){
+    const items = pageItems(S.fPanel), f = focusables(items);
+    const at = f.indexOf(FF.idx);
+    if (dir === "up" && at > 0) FF.idx = f[at - 1];
+    if (dir === "down" && at >= 0 && at < f.length - 1) FF.idx = f[at + 1];
+    if (dir === "ok" && items[FF.idx] && items[FF.idx].act) panelAct(items[FF.idx].act);
+    if (dir === "back"){
+      if (S.fPanel === "root") closePanel();
+      else { const from = S.fPanel === "sort" ? 0 : 1; S.fPanel = "root"; FF.idx = from; FF.scroll = 0; }
+    }
+    return;   /* влево / вправо заперты TvDialogOverlay */
+  }
+  const g = geom();
+  const empty = emptyGrid();
+  const downTarget = () => {
+    if (empty){ if (isActive(FF.applied) && browseGrid()) FF.zone = "emptyReset"; return; }
+    FF.zone = "grid"; FOCUS.index = FF.lastGrid < g.cols ? FF.lastGrid : 0;
+  };
+  if (FF.zone === "rail"){ if (dir === "right") FF.zone = FF.railFrom; return; }
+  if (FF.zone === "filters"){
+    if (dir === "left"){ FF.railFrom = "filters"; FF.zone = "rail"; }
+    if (dir === "right" && resetShown()) FF.zone = "reset";
+    if (dir === "down") downTarget();
+    if (dir === "ok") openPanel();
+    return;
+  }
+  if (FF.zone === "reset"){
+    if (dir === "left") FF.zone = "filters";
+    if (dir === "down") downTarget();
+    if (dir === "ok") resetFilter();
+    return;
+  }
+  if (FF.zone === "emptyReset"){
+    if (dir === "up") FF.zone = "filters";
+    if (dir === "ok") resetFilter();
+    return;
+  }
+  /* сетка */
+  if (dir === "up" && FOCUS.index < g.cols && browseGrid()){ FF.lastGrid = FOCUS.index; FF.zone = "filters"; return; }
+  if (dir === "left" && FOCUS.index % g.cols === 0){ FF.railFrom = "grid"; FF.zone = "rail"; return; }
+  if (dir !== "ok" && dir !== "back") move(dir);
+}
+
+/* Переключатели сцены приводят фокус и черновик в согласие с собой. */
+function onFiltersSwitch(k){
+  if (k === "scene"){ FF.zone = "grid"; S.fPanel = "closed"; }
+  if (k === "fPreset" && PRESETS[S.fPreset]){
+    FF.applied = {...PRESETS[S.fPreset]}; FF.draft = {...FF.applied};
+    if (!isActive(FF.applied) && (FF.zone === "reset" || FF.zone === "emptyReset")) FF.zone = "filters";
+  }
+  if (k === "fPanel"){
+    if (S.fPanel === "closed"){ FF.zone = FF.zone === "panel" ? "filters" : FF.zone; }
+    else {
+      if (FF.zone !== "panel") FF.draft = {...FF.applied};
+      FF.zone = "panel"; goPage(S.fPanel);
+    }
+  }
+  if (k === "fGenres" && S.fPanel === "genre") goPage("genre");
+  if (k === "fGrid" && S.fGrid === "shelf"){ S.fPanel = "closed"; if (FF.zone !== "grid") FF.zone = "grid"; }
+  if (k === "fEmpty"){
+    if (S.fEmpty === "empty" && FF.zone === "grid") FF.zone = browseGrid() ? "filters" : "grid";
+    if (S.fEmpty === "cards" && FF.zone === "emptyReset") FF.zone = "filters";
+  }
+}
+function syncFiltersFromSwitches(){
+  if (PRESETS[S.fPreset]){ FF.applied = {...PRESETS[S.fPreset]}; FF.draft = {...FF.applied}; }
+  if (S.scene === "filters" && S.fPanel !== "closed"){ FF.zone = "panel"; goPage(S.fPanel); }
+  if (S.scene === "filters" && S.fEmpty === "empty" && FF.zone === "grid" && browseGrid()) FF.zone = "filters";
+}
+
+function filtersNotes(g, rows){
+  const r = v => fmt(Math.round(v * 10) / 10);
+  const out = [];
+  const h0 = rows.length ? rows[0].h : 237;
+  const h1 = rows.length > 1 ? rows[1].h : h0;
+  const row1 = g.hdrH + g.gridTop;
+  const row2End = row1 + h0 + g.rowGap + h1;
+  const over = (g.focusScale - 1) * h0 / 2;
+  out.push("шапка:           " + r(g.fHdrTop) + " + ряд " + r(g.fRowH) + " + до сетки " + r(g.fToGrid) + " dp — первый ряд с " + r(row1) +
+           " dp; центр заголовка на " + r(g.fHdrTop + g.fRowH / 2) + " dp");
+  out.push(row2End + over <= H
+    ? "два ряда:        второй кончается на " + r(row2End) + " dp, с выносом фокуса " + r(row2End + over) + " ≤ " + H + " — оба целиком"
+    : "<b>второй ряд не влезает:</b> кончается на " + r(row2End + over) + " dp с выносом фокуса, экран " + H + " dp");
+  const btnBottom = g.fHdrTop + g.fRowH + g.fRowH * (g.fFocusScale - 1) / 2;
+  const tileTop = row1 - over;
+  out.push(btnBottom <= tileTop
+    ? "кнопка и плитка: кнопка под фокусом доходит до " + r(btnBottom) + " dp, плитка первого ряда под фокусом — от " + r(tileTop) + " dp: не пересекаются"
+    : "<b>кнопка под фокусом заходит на плитку:</b> " + r(btnBottom) + " dp против " + r(tileTop) + " dp");
+  if (browseGrid()){
+    out.push("ряд шапки:       [заголовок] " + g.fGapTitle + " [Фильтры] " +
+      (S.fOrder === "reset" ? g.fGapReset + " [Сброс] " + g.fGapSummary + " [сводка]" : g.fGapSummary + " [сводка] " + g.fGapReset + " [Сброс]") +
+      "; «Сброс» и сводка — только при активном фильтре");
+    out.push("сводка:          «" + esc(summaryOf(FF.applied) || "—") + "» · применено" +
+      (S.fPanel !== "closed" ? "; в панели черновик «" + esc(summaryOf(FF.draft) || "—") + "», применится при закрытии" : ""));
+  } else out.push("полка:           ряд " + r(g.fRowH) + " dp с одним заголовком — первый ряд на той же высоте, что у browse-сетки");
+  const page = S.fPanel === "closed" ? "sort" : S.fPanel;
+  const L = panelLayout(g, page);
+  out.push("панель «" + pageTitle(page) + "»: ширина " + r(L.w) + " dp (по строкам " + r(L.natural) + ", зажим " + Math.min(g.fPanelMin, g.fPanelMax) + "–" + g.fPanelMax +
+    "), высота " + r(L.fullH) + (L.fullH > L.h ? " → <b>" + r(L.h) + " dp, листается</b>" : " dp, без прокрутки"));
+  ["root", "sort", "genre"].filter(p => p !== page).forEach(p => {
+    const l = panelLayout(g, p);
+    out.push("                 «" + pageTitle(p) + "»: " + r(l.w) + " × " + r(l.h) + " dp" + (l.fullH > l.h ? " (листается, полностью " + r(l.fullH) + ")" : ""));
+  });
+  out.push("материал:        playerGlass(Strong): surface 72 % + onSurface 15 % → primary 5,5 % → surface 84 %, контур 1 dp, тень 20 dp");
+  out.push("затемнение:      " + (S.fScrim === "flat" ? "ровное " + g.fScrimA + " % (TvDialogOverlay)" : "градиент плеера 0 → 42 % от 52 % ширины") + "; меню слева — вне оверлея");
+  out.push("выбор жанра:     " + (S.fPick === "stay" ? "фокус остаётся на странице, галочка переезжает" : "возвращает в корень, фокус на «Жанр»") +
+    "; сортировка всегда остаётся на странице");
+  out.push("фокус:           " + ({grid:"сетка", filters:"«Фильтры»", reset:"«Сброс»", panel:"панель · " + pageTitle(S.fPanel === "closed" ? "root" : S.fPanel), rail:"меню", emptyReset:"«Сброс» пустой выдачи"})[FF.zone]);
+  return out;
 }
 
 /* ── консоль ──────────────────────────────────────────────── */
@@ -706,6 +1195,7 @@ function paintSwitches(){
     '</div></div>').join("");
   host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     S[b.dataset.sw] = b.dataset.v;
+    onFiltersSwitch(b.dataset.sw);
     if (b.dataset.sw === "set"){ FOCUS.index = 0; FOCUS.scroll = 0; }
     paintSwitches(); render();
   }));
@@ -756,7 +1246,8 @@ function paintSpec(g, rows){
   if (g.focusScale > 1 && grow > Math.min(g.colGap / 2, g.padH))
     notes.push("<b>увеличение заходит на соседей:</b> плитка растёт на " + fmt(Math.round(grow * 10) / 10) + " dp с каждой стороны, " +
                "\n                 а между колонками " + g.colGap + " dp, у края " + g.padH + " dp");
-  if (g.hdrOn){
+  if (g.filters) notes.push(...filtersNotes(g, rows));
+  else if (g.hdrOn){
     const r = v => fmt(Math.round(v * 10) / 10);
     const row1 = g.hdrH + g.gridTop;
     const h1 = rows.length > 1 ? rows[1].h : h0;
@@ -801,10 +1292,14 @@ function move(dir){
 document.addEventListener("keydown", e => {
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "SELECT")) return;
-  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down"};
+  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down", Enter:"ok", Escape:"back", Backspace:"back"};
   if (!map[e.key]) return;
   e.preventDefault();
-  move(map[e.key]);
+  if (filtersOn()){
+    const before = S.fPanel + "|" + S.fPreset + "|" + S.fGenres;
+    filtersKey(map[e.key]);
+    if (before !== S.fPanel + "|" + S.fPreset + "|" + S.fGenres) paintSwitches();
+  } else if (map[e.key] !== "ok" && map[e.key] !== "back") move(map[e.key]);
   render();
 });
 
@@ -825,12 +1320,15 @@ document.getElementById("reset").addEventListener("click", () => {
   forget();
   Object.assign(S, DEFAULTS);
   FOCUS.index = 0; FOCUS.scroll = 0;
+  FF.zone = "grid"; FF.idx = 0; FF.scroll = 0; FF.lastGrid = 0;
+  syncFiltersFromSwitches();
   for (const c of CONTROLS) document.getElementById("in-" + c.k).value = DEFAULTS[c.k];
   paintSwitches();
   render();
 });
 
 restore();
+syncFiltersFromSwitches();
 paintSwitches();
 buildConsole();
 fit();

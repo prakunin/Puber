@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="13" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-24T17:25:23" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" tests="13" failures="0" errors="0" skipped="0" time="34.693" timestamp="2026-11-24T17:25:23" hostname="localhost">
+    <properties>
+      <property name="device" value="192.168.1.110_5555" />
+    </properties>
+    <testcase name="upFromFirstAndLastRowOneCard_landsOnFilters" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="8.429" />
+    <testcase name="coldOpen_focusesTheFirstCardNotFilters" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="1.872" />
+    <testcase name="downFromFilters_returnsToTheRowOneCardItCameFrom" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.515" />
+    <testcase name="panelOpen_dpadLeftAndRightStayInsideThePanel" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.856" />
+    <testcase name="subPageBack_returnsToTheDoorItCameFrom" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="3.037" />
+    <testcase name="panelBack_closesWithFocusOnFilters" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.261" />
+    <testcase name="resetPressed_focusesFiltersThenFirstCardWhenListLands" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.477" />
+    <testcase name="filteredEmpty_showsResetAndDownFromFiltersReachesIt" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="0.918" />
+    <testcase name="newListLanding_whilePanelOpen_keepsFocusInThePanel" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.049" />
+    <testcase name="genresFailed_showsTheErrorRowAndFocusableRetry" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="2.222" />
+    <testcase name="filtersOk_opensThePanelOnItsFirstRow" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="1.892" />
+    <testcase name="unavailableFilter_showsNoFiltersButton" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="0.952" />
+    <testcase name="newListLanding_afterApply_focusesTheFirstCard" classname="com.kino.puber.ui.feature.showall.content.ShowAllFilterFocusTest" time="3.213" />
+  </testsuite>
+</testsuites>

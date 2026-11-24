@@ -117,6 +117,75 @@ Title text (switch «текст заголовка»): the browse grid and the �
 the same " · " separator as the original-title line. Switch «заголовок → нет» shows the agreed grid
 without it.
 
+## catalogue-filters starting values (2026-11-24)
+
+Run `catalogue-filters` (`.flow/runs/catalogue-filters/design-ux.md`, Elements A-C). Switch
+«сцена» = «catalogue-filters» (the stand now opens on it; «сетка (согласовано)» is the grid and header
+above, unchanged). Not dialled yet: the owner dials these on the TV box at AC-13. The "Agreed
+2026-11-24" grid numbers do not change.
+
+**Header (browse grids).** One row, all on the left edge: `[title] 16 [Фильтры] 8 [Сброс] 12 [summary]`.
+The title is fixed for the screen's life, so «Фильтры» never moves. «Сброс» and the summary appear only
+while a filter is active.
+
+| | start | |
+|---|---|---|
+| поле над рядом | **10** dp, slider max **11** | was 12; at 12 row 2 ends at exactly 540 with the focus overhang |
+| высота ряда = кнопки | **24** dp | title (16 / 20 sp) centred in it: centre stays at 22 dp |
+| ряд → сетка | **8** dp | unchanged; must stay ≥ 6 (tile overhang) |
+| заголовок → «Фильтры» / «Фильтры» → «Сброс» / «Сброс» → сводка | **16 / 8 / 12** dp | |
+| кнопка | **24** high, side padding **12**, label **11 / 16** sp Medium, focus scale **1.1** | = `BrowseAllEntry` |
+| «Фильтры» / «Сброс» | **filled** (Button) / **outlined** (OutlinedButton) | switch «Фильтры / Сброс» |
+| значок «Фильтры» | **off**; on = Phosphor Funnel **15** dp, gap **6** | switch «Фильтры» |
+| сводка | **11 / 16** sp Regular, #CAC4D0, 1 line, ellipsis | genre, then sort only when not «по обновлению ↓»: «Драма · по году ↓» |
+| полка | the same 24 dp row with the title only | switch «фильтры: сетка» |
+
+What that gives: row 1 starts at 10 + 24 + 8 = 42 dp; row 2 ends at 532, 537.9 with the 1.05 overhang,
+inside 540. A focused button reaches 35.2 dp, a focused row-1 tile starts at 36.1: no overlap.
+
+**Panel.** Right edge, vertically centred, over the grid in `TvDialogOverlay`. Built like
+`PlayerSidePanel`: root «Фильтры» with two doors (Сортировка, Жанр, each with its current value on
+the right), each opening a page.
+
+| | start | source |
+|---|---|---|
+| ширина | **240 – 420** dp, by the widest row | `PanelMinWidth` / `PanelMaxWidth` |
+| высота | content, max **500** dp; a longer page scrolls under its title | new |
+| скругление | **20** dp, start side only | `PanelCornerRadius` |
+| поля start / top / end / bottom | **20 / 20 / 20 / 16** | `PanelPadding*` |
+| материал | `playerGlass(Strong)`: surface 72 % with onSurface 15 % → primary 5.5 % → surface 84 %, 1 dp rim, elevation 20 | `PlayerGlass.kt` |
+| заголовок | **14 / 18** sp SemiBold, **12** dp to the rows | `PlayerSidePanel` |
+| раздел | **11 / 14** sp SemiBold, letterSpacing 0.8, onSurfaceVariant 78 %, 8 above / 4 below | `PlayerPanelSectionHeader` |
+| строка | min **40** dp, padding **12 / 6**, radius **12**, label **14 / 18** sp Medium, trailing **13** sp at 76 % | `PlayerPanelItem` |
+| выбранное / фокус | primary 16 % + check **18** dp primary / onSurface 30 % | `PlayerPanelItem` |
+| затемнение | **62 %** flat; switch: the player's gradient (0 → 42 % from 52 % of the width) | `TvDialogOverlay.kt:17` |
+
+Pages: «Сортировка» = section «Поле» (по обновлению, по дате добавления, по году, по рейтингу, по
+просмотрам) and section «Порядок» (по убыванию, по возрастанию); 398 dp tall, no scrolling. «Жанр» =
+«Все жанры» plus the genres, about 1266 dp, so it scrolls at 500. While loading: one row with a 20 dp
+spinner; on failure a read-only «Не удалось загрузить жанры» and a focusable «Повторить» (on the stand it
+loads after 1.2 s). The genre titles are placeholders: the box check (api-check, 2026-11-24) counted 30
+movie genres and named only «Драма» (9) and «Аниме» (25); the other 28 titles here are plausible, not
+read from the box. «Аниме» is left out (brief.md#AC-9).
+
+Filtered empty state (switch «выдача» = «пусто»): «Ничего не найдено. Активен фильтр: <summary>», 12 dp,
+outlined «Сброс». With no filter it stays «Ничего не найдено».
+
+**Focus on the stand** (arrows, Enter = OK, Esc = Back): row-1 card Up → «Фильтры»; «Фильтры» Left →
+rail, Right → «Сброс» if shown, Down → the row-1 card it came from; OK → panel, root, «Сортировка».
+Panel: Up / Down move, Left / Right trapped; OK on a door opens its page on the selected value; OK on a
+value moves the check. Back: page → root on the door it came from → panel closes, focus on «Фильтры».
+A change applies on close only; the grid restarts from the top (the stand's cards do not change).
+«Сброс» OK clears the filter and puts focus on «Фильтры».
+
+Switches that open on the start value: Сброс before the summary («порядок»), genre pick stays on the
+page («выбор жанра»), «Фильтры» without the icon, filled / outlined, flat scrim, filter «Драма · по
+году ↓» applied.
+
+Open: placement of «Сброс» against the summary; glass over posters vs a plain surface (judged on the
+box); genre pick stays or returns to root; the icon. The panel width follows the widest row including
+the check, so it can change by a few dp when the selection moves to a longer row.
+
 ## Open items
 
 1. **CC and AC3** — follow-up run `catalogue-card-audio-subtitle-badges` (source: file audio tracks and
