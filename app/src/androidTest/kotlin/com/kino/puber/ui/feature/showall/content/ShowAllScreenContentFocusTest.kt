@@ -21,6 +21,7 @@ import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -90,6 +91,43 @@ class ShowAllScreenContentFocusTest {
         composeRule.mainClock.advanceTimeBy(SettleMillis)
         val title = focusedTitle()
         assertTrue("focus moved off the first card", title != items.first().title)
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        composeRule.waitUntil(FocusTimeoutMillis) {
+            composeRule.onAllNodesFocusedWith(title)
+        }
+        composeRule.onNodeWithText(title).assertIsFocused()
+    }
+
+    @Test
+    fun activeFilter_focusReturnsToTheFocusedCardAfterReentry() {
+        val filter = ShowAllFilterState(available = true, isActive = true, genreTitle = "Драма")
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(items),
+                        onAction = {},
+                        filter = filter,
+                    )
+                }
+            }
+        }
+        awaitAnyFocus()
+        composeRule.onNode(isFocused()).performDirection(Key.DirectionDown)
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+        repeat(2) {
+            composeRule.onNode(isFocused()).performDirection(Key.DirectionRight)
+            composeRule.mainClock.advanceTimeBy(SettleMillis)
+        }
+        val title = focusedTitle()
+        assertTrue(
+            "focus is on card 3 of row 2",
+            items.indexOfFirst { it.title == title } == GridColumns + 2,
+        )
 
         restoration.emulateSavedInstanceStateRestore()
 

@@ -16,7 +16,23 @@ import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.vm.ContentListPagingVM
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
+import com.kino.puber.data.api.models.ANIME_GENRE_ID
+import com.kino.puber.data.api.models.Genre
+import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.model.ContentFilter
+import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
+import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
+import com.kino.puber.ui.feature.showall.model.FilterGenres
+import com.kino.puber.ui.feature.showall.model.ShowAllAction
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
+import com.kino.puber.ui.feature.showall.model.applyTo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.joinAll
@@ -25,10 +41,12 @@ internal class ShowAllVM(
     paginator: Paginator.Store<Item>,
     config: SectionConfig,
     interactor: ContentListInteractor,
+    private val genreInteractor: GenreInteractor,
     private val savedItemInteractor: SavedItemInteractor,
     mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
+    pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
 ) : ContentListPagingVM<ShowAllViewState>(
     paginator,
     config,
@@ -36,7 +54,21 @@ internal class ShowAllVM(
     mapper,
     router,
     errorHandler,
+    pagingCoroutineContext,
 ) {
+
+    private val base = config
+    private val filterable = TabTypeConfig.isFilterable(config)
+    private val mutableFilterState = MutableStateFlow(
+        if (filterable) ShowAllFilterState(available = true) else ShowAllFilterState.Unavailable,
+    )
+
+    /** What the grid header and the filter panel draw; [ShowAllFilterState.Unavailable] on a shelf grid. */
+    val filterState: StateFlow<ShowAllFilterState> = mutableFilterState.asStateFlow()
+
+    private var applied = ContentFilter()
+    private var rawGenres: List<Genre>? = null
+    private var genresJob: Job? = null
 
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
@@ -73,6 +105,7 @@ internal class ShowAllVM(
     override fun handleAction(action: UIAction) {
         if (closing) return
         when (action) {
+            is ShowAllAction -> handleFilterAction(action)
             is CommonAction.LoadMore -> notifyLoadNextPage()
             is CommonAction.RetryClicked -> refreshFirstPage()
             is CommonAction.ItemSelected<*> -> {
@@ -88,6 +121,76 @@ internal class ShowAllVM(
                 setItemSaved(item, action.isSaved)
             }
             else -> super.handleAction(action)
+        }
+    }
+
+    private fun handleFilterAction(action: ShowAllAction) {
+        if (!filterable) return
+        when (action) {
+            ShowAllAction.FilterPanelOpened -> openFilterPanel()
+            ShowAllAction.FilterPanelClosed -> closeFilterPanel()
+            is ShowAllAction.SortFieldChosen -> updateDraft { copy(sort = action.field) }
+            is ShowAllAction.SortDirectionChosen -> updateDraft { copy(sortDirection = action.direction) }
+            is ShowAllAction.GenreChosen -> updateDraft { copy(genre = action.genre) }
+            ShowAllAction.GenresRetry -> loadGenres()
+            ShowAllAction.FilterReset -> resetFilter()
+        }
+    }
+
+    private fun updateDraft(change: ContentFilter.() -> ContentFilter) {
+        mutableFilterState.update { it.copy(draft = it.draft.change()) }
+    }
+
+    private fun openFilterPanel() {
+        mutableFilterState.update { it.copy(panelOpen = true, draft = applied) }
+        val genres = rawGenres
+        if (genres != null) {
+            mutableFilterState.update { it.copy(genres = FilterGenres.Loaded(visibleGenres(genres))) }
+        } else {
+            loadGenres()
+        }
+    }
+
+    private fun closeFilterPanel() {
+        val draft = mutableFilterState.value.draft
+        val changed = draft != applied
+        applied = draft
+        mutableFilterState.update { it.withApplied(applied).copy(panelOpen = false) }
+        if (changed) changeQuery(applied.applyTo(base), cacheable = !applied.isActive)
+    }
+
+    private fun resetFilter() {
+        if (!applied.isActive) return
+        applied = ContentFilter()
+        mutableFilterState.update { it.withApplied(applied).copy(draft = applied) }
+        changeQuery(base, cacheable = true)
+    }
+
+    private fun ShowAllFilterState.withApplied(filter: ContentFilter) = copy(
+        isActive = filter.isActive,
+        genreTitle = filter.genre?.title,
+        sort = filter.sort,
+        direction = filter.sortDirection,
+    )
+
+    /** The anime genre is offered only while the catalogue shows anime for this grid at all. */
+    private fun visibleGenres(genres: List<Genre>): List<Genre> {
+        val hideAnime = base.animeFilterMode == AnimeFilterMode.FollowPreference && !interactor.showAnimeEnabled
+        return if (hideAnime) genres.filterNot { it.id == ANIME_GENRE_ID } else genres
+    }
+
+    private fun loadGenres() {
+        if (genresJob?.isActive == true) return
+        mutableFilterState.update { it.copy(genres = FilterGenres.Loading) }
+        genresJob = launch {
+            genreInteractor.getGenres(base.type ?: base.quality)
+                .onSuccess { genres ->
+                    rawGenres = genres
+                    mutableFilterState.update { it.copy(genres = FilterGenres.Loaded(visibleGenres(genres))) }
+                }
+                .onFailure {
+                    mutableFilterState.update { state -> state.copy(genres = FilterGenres.Failed) }
+                }
         }
     }
 
@@ -122,19 +225,24 @@ internal class ShowAllVM(
             is Paginator.State.ErrorEmpty -> ShowAllViewState.Error(state.error.message)
             is Paginator.State.Data<*> -> ShowAllViewState.Content(
                 items = mapItems(state.data as List<Item>),
+                queryGeneration = currentQueryGeneration,
             )
             is Paginator.State.LoadingNext<*> -> ShowAllViewState.Content(
                 items = mapItems(state.data as List<Item>),
                 isLoadingMore = true,
+                queryGeneration = currentQueryGeneration,
             )
             is Paginator.State.Error<*> -> ShowAllViewState.Content(
                 items = mapItems(state.data as List<Item>),
+                queryGeneration = currentQueryGeneration,
             )
             is Paginator.State.PageErrorNext<*> -> ShowAllViewState.Content(
                 items = mapItems(state.data as List<Item>),
+                queryGeneration = currentQueryGeneration,
             )
             is Paginator.State.Refreshing<*> -> ShowAllViewState.Content(
                 items = mapItems(state.data as List<Item>),
+                queryGeneration = currentQueryGeneration,
             )
             is Paginator.State.LoadingPrev<*>,
             is Paginator.State.PageErrorPrev<*> -> return

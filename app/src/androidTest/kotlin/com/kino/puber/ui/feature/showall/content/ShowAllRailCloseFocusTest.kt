@@ -49,6 +49,7 @@ import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.main.component.MainSideMenuContent
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -168,6 +169,41 @@ class ShowAllRailCloseFocusTest {
         assertEquals(moved, focusedTitle())
     }
 
+    @Test
+    fun leftFromFilters_opensTheRail() {
+        val host = setUpScreen(filter = ShowAllFilterState(available = true))
+        awaitAnyFocus()
+        press(Key.DirectionUp)
+        composeRule.onNodeWithText(
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.show_all_filters),
+        ).assertIsFocused()
+
+        press(Key.DirectionLeft)
+
+        composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+    }
+
+    @Test
+    fun railOpenedFromFilters_closesWithFocusBackOnFilters() {
+        val host = setUpScreen(filter = ShowAllFilterState(available = true))
+        awaitAnyFocus()
+        press(Key.DirectionUp)
+        val filters = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.show_all_filters)
+        composeRule.onNodeWithText(filters).assertIsFocused()
+
+        repeat(Repeats) {
+            press(Key.DirectionLeft)
+            composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+            press(Key.DirectionRight)
+            composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Closed }
+            composeRule.waitForIdle()
+            composeRule.mainClock.advanceTimeBy(SettleMillis)
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText(filters).assertIsFocused()
+        }
+    }
+
     private fun flipContentActive(host: Host) {
         composeRule.runOnIdle { host.forcedInactive = true }
         composeRule.waitForIdle()
@@ -189,13 +225,14 @@ class ShowAllRailCloseFocusTest {
     private fun setUpScreen(
         initial: DrawerValue = DrawerValue.Closed,
         autoFocus: Boolean = true,
+        filter: ShowAllFilterState = ShowAllFilterState.Unavailable,
     ): Host {
         val host = Host()
         composeRule.setContent {
             PuberTheme {
                 host.drawerState = rememberDrawerState(initial)
                 CompositionLocalProvider(LocalAutoFocusOnLaunchEnabled provides autoFocus) {
-                    RailWithShowAll(host, items)
+                    RailWithShowAll(host, items, filter)
                 }
             }
         }
@@ -246,7 +283,7 @@ private class Host {
 }
 
 @Composable
-private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>) {
+private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>, filter: ShowAllFilterState) {
     val drawerState = host.drawerState
     val contentFocusRequester = remember { FocusRequester() }
     val contentHasFocus = remember { booleanArrayOf(false) }
@@ -285,7 +322,12 @@ private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>) {
                             .focusRestorer()
                             .focusGroup(),
                     ) {
-                        ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
+                        ShowAllScreenContent(
+                            title = TestTitle,
+                            state = ShowAllViewState.Content(items),
+                            onAction = {},
+                            filter = filter,
+                        )
                         if (host.popupShown) {
                             Box(Modifier.size(1.dp).testTag(PopupTag).focusable())
                         }

@@ -14,5 +14,6 @@ internal sealed interface ShowAllViewState {
     data class Content(
         val items: List<VideoItemUIState>,
         val isLoadingMore: Boolean = false,
+        val queryGeneration: Int = 0,
     ) : ShowAllViewState
 }
