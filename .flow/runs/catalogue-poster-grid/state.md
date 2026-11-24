@@ -63,3 +63,4 @@ nothing; follow-ups: catalogue-browse-all, catalogue-filters, catalogue-card-aud
 - 2026-11-24 judge-1 CONCERNS (no must fix); stand anonymised 3aabfd58; qa round 3 on head: AC-9..11 PASS, M7 paging PASS, combined-run crash not recurred (116594ff); gate 2 ship (standing instruction); stage handover
 - 2026-11-24 squashed to 4 commits (tree 9b1e867c unchanged); merged into master as 0c22bc33; worktree removed, branch deleted; stage done
 - 2026-11-24 post-merge codex review (review + adversarial): clean, review-codex-post-merge.md
+- 2026-11-24 post-merge Antigravity review: clean, review-antigravity-post-merge.md
