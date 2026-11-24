@@ -4,6 +4,7 @@ import androidx.room3.Room
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kino.puber.data.repository.RoomPersistentPayloadStore
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -36,12 +37,14 @@ class CachedPayloadDaoTest {
         database.close()
     }
 
+    private suspend fun read(key: String) = dao.read(key, Int.MAX_VALUE)
+
     @Test
     fun upsertInsertsThenReplaces() = runTest {
         dao.upsert(CachedPayloadEntity(key = "item:1", payload = "{\"a\":1}", updatedAt = 100))
         dao.upsert(CachedPayloadEntity(key = "item:1", payload = "{\"a\":2}", updatedAt = 200))
 
-        val row = dao.read("item:1")
+        val row = read("item:1")
 
         assertEquals("{\"a\":2}", row?.payload)
         assertEquals(200L, row?.updatedAt)
@@ -49,7 +52,7 @@ class CachedPayloadDaoTest {
 
     @Test
     fun readReturnsNullForUnknownKey() = runTest {
-        assertNull(dao.read("item:404"))
+        assertNull(read("item:404"))
     }
 
     @Test
@@ -58,7 +61,7 @@ class CachedPayloadDaoTest {
 
         dao.touch(key = "item:1", updatedAt = 42)
 
-        val row = dao.read("item:1")
+        val row = read("item:1")
         assertEquals("{\"a\":1}", row?.payload)
         assertEquals(42L, row?.updatedAt)
     }
@@ -70,8 +73,8 @@ class CachedPayloadDaoTest {
 
         dao.delete("item:1")
 
-        assertNull(dao.read("item:1"))
-        assertEquals("{\"a\":2}", dao.read("item:2")?.payload)
+        assertNull(read("item:1"))
+        assertEquals("{\"a\":2}", read("item:2")?.payload)
     }
 
     @Test
@@ -82,9 +85,9 @@ class CachedPayloadDaoTest {
 
         dao.deleteByPrefix("home:")
 
-        assertNull(dao.read("home:hot"))
-        assertNull(dao.read("home:fresh"))
-        assertEquals("{}", dao.read("item:1")?.payload)
+        assertNull(read("home:hot"))
+        assertNull(read("home:fresh"))
+        assertEquals("{}", read("item:1")?.payload)
     }
 
     @Test
@@ -93,7 +96,7 @@ class CachedPayloadDaoTest {
 
         dao.clear()
 
-        assertNull(dao.read("item:1"))
+        assertNull(read("item:1"))
     }
 
     @Test
@@ -105,9 +108,9 @@ class CachedPayloadDaoTest {
 
         dao.deleteOlderThan(cutoff)
 
-        assertNull(dao.read("before"))
-        assertEquals(CachedPayloadEntity("at", "a", cutoff), dao.read("at"))
-        assertEquals(CachedPayloadEntity("after", "c", cutoff + 1), dao.read("after"))
+        assertNull(read("before"))
+        assertEquals(CachedPayloadEntity("at", "a", cutoff), read("at"))
+        assertEquals(CachedPayloadEntity("after", "c", cutoff + 1), read("after"))
     }
 
     @Test
@@ -116,11 +119,11 @@ class CachedPayloadDaoTest {
 
         dao.deleteBeyondNewest(keepNewest = 3)
 
-        assertNull(dao.read("k1"))
-        assertNull(dao.read("k2"))
-        assertEquals("p3", dao.read("k3")?.payload)
-        assertEquals("p4", dao.read("k4")?.payload)
-        assertEquals("p5", dao.read("k5")?.payload)
+        assertNull(read("k1"))
+        assertNull(read("k2"))
+        assertEquals("p3", read("k3")?.payload)
+        assertEquals("p4", read("k4")?.payload)
+        assertEquals("p5", read("k5")?.payload)
     }
 
     @Test
@@ -130,8 +133,8 @@ class CachedPayloadDaoTest {
 
         dao.deleteBeyondNewest(keepNewest = 3)
 
-        assertEquals("p1", dao.read("k1")?.payload)
-        assertEquals("p2", dao.read("k2")?.payload)
+        assertEquals("p1", read("k1")?.payload)
+        assertEquals("p2", read("k2")?.payload)
     }
 
     @Test
@@ -144,9 +147,20 @@ class CachedPayloadDaoTest {
         dao.upsert(CachedPayloadEntity("fresh", "pf", updatedAt = 400))
         dao.deleteBeyondNewest(keepNewest = 3)
 
-        assertNull(dao.read("k1"))
-        assertEquals("pf", dao.read("fresh")?.payload)
-        assertEquals("p2", dao.read("k2")?.payload)
-        assertEquals("p3", dao.read("k3")?.payload)
+        assertNull(read("k1"))
+        assertEquals("pf", read("fresh")?.payload)
+        assertEquals("p2", read("k2")?.payload)
+        assertEquals("p3", read("k3")?.payload)
+    }
+
+    @Test
+    fun deleteOversizedKeepsARowWithinTheLimit() = runTest {
+        dao.upsert(CachedPayloadEntity(key = "small", payload = "{}", updatedAt = 1))
+        dao.upsert(CachedPayloadEntity(key = "big", payload = "a".repeat(3 shl 20), updatedAt = 1))
+
+        dao.deleteOversized(listOf("small", "big"), RoomPersistentPayloadStore.MAX_ROW_BYTES)
+
+        assertEquals("{}", read("small")?.payload)
+        assertNull(read("big"))
     }
 }
