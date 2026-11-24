@@ -68,11 +68,21 @@ data class VideoItemUIState(
     val year: String = "",
     val presentation: VideoItemPresentation = VideoItemPresentation.Playable,
     val scheduledReleaseDate: String? = null,
+    val qualityBadge: VideoQualityBadge? = null,
+    val localTitle: String = "",
+    val originalTitle: String = "",
+    val pillRatings: List<RatingUIState> = emptyList(),
 )
 
 enum class VideoItemPresentation {
     Playable,
     Scheduled,
+}
+
+/** Resolution badge shown on the poster card. */
+enum class VideoQualityBadge {
+    HD,
+    UHD,
 }
 
 internal const val WATCHED_INDICATOR_TEST_TAG = "watched_indicator"
@@ -292,7 +302,7 @@ internal fun CardYear(year: String) {
  * The eye badge and the unwatched-episode counter share the top-end corner, so only one may win.
  */
 @Composable
-private fun TopEndBadge(
+internal fun TopEndBadge(
     state: VideoItemUIState,
     modifier: Modifier = Modifier,
 ) {

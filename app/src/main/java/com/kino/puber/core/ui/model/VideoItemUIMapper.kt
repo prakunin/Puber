@@ -6,15 +6,21 @@ import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.RatingUIState
 import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoQualityBadge
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.repository.WatchState
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.repository.toWatchStateOrNull
+import java.util.Locale
 
 /** KinoPub reports its own rating as a 0..100 percentage; the UI shows it on a 0..10 scale. */
 private const val RATING_PERCENT_TO_TEN_SCALE = 10
+
+private const val UHD_MIN_QUALITY = 2160
+private const val HD_MIN_QUALITY = 720
+private const val TITLE_SEPARATOR = " / "
 
 class VideoItemUIMapper(
     private val resources: ResourceProvider,
@@ -30,6 +36,7 @@ class VideoItemUIMapper(
         val mediumPosterUrls = mapPosterUrls(item.posters?.medium)
         val bigPosterUrls = mapPosterUrls(item.posters?.big)
         val widePosterUrls = mapPosterUrls(item.posters?.wide)
+        val (localTitle, originalTitle) = splitItemTitle(item.title)
         return VideoItemUIState(
             id = item.id,
             title = item.title,
@@ -49,7 +56,11 @@ class VideoItemUIMapper(
             } else {
                 item.bookmarks.orEmpty().isNotEmpty()
             },
-            year = item.year?.toString().orEmpty(),
+            year = item.year?.takeIf { it > 0 }?.toString().orEmpty(),
+            qualityBadge = qualityBadge(item.quality),
+            localTitle = localTitle,
+            originalTitle = originalTitle,
+            pillRatings = buildPillRatings(item),
         )
     }
 
@@ -121,6 +132,24 @@ class VideoItemUIMapper(
         }
     }
 
+    /** Ratings for the poster card pills: PUB first; every text has at most one decimal (`8.3`, `10`). */
+    fun buildPillRatings(item: Item): List<RatingUIState> = buildList {
+        item.ratingPercentage?.takeIf { it > 0 }?.let { percent ->
+            val whole = percent / RATING_PERCENT_TO_TEN_SCALE
+            val tenth = percent % RATING_PERCENT_TO_TEN_SCALE
+            add(RatingUIState.PUB(if (tenth == 0) "$whole" else "$whole.$tenth"))
+        }
+        item.kinopoiskRating?.takeIf { it.isValidRating() }?.let { add(RatingUIState.KP(it.toPillRating())) }
+        item.imdbRating?.takeIf { it.isValidRating() }?.let { add(RatingUIState.IMDB(it.toPillRating())) }
+    }
+
+    private fun qualityBadge(quality: Int?): VideoQualityBadge? = when {
+        quality == null -> null
+        quality >= UHD_MIN_QUALITY -> VideoQualityBadge.UHD
+        quality >= HD_MIN_QUALITY -> VideoQualityBadge.HD
+        else -> null
+    }
+
     private fun String?.isValidRating(): Boolean {
         if (this == null) return false
         val value = toFloatOrNull() ?: return false
@@ -160,6 +189,24 @@ class VideoItemUIMapper(
     fun watchedIndicatorsEnabled(): Boolean {
         return navigationPreferencesRepository?.contentPreferences?.value?.showWatchedIndicators ?: true
     }
+}
+
+/**
+ * Splits `Local / Original` once; a bare `/` (`Fate/Zero`) is part of the local title. With an empty
+ * local part the original is the title and there is no original line.
+ */
+internal fun splitItemTitle(raw: String): Pair<String, String> {
+    val parts = raw.split(TITLE_SEPARATOR, limit = 2)
+    val local = parts[0].trim()
+    val original = parts.getOrNull(1)?.trim().orEmpty()
+    return if (local.isEmpty()) original to "" else local to original
+}
+
+/** `5.978` becomes `6`, `7.25` becomes `7.3`; the dot never follows the device locale. */
+private fun String.toPillRating(): String {
+    val value = toFloatOrNull() ?: return this
+    val text = String.format(Locale.ROOT, "%.1f", value)
+    return text.removeSuffix(".0")
 }
 
 private fun List<String>.firstOrEmpty(): String = firstOrNull().orEmpty()
