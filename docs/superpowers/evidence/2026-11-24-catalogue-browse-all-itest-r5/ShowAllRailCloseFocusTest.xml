@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="6" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-24T14:09:04" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" tests="6" failures="0" errors="0" skipped="0" time="44.966" timestamp="2026-11-24T14:09:04" hostname="localhost">
+    <properties>
+      <property name="device" value="192.168.1.110_5555" />
+    </properties>
+    <testcase name="showAllMenuOpenAndBackReturnsFocusToTheOpeningCard" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="12.373" />
+    <testcase name="showAllRecompositionAfterSettleDoesNotRefocus" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="7.725" />
+    <testcase name="showAllRailCloseKeepsFocusOnTheTopRowCardAndAfterScrolling" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="11.196" />
+    <testcase name="showAllRailCloseKeepsFocusOnTheLowerRowCard" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="7.148" />
+    <testcase name="showAllHandoffResponseDoesNotStealFocusFromADialog" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="5.104" />
+    <testcase name="showAllRailCloseWithoutMemoryBehavesAsBase" classname="com.kino.puber.ui.feature.showall.content.ShowAllRailCloseFocusTest" time="1.420" />
+  </testsuite>
+</testsuites>

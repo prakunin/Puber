@@ -112,6 +112,8 @@ body{
 .bar i{display:block;height:100%;background:var(--p-primary)}
 .tt{position:absolute;font-weight:500;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .ot{position:absolute;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* Заголовок над сеткой: закреплён, не фокусируется, одна строка с многоточием. */
+.ghead{position:absolute;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500;color:var(--p-onsurface,#E6E1E5)}
 
 .guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono);z-index:9}
 .guides .v{position:absolute;top:0;bottom:0;width:2px}
@@ -164,7 +166,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
   <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 новой сетки постеров для Show all: плитка с постером 2:3,
     значки CC / AC3 / HD / 4K, пилюли рейтингов KinoPub / Кинопоиск / IMDb, русское и оригинальное название.
     48 карточек и их поля — из кэша приложения на TV-боксе, постеры — posters.medium с CDN. Меню — по кадру
-    с бокса. Числа ниже — стартовые, ничего ещё не зафиксировано.</div>
+    с бокса. Сетка открывается на согласованных 2026-11-24 числах; заголовок над ней — стартовые
+    значения прогона catalogue-browse-all, ещё не выкручен.</div>
   <div class="readout" id="scaleOut"></div>
 </div>
 
@@ -270,6 +273,8 @@ const START = {
   scrim:78, pillH:13, pillSp:8, pillIcon:8, pillGap:3, pillInset:5,
   titleSp:10, titleLine:12, origSp:8, origLine:10, gapPosterTitle:5, gapTitleOrig:1,
   focusW:2, focusScale:1.05, progressH:3,
+  /* catalogue-browse-all: закреплённый заголовок над сеткой (design-ux.md, Element B). */
+  hdrTop:12, hdrSp:16, hdrLine:20, hdrLeft:16, hdrToGrid:8,
 };
 
 const CONTROLS = [
@@ -279,7 +284,8 @@ const CONTROLS = [
    note:"GridCells.Fixed; сегодня 3 широкие карточки. Веб — 6"},
   {g:"Сетка", k:"padH", n:"поле сетки по бокам", min:0, max:64, step:1, u:"dp",
    note:"contentPadding = PaddingValues(16.dp) сегодня; 48 dp — безопасная зона Google"},
-  {g:"Сетка", k:"padTop", n:"поле сетки сверху", min:0, max:64, step:1, u:"dp"},
+  {g:"Сетка", k:"padTop", n:"поле сетки сверху / снизу", min:0, max:64, step:1, u:"dp",
+   note:"с заголовком сверху его место занимает «заголовок → сетка», это поле остаётся снизу"},
   {g:"Сетка", k:"colGap", n:"между колонками", min:0, max:48, step:1, u:"dp", note:"сегодня 16"},
   {g:"Сетка", k:"rowGap", n:"между рядами", min:0, max:64, step:1, u:"dp", note:"сегодня 32"},
 
@@ -321,6 +327,16 @@ const CONTROLS = [
    note:"scale плитки под фокусом; tv-material3 Card по умолчанию 1.1"},
   {g:"Фокус", k:"progressH", n:"полоса просмотра", min:0, max:8, step:0.5, u:"dp",
    note:"WatchProgressBar, 3 dp сегодня"},
+
+  {g:"Заголовок", k:"hdrTop", n:"поле над заголовком", min:0, max:32, step:1, u:"dp"},
+  {g:"Заголовок", k:"hdrSp", n:"кегль", min:10, max:24, step:0.5, u:"sp",
+   note:"SectionTitleStyle (Type.kt) 16 / 20 sp Medium — тот же, что у заголовков полок каталога"},
+  {g:"Заголовок", k:"hdrLine", n:"интерлиньяж", min:12, max:32, step:1, u:"sp",
+   note:"он же высота строки заголовка"},
+  {g:"Заголовок", k:"hdrLeft", n:"поле слева", min:0, max:48, step:1, u:"dp",
+   note:"16 = поле сетки: заголовок на одном краю с первой колонкой"},
+  {g:"Заголовок", k:"hdrToGrid", n:"заголовок → сетка", min:0, max:32, step:1, u:"dp",
+   note:"contentPadding сетки сверху; не меньше выноса фокуса (237 × 0,025 ≈ 6 dp), иначе сетка срежет плитку первого ряда"},
 ];
 
 const FOCUS_COLOURS = {
@@ -329,8 +345,13 @@ const FOCUS_COLOURS = {
   white:   ["#E6E1E5", "onSurface"],
   green:   ["#4CAF50", "зелёный, как на вебе"],
 };
+/* Текст заголовка: у входа и у полки «Все» — надпись входа, у остальных полок «вкладка · полка». */
+const HEADER_TEXTS = [["k4","Всё в 4К"],["concerts","Все концерты"],["shelf","Фильмы · Новинки"]];
+
 const SWITCHES = [
   {k:"set",    n:"раздел", opts:Object.keys(SETS).map(k => [k, SETS[k].title])},
+  {k:"header", n:"заголовок", opts:[["on","над сеткой"],["off","нет (как сейчас)"]]},
+  {k:"hdrText",n:"текст заголовка", opts:HEADER_TEXTS},
   {k:"focusC", n:"цвет рамки", opts:Object.keys(FOCUS_COLOURS).map(k => [k, FOCUS_COLOURS[k][1].split(" — ")[0]])},
   {k:"flags",  n:"CC / AC3", opts:[["web","у каждой (место на вебе)"],["data","по кэшу (нет ни одной)"]]},
   {k:"hd4k",   n:"цвет 4K", opts:[["green","зелёный, как на вебе"],["theme","primary"],["plain","как остальные"]]},
@@ -373,6 +394,7 @@ const DEFAULTS = {
   ...START,
   set:"k4", focusC:"border", flags:"data", hd4k:"green", pills:"two", names:"reserve",
   tier:"medium", scroll:"edge", year:"line", marks:"on", guides:"off",
+  header:"on", hdrText:"k4",
 };
 const S = {...DEFAULTS};
 const FOCUS = {set:"k4", index:0, scroll:0};
@@ -432,6 +454,11 @@ function geom(){
   g.posterHpx = Math.round(g.posterWpx / POSTER_AR);
   g.posterH = g.posterHpx / 2;
   g.focusColour = FOCUS_COLOURS[S.focusC][0];
+  /* Column { заголовок; сетка(weight 1) }: сетка начинается под заголовком и сверху несёт своё поле. */
+  g.hdrOn = S.header === "on";
+  g.hdrH = g.hdrOn ? g.hdrTop + g.hdrLine : 0;
+  g.gridTop = g.hdrOn ? g.hdrToGrid : g.padTop;
+  g.viewH = H - g.hdrH;
   return g;
 }
 
@@ -467,7 +494,7 @@ function layoutRows(g){
     const slice = list.slice(i, i + g.cols).map(it => tileLayout(it, g));
     rows.push({start:i, tiles:slice, h:Math.max(...slice.map(t => t.h))});
   }
-  let y = g.padTop;
+  let y = g.gridTop;
   for (const r of rows){ r.y = y; y += r.h + g.rowGap; }
   g.contentH = y - g.rowGap + g.padTop;
   return rows;
@@ -596,14 +623,15 @@ function tileHTML(it, index, colIdx, row, t, g, focused){
 function bringIntoView(g, rows){
   const r = rows[Math.floor(FOCUS.index / g.cols)];
   if (!r) return;
-  const maxScroll = Math.max(0, g.contentH - H);
+  const VH = g.viewH;
+  const maxScroll = Math.max(0, g.contentH - VH);
   if (S.scroll === "pivot"){
-    FOCUS.scroll = clamp(r.y - 0.3 * H, 0, maxScroll);
+    FOCUS.scroll = clamp(r.y - 0.3 * VH, 0, maxScroll);
     return;
   }
   const top = r.y, bottom = r.y + r.h;
   if (top < FOCUS.scroll) FOCUS.scroll = top;
-  else if (bottom > FOCUS.scroll + H) FOCUS.scroll = bottom - H;
+  else if (bottom > FOCUS.scroll + VH) FOCUS.scroll = bottom - VH;
   FOCUS.scroll = clamp(FOCUS.scroll, 0, maxScroll);
 }
 
@@ -614,8 +642,18 @@ function gridHTML(g, rows){
     const i = row.start + c;
     out += tileHTML(list[i], i, c, row, t, g, i === FOCUS.index);
   }));
-  return '<div class="grid" style="left:' + px(g.contentX) + 'px;width:' + px(g.contentW) + 'px"><div class="sheet" style="top:' +
+  return '<div class="grid" style="left:' + px(g.contentX) + 'px;width:' + px(g.contentW) + 'px;top:' + px(g.hdrH) + 'px"><div class="sheet" style="top:' +
     (-px(FOCUS.scroll)) + 'px;height:' + px(g.contentH) + 'px">' + out + '</div></div>';
+}
+
+function headerText(){ return (HEADER_TEXTS.find(t => t[0] === S.hdrText) || HEADER_TEXTS[0])[1]; }
+
+/* ShowAllHeader: Text(SectionTitleStyle, maxLines 1, Ellipsis) с полем сверху и слева. */
+function headerHTML(g){
+  if (!g.hdrOn) return "";
+  return '<div class="ghead" style="left:' + px(g.contentX + g.hdrLeft) + 'px;top:' + px(g.hdrTop) + 'px;width:' +
+    px(g.contentW - 2 * g.hdrLeft) + 'px;height:' + px(g.hdrLine) + 'px;font-size:' + px(g.hdrSp) + 'px;line-height:' +
+    px(g.hdrLine) + 'px;letter-spacing:' + px(0.15) + 'px">' + esc(headerText()) + '</div>';
 }
 
 function guidesHTML(g, rows){
@@ -623,13 +661,16 @@ function guidesHTML(g, rows){
   const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
   const firstX = g.contentX + g.padH;
   const r0 = rows[0];
-  const posterTop = r0.y + g.tilePad - FOCUS.scroll;
+  const posterTop = g.hdrH + r0.y + g.tilePad - FOCUS.scroll;
   return '<div class="guides">' +
     '<div class="v" style="left:' + (px(g.contentX) - 1) + 'px;background:' + A + '"></div>' +
     '<div class="v" style="left:' + (px(firstX) - 1) + 'px;background:' + A + '"></div>' +
     '<div class="v" style="left:' + (px(W - g.padH) - 1) + 'px;background:' + A + '"></div>' +
     '<div class="v" style="left:96px;background:' + C + '"></div>' +
-    '<div class="h" style="top:' + (px(g.padTop - FOCUS.scroll) - 1) + 'px;background:' + C + '"></div>' +
+    '<div class="h" style="top:' + (px(g.hdrH + g.gridTop - FOCUS.scroll) - 1) + 'px;background:' + C + '"></div>' +
+    (g.hdrOn ? '<div class="h" style="top:' + (px(g.hdrH) - 1) + 'px;background:' + A + '"></div>' +
+      '<div class="lab" style="right:14px;top:' + (px(g.hdrH) + 8) + 'px;color:' + A + '">заголовок ' + g.hdrTop + ' + ' + g.hdrLine +
+      ' · до сетки ' + g.hdrToGrid + ' dp</div>' : '') +
     '<div class="h" style="top:' + (px(posterTop + g.posterH) - 1) + 'px;background:' + B + '"></div>' +
     '<div class="lab" style="left:' + (px(g.contentX) + 10) + 'px;top:' + (px(H) - 46) + 'px;color:' + A + '">меню ' + g.railW + ' dp · поле ' + g.padH + ' dp</div>' +
     '<div class="lab" style="left:106px;top:14px;color:' + C + '">безопасная зона 48 dp</div>' +
@@ -648,7 +689,7 @@ function render(){
   const rows = layoutRows(g);
   lastRows = rows;
   bringIntoView(g, rows);
-  st.insertAdjacentHTML("beforeend", gridHTML(g, rows) + railHTML(g) + guidesHTML(g, rows));
+  st.insertAdjacentHTML("beforeend", gridHTML(g, rows) + headerHTML(g) + railHTML(g) + guidesHTML(g, rows));
   st.querySelectorAll("[data-i]").forEach(el => el.addEventListener("click", ev => {
     ev.preventDefault(); FOCUS.index = Number(el.dataset.i); render();
   }));
@@ -708,13 +749,29 @@ function paintSpec(g, rows){
     ? "постер:          <b>posters.medium</b> хватает — 250 px на " + g.posterWpx + " px, без растяжения"
     : "постер:          medium растянут в <b>" + up.toFixed(2) + "×</b> — при ширине больше 125 dp нужен posters.big (500 px)");
   const h0 = rows.length ? rows[0].h : 0;
-  const shown = (H - g.padTop + g.rowGap) / (h0 + g.rowGap);
+  const shown = (g.viewH - g.gridTop + g.rowGap) / (h0 + g.rowGap);
   notes.push("ряд:             " + fmt(Math.round(h0 * 10) / 10) + " dp, на экране " + shown.toFixed(2) + " ряда · " +
              Math.floor(shown) * g.cols + " плиток целиком");
   const grow = (g.focusScale - 1) * g.tileW / 2;
   if (g.focusScale > 1 && grow > Math.min(g.colGap / 2, g.padH))
     notes.push("<b>увеличение заходит на соседей:</b> плитка растёт на " + fmt(Math.round(grow * 10) / 10) + " dp с каждой стороны, " +
                "\n                 а между колонками " + g.colGap + " dp, у края " + g.padH + " dp");
+  if (g.hdrOn){
+    const r = v => fmt(Math.round(v * 10) / 10);
+    const row1 = g.hdrH + g.gridTop;
+    const h1 = rows.length > 1 ? rows[1].h : h0;
+    const row2End = row1 + h0 + g.rowGap + h1;
+    const over = (g.focusScale - 1) * h0 / 2;
+    notes.push("заголовок:       «" + esc(headerText()) + "», " + g.hdrTop + " + " + g.hdrLine + " dp, до сетки " + g.hdrToGrid +
+               " dp — первый ряд с " + r(row1) + " dp");
+    notes.push(row2End + over <= H
+      ? "два ряда:        второй кончается на " + r(row2End) + " dp, с выносом фокуса " + r(row2End + over) + " ≤ " + H + " — оба целиком"
+      : "<b>второй ряд не влезает:</b> кончается на " + r(row2End + over) + " dp с выносом фокуса, экран " + H + " dp");
+    notes.push(g.gridTop >= over
+      ? "вынос фокуса:    " + r(over) + " dp вверх — помещается в " + g.hdrToGrid + " dp над первым рядом"
+      : "<b>фокус срезает первый ряд:</b> плитка выходит на " + r(over) + " dp, а над ней " + g.hdrToGrid + " dp — сетка обрезает");
+    notes.push("фокус:           заголовок не фокусируется; первый фокус — первая плитка, как без него");
+  }
   notes.push(S.flags === "web"
     ? "CC / AC3:        <b>у каждой</b> — проверка места; в данных их нет (subtitles не в модели, ac3 = 0 у всех)"
     : "CC / AC3:        по кэшу — не горит ни один: subtitles у элемента списка в модели нет, ac3 = 0 у всех 208");

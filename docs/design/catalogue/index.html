@@ -116,7 +116,16 @@ body{
 .rows{position:absolute;overflow:hidden}
 .page{position:absolute;left:0;right:0}
 .page .head{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
-.rowbox{position:relative;overflow:hidden}
+/* LazyRow обрезает только по своей оси (clipScrollableContainer): по горизонтали у края ряда, а
+   по вертикали рамка фокуса свободно выходит за карточку. Обрезает её уже LazyColumn. */
+.rowbox{position:relative;clip-path:inset(-40px 0 -40px 0)}
+/* Вход «Все …» над заголовком первой секции: tv-material3 Button / OutlinedButton по умолчанию. */
+.entry{display:flex;align-items:flex-start}
+.entry .btn{
+  display:flex;align-items:center;justify-content:center;white-space:nowrap;flex:none;
+  border-radius:9999px;font-weight:500;border-style:solid;border-color:transparent;
+  transform-origin:50% 50%;
+}
 .cards{position:absolute;top:0;display:flex}
 /* Слот не обрезает: рамка фокуса рисуется `Stroke` по контуру карточки, то есть половиной
    наружу, и LazyRow ставит `graphicsLayer { clip = false }` именно ради неё. Обрезает только
@@ -139,7 +148,7 @@ body{
 .showall{position:relative;flex:none;display:flex;align-items:center;justify-content:center}
 .showall .pill{
   display:flex;align-items:center;justify-content:center;text-align:center;
-  border-radius:9999px;background:var(--p-onsurface);color:#1B1722;font-weight:500;white-space:pre-line;
+  border-radius:9999px;font-weight:500;white-space:nowrap;
 }
 .fade{position:absolute;pointer-events:none}
 
@@ -192,8 +201,9 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
 <div class="top">
   <h1>Экран каталога</h1>
   <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 на разделе «Фильмы»: пять секций и 57 карточек взяты
-    из кэша KM6 — те самые, что экран показал бы прямо сейчас. Открывается на зафиксированных значениях —
-    они перенесены в код (<span style="font-family:var(--mono)">ContentListScreenContent.kt</span>,
+    из кэша KM6 — те самые, что экран показал бы прямо сейчас. Открывается на значениях, которые код несёт сейчас (сверено с e4d75215,
+    после 85bfd1d2), плюс стартовые числа входа «Все …» над первой секцией (прогон
+    catalogue-browse-all, ещё не выкручено). Значения кода — в (<span style="font-family:var(--mono)">ContentListScreenContent.kt</span>,
     <span style="font-family:var(--mono)">SectionRow.kt</span>,
     <span style="font-family:var(--mono)">VideoItemHorizontal.kt</span>). Кадров с телевизора пока
     нет: вход на KM6 стёрт, геометрия снята с кода.</div>
@@ -213,6 +223,10 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3
   <div class="spec" id="spec"></div>
   <div class="hint">
     <kbd>←</kbd> <kbd>→</kbd> — по карточкам ряда, <kbd>↑</kbd> <kbd>↓</kbd> — на соседнюю секцию.
+    Из любой карточки первой секции <kbd>↑</kbd> ведёт на вход «Все …», <kbd>↓</kbd> с него — обратно на
+    запомненную карточку ряда, а не на ту, что под кнопкой; <kbd>←</kbd> с него уходит в меню (на стенде
+    фокус остаётся), <kbd>↑</kbd> и <kbd>→</kbd> никуда не ведут. Пока вход под фокусом, панель держит
+    последнюю карточку.
     Это и есть путь пульта на экране: секция занимает страницу целиком, поэтому вниз уходит не
     следующий ряд, а следующая страница. Панель сверху всегда показывает карточку под фокусом —
     так же, как <span style="font-family:var(--mono)">CommonAction.ItemFocused</span> на устройстве.
@@ -305,31 +319,36 @@ const LONGEST_PLOT = Object.values(ITEMS)
 
 /* ── что несёт код сегодня ─────────────────────────────────────────────────
    Ссылки на источник каждого числа — в примечаниях к ползункам ниже. */
+/* Значения кода на e4d75215. 85bfd1d2 вернул ряду карточку 150 dp со стандартной типографикой и
+   полями VideoItemHorizontal, поле ряда 16 / зазор 16 и деление 62 / 38; стенд это догоняет здесь.
+   entry* — стартовые числа входа «Все …» (catalogue-browse-all, design-ux.md), кода для них ещё нет. */
 const SHIPPED = {
-  railW:60, panelPct:67, pageFrac:100, sideEdge:16,
+  railW:60, panelPct:62, pageFrac:100, sideEdge:16,
 
   mediaFrac:75, scrimEdge:10, scrimAlpha:90, scrimEnd:45, bottomFade:50,
 
   descFrac:60, descPadH:15, descPadTop:5,
   titleSp:20, titleLine:18, gapTitleToRat:4, gapRatToFacts:5,
   factsSp:10, factsLine:15, gapFactLines:4, gapFactsToPlot:8,
-  plotSp:12, plotLine:15, plotMax:0,
+  plotSp:14, plotLine:17, plotMax:0,
 
-  headTop:30, sectionSp:11, sectionLine:20, gapHeadToRow:2,
+  headTop:30, sectionSp:16, sectionLine:20, gapHeadToRow:2,
 
-  rowPad:0, cardH:115, cardGap:10,
-  cardRadius:8, cardPadH:7, cardPadV:10,
-  cardTitleSp:10, cardTitleLine:9, gapMetaToTitle:6, ratingGap:9,
+  rowPad:16, cardH:150, cardGap:16,
+  cardRadius:8, cardPadH:12, cardPadV:10,
+  cardTitleSp:14, cardTitleLine:20, gapMetaToTitle:6, ratingGap:16,
   cardScrimTop:20, cardScrimBottom:90, progressH:3, focusRing:3,
 
-  fadeW:36, fadeH:180, showAllH:43,
+  fadeW:36, fadeH:180, showAllH:40,
+
+  entryTop:4, entryH:24, entryToHead:2, entrySp:11, entryLine:16, entryPadH:12,
 };
 
 const CONTROLS = [
   {g:"Каркас", k:"railW", n:"закрытое меню", min:0, max:120, step:1, u:"dp",
    note:"MainScreenContentBody: closeDrawerWidth = 60 dp — на глаз, а не по замеру ящика"},
   {g:"Каркас", k:"panelPct", n:"панель по высоте", min:20, max:80, step:1, u:"%",
-   note:"DetailsWeight : ContentWeight = 1 : 1, то есть ровно половина экрана под одну карточку"},
+   note:"CatalogueDetailsWeight : CatalogueContentWeight = 62 : 38 (PuberTheme.kt) — ряды 205,2 dp"},
   {g:"Каркас", k:"pageFrac", n:"страница секции", min:40, max:150, step:1, u:"% области рядов",
    note:"100 % — это и есть fillParentMaxHeight(): страница всегда ровно с область рядов и едет за «панелью по высоте». Ниже 100 снизу заглядывает следующая секция"},
   {g:"Каркас", k:"sideEdge", n:"поле у заголовка", min:0, max:64, step:1, u:"dp",
@@ -360,7 +379,7 @@ const CONTROLS = [
    note:"0 — как в коде: maxLines не задан, и длинный текст вылезает на ряд карточек"},
 
   {g:"Заголовок секции", k:"headTop", n:"поле над заголовком", min:0, max:80, step:1, u:"dp",
-   note:"сегодня 0: заголовок — первый ребёнок страницы и прижат вплотную к низу панели, между ними в коде ничего нет"},
+   note:"SectionTitleTopPadding. В первой секции, пока вход «Все …» включён, его место занимает полоса входа"},
   {g:"Заголовок секции", k:"sectionSp", n:"кегль", min:10, max:32, step:1, u:"sp",
    note:"SectionTitleStyle в Type.kt — отдельный стиль, не titleLarge"},
   {g:"Заголовок секции", k:"sectionLine", n:"интерлиньяж", min:12, max:40, step:1, u:"sp",
@@ -368,13 +387,13 @@ const CONTROLS = [
   {g:"Заголовок секции", k:"gapHeadToRow", n:"заголовок → ряд", min:0, max:40, step:1, u:"dp"},
 
   {g:"Ряд", k:"rowPad", n:"поле ряда", min:0, max:48, step:1, u:"dp",
-   note:"contentPadding у LazyRow — сразу и слева, и сверху, и снизу; сегодня совпадает с полем заголовка"},
+   note:"RowHorizontalPadding — только слева и справа; сверху и снизу у ряда поля нет"},
   {g:"Ряд", k:"cardGap", n:"между карточками", min:0, max:48, step:1, u:"dp"},
   {g:"Ряд", k:"fadeW", n:"растворение справа", min:0, max:120, step:1, u:"dp"},
   {g:"Ряд", k:"fadeH", n:"высота растворения", min:0, max:280, step:1, u:"dp",
-   note:"FadeGradient берёт VideoItemHeight = 180 dp — не высоту карточки, поэтому край её не закрывает"},
+   note:"FadeGradient берёт VideoItemHeight = 180 dp, а не высоту карточки (150)"},
   {g:"Ряд", k:"showAllH", n:"кнопка «Показать все»", min:32, max:120, step:1, u:"dp",
-   note:"минимум кнопки 40 dp плюс две строки labelLarge"},
+   note:"Button по умолчанию: минимум 40 dp, labelLarge 14 / 20 sp в одну строку"},
 
   {g:"Карточка", k:"cardH", n:"высота", min:60, max:280, step:1, u:"dp",
    note:"CatalogueRowItemHeight; ширина — 16:9 от неё"},
@@ -391,6 +410,24 @@ const CONTROLS = [
   {g:"Карточка", k:"progressH", n:"полоса просмотра", min:0, max:12, step:1, u:"dp"},
   {g:"Карточка", k:"focusRing", n:"рамка фокуса", min:0, max:8, step:1, u:"dp",
    note:"CardDefaults.border — 3 dp цветом colorScheme.border (#938F99)"},
+
+  {g:"Вход «Все …»", k:"entryTop", n:"панель → вход", min:0, max:16, step:1, u:"dp",
+   note:"воздух над кнопкой; LazyColumn обрезает сверху, а фокус 1.1 растит 24 dp на 1,2 dp с каждой стороны"},
+  {g:"Вход «Все …»", k:"entryH", n:"высота", min:16, max:26, step:1, u:"dp",
+   note:"не выше 26: на 30 dp (кнопки экрана контента) воздуха над ней не остаётся и фокус срезает верх"},
+  {g:"Вход «Все …»", k:"entryToHead", n:"вход → заголовок", min:0, max:16, step:1, u:"dp",
+   note:"4 + 24 + 2 = 30 = SectionTitleTopPadding: заголовок и ряд первой секции стоят там же, где у остальных"},
+  {g:"Вход «Все …»", k:"entrySp", n:"кегль надписи", min:8, max:16, step:0.5, u:"sp",
+   note:"labelLarge (Medium) с новым кеглем; 11 — кегль кнопок, согласованный на стенде экрана контента"},
+  {g:"Вход «Все …»", k:"entryLine", n:"интерлиньяж надписи", min:10, max:24, step:1, u:"sp"},
+  {g:"Вход «Все …»", k:"entryPadH", n:"поле по бокам", min:0, max:32, step:1, u:"dp",
+   note:"ширина — по надписи, кнопка не растягивается; левый край — поле у заголовка"},
+];
+
+/* Надписи входа по вкладкам (brief.md#AC-1). Стенд стоит на «Фильмах»; остальные — проверить ширину. */
+const ENTRY_LABELS = [
+  ["movies","Все фильмы"],["series","Все сериалы"],["concerts","Все концерты"],
+  ["docmovies","Все док. фильмы"],["docseries","Все док. сериалы"],["tvshows","Все ТВ-шоу"],["4k","Всё в 4К"],
 ];
 
 const SWITCHES = [
@@ -400,6 +437,8 @@ const SWITCHES = [
   {k:"plot",   n:"описание", opts:[["own","своё"],["longest","самое длинное в кэше"]]},
   {k:"lines",  n:"название карточки", opts:[["2","две строки"],["1","одна строка"]]},
   {k:"showall",n:"«Показать все»", opts:[["last","только в «Все»"],["every","в каждой секции"],["none","нигде"]]},
+  {k:"entry",  n:"вход «Все …»", opts:[["filled","заливка (Button)"],["outlined","контур (OutlinedButton)"],["off","нет"]]},
+  {k:"entryLabel", n:"надпись входа", opts:ENTRY_LABELS.map(l => [l[0], l[1]])},
   {k:"marks",  n:"отметки просмотра", opts:[["on","как в коде"],["off","выключены"]]},
   {k:"guides", n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
 ];
@@ -438,9 +477,12 @@ const PUB_MARK = "data:image/webp;base64,UklGRiQFAABXRUJQVlA4TBcFAAAvf8AfEFUOQbZ
 const DEFAULTS = {
   ...SHIPPED,
   expand:"on", media:"still", align:"start", plot:"own", lines:"1", showall:"every",
-  marks:"on", guides:"off",
+  marks:"on", guides:"off", entry:"filled", entryLabel:"movies",
   section:0,
 };
+
+/* Фокус на входе «Все …» — не запоминается: экран вкладки открывается на первой карточке. */
+const ENTRY_FOCUS = {on:false};
 
 const S = {...DEFAULTS};
 
@@ -451,7 +493,7 @@ const S = {...DEFAULTS};
  * окно, очищенные данные, снятие превью, — поэтому и чтение, и запись обёрнуты, и стенд
  * обязан открываться на значениях кода, когда не прочиталось ничего.
  */
-const STORE_KEY = "puber.stand.catalogue.v1";
+const STORE_KEY = "puber.stand.catalogue.v2";   /* v2: значения сверены с кодом 2026-11-24 */
 
 function restore(){
   let saved;
@@ -497,6 +539,8 @@ const ROWS = SECTIONS.map(() => ({index:0, scroll:0}));
 
 const W = 960, H = 540;      /* экран в dp: 1920 × 1080 при density 2.0 */
 const CARD_AR = 16 / 9;
+const VISIBLE_CARDS = 3;     /* SectionRow.VisibleCardCount */
+const ENTRY_FOCUS_SCALE = 1.1;   /* ButtonDefaults.scale: focusedScale */
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function px(dp){ return dp * 2; }
@@ -542,10 +586,16 @@ function geom(){
   /* Страница секции: заголовок, зазор, коробка ряда. Карточка не зажимается ничем —
      LazyRow отдаёт ей ровно ту высоту, что попросили, и ряд вылезает, если её много. */
   g.headH   = g.sectionLine;
-  g.rowBoxH = g.cardH + 2 * g.rowPad;
+  g.rowBoxH = g.cardH;   /* у ряда поля только по бокам */
   g.pageH = g.rowsH * g.pageFrac / 100;
   g.pageUsed = g.headTop + g.headH + g.gapHeadToRow + g.rowBoxH;
   g.cardW   = toDeviceDp(Math.round(px(g.cardH) * CARD_AR));
+  /* SectionRow: Box.widthIn(max = 3 карточки + 2 зазора + 2 поля), уже 900 dp области. */
+  g.rowViewW = Math.min(g.contentW, VISIBLE_CARDS * g.cardW + (VISIBLE_CARDS - 1) * g.cardGap + 2 * g.rowPad);
+  /* Первая секция: полоса входа вместо поля над заголовком. */
+  g.entryOn = S.entry !== "off";
+  g.band0 = g.entryOn ? g.entryTop + g.entryH + g.entryToHead : g.headTop;
+  g.page0Used = g.band0 + g.headH + g.gapHeadToRow + g.rowBoxH;
   return g;
 }
 
@@ -574,6 +624,18 @@ function measureLines(text, widthDp, sizeSp, lineSp, weight, trackSp){
   r.style.letterSpacing = px(trackSp || 0) + "px";
   r.textContent = text;
   return Math.max(1, Math.round(r.scrollHeight / px(lineSp)));
+}
+
+function measureWidth(text, sizeSp, weight, trackSp){
+  const r = document.getElementById("ruler");
+  r.style.width = "auto";
+  r.style.whiteSpace = "nowrap";
+  r.style.fontSize = px(sizeSp) + "px";
+  r.style.fontWeight = weight || 400;
+  r.style.letterSpacing = px(trackSp || 0) + "px";
+  r.textContent = text;
+  r.style.whiteSpace = "";
+  return Math.round(r.scrollWidth / 2 * 10) / 10;
 }
 
 /* ── сцена ────────────────────────────────────────────────── */
@@ -726,11 +788,41 @@ function cardHTML(it, index, g, focused){
   </div>`;
 }
 
-function showAllHTML(g){
+/* tv-material3 ButtonDefaults.colors: surfaceVariant 80 % / onSurface 80 %, под фокусом onSurface /
+   inverseOnSurface и масштаб 1.1. */
+const BTN = {
+  filled:   {bg:"rgba(73,69,79,.8)", fg:"rgba(230,225,229,.8)", border:0, bc:"transparent"},
+  outlined: {bg:"transparent", fg:"rgba(230,225,229,.8)", border:1.5, bc:"rgba(202,196,208,.4)"},
+  focused:  {bg:"#E6E1E5", fg:"#313033"},
+};
+
+function showAllHTML(g, focused){
+  const c = focused ? BTN.focused : BTN.filled;
   return `<div class="showall" style="width:${px(g.cardW)}px;height:${px(g.cardH)}px">
     <div class="pill" style="min-width:${px(58)}px;height:${px(g.showAllH)}px;
-         padding:0 ${px(16)}px;font-size:${px(14)}px;line-height:${px(20)}px">Показать
-все</div></div>`;
+         padding:0 ${px(16)}px;font-size:${px(14)}px;line-height:${px(20)}px;${tracking(0.1)};
+         background:${c.bg};color:${c.fg};${focused ? `transform:scale(${ENTRY_FOCUS_SCALE})` : ""}">Показать все</div></div>`;
+}
+
+function entryLabel(){ return (ENTRY_LABELS.find(l => l[0] === S.entryLabel) || ENTRY_LABELS[0])[1]; }
+
+/* Вход «Все …»: OutlinedButton рисует контур 1,5 dp onSurfaceVariant 40 %, под фокусом 1,65 dp
+   без прозрачности; Button контура не имеет. */
+function entryHTML(g){
+  const outlined = S.entry === "outlined";
+  const base = outlined ? BTN.outlined : BTN.filled;
+  const f = ENTRY_FOCUS.on;
+  const bw = outlined ? (f ? 1.65 : 1.5) : 0;
+  const bc = outlined ? (f ? "#CAC4D0" : base.bc) : "transparent";
+  const bg = f ? BTN.focused.bg : base.bg, fg = f ? BTN.focused.fg : base.fg;
+  return `<div style="height:${px(g.entryTop)}px"></div>
+    <div class="entry" style="height:${px(g.entryH)}px;padding-left:${px(g.sideEdge)}px">
+      <div class="btn" id="entryBtn" style="height:${px(g.entryH)}px;padding:0 ${px(g.entryPadH)}px;
+           font-size:${px(g.entrySp)}px;line-height:${px(g.entryLine)}px;${tracking(0.1)};
+           background:${bg};color:${fg};border-width:${px(bw)}px;border-color:${bc};
+           ${f ? `transform:scale(${ENTRY_FOCUS_SCALE});` : ""}">${esc(entryLabel())}</div>
+    </div>
+    <div style="height:${px(g.entryToHead)}px"></div>`;
 }
 
 /*
@@ -743,21 +835,19 @@ function showAllHTML(g){
  * вовсе (keepFullyVisibleItemInPlace), а та, что за краем, встаёт левым краем на
  * parentFraction = 30 % ширины области — не к краю и не по центру.
  */
-const PARENT_FRACTION = 0.3;
+/* С 85bfd1d2 SectionRow ставит свой PositionFocusedItemInLazyLayout(parentFraction = 0.5,
+   childFraction = 0.5) без keepFullyVisibleItemInPlace: карточка под фокусом встаёт по центру
+   ряда, первая остаётся у левого края, последняя доходит до правого — прокрутку зажимают края. */
+const PARENT_FRACTION = 0.5, CHILD_FRACTION = 0.5;
 
 function applyBringIntoView(g, sectionIndex){
   const r = ROWS[sectionIndex];
   const step = g.cardW + g.cardGap;
-  const container = g.contentW;
+  const container = g.rowViewW;
   const contentLen = 2 * g.rowPad + tileCount(sectionIndex) * step - g.cardGap;
   const maxScroll = Math.max(0, contentLen - container);
   const offset = g.rowPad + r.index * step - r.scroll;
-  const fullyVisible = offset >= 0 && offset + g.cardW <= container;
-  if (fullyVisible){
-    r.scroll = clamp(r.scroll, 0, maxScroll);
-    return;
-  }
-  const initial = PARENT_FRACTION * container;
+  const initial = PARENT_FRACTION * container - CHILD_FRACTION * g.cardW;
   const target = (g.cardW <= container && container - initial < g.cardW)
     ? container - g.cardW
     : initial;
@@ -768,9 +858,13 @@ function pageHTML(g, sectionIndex, top, isCurrent){
   const sec = sectionAt(sectionIndex);
   const r = ROWS[sectionIndex];
   const items = itemsOf(sectionIndex);
+  const rowFocused = isCurrent && !(sectionIndex === 0 && ENTRY_FOCUS.on);
   const cards = items.map((it, i) =>
-    cardHTML(it, i, g, isCurrent && i === r.index)).join("");
-  const tail = showAllIn(sectionIndex) ? showAllHTML(g) : "";
+    cardHTML(it, i, g, rowFocused && i === r.index)).join("");
+  const tail = showAllIn(sectionIndex) ? showAllHTML(g, rowFocused && r.index === items.length) : "";
+  const band = sectionIndex === 0 && g.entryOn
+    ? entryHTML(g)
+    : `<div style="height:${px(g.headTop)}px"></div>`;
   const scroll = r.scroll;
   const fade = g.fadeW > 0 && g.fadeH > 0
     ? `<div class="fade" style="right:0;top:${px((g.rowBoxH - g.fadeH) / 2)}px;
@@ -778,12 +872,12 @@ function pageHTML(g, sectionIndex, top, isCurrent){
          background:linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,1))"></div>`
     : "";
   return `<div class="page" style="top:${px(top)}px;height:${px(g.pageH)}px">
-    <div style="height:${px(g.headTop)}px"></div>
+    ${band}
     <div class="head" style="margin:0 ${px(g.sideEdge)}px;font-size:${px(g.sectionSp)}px;
          line-height:${px(g.sectionLine)}px;${tracking(TRACKING.section)}">${esc(sec.title)}</div>
     <div style="height:${px(g.gapHeadToRow)}px"></div>
-    <div class="rowbox" style="height:${px(g.rowBoxH)}px">
-      <div class="cards" style="left:${px(g.rowPad - scroll)}px;top:${px(g.rowPad)}px;gap:${px(g.cardGap)}px">${cards}${tail}</div>
+    <div class="rowbox" style="height:${px(g.rowBoxH)}px;width:${px(g.rowViewW)}px">
+      <div class="cards" style="left:${px(g.rowPad - scroll)}px;top:0;gap:${px(g.cardGap)}px">${cards}${tail}</div>
       ${fade}
     </div>
   </div>`;
@@ -806,12 +900,13 @@ function guidesHTML(g){
   if (S.guides !== "on") return "";
   const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
   const headTop = g.rowsY + g.headTop;
-  const cardTop = headTop + g.headH + g.gapHeadToRow + g.rowPad;
+  const cardTop = headTop + g.headH + g.gapHeadToRow;
   return `<div class="guides">
     <div class="v" style="left:${px(g.contentX)-1}px;background:${A}"></div>
     <div class="v" style="left:${px(g.contentX + g.sideEdge)-1}px;background:${A}"></div>
     <div class="v" style="left:${px(g.contentX + g.rowPad)-1}px;background:${C}"></div>
     <div class="v" style="left:${px(g.contentX + g.descW)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.contentX + g.rowViewW)-1}px;background:${C}"></div>
     <div class="v" style="left:${px(g.mediaX)-1}px;background:${B}"></div>
     <div class="v" style="left:96px;background:${C}"></div>
     <div class="h" style="top:${px(g.panelH)-1}px;background:${A}"></div>
@@ -843,8 +938,14 @@ function render(){
     el.addEventListener("click", ev => {
       ev.preventDefault();
       ROWS[S.section].index = Number(el.dataset.card);
+      ENTRY_FOCUS.on = false;
       render();
     });
+  });
+
+  const eb = st.querySelector("#entryBtn");
+  if (eb) eb.addEventListener("click", ev => {
+    ev.preventDefault(); S.section = 0; ENTRY_FOCUS.on = true; paintSwitches(); render();
   });
 
   paintConsole(g);
@@ -864,6 +965,7 @@ function paintSwitches(){
   host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const k = b.dataset.sw;
     S[k] = k === "section" ? Number(b.dataset.v) : b.dataset.v;
+    if (k === "section" || (k === "entry" && S.entry === "off")) ENTRY_FOCUS.on = false;
     paintSwitches(); render();
   }));
 }
@@ -913,6 +1015,25 @@ function paintSpec(g){
       `                 ${Math.round(g.pageUsed)} — свободно ${spare} dp снизу`
     : `<b>ряд не влезает:</b> содержимому нужно ${Math.round(g.pageUsed)} dp, видно ${Math.round(visible)} —\n` +
       `                 карточки обрезаются снизу на ${-spare} dp`);
+  if (g.entryOn){
+    const lab = entryLabel();
+    const textW = measureWidth(lab, g.entrySp, 500, 0.1);
+    const btnW = Math.round((textW + 2 * g.entryPadH) * 10) / 10;
+    const grow = (ENTRY_FOCUS_SCALE - 1) * g.entryH / 2;
+    const vis0 = Math.min(g.pageH, g.rowsH);
+    const spare0 = Math.round((vis0 - g.page0Used) * 10) / 10;
+    notes.push(`вход «Все …»:   «${esc(lab)}» — ${btnW} × ${g.entryH} dp (${S.entry === "outlined" ? "контур" : "заливка"}), левый край\n` +
+      `                 ${g.railW + g.sideEdge} dp от края экрана = ${px(g.railW + g.sideEdge)} px`);
+    notes.push(g.band0 === g.headTop
+      ? `полоса входа:   ${g.entryTop} + ${g.entryH} + ${g.entryToHead} = ${g.band0} dp = поле над заголовком —\n` +
+        `                 заголовок и ряд первой секции там же, где на остальных страницах`
+      : `<b>полоса входа ${g.band0} dp против ${g.headTop}:</b> заголовок и ряд первой секции сдвинуты на ${g.band0 - g.headTop} dp`);
+    if (spare0 < 0) notes.push(`<b>первая секция не влезает:</b> ${g.page0Used} dp при видимых ${Math.round(vis0 * 10) / 10} — ряд обрезан на ${-spare0} dp`);
+    if (grow > g.entryTop) notes.push(`<b>фокус срезает верх входа:</b> 1.1 растит кнопку на ${grow.toFixed(1)} dp, над ней ${g.entryTop} dp — LazyColumn обрезает`);
+    if (grow > g.entryToHead) notes.push(`<b>вход под фокусом наезжает на заголовок:</b> ${grow.toFixed(1)} dp против ${g.entryToHead} dp зазора`);
+    if (grow <= g.entryTop && grow <= g.entryToHead)
+      notes.push(`фокус входа:    1.1 растит на ${grow.toFixed(1)} dp сверху и снизу — помещается в ${g.entryTop} и ${g.entryToHead} dp`);
+  }
   const peek = Math.round(g.rowsH - g.pageH);
   if (peek > 0) notes.push(`                снизу заглядывает следующая секция на <b>${peek} dp</b>`);
 
@@ -927,9 +1048,9 @@ function paintSpec(g){
     : `описание:       ${plotLines} строк, помещается в панель`);
 
   const fadeGap = Math.round((g.rowBoxH - g.fadeH) / 2);
-  notes.push(fadeGap > g.rowPad
+  notes.push(fadeGap > 0
     ? `<b>растворение короче карточки:</b> ${g.fadeH} dp против ${g.cardH} — сверху и снизу\n` +
-      `                 остаётся по ${fadeGap - g.rowPad} dp неприкрытой карточки`
+      `                 остаётся по ${fadeGap} dp неприкрытой карточки`
     : `растворение:    ${g.fadeH} dp — карточку закрывает целиком`);
 
   const edgeGap = Math.abs(g.sideEdge - g.rowPad);
@@ -958,6 +1079,13 @@ function paintSpec(g){
 /* ── пульт ────────────────────────────────────────────────── */
 function move(dir){
   const r = ROWS[S.section];
+  const entryHere = S.section === 0 && S.entry !== "off";
+  if (ENTRY_FOCUS.on){
+    /* Вниз — запомненная карточка ряда (focusRestorer), влево — меню; вверх и вправо некуда. */
+    if (dir === "down" || !entryHere) ENTRY_FOCUS.on = false;
+    return;
+  }
+  if (dir === "up" && entryHere){ ENTRY_FOCUS.on = true; return; }
   if (dir === "left")  r.index = Math.max(0, r.index - 1);
   if (dir === "right") r.index = Math.min(tileCount(S.section) - 1, r.index + 1);
   if (dir === "up" || dir === "down"){
@@ -995,6 +1123,7 @@ window.addEventListener("resize", fit);
 document.getElementById("reset").addEventListener("click", () => {
   forget();
   Object.assign(S, DEFAULTS);
+  ENTRY_FOCUS.on = false;
   for (const c of CONTROLS) document.getElementById("in-" + c.k).value = DEFAULTS[c.k];
   paintSwitches();
   render();   /* render() запишет значения кода обратно — это и есть новое запомненное состояние */

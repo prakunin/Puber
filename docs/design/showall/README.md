@@ -92,6 +92,31 @@ What that gives: tile 134.5 dp (269 px), poster 124.5 × 187 dp = 249 × 374 px,
 `posters.medium` (250 px) is enough with no upscale; above 125 dp of poster width the spec panel
 says big is needed. A row is 237 dp, so 2.1 rows are on screen and 12 tiles whole.
 
+
+## catalogue-browse-all starting values (2026-11-24)
+
+Run `catalogue-browse-all` (`.flow/runs/catalogue-browse-all/design-ux.md`, Element B). A fixed
+one-line title above the grid. It is not a grid item and not focusable, so first focus stays on the
+first tile. The "Agreed 2026-11-24" grid numbers above do not change. Not dialled yet: the owner
+dials these on the TV box at AC-11.
+
+| | start | |
+|---|---|---|
+| поле над заголовком | **12** dp | |
+| кегль / интерлиньяж | **16 / 20** sp Medium | `SectionTitleStyle`, the catalogue shelf heading |
+| поле слева | **16** dp | = the grid's side padding, the edge of column 1 |
+| строк | **1**, ellipsis | |
+| заголовок → сетка | **8** dp | the grid's top `contentPadding`; must stay at or above the 6 dp focus overhang |
+| сетка по бокам / снизу | **16 / 16** dp | unchanged |
+
+What that gives: row 1 starts at 12 + 20 + 8 = 40 dp, row 2 ends at 40 + 237 + 16 + 237 = 530 dp,
+536 with the 1.05 focus overhang, so two whole rows stay on screen (today row 2 ends at 506).
+
+Title text (switch «текст заголовка»): the browse grid and the «Все» shelf show the entry label
+(«Всё в 4К», «Все концерты», ...); other shelves show `<tab> · <shelf>` («Фильмы · Новинки»), with
+the same " · " separator as the original-title line. Switch «заголовок → нет» shows the agreed grid
+without it.
+
 ## Open items
 
 1. **CC and AC3** — follow-up run `catalogue-card-audio-subtitle-badges` (source: file audio tracks and
