@@ -30,3 +30,4 @@ From the code-quality-audit report (full scope there): BP-1, BP-7, STR-4; refact
 ## Log
 - 2026-10-12 created on the board (stage idea)
 - 2026-10-12 migrated from the former board file (board stage `idea` -> `idea`); the board row Notes are copied verbatim into ## Next
+- 2026-11-24 ContentFilter (domain/model/ContentFilter.kt) is out of this run's scope: catalogue-filters builds on it (catalogue-browse-all Q3, owner standing instruction)
