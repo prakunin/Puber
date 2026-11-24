@@ -24,6 +24,9 @@ internal object TabTypeConfig {
         return BrowseEntry(config = config, labelRes = labelRes)
     }
 
+    fun isFilterable(config: SectionConfig): Boolean =
+        TabType.entries.any { browseEntryFor(it)?.config?.id == config.id }
+
     fun showAllTitle(tabType: TabType, config: SectionConfig): ShowAllTitle {
         val entry = browseEntryFor(tabType)
         return if (entry != null && entry.config.id == config.id) {

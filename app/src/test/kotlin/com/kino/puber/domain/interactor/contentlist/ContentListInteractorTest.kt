@@ -19,7 +19,11 @@ import com.kino.puber.data.api.models.isFullyWatched
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
+import com.kino.puber.domain.model.ContentFilter
+import com.kino.puber.domain.model.SortDirection
+import com.kino.puber.domain.model.SortField
 import com.kino.puber.domain.model.TabType
+import com.kino.puber.ui.feature.showall.model.applyTo
 import com.kino.puber.util.FakePayloadStore
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -68,7 +72,8 @@ internal open class ContentListInteractorTestFixture {
 
     /** The cache reads its clock rather than the wall, so a test can age an entry past its TTL. */
     protected var now = 0L
-    protected val contentCache = ContentCacheRepository(store = FakePayloadStore(), clock = { now })
+    protected val payloadStore = FakePayloadStore()
+    protected val contentCache = ContentCacheRepository(store = payloadStore, clock = { now })
     protected val interactor = ContentListInteractor(
         api,
         navigationPreferencesRepository,
@@ -125,7 +130,8 @@ internal open class ContentListInteractorTestFixture {
     protected suspend fun observedPages(
         config: SectionConfig,
         force: Boolean = false,
-    ): List<PaginatedResponse<Item>> = interactor.observeFirstPage(config, force)
+        cacheable: Boolean = true,
+    ): List<PaginatedResponse<Item>> = interactor.observeFirstPage(config, force, cacheable)
         .toList()
         .map { cached -> (cached as Cached.Value).value }
 
@@ -273,6 +279,19 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
 
         assertEquals(listOf(visible), result.items)
         assertEquals(response.pagination, result.pagination)
+    }
+
+    @Test
+    fun followPreference_whenAnimeIsShownAndWatchedHidden_keepsUnwatchedAnime() = runTest {
+        contentPreferences.value = defaultContentPreferences().copy(showAnime = true, hideWatched = true)
+        val config = config(AnimeFilterMode.FollowPreference)
+        val anime = item(id = 1, title = "Anime", ANIME_GENRE_ID)
+        val movie = item(id = 2, title = "Movie")
+        val watched = item(id = 3, title = "Watched", watched = 1)
+        coEvery { api.getItems("movie", "updated", 1, null, null) } returns
+            Result.success(page(anime, movie, watched))
+
+        assertEquals(listOf(anime, movie), interactor.loadPage(config, page = 1).items)
     }
 
     @Test
@@ -773,6 +792,72 @@ internal class ContentListInteractorTest : ContentListInteractorTestFixture() {
 
         coVerify(exactly = 1) { itemDetailsRepository.getItemDetailsCacheOnly(42) }
         coVerify(exactly = 0) { api.getItemDetails(any()) }
+    }
+
+    private val allMovie = TabTypeConfig.browseEntryFor(TabType.Movies)!!.config
+    private val all4k = TabTypeConfig.browseEntryFor(TabType.For4k)!!.config
+    private val drama = Genre(9, "Драма")
+
+    @Test
+    fun filteredBrowseConfig_sendsSortAndGenreWithTheBaseType() = runTest {
+        val filtered = ContentFilter(genre = drama, sort = SortField.YEAR, sortDirection = SortDirection.ASC)
+            .applyTo(allMovie)
+        coEvery { api.getItems("movie", "year", 1, null, "9") } returns Result.success(page(item(1, "A")))
+
+        interactor.loadPage(filtered, page = 1)
+
+        coVerify(exactly = 1) { api.getItems("movie", "year", 1, null, "9") }
+    }
+
+    @Test
+    fun filtered4kConfig_sendsSortAndGenreWithTheBaseQuality() = runTest {
+        val filtered = ContentFilter(genre = drama, sort = SortField.RATING).applyTo(all4k)
+        coEvery { api.getItems(null, "rating-", 1, "4k", "9") } returns Result.success(page(item(1, "A")))
+
+        interactor.loadPage(filtered, page = 1)
+
+        coVerify(exactly = 1) { api.getItems(null, "rating-", 1, "4k", "9") }
+    }
+
+    @Test
+    fun observeFirstPage_notCacheable_neitherReadsNorWritesTheStore() = runTest {
+        val stored = page(item(1, "Stored"))
+        val live = page(item(2, "Live"))
+        coEvery { api.getItems("movie", "updated-", 1, null, null) } returns Result.success(stored) andThen
+            Result.success(live)
+        assertEquals(listOf(stored), observedPages(allMovie))
+        val readsBefore = payloadStore.readCount
+        var written = false
+        payloadStore.onWrite = { written = true }
+
+        assertEquals(listOf(live), observedPages(allMovie, cacheable = false))
+
+        assertEquals(readsBefore, payloadStore.readCount)
+        assertEquals(false, written)
+    }
+
+    @Test
+    fun observeFirstPage_afterAFilteredRead_theUnfilteredPageStillComesFromTheStore() = runTest {
+        val base = page(item(1, "Base"))
+        val filteredPage = page(item(2, "Filtered"))
+        val filtered = ContentFilter(genre = drama).applyTo(allMovie)
+        coEvery { api.getItems("movie", "updated-", 1, null, null) } returns Result.success(base)
+        coEvery { api.getItems("movie", "updated-", 1, null, "9") } returns Result.success(filteredPage)
+
+        assertEquals(listOf(base), observedPages(allMovie))
+        assertEquals(listOf(filteredPage), observedPages(filtered, cacheable = false))
+        assertEquals(listOf(base), observedPages(allMovie))
+
+        coVerify(exactly = 1) { api.getItems("movie", "updated-", 1, null, null) }
+    }
+
+    @Test
+    fun showAnimeEnabled_followsThePreference() {
+        contentPreferences.value = defaultContentPreferences().copy(showAnime = false)
+        assertEquals(false, interactor.showAnimeEnabled)
+
+        contentPreferences.value = defaultContentPreferences().copy(showAnime = true)
+        assertEquals(true, interactor.showAnimeEnabled)
     }
 }
 

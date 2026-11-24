@@ -48,6 +48,10 @@ internal class ContentListInteractor(
     val hideWatchedEnabled: Boolean
         get() = navigationPreferencesRepository.contentPreferences.value.hideWatched
 
+    /** Whether the catalogue shows anime now; a genre list drops the anime genre when it does not. */
+    val showAnimeEnabled: Boolean
+        get() = navigationPreferencesRepository.contentPreferences.value.showAnime
+
     /**
      * The first page of a section: whatever is stored is emitted at once, and the network is
      * consulted behind it when the entry is stale, when the watch-state index has moved, or when
@@ -56,7 +60,15 @@ internal class ContentListInteractor(
     fun observeFirstPage(
         config: SectionConfig,
         force: Boolean = false,
+        cacheable: Boolean = true,
     ): Flow<Cached<PaginatedResponse<Item>>> {
+        // A filtered query is read once for as long as its panel choice lasts: it neither reads the
+        // stored first page of the unfiltered config nor leaves a row behind for the next filter.
+        if (!cacheable) {
+            return flow {
+                emit(Cached.Value(loadPage(config, page = FIRST_PAGE), isStale = false))
+            }
+        }
         // A fresh section's page one is also what primes its FreshSectionPager: the pager builds
         // page two out of the state page one left behind, and refuses a cursor it never issued.
         // Served from the store, the section would draw its first page and then fail on its second.
@@ -149,7 +161,7 @@ internal class ContentListInteractor(
                     "did not match requested page $currentRequestedPage"
             }
             response.items
-                .filter { item -> isVisible(item, filterMode, hideWatched) }
+                .filter { item -> isVisible(item, filterMode, showAnime, hideWatched) }
                 .forEach { item -> visibleItems.putIfAbsent(item.id, item) }
 
             val pageIsFull = visibleItems.size >= targetSize || targetSize == 0
@@ -167,10 +179,15 @@ internal class ContentListInteractor(
         }
     }
 
-    private fun isVisible(item: Item, filterMode: AnimeFilterMode, hideWatched: Boolean): Boolean {
+    private fun isVisible(
+        item: Item,
+        filterMode: AnimeFilterMode,
+        showAnime: Boolean,
+        hideWatched: Boolean,
+    ): Boolean {
         val passesAnimeFilter = when (filterMode) {
             AnimeFilterMode.None -> true
-            AnimeFilterMode.FollowPreference,
+            AnimeFilterMode.FollowPreference -> showAnime || item.isAnime().not()
             AnimeFilterMode.Exclude -> item.isAnime().not()
             AnimeFilterMode.Only -> item.isAnime()
         }
