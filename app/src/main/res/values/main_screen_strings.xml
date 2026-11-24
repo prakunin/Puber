@@ -33,6 +33,14 @@
     <string name="content_section_popular">Популярные</string>
     <string name="content_section_hot">Горячие</string>
     <string name="content_section_all">Все</string>
+    <string name="browse_all_movies">Все фильмы</string>
+    <string name="browse_all_series">Все сериалы</string>
+    <string name="browse_all_concerts">Все концерты</string>
+    <string name="browse_all_docmovies">Все док. фильмы</string>
+    <string name="browse_all_docseries">Все док. сериалы</string>
+    <string name="browse_all_tvshows">Все ТВ-шоу</string>
+    <string name="browse_all_4k">Всё в 4К</string>
+    <string name="show_all_title_shelf">%1$s · %2$s</string>
     <string name="settings_startup_tab">Стартовая вкладка</string>
     <string name="settings_menu_sections_title">Секции меню</string>
     <string name="settings_menu_sections_description">Что показывать в меню. Скрытые секции не предлагаются как стартовая вкладка</string>

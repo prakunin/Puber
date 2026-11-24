@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.contentlist.vm
 
+import com.kino.puber.R
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -22,6 +23,7 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
+import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
@@ -581,28 +583,112 @@ class ContentListVMTest {
         assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
     }
 
-    private fun createVM() = ContentListVM(
+    @Test
+    fun browseAll_navigatesToShowAllWithTheTabsAllConfigAndTitle() {
+        val navigated = slot<PuberScreen>()
+        val vm = createVM(TabType.Movies)
+
+        vm.onAction(ContentListAction.BrowseAll)
+
+        verify {
+            router.navigateForResult<ContentChangeSet>(capture(navigated), RESULT_CONTENT_CHANGED, any())
+        }
+        val screen = navigated.captured as ShowAllScreen
+        assertEquals(TabTypeConfig.sectionsFor(TabType.Movies).last(), screen.config)
+        assertEquals("movie", screen.config.type)
+        assertEquals("updated-", screen.config.sort)
+        assertEquals(AnimeFilterMode.FollowPreference, screen.config.animeFilterMode)
+        assertEquals(R.string.browse_all_movies, screen.title.titleRes)
+    }
+
+    @Test
+    fun browseAllAndAllShelfShowAll_openTheSameScreenKeyAndTitle() {
+        val navigated = mutableListOf<PuberScreen>()
+        val vm = createVM(TabType.Movies)
+
+        vm.onAction(ContentListAction.BrowseAll)
+        vm.onAction(ContentListAction.ShowAll(TabTypeConfig.sectionsFor(TabType.Movies).last()))
+
+        verify(exactly = 2) {
+            router.navigateForResult<ContentChangeSet>(capture(navigated), RESULT_CONTENT_CHANGED, any())
+        }
+        val (browse, shelf) = navigated.map { it as ShowAllScreen }
+        assertEquals("ShowAllScreen_all_movie", browse.key)
+        assertEquals(browse.key, shelf.key)
+        assertEquals(browse.config, shelf.config)
+        assertEquals(browse.title, shelf.title)
+    }
+
+    @Test
+    fun browseAll_onATabWithoutAnEntry_doesNotNavigate() {
+        val vm = createVM(TabType.Cartoons)
+
+        vm.onAction(ContentListAction.BrowseAll)
+
+        verify(exactly = 0) {
+            router.navigateForResult<ContentChangeSet>(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun browseAll_returnedChanges_invalidateFirstPageCacheAndRequestSectionRefresh() {
+        val listener = slot<(ContentChangeSet?) -> Unit>()
+        val vm = createVM(TabType.Movies)
+        vm.onAction(ContentListAction.BrowseAll)
+        verify {
+            router.navigateForResult<ContentChangeSet>(any(), RESULT_CONTENT_CHANGED, capture(listener))
+        }
+
+        listener.captured(ContentChangeSet.single(42, ContentChangeType.Watched))
+
+        verifyOrder {
+            interactor.invalidateFirstPageCache()
+            refreshCoordinator.requestRefresh()
+        }
+    }
+
+    @Test
+    fun browseAll_stopsAPublishedTrailerPreview() {
+        coEvery { interactor.getItemDetails(42) } returns
+            item(42, trailer = Trailer(url = "https://cdn/trailer.mp4"))
+        val vm = createVM(autoTrailerEnabled = true)
+        vm.onAction(CommonAction.ItemFocused(videoItem(42)))
+        mainDispatcher.dispatcher.scheduler.advanceTimeBy(2001)
+        assertEquals("https://cdn/trailer.mp4", vm.testStateValue.previewTrailerUrl)
+
+        vm.onAction(ContentListAction.BrowseAll)
+
+        assertNull(vm.testStateValue.previewTrailerUrl)
+    }
+
+    private fun createVM(tabType: TabType = TabType.Movies) = ContentListVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
         trailerLinks = noTrailerLinks(),
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true),
         contentListRefreshCoordinator = refreshCoordinator,
+        tabType = tabType,
     )
 
-    private fun createVM(heroConfigs: List<SectionConfig>) = ContentListVM(
+    private fun createVM(
+        heroConfigs: List<SectionConfig>,
+        tabType: TabType = TabType.Movies,
+    ) = ContentListVM(
         router = router,
         interactor = interactor,
         mapper = mapper,
         trailerLinks = noTrailerLinks(),
         navPrefs = mockk<NavigationPreferencesRepository>(relaxed = true),
         contentListRefreshCoordinator = refreshCoordinator,
+        tabType = tabType,
         heroConfigs = heroConfigs,
     )
 
     private fun createVM(
         autoTrailerEnabled: Boolean,
         trailerLinks: TrailerLinkInteractor = noTrailerLinks(),
+        tabType: TabType = TabType.Movies,
     ) = ContentListVM(
         router = router,
         interactor = interactor,
@@ -612,6 +698,7 @@ class ContentListVMTest {
             every { getAutoTrailerEnabled() } returns autoTrailerEnabled
         },
         contentListRefreshCoordinator = refreshCoordinator,
+        tabType = tabType,
     )
 
     /**
