@@ -1,0 +1,783 @@
+<title>Экран «Показать все»</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#0B0A0E;
+  --panel:#141118;
+  --panel2:#1B1722;
+  --line:#2B2534;
+  --text:#E7E3EC;
+  --dim:#948CA3;
+  --dimmer:#6A637A;
+  --accent:#D0BCFF;
+  --warm:#FFC178;
+
+  /* PuberTheme поверх tv-material3 darkColorScheme, дословно */
+  --p-primary:#D0BCFF;        /* Purple80 */
+  --p-onsurface:#E6E1E5;      /* Neutral90 */
+  --p-surfacevariant:#49454F; /* NeutralVariant30 */
+  --p-border:#938F99;         /* NeutralVariant60 — рамка фокуса карточки */
+  --p-surface:#000000;        /* OledBackground */
+
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --roboto:"Roboto","Helvetica Neue",Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── chrome ───────────────────────────────────────────────── */
+.top{
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+  padding:18px 24px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#17131F 0%,var(--panel) 100%);
+}
+.top h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.top .sub{color:var(--dim);font-size:12.5px;max-width:70ch}
+.readout{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.readout b{color:var(--accent);font-weight:500}
+
+.switches{
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+  padding:12px 24px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.seg{display:flex;align-items:center;gap:8px}
+.seg > span{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dimmer)}
+.seg .opts{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:5px 11px;cursor:pointer;
+  border-right:1px solid var(--line);
+}
+.seg .opts button:last-child{border-right:0}
+.seg button:hover{color:var(--text);background:var(--panel2)}
+.seg button[aria-pressed="true"]{background:#2C2338;color:var(--accent)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+:root{
+  /* tv-material3 darkColorScheme, дословно */
+  --p-onsurfacevariant:#CAC4D0; /* NeutralVariant80 */
+  --p-onprimary:#381E72;        /* Primary20 */
+}
+
+/* ── stage ────────────────────────────────────────────────── */
+.scope{padding:22px 24px;background:linear-gradient(180deg,#0E0C12 0%,var(--ground) 100%);border-bottom:1px solid var(--line)}
+.stagewrap{position:relative;margin:0 auto;overflow:hidden;border:1px solid var(--line)}
+.stage{
+  position:absolute;top:0;left:0;width:1920px;height:1080px;
+  transform-origin:top left;background:#000;overflow:hidden;
+  font-family:var(--roboto);color:var(--p-onsurface);
+}
+.ruler{position:absolute;left:-9999px;top:0;visibility:hidden;white-space:normal}
+
+/* закрытое боковое меню — геометрия снята с кадра TV-бокса */
+.rail{position:absolute;left:0;top:0;bottom:0;background:var(--p-surface);z-index:5}
+.rail .ri{position:absolute;display:flex;align-items:center;justify-content:center}
+.rail .ri svg{display:block;opacity:.72}
+.rail .ri.on{background:#1E1B23;border-radius:9999px}
+.rail .ri.on svg{opacity:1}
+
+/* сетка */
+.grid{position:absolute;top:0;bottom:0;overflow:hidden}
+.sheet{position:absolute;left:0;right:0;top:0}
+.tile{position:absolute;transform-origin:50% 50%}
+.tile.f{z-index:3}
+.tile .frame{position:absolute;inset:0;border-style:solid}
+.tile .ring{position:absolute;pointer-events:none;border-style:solid}
+.poster{position:absolute;overflow:hidden;background:#111}
+.poster > img.art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.badges{position:absolute;display:flex;align-items:flex-start}
+.badge{display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;white-space:nowrap}
+.pills{position:absolute;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-end}
+.pill{display:flex;align-items:center;flex:none;border-radius:9999px;white-space:nowrap}
+.pill svg,.pill img{display:block;flex:none}
+.pills .br{flex-basis:100%;height:0}
+.eye{position:absolute;display:flex;align-items:center;justify-content:center}
+.eye svg{display:block}
+.cnt{position:absolute;font-weight:500}
+.bar{position:absolute;left:0;right:0;bottom:0;background:rgba(73,69,79,.5)}
+.bar i{display:block;height:100%;background:var(--p-primary)}
+.tt{position:absolute;font-weight:500;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.ot{position:absolute;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+.guides{position:absolute;inset:0;pointer-events:none;font-family:var(--mono);z-index:9}
+.guides .v{position:absolute;top:0;bottom:0;width:2px}
+.guides .h{position:absolute;left:0;right:0;height:2px}
+.guides .lab{
+  position:absolute;font-size:19px;padding:3px 7px;border-radius:3px;
+  background:rgba(11,10,14,.82);white-space:nowrap;letter-spacing:.04em;
+}
+
+/* ── console ──────────────────────────────────────────────── */
+.console{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0;border-top:1px solid var(--line)}
+.group{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 20px 18px}
+.group > h2{margin:0 0 12px;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin-bottom:11px;align-items:center}
+.ctl .name{font-size:12.5px;color:var(--dim)}
+.ctl .val{font-family:var(--mono);font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums;text-align:right}
+.ctl .val.changed{color:var(--warm)}
+.ctl input[type=range]{grid-column:1 / -1;width:100%;margin:2px 0 0}
+.ctl .note{grid-column:1 / -1;font-size:11px;color:var(--dimmer);margin-top:-1px}
+
+input[type=range]{appearance:none;height:18px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);margin-top:-5px;border:0}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.foot{padding:18px 24px 40px;display:grid;gap:14px}
+.foot h2{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--dimmer)}
+.spec{
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--dim);
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:14px 16px;overflow-x:auto;white-space:pre;
+}
+.spec b{color:var(--warm);font-weight:500}
+.hint{font-size:12px;color:var(--dimmer);max-width:88ch}
+.hint kbd{font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--dim)}
+.reset{
+  appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  font-family:var(--sans);font-size:12.5px;padding:6px 14px;border-radius:3px;cursor:pointer;justify-self:start;
+}
+.reset:hover{color:var(--text);border-color:var(--accent)}
+.reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="top">
+  <h1>Экран «Показать все»</h1>
+  <div class="sub">Стенд 1920&nbsp;×&nbsp;1080 новой сетки постеров для Show all: плитка с постером 2:3,
+    значки CC / AC3 / HD / 4K, пилюли рейтингов KinoPub / Кинопоиск / IMDb, русское и оригинальное название.
+    48 карточек и их поля — из кэша приложения на TV-боксе, постеры — posters.medium с CDN. Меню — по кадру
+    с бокса. Числа ниже — стартовые, ничего ещё не зафиксировано.</div>
+  <div class="readout" id="scaleOut"></div>
+</div>
+
+<div class="switches" id="switches"></div>
+
+<div class="scope">
+  <div class="stagewrap" id="stagewrap"><div class="stage" id="stage"></div></div>
+</div>
+
+<div class="console" id="console"></div>
+
+<div class="foot">
+  <h2>Что уедет в Compose</h2>
+  <div class="spec" id="spec"></div>
+  <div class="hint">
+    <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> — по плиткам сетки, как пульт. Из первой колонки
+    влево на устройстве открывается меню; вниз из предпоследнего ряда в неполный последний — на последнюю
+    плитку. Кликните по стенду, чтобы он начал ловить стрелки, или кликните по плитке.
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button class="reset" id="reset">Вернуть стартовые значения</button>
+    <span class="hint" style="max-width:56ch">Выкрученное запоминается в этом браузере и переживает
+      обновление страницы; кнопка возвращает стартовые значения и стирает запомненное.</span>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* Содержимое: 48 карточек из cached_payload приложения com.kino.puber.stage (снимок данных
+   TV-бокса от 2026-11-23), прогнанных через реплику VideoItemUIMapper: название делится по «/»,
+   KinoPub = rating_percentage / 10 без «.0», рейтинги с нулём выброшены. Постеры — posters.medium
+   (250 × 375) с CDN; у первых шести в каждом наборе есть и posters.big (500 × 750). */
+const SETS = {
+ k4: {title:"4K · Популярные", rail:6, items:[
+ {"id":66136,"title":"Тед Лассо","orig":"Ted Lasso","year":2020,"quality":2160,"ac3":0,"ratings":[["PUB","9.6"],["KP","8.5"],["IMDB","8.7"]],"unwatched":null,"medium":"__ASSET:m-66136.jpg__","big":"__ASSET:b-66136.jpg__"},
+ {"id":109996,"title":"Гангстерленд","orig":"MobLand","year":2025,"quality":2160,"ac3":0,"ratings":[["PUB","9.6"],["KP","8.2"],["IMDB","8.3"]],"unwatched":null,"medium":"__ASSET:m-109996.jpg__","big":"__ASSET:b-109996.jpg__"},
+ {"id":78667,"title":"Медленные лошади","orig":"Slow Horses","year":2022,"quality":2160,"ac3":0,"ratings":[["PUB","9.6"],["KP","7.9"],["IMDB","8.4"]],"unwatched":null,"medium":"__ASSET:m-78667.jpg__","big":"__ASSET:b-78667.jpg__"},
+ {"id":101377,"title":"Тёмная материя","orig":"Dark Matter","year":2024,"quality":2160,"ac3":0,"ratings":[["PUB","9.3"],["KP","7.7"],["IMDB","7.6"]],"unwatched":null,"medium":"__ASSET:m-101377.jpg__","big":"__ASSET:b-101377.jpg__"},
+ {"id":106414,"title":"Лэндмен","orig":"Landman","year":2024,"quality":2160,"ac3":0,"ratings":[["PUB","9.6"],["KP","8.3"],["IMDB","8.2"]],"unwatched":null,"medium":"__ASSET:m-106414.jpg__","big":"__ASSET:b-106414.jpg__"},
+ {"id":82690,"title":"Властелин колец: Кольца власти","orig":"The Lord of the Rings: The Rings of Power","year":2022,"quality":2160,"ac3":0,"ratings":[["PUB","7"],["KP","6.3"],["IMDB","6.8"]],"unwatched":null,"medium":"__ASSET:m-82690.jpg__","big":"__ASSET:b-82690.jpg__"},
+ {"id":64567,"title":"Великая","orig":"The Great","year":2020,"quality":2160,"ac3":0,"ratings":[["PUB","8.6"],["KP","7.2"],["IMDB","8.1"]],"unwatched":null,"medium":"__ASSET:m-64567.jpg__","big":null},
+ {"id":75412,"title":"Шершни","orig":"Yellowjackets","year":2021,"quality":2160,"ac3":0,"ratings":[["PUB","8.3"],["KP","7.5"]],"unwatched":null,"medium":"__ASSET:m-75412.jpg__","big":null},
+ {"id":98908,"title":"Следопыт","orig":"Tracker","year":2024,"quality":2160,"ac3":0,"ratings":[["PUB","7.8"],["KP","6.8"],["IMDB","7.2"]],"unwatched":null,"medium":"__ASSET:m-98908.jpg__","big":null},
+ {"id":81337,"title":"Список смертников","orig":"The Terminal List","year":2022,"quality":2160,"ac3":0,"ratings":[["PUB","9.3"],["KP","7.4"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-81337.jpg__","big":null},
+ {"id":104920,"title":"Никто этого не хочет","orig":"Nobody Wants This","year":2024,"quality":2160,"ac3":0,"ratings":[["PUB","9.1"],["KP","7.7"],["IMDB","7.7"]],"unwatched":null,"medium":"__ASSET:m-104920.jpg__","big":null},
+ {"id":116863,"title":"Оно: Добро пожаловать в Дерри","orig":"IT: Welcome to Derry","year":2025,"quality":2160,"ac3":0,"ratings":[["PUB","9"],["KP","7.4"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-116863.jpg__","big":null},
+ {"id":128626,"title":"Обитель зла","orig":"Resident Evil","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","8.3"],["KP","7.2"],["IMDB","7.4"]],"unwatched":null,"medium":"__ASSET:m-128626.jpg__","big":null},
+ {"id":61420,"title":"Достать ножи","orig":"Knives Out","year":2019,"quality":2160,"ac3":0,"ratings":[["PUB","9.7"],["KP","8.2"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-61420.jpg__","big":null},
+ {"id":128185,"title":"Хрустальное озеро","orig":"Crystal Lake","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","8.8"],["KP","7.4"],["IMDB","7.6"]],"unwatched":null,"medium":"__ASSET:m-128185.jpg__","big":null},
+ {"id":128176,"title":"Квест Вижна","orig":"VisionQuest","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","8.1"],["KP","7"],["IMDB","7.8"]],"unwatched":null,"medium":"__ASSET:m-128176.jpg__","big":null},
+ {"id":79621,"title":"Фантастические твари: Тайны Дамблдора","orig":"Fantastic Beasts: The Secrets of Dumbledore","year":2022,"quality":2160,"ac3":0,"ratings":[["PUB","6.3"],["KP","6.1"],["IMDB","6.2"]],"unwatched":null,"medium":"__ASSET:m-79621.jpg__","big":null},
+ {"id":52228,"title":"Джон Уик 3","orig":"John Wick: Chapter 3 - Parabellum","year":2019,"quality":2160,"ac3":0,"ratings":[["PUB","8.3"],["KP","7.1"],["IMDB","7.4"]],"unwatched":null,"medium":"__ASSET:m-52228.jpg__","big":null},
+ {"id":121,"title":"Человек-паук","orig":"Spider-Man","year":2002,"quality":2160,"ac3":0,"ratings":[["PUB","9.6"],["KP","7.8"],["IMDB","7.5"]],"unwatched":null,"medium":"__ASSET:m-121.jpg__","big":null},
+ {"id":128597,"title":"Ноктюрн","orig":"Nocturne","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","9"],["KP","7.2"],["IMDB","7.4"]],"unwatched":null,"medium":"__ASSET:m-128597.jpg__","big":null},
+ {"id":106837,"title":"Чёрные голуби","orig":"Black Doves","year":2024,"quality":2160,"ac3":0,"ratings":[["PUB","7"],["KP","6.5"],["IMDB","7.2"]],"unwatched":null,"medium":"__ASSET:m-106837.jpg__","big":null},
+ {"id":76087,"title":"Пожиратель звёзд","orig":"Swallowed Star","year":2020,"quality":2160,"ac3":0,"ratings":[["PUB","7.1"],["KP","8.6"],["IMDB","8.3"]],"unwatched":null,"medium":"__ASSET:m-76087.jpg__","big":null},
+ {"id":121408,"title":"Река Мадисон","orig":"The Madison","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","8.8"],["KP","8"],["IMDB","7.8"]],"unwatched":null,"medium":"__ASSET:m-121408.jpg__","big":null},
+ {"id":127942,"title":"Глубина","orig":"Below","year":2026,"quality":2160,"ac3":0,"ratings":[["PUB","7.3"],["KP","6.3"],["IMDB","6.2"]],"unwatched":null,"medium":"__ASSET:m-127942.jpg__","big":null}
+ ]},
+ mix: {title:"Сериалы · 1080 / 720 / 480", rail:5, items:[
+ {"id":8740,"title":"Игра престолов","orig":"Game of Thrones","year":2011,"quality":1080,"ac3":0,"ratings":[["PUB","9.5"],["KP","9"],["IMDB","9.2"]],"unwatched":null,"medium":"__ASSET:m-8740.jpg__","big":"__ASSET:b-8740.jpg__"},
+ {"id":14148,"title":"Анатомия страсти","orig":"Grey's Anatomy","year":2005,"quality":1080,"ac3":0,"ratings":[["PUB","9.5"],["KP","8.2"],["IMDB","7.6"]],"unwatched":null,"medium":"__ASSET:m-14148.jpg__","big":"__ASSET:b-14148.jpg__"},
+ {"id":8634,"title":"Южный Парк","orig":"South Park","year":1997,"quality":1080,"ac3":0,"ratings":[["PUB","9.6"],["KP","8.2"],["IMDB","8.7"]],"unwatched":null,"medium":"__ASSET:m-8634.jpg__","big":"__ASSET:b-8634.jpg__"},
+ {"id":8745,"title":"Клиника","orig":"Scrubs","year":2001,"quality":480,"ac3":0,"ratings":[["PUB","9.8"],["KP","8.7"],["IMDB","8.4"]],"unwatched":null,"medium":"__ASSET:m-8745.jpg__","big":"__ASSET:b-8745.jpg__"},
+ {"id":77917,"title":"Извне","orig":"From","year":2022,"quality":1080,"ac3":0,"ratings":[["PUB","8.8"],["KP","7.6"],["IMDB","7.7"]],"unwatched":null,"medium":"__ASSET:m-77917.jpg__","big":"__ASSET:b-77917.jpg__"},
+ {"id":8785,"title":"Американская история ужасов","orig":"American Horror Story","year":2011,"quality":1080,"ac3":0,"ratings":[["PUB","9.1"],["KP","7.9"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-8785.jpg__","big":"__ASSET:b-8785.jpg__"},
+ {"id":84649,"title":"Король Талсы","orig":"Tulsa King","year":2022,"quality":1080,"ac3":0,"ratings":[["PUB","9.6"],["KP","7.6"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-84649.jpg__","big":null},
+ {"id":12879,"title":"Кости","orig":"Bones","year":2005,"quality":720,"ac3":0,"ratings":[["PUB","9.5"],["KP","8"],["IMDB","7.8"]],"unwatched":null,"medium":"__ASSET:m-12879.jpg__","big":null},
+ {"id":17649,"title":"Медики Чикаго","orig":"Chicago Med","year":2015,"quality":1080,"ac3":0,"ratings":[["PUB","8.9"],["KP","7.6"],["IMDB","7.6"]],"unwatched":null,"medium":"__ASSET:m-17649.jpg__","big":null},
+ {"id":95137,"title":"Монолог фармацевта","orig":"Kusuriya no Hitorigoto","year":2023,"quality":1080,"ac3":0,"ratings":[["PUB","9.7"],["KP","9"],["IMDB","8.6"]],"unwatched":null,"medium":"__ASSET:m-95137.jpg__","big":null},
+ {"id":22400,"title":"Чёрный Клевер","orig":"Black Clover","year":2017,"quality":720,"ac3":0,"ratings":[["PUB","9.2"],["KP","8.3"],["IMDB","8.3"]],"unwatched":null,"medium":"__ASSET:m-22400.jpg__","big":null},
+ {"id":68842,"title":"Люпен","orig":"Lupin","year":2021,"quality":1080,"ac3":0,"ratings":[["PUB","9"],["KP","7.5"],["IMDB","7.5"]],"unwatched":null,"medium":"__ASSET:m-68842.jpg__","big":null},
+ {"id":113263,"title":"Декстер: Воскрешение","orig":"Dexter: Resurrection","year":2025,"quality":1080,"ac3":0,"ratings":[["PUB","9.7"],["KP","8.5"],["IMDB","9"]],"unwatched":null,"medium":"__ASSET:m-113263.jpg__","big":null},
+ {"id":77200,"title":"Позолоченный век","orig":"The Gilded Age","year":2022,"quality":1080,"ac3":0,"ratings":[["PUB","9.4"],["KP","8.4"],["IMDB","8.1"]],"unwatched":null,"medium":"__ASSET:m-77200.jpg__","big":null},
+ {"id":25353,"title":"Невероятные приключения Джоджо","orig":"JoJo no Kimyou na Bouken","year":2012,"quality":1080,"ac3":0,"ratings":[["PUB","9.5"],["KP","8.5"],["IMDB","8.6"]],"unwatched":null,"medium":"__ASSET:m-25353.jpg__","big":null},
+ {"id":108493,"title":"Рай","orig":"Paradise","year":2025,"quality":1080,"ac3":0,"ratings":[["PUB","9"],["KP","7.3"],["IMDB","7.9"]],"unwatched":null,"medium":"__ASSET:m-108493.jpg__","big":null},
+ {"id":60562,"title":"Условный мент","orig":"","year":2019,"quality":1080,"ac3":0,"ratings":[["PUB","3.9"],["KP","7.2"],["IMDB","4.3"]],"unwatched":null,"medium":"__ASSET:m-60562.jpg__","big":null},
+ {"id":127795,"title":"Вампир поневоле","orig":"The Reluctant Vampire","year":null,"quality":null,"ac3":null,"ratings":[],"unwatched":null,"medium":"__ASSET:m-127795.jpg__","big":null},
+ {"id":83023,"title":"Киберпанк: Бегущие по краю","orig":"Cyberpunk: Edgerunners","year":2022,"quality":1080,"ac3":0,"ratings":[["PUB","9.4"],["KP","7.9"],["IMDB","8.3"]],"unwatched":null,"medium":"__ASSET:m-83023.jpg__","big":null},
+ {"id":127393,"title":"Трудно быть богом","orig":"","year":2026,"quality":1080,"ac3":0,"ratings":[["PUB","6.6"],["KP","7"],["IMDB","5.5"]],"unwatched":null,"medium":"__ASSET:m-127393.jpg__","big":null},
+ {"id":127792,"title":"Война","orig":"WAR","year":2026,"quality":1080,"ac3":0,"ratings":[["PUB","9.6"],["IMDB","7.1"]],"unwatched":null,"medium":"__ASSET:m-127792.jpg__","big":null},
+ {"id":15342,"title":"Каменская","orig":"","year":1999,"quality":1080,"ac3":0,"ratings":[["PUB","8.4"],["KP","8.1"],["IMDB","6.2"]],"unwatched":null,"medium":"__ASSET:m-15342.jpg__","big":null},
+ {"id":128899,"title":"Тело","orig":"The Body","year":2026,"quality":1080,"ac3":0,"ratings":[["PUB","8.1"],["IMDB","7.5"]],"unwatched":null,"medium":"__ASSET:m-128899.jpg__","big":null},
+ {"id":71653,"title":"Токийские мстители","orig":"Tokyo Revengers","year":2021,"quality":1080,"ac3":0,"ratings":[["PUB","9.3"],["KP","7.4"],["IMDB","7.7"]],"unwatched":null,"medium":"__ASSET:m-71653.jpg__","big":null}
+ ]},
+};
+
+/* Отметки просмотра. «Новых серий» — настоящие поля new из кэша (Следопыт 6, Монолог фармацевта 56,
+   Вампир поневоле 6). Глаз и полоса — пример: watch_state в снимке нет, а место им нужно увидеть. */
+const DEMO_WATCHED = new Set([66136, 8740]);
+const DEMO_PROGRESS = {61420: 0.42, 14148: 0.7};
+/* Unwatched-episode counters are placed by hand too, so the stand carries no account data. */
+const DEMO_UNWATCHED = {98908: 3, 95137: 12, 127795: 2};
+
+/* ── стартовые значения ────────────────────────────────────────────────────
+   Новой карточки в коде ещё нет. Старт — пропорции веб-сетки KinoPub (reference-web-grid.png),
+   переведённые в dp при 6 колонках, и то, что Show all несёт сегодня (поле 16 dp). */
+const START = {
+  railW:60, cols:6, padH:16, padTop:16, colGap:12, rowGap:16,
+  tilePad:5, tileRadius:10, posterRadius:7, tileFill:14, tileBorder:1, tileBorderAlpha:22,
+  badgeH:11, badgeSp:7, badgeGap:3, badgePadH:4, badgeInset:5, badgeRadius:3,
+  scrim:78, pillH:13, pillSp:8, pillIcon:8, pillGap:3, pillInset:5,
+  titleSp:10, titleLine:12, origSp:8, origLine:10, gapPosterTitle:5, gapTitleOrig:1,
+  focusW:2, focusScale:1.05, progressH:3,
+};
+
+const CONTROLS = [
+  {g:"Сетка", k:"railW", n:"закрытое меню", min:0, max:120, step:1, u:"dp",
+   note:"MainScreenContentBody: closeDrawerWidth = 60 dp. На боксе контент начинается с 152 px = 76 dp: 60 + поле 16"},
+  {g:"Сетка", k:"cols", n:"колонок", min:3, max:10, step:1, u:"",
+   note:"GridCells.Fixed; сегодня 3 широкие карточки. Веб — 6"},
+  {g:"Сетка", k:"padH", n:"поле сетки по бокам", min:0, max:64, step:1, u:"dp",
+   note:"contentPadding = PaddingValues(16.dp) сегодня; 48 dp — безопасная зона Google"},
+  {g:"Сетка", k:"padTop", n:"поле сетки сверху", min:0, max:64, step:1, u:"dp"},
+  {g:"Сетка", k:"colGap", n:"между колонками", min:0, max:48, step:1, u:"dp", note:"сегодня 16"},
+  {g:"Сетка", k:"rowGap", n:"между рядами", min:0, max:64, step:1, u:"dp", note:"сегодня 32"},
+
+  {g:"Плитка", k:"tilePad", n:"поле плитки", min:0, max:20, step:0.5, u:"dp",
+   note:"рамка вокруг постера и под названиями; на вебе ~3 % ширины"},
+  {g:"Плитка", k:"tileRadius", n:"скругление плитки", min:0, max:32, step:1, u:"dp"},
+  {g:"Плитка", k:"posterRadius", n:"скругление постера", min:0, max:32, step:1, u:"dp"},
+  {g:"Плитка", k:"tileFill", n:"заливка плитки", min:0, max:100, step:1, u:"%",
+   note:"surfaceVariant #49454F с этой непрозрачностью поверх чёрного"},
+  {g:"Плитка", k:"tileBorder", n:"контур плитки", min:0, max:3, step:0.5, u:"dp"},
+  {g:"Плитка", k:"tileBorderAlpha", n:"контур, непрозрачность", min:0, max:100, step:1, u:"%",
+   note:"colorScheme.border #938F99"},
+
+  {g:"Значки", k:"badgeH", n:"высота", min:6, max:24, step:0.5, u:"dp"},
+  {g:"Значки", k:"badgeSp", n:"кегль", min:5, max:14, step:0.5, u:"sp"},
+  {g:"Значки", k:"badgeGap", n:"между значками", min:0, max:10, step:0.5, u:"dp"},
+  {g:"Значки", k:"badgePadH", n:"поле по бокам", min:1, max:10, step:0.5, u:"dp"},
+  {g:"Значки", k:"badgeInset", n:"отступ от края постера", min:0, max:16, step:0.5, u:"dp"},
+  {g:"Значки", k:"badgeRadius", n:"скругление", min:0, max:12, step:0.5, u:"dp"},
+
+  {g:"Рейтинги", k:"scrim", n:"подложка значков и пилюль", min:30, max:100, step:1, u:"%",
+   note:"чёрный с этой непрозрачностью; 62 % тонули на светлых постерах, ux-ревью просит 75–80"},
+  {g:"Рейтинги", k:"pillH", n:"высота пилюли", min:8, max:28, step:0.5, u:"dp"},
+  {g:"Рейтинги", k:"pillSp", n:"кегль", min:5, max:16, step:0.5, u:"sp"},
+  {g:"Рейтинги", k:"pillIcon", n:"значок", min:5, max:16, step:0.5, u:"dp"},
+  {g:"Рейтинги", k:"pillGap", n:"между пилюлями", min:0, max:10, step:0.5, u:"dp"},
+  {g:"Рейтинги", k:"pillInset", n:"отступ от низа постера", min:0, max:20, step:0.5, u:"dp"},
+
+  {g:"Названия", k:"titleSp", n:"кегль названия", min:7, max:20, step:0.5, u:"sp"},
+  {g:"Названия", k:"titleLine", n:"интерлиньяж названия", min:8, max:28, step:0.5, u:"sp"},
+  {g:"Названия", k:"origSp", n:"кегль оригинала", min:6, max:16, step:0.5, u:"sp"},
+  {g:"Названия", k:"origLine", n:"интерлиньяж оригинала", min:7, max:24, step:0.5, u:"sp"},
+  {g:"Названия", k:"gapPosterTitle", n:"постер → название", min:0, max:20, step:0.5, u:"dp"},
+  {g:"Названия", k:"gapTitleOrig", n:"название → оригинал", min:0, max:12, step:0.5, u:"dp"},
+
+  {g:"Фокус", k:"focusW", n:"рамка фокуса", min:0, max:6, step:0.5, u:"dp",
+   note:"у остальных карточек приложения — CardDefaults.border, 3 dp"},
+  {g:"Фокус", k:"focusScale", n:"увеличение", min:1, max:1.2, step:0.01, u:"×",
+   note:"scale плитки под фокусом; tv-material3 Card по умолчанию 1.1"},
+  {g:"Фокус", k:"progressH", n:"полоса просмотра", min:0, max:8, step:0.5, u:"dp",
+   note:"WatchProgressBar, 3 dp сегодня"},
+];
+
+const FOCUS_COLOURS = {
+  border:  ["#938F99", "border — как у карточек приложения"],
+  primary: ["#D0BCFF", "primary — Purple80"],
+  white:   ["#E6E1E5", "onSurface"],
+  green:   ["#4CAF50", "зелёный, как на вебе"],
+};
+const SWITCHES = [
+  {k:"set",    n:"раздел", opts:Object.keys(SETS).map(k => [k, SETS[k].title])},
+  {k:"focusC", n:"цвет рамки", opts:Object.keys(FOCUS_COLOURS).map(k => [k, FOCUS_COLOURS[k][1].split(" — ")[0]])},
+  {k:"flags",  n:"CC / AC3", opts:[["web","у каждой (место на вебе)"],["data","по кэшу (нет ни одной)"]]},
+  {k:"hd4k",   n:"цвет 4K", opts:[["green","зелёный, как на вебе"],["theme","primary"],["plain","как остальные"]]},
+  {k:"pills",  n:"пилюли", opts:[["two","по две в ряд, как на вебе"],["flow","сколько влезет"]]},
+  {k:"names",  n:"высота названий", opts:[["reserve","резерв 2 + 1 строки"],["content","по содержимому"]]},
+  {k:"tier",   n:"постер", opts:[["medium","medium 250 px"],["big","big 500 px (первый ряд)"]]},
+  {k:"scroll", n:"прокрутка", opts:[["edge","до края"],["pivot","фокус на 30 %"]]},
+  {k:"year",   n:"год выхода", opts:[["line","в строке оригинала"],["badge","значком на постере"],["off","скрыт"]]},
+  {k:"marks",  n:"отметки просмотра", opts:[["on","вкл"],["off","выкл"]]},
+  {k:"guides", n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
+];
+
+const ICONS = {
+  eye:"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+  house:"M12 3 3 10.2V21h6v-6h6v6h6V10.2z",
+  glass:"M11 3a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 11 3m0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12",
+  heart:"M12 21C12 21 4 16.1 4 10.8A4.8 4.8 0 0 1 12 7a4.8 4.8 0 0 1 8 3.8C20 16.1 12 21 12 21",
+  clock:"M12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6 5.9 5.9 0 0 1 4.2 1.8L14 10h6V4l-2.4 2.4A7.9 7.9 0 0 0 12 4m-1 4v5l4 2 .8-1.6L13 12V8z",
+  slate:"M3 4h18v3H3zM3 9h18v11H3zm2.6-5.9L4 7h3l1.6-3.9zm5 0L9 7h3l1.6-3.9zm5 0L14 7h3l1.6-3.9z",
+  tv:"M3 4h18v13H3zm6 15h6v2H9z",
+  mic:"M12 3a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M6 11a6 6 0 0 0 5 5.9V19H8l-2 2h12l-2-2h-3v-2.1A6 6 0 0 0 18 11h-2a4 4 0 0 1-8 0z",
+  reel:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 3.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m-5.2 5.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m10.4 0a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2m-5.2 5.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2",
+  monitor:"M3 4h18v13H3zm7 3.2v6.6l5.2-3.3zM8 20h8v2H8z",
+  cast:"M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4M8.5 6.5 7 5A9.9 9.9 0 0 0 4 12a9.9 9.9 0 0 0 3 7l1.5-1.5A7.9 7.9 0 0 1 6 12a7.9 7.9 0 0 1 2.5-5.5m7 0A7.9 7.9 0 0 1 18 12a7.9 7.9 0 0 1-2.5 5.5L17 19a9.9 9.9 0 0 0 3-7 9.9 9.9 0 0 0-3-7z",
+  gear:"M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m9 4-2.1 1.4.5 2.5-2.3 1.1-1.7-1.9-2.4.8-.9 2.4h-2.6l-.9-2.4-2.4-.8-1.7 1.9-2.3-1.1.5-2.5L3 12l2.1-1.4-.5-2.5 2.3-1.1L8.6 9l2.4-.8.9-2.4h2.6l.9 2.4 2.4.8 1.7-1.9 2.3 1.1-.5 2.5z",
+  thumb:"M1 21h4V9H1zm22-11a2 2 0 0 0-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10a2 2 0 0 0 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73z",
+};
+
+/* Пункты закрытого меню в порядке кадра с бокса (набор вкладок по умолчанию). */
+const RAIL_TABS = [
+  ["house","Главная"],["glass","Поиск"],["heart","Я смотрю"],["clock","История"],
+  ["slate","Фильмы"],["tv","Сериалы"],["4k","4K"],["mic","Концерты"],
+  ["reel","Док. фильмы"],["monitor","Док. сериалы"],["cast","ТВ шоу"],["gear","Настройки"],
+];
+
+const IMDB = ["M8.4,21.1H5.9V9.9h3.8l0.7,4.7h0.1L11,9.9h3.8v11.2h-2.5v-6.7h-0.1l-0.9,6.7H9.4l-1,-6.7h0L8.4,21.1L8.4,21.1z","M15.8,9.8c0.4,0 3.2,-0.1 4.7,0.1c1.2,0.1 1.8,1.1 1.9,2.3c0.1,2.2 0.1,4.4 0.1,6.6c0,0.2 0,0.5 -0.1,0.8c-0.2,0.9 -0.7,1.4 -1.9,1.5c-1.5,0.1 -3,0.1 -4.4,0.1c0,0 -0.1,0 -0.2,0V9.8zM18.8,11.9v7.2c0.5,0 0.8,-0.2 0.8,-0.7c0,-1.9 0,-3.9 0,-5.9C19.6,12 19.4,11.8 18.8,11.9z","M2,21.1V9.9h2.9v11.2H2z","M29.9,14.1c-0.1,-0.8 -0.6,-1.2 -1.4,-1.4c-0.8,-0.1 -1.6,0 -2.3,0.7V9.9h-2.8v11.2H26c0.1,-0.2 0.1,-0.4 0.2,-0.5c0,0 0,0 0.1,0c0.1,0.1 0.2,0.2 0.3,0.3c0.7,0.5 1.5,0.6 2.3,0.3c0.7,-0.3 1,-0.9 1,-1.6c0,-0.8 0.1,-1.7 0.1,-2.6C30,16 30,15 29.9,14.1L29.9,14.1zM27.1,19.1c0,0.2 -0.2,0.4 -0.4,0.4s-0.4,-0.2 -0.4,-0.4v-4.3c0,-0.2 0.2,-0.4 0.4,-0.4s0.4,0.2 0.4,0.4V19.1z"];
+const KP = "M24,2.5A21.5,21.5 0,1 0,45.5 24,21.51 21.51,0 0,0 24,2.5ZM19.23,8.35a5.32,5.32 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,19.23 8.35ZM34.23,13.87a5.31,5.31 0,1 1,-5.32 5.31A5.31,5.31 0,0 1,34.26 13.87ZM24,21.33A2.67,2.67 0,0 1,26.69 24h0A2.68,2.68 0,0 1,24 26.67h0a2.67,2.67 0,1 1,0 -5.34ZM13.74,23.45a5.32,5.32 0,1 1,-5.32 5.32h0A5.32,5.32 0,0 1,13.74 23.45ZM28.79,29a5.31,5.31 0,1 1,-5.31 5.31A5.32,5.32 0,0 1,28.79 29Z";
+
+const DEFAULTS = {
+  ...START,
+  set:"k4", focusC:"border", flags:"data", hd4k:"green", pills:"two", names:"reserve",
+  tier:"medium", scroll:"edge", year:"line", marks:"on", guides:"off",
+};
+const S = {...DEFAULTS};
+const FOCUS = {set:"k4", index:0, scroll:0};
+
+/* Выкрученное переживает перезагрузку. Хранилище только в этом браузере и может быть
+   недоступно — тогда стенд открывается на стартовых значениях. */
+const STORE_KEY = "puber.stand.showall.v1";
+function restore(){
+  let saved;
+  try { const raw = localStorage.getItem(STORE_KEY); if (!raw) return; saved = JSON.parse(raw); }
+  catch (e) { return; }
+  if (!saved || typeof saved !== "object") return;
+  for (const c of CONTROLS){ const v = Number(saved[c.k]); if (Number.isFinite(v)) S[c.k] = clamp(v, c.min, c.max); }
+  for (const sw of SWITCHES){ if (sw.opts.some(o => o[0] === saved[sw.k])) S[sw.k] = saved[sw.k]; }
+}
+function remember(){
+  try {
+    const out = {};
+    for (const c of CONTROLS) out[c.k] = S[c.k];
+    for (const sw of SWITCHES) out[sw.k] = S[sw.k];
+    localStorage.setItem(STORE_KEY, JSON.stringify(out));
+  } catch (e) { /* без памяти между обновлениями */ }
+}
+function forget(){ try { localStorage.removeItem(STORE_KEY); } catch (e) {} }
+
+const W = 960, H = 540;      /* экран в dp: 1920 × 1080 при density 2.0 */
+const POSTER_AR = 2 / 3;
+const MEDIUM_PX = 250, BIG_PX = 500;
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function px(dp){ return dp * 2; }
+function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+/* Трекинг tv-material3, дословно: titleSmall 0.1, labelSmall 0.5, bodySmall 0.2. */
+const TRACKING = {titleSmall:0.1, bodySmall:0.2, labelSmall:0.5};
+function tracking(sp){ return "letter-spacing:" + px(sp) + "px"; }
+
+function items(){ return SETS[S.set].items; }
+
+/* Каждый размер на сцене проходит здесь: dp внутрь, пиксели устройства наружу, с зажимом. */
+function geom(){
+  const g = {};
+  for (const c of CONTROLS) g[c.k] = clamp(Number(S[c.k]), c.min, c.max);
+  g.cols = Math.round(g.cols);
+  g.contentX = g.railW;
+  g.contentW = W - g.railW;
+  /* GridCells.Fixed делит целые пиксели: остаток раздаётся первым колонкам по одному. */
+  const availPx = Math.round(px(g.contentW - 2 * g.padH)) - (g.cols - 1) * Math.round(px(g.colGap));
+  const base = Math.floor(availPx / g.cols), rest = availPx - base * g.cols;
+  g.colPx = Array.from({length:g.cols}, (_, i) => base + (i < rest ? 1 : 0));
+  g.colX = [];
+  let x = Math.round(px(g.padH));
+  for (let i = 0; i < g.cols; i++){ g.colX.push(x); x += g.colPx[i] + Math.round(px(g.colGap)); }
+  g.tileWpx = base;
+  g.tileW = base / 2;
+  g.posterWpx = Math.max(2, base - 2 * Math.round(px(g.tilePad)));
+  g.posterW = g.posterWpx / 2;
+  g.posterHpx = Math.round(g.posterWpx / POSTER_AR);
+  g.posterH = g.posterHpx / 2;
+  g.focusColour = FOCUS_COLOURS[S.focusC][0];
+  return g;
+}
+
+/* ── измерение переносов настоящим шрифтом ────────────────── */
+function measureLines(text, widthDp, sizeSp, lineSp, weight, trackSp){
+  const r = document.getElementById("ruler");
+  r.style.width = px(widthDp) + "px";
+  r.style.fontSize = px(sizeSp) + "px";
+  r.style.lineHeight = px(lineSp) + "px";
+  r.style.fontWeight = weight || 400;
+  r.style.letterSpacing = px(trackSp || 0) + "px";
+  r.textContent = text;
+  return Math.max(1, Math.round(r.scrollHeight / px(lineSp)));
+}
+
+/* Высота плитки: поле, постер, зазор, название, зазор, оригинал, поле. В режиме «резерв» место под
+   две строки названия и строку оригинала есть всегда, так что ряд не прыгает от длины текста. */
+function tileLayout(it, g){
+  const reserve = S.names === "reserve";
+  const titleLines = reserve ? 2 : Math.min(2, measureLines(it.title, g.posterW, g.titleSp, g.titleLine, 500, TRACKING.titleSmall));
+  /* Год в строке оригинала: «Ted Lasso · 2020»; без оригинала строка несёт только год. */
+  const hasOrig = !!it.orig || (S.year === "line" && !!it.year);
+  const origH = (reserve || hasOrig) ? g.gapTitleOrig + g.origLine : 0;
+  const h = g.tilePad + g.posterH + g.gapPosterTitle + titleLines * g.titleLine + origH + g.tilePad;
+  return {titleLines, hasOrig, h};
+}
+
+/* LazyVerticalGrid: высота ряда — по самой высокой плитке в нём, плитки прижаты к верху. */
+function layoutRows(g){
+  const list = items();
+  const rows = [];
+  for (let i = 0; i < list.length; i += g.cols){
+    const slice = list.slice(i, i + g.cols).map(it => tileLayout(it, g));
+    rows.push({start:i, tiles:slice, h:Math.max(...slice.map(t => t.h))});
+  }
+  let y = g.padTop;
+  for (const r of rows){ r.y = y; y += r.h + g.rowGap; }
+  g.contentH = y - g.rowGap + g.padTop;
+  return rows;
+}
+
+function railHTML(g){
+  if (g.railW <= 0) return "";
+  const pitch = 40, firstCentre = 36, icon = 24;
+  const active = SETS[S.set].rail;
+  const items = RAIL_TABS.map((t, i) => {
+    const cy = firstCentre + i * pitch;
+    const glyph = t[0] === "4k"
+      ? '<svg viewBox="0 0 24 24" width="' + px(icon) + '" height="' + px(icon) + '" aria-hidden="true"><rect x="1.5" y="5" width="21" height="14" rx="2.5" fill="none" stroke="var(--p-onsurface)" stroke-width="1.6"/><text x="12" y="16.3" text-anchor="middle" font-family="Roboto, sans-serif" font-size="10" font-weight="700" fill="var(--p-onsurface)">4K</text></svg>'
+      : '<svg viewBox="0 0 24 24" width="' + px(icon) + '" height="' + px(icon) + '" fill="var(--p-onsurface)" aria-hidden="true"><path d="' + ICONS[t[0]] + '"/></svg>';
+    /* Пилюля выбранной вкладки на кадре бокса: x 8–119 px, 48 dp высотой, #1E1B23. */
+    const on = i === active;
+    const w = 56, h = on ? 48 : pitch;
+    return '<div class="ri' + (on ? " on" : "") + '" title="' + esc(t[1]) + '" style="left:' + px(4) + 'px;width:' + px(w) +
+      'px;top:' + px(cy - h / 2) + 'px;height:' + px(h) + 'px">' + glyph + '</div>';
+  }).join("");
+  return '<div class="rail" style="width:' + px(g.railW) + 'px">' + items + '</div>';
+}
+
+function badgeHTML(label, kind, g){
+  let bg = "rgba(0,0,0," + g.scrim / 100 + ")", fg = "var(--p-onsurface)", border = "rgba(230,225,229,.28)";
+  if (kind === "4k" && S.hd4k === "green"){ bg = "#4CAF50"; fg = "#0B1F0C"; border = "transparent"; }
+  if (kind === "4k" && S.hd4k === "theme"){ bg = "var(--p-primary)"; fg = "var(--p-onprimary)"; border = "transparent"; }
+  return '<div class="badge" style="height:' + px(g.badgeH) + 'px;padding:0 ' + px(g.badgePadH) + 'px;border-radius:' +
+    px(g.badgeRadius) + 'px;background:' + bg + ';color:' + fg + ';box-shadow:inset 0 0 0 1px ' + border +
+    ';font-size:' + px(g.badgeSp) + 'px;line-height:' + px(g.badgeH) + 'px;' + tracking(TRACKING.labelSmall) + '">' + label + '</div>';
+}
+
+function badgesOf(it){
+  const out = [];
+  const web = S.flags === "web";
+  /* CC: у элемента списка поля subtitles в модели нет, в кэше его нет ни у одного элемента. */
+  if (web) out.push(["CC", "cc"]);
+  /* AC3: ac3 = 0 у всех 208 элементов кэша, где поле есть, — по данным значок не загорится нигде. */
+  if (web || it.ac3 === 1) out.push(["AC3", "ac3"]);
+  if (it.quality >= 2160) out.push(["4K", "4k"]);
+  else if (it.quality >= 720) out.push(["HD", "hd"]);
+  /* year: Item.year, есть у всех элементов кэша, кроме анонсов. */
+  if (S.year === "badge" && it.year) out.push([String(it.year), "year"]);
+  return out;
+}
+
+function pillHTML(r, g){
+  const s = px(g.pillIcon);
+  let mark;
+  if (r[0] === "KP") mark = '<svg viewBox="0 0 48 48" width="' + s + '" height="' + s + '" fill="#FF6600" aria-hidden="true"><path d="' + KP + '"/></svg>';
+  else if (r[0] === "IMDB") mark = '<svg viewBox="0 0 32 32" width="' + Math.round(s * 1.25) + '" height="' + s + '" preserveAspectRatio="xMidYMid meet" fill="#F5C518" aria-hidden="true">' + IMDB.map(p => '<path d="' + p + '"/>').join("") + '</svg>';
+  else mark = '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="#4CAF50" aria-hidden="true"><path d="' + ICONS.thumb + '"/></svg>';
+  const padH = Math.max(3, g.pillH * 0.35);
+  return '<div class="pill" style="height:' + px(g.pillH) + 'px;padding:0 ' + px(padH) + 'px;background:rgba(0,0,0,' + g.scrim / 100 + ');gap:' + px(Math.max(2, g.pillH * 0.2)) + 'px">' +
+    mark + '<span style="font-size:' + px(g.pillSp) + 'px;line-height:' + px(g.pillH) + 'px;font-weight:500;' +
+    tracking(TRACKING.bodySmall) + '">' + esc(r[1]) + '</span></div>';
+}
+
+function tileHTML(it, index, colIdx, row, t, g, focused){
+  const ownH = t.h;
+  const x = g.colX[colIdx], y = px(row.y);
+  const wpx = g.colPx[colIdx];
+  const pad = Math.round(px(g.tilePad));
+  const pw = wpx - 2 * pad, ph = Math.round(pw / POSTER_AR);
+  const useBig = S.tier === "big" && it.big;
+  const src = useBig ? it.big : it.medium;
+  const marks = S.marks === "on";
+
+  const badges = badgesOf(it);
+  const badgeRow = badges.length
+    ? '<div class="badges" style="left:' + px(g.badgeInset) + 'px;top:' + px(g.badgeInset) + 'px;gap:' + px(g.badgeGap) + 'px">' +
+      badges.map(b => badgeHTML(b[0], b[1], g)).join("") + '</div>' : "";
+
+  let pills = "";
+  if (it.ratings.length){
+    const parts = it.ratings.map(r => pillHTML(r, g));
+    if (S.pills === "two" && parts.length > 2) parts.splice(2, 0, '<div class="br"></div>');
+    pills = '<div class="pills" style="bottom:' + px(g.pillInset) + 'px;gap:' + px(g.pillGap) + 'px;padding:0 ' + px(2) + 'px">' + parts.join("") + '</div>';
+  }
+
+  const watched = marks && DEMO_WATCHED.has(it.id);
+  const progress = marks && !watched ? DEMO_PROGRESS[it.id] : undefined;
+  const eye = watched
+    ? '<div class="eye" style="top:' + px(6) + 'px;right:' + px(6) + 'px;padding:' + px(4) + 'px;border-radius:' + px(6) +
+      'px;background:rgba(0,0,0,.48)"><svg viewBox="0 0 24 24" width="' + px(16) + '" height="' + px(16) +
+      '" fill="rgba(208,188,255,.9)" aria-hidden="true"><path d="' + ICONS.eye + '"/></svg></div>'
+    : (marks && DEMO_UNWATCHED[it.id] > 0
+        ? '<div class="cnt" style="top:' + px(6) + 'px;right:' + px(6) + 'px;padding:' + px(2) + 'px ' + px(6) + 'px;border-radius:' + px(4) +
+          'px;background:var(--p-primary);color:var(--p-onprimary);font-size:' + px(11) + 'px;line-height:' + px(16) + 'px;' +
+          tracking(TRACKING.labelSmall) + '">' + DEMO_UNWATCHED[it.id] + '</div>'
+        : "");
+  const bar = progress != null && g.progressH > 0
+    ? '<div class="bar" style="height:' + px(g.progressH) + 'px"><i style="width:' + (progress * 100).toFixed(1) + '%"></i></div>' : "";
+
+  const titleTop = pad + ph + px(g.gapPosterTitle);
+  const titleH = px(t.titleLines * g.titleLine);
+  const title = '<div class="tt" style="left:' + pad + 'px;width:' + pw + 'px;top:' + titleTop + 'px;font-size:' + px(g.titleSp) +
+    'px;line-height:' + px(g.titleLine) + 'px;max-height:' + titleH + 'px;' + tracking(TRACKING.titleSmall) + '">' + esc(it.title) + '</div>';
+  /* Оригинал обрезается многоточием, год не обрезается никогда. */
+  const yearTxt = S.year === "line" && it.year ? String(it.year) : "";
+  const origInner = (it.orig ? '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">' + esc(it.orig) + '</span>' : "") +
+    (yearTxt ? '<span style="flex:none;white-space:pre">' + (it.orig ? " · " : "") + yearTxt + '</span>' : "");
+  const orig = origInner
+    ? '<div class="ot" style="display:flex;left:' + pad + 'px;width:' + pw + 'px;top:' + (titleTop + titleH + px(g.gapTitleOrig)) + 'px;font-size:' +
+      px(g.origSp) + 'px;line-height:' + px(g.origLine) + 'px;color:var(--p-onsurfacevariant);' + tracking(TRACKING.bodySmall) + '">' + origInner + '</div>'
+    : "";
+
+  const fill = 'rgba(73,69,79,' + (g.tileFill / 100).toFixed(2) + ')';
+  const bw = px(g.tileBorder);
+  const frame = '<div class="frame" style="border-radius:' + px(g.tileRadius) + 'px;background:' + fill + ';border-width:' + bw +
+    'px;border-color:rgba(147,143,153,' + (g.tileBorderAlpha / 100).toFixed(2) + ')"></div>';
+  /* Рамка фокуса — Stroke по контуру плитки, половиной наружу, как у CardDefaults.border. */
+  const ring = focused && g.focusW > 0
+    ? '<div class="ring" style="inset:' + (-px(g.focusW / 2)) + 'px;border-width:' + px(g.focusW) + 'px;border-color:' + g.focusColour +
+      ';border-radius:' + px(g.tileRadius + g.focusW / 2) + 'px"></div>' : "";
+  const scale = focused ? g.focusScale : 1;
+  /* Плитка своей высоты: LazyVerticalGrid не тянет её до ряда без fillMaxHeight. */
+  const h = px(ownH);
+  return '<div class="tile' + (focused ? " f" : "") + '" data-i="' + index + '" style="left:' + x + 'px;top:' + y + 'px;width:' + wpx +
+    'px;height:' + h + 'px;transform:scale(' + scale + ')">' + frame +
+    '<div class="poster" style="left:' + pad + 'px;top:' + pad + 'px;width:' + pw + 'px;height:' + ph + 'px;border-radius:' + px(g.posterRadius) + 'px">' +
+    '<img class="art" src="' + src + '" alt="">' + badgeRow + eye + pills + bar + '</div>' + title + orig + ring + '</div>';
+}
+
+/* Куда уезжает сетка, когда фокус уходит на ряд за краем экрана. */
+function bringIntoView(g, rows){
+  const r = rows[Math.floor(FOCUS.index / g.cols)];
+  if (!r) return;
+  const maxScroll = Math.max(0, g.contentH - H);
+  if (S.scroll === "pivot"){
+    FOCUS.scroll = clamp(r.y - 0.3 * H, 0, maxScroll);
+    return;
+  }
+  const top = r.y, bottom = r.y + r.h;
+  if (top < FOCUS.scroll) FOCUS.scroll = top;
+  else if (bottom > FOCUS.scroll + H) FOCUS.scroll = bottom - H;
+  FOCUS.scroll = clamp(FOCUS.scroll, 0, maxScroll);
+}
+
+function gridHTML(g, rows){
+  const list = items();
+  let out = "";
+  rows.forEach(row => row.tiles.forEach((t, c) => {
+    const i = row.start + c;
+    out += tileHTML(list[i], i, c, row, t, g, i === FOCUS.index);
+  }));
+  return '<div class="grid" style="left:' + px(g.contentX) + 'px;width:' + px(g.contentW) + 'px"><div class="sheet" style="top:' +
+    (-px(FOCUS.scroll)) + 'px;height:' + px(g.contentH) + 'px">' + out + '</div></div>';
+}
+
+function guidesHTML(g, rows){
+  if (S.guides !== "on") return "";
+  const A = "rgba(208,188,255,.55)", B = "rgba(255,193,120,.5)", C = "rgba(255,255,255,.18)";
+  const firstX = g.contentX + g.padH;
+  const r0 = rows[0];
+  const posterTop = r0.y + g.tilePad - FOCUS.scroll;
+  return '<div class="guides">' +
+    '<div class="v" style="left:' + (px(g.contentX) - 1) + 'px;background:' + A + '"></div>' +
+    '<div class="v" style="left:' + (px(firstX) - 1) + 'px;background:' + A + '"></div>' +
+    '<div class="v" style="left:' + (px(W - g.padH) - 1) + 'px;background:' + A + '"></div>' +
+    '<div class="v" style="left:96px;background:' + C + '"></div>' +
+    '<div class="h" style="top:' + (px(g.padTop - FOCUS.scroll) - 1) + 'px;background:' + C + '"></div>' +
+    '<div class="h" style="top:' + (px(posterTop + g.posterH) - 1) + 'px;background:' + B + '"></div>' +
+    '<div class="lab" style="left:' + (px(g.contentX) + 10) + 'px;top:' + (px(H) - 46) + 'px;color:' + A + '">меню ' + g.railW + ' dp · поле ' + g.padH + ' dp</div>' +
+    '<div class="lab" style="left:106px;top:14px;color:' + C + '">безопасная зона 48 dp</div>' +
+    '<div class="lab" style="left:' + (px(firstX) + 10) + 'px;top:' + (px(posterTop + g.posterH) + 8) + 'px;color:' + B + '">постер ' +
+      g.posterW + ' × ' + g.posterH + ' dp = ' + g.posterWpx + ' × ' + g.posterHpx + ' px</div>' +
+    '<div class="lab" style="right:14px;top:' + (px(H) - 46) + 'px;color:' + A + '">плитка ' + g.tileW + ' dp · ' + g.cols + ' колонок</div>' +
+    '</div>';
+}
+
+let lastRows = [];
+function render(){
+  const g = geom();
+  const st = document.getElementById("stage");
+  st.innerHTML = '<div class="ruler" id="ruler"></div>';
+  FOCUS.index = clamp(FOCUS.index, 0, items().length - 1);
+  const rows = layoutRows(g);
+  lastRows = rows;
+  bringIntoView(g, rows);
+  st.insertAdjacentHTML("beforeend", gridHTML(g, rows) + railHTML(g) + guidesHTML(g, rows));
+  st.querySelectorAll("[data-i]").forEach(el => el.addEventListener("click", ev => {
+    ev.preventDefault(); FOCUS.index = Number(el.dataset.i); render();
+  }));
+  paintConsole(g);
+  paintSpec(g, rows);
+  remember();
+}
+
+/* ── консоль ──────────────────────────────────────────────── */
+function paintSwitches(){
+  const host = document.getElementById("switches");
+  host.innerHTML = SWITCHES.map(s => '<div class="seg"><span>' + s.n + '</span><div class="opts">' +
+    s.opts.map(([v, l]) => '<button data-sw="' + s.k + '" data-v="' + v + '" aria-pressed="' + (String(S[s.k]) === v) + '">' + esc(l) + '</button>').join("") +
+    '</div></div>').join("");
+  host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    S[b.dataset.sw] = b.dataset.v;
+    if (b.dataset.sw === "set"){ FOCUS.index = 0; FOCUS.scroll = 0; }
+    paintSwitches(); render();
+  }));
+}
+
+function buildConsole(){
+  const host = document.getElementById("console");
+  const groups = [...new Set(CONTROLS.map(c => c.g))];
+  host.innerHTML = groups.map(gn => '<div class="group"><h2>' + gn + '</h2>' +
+    CONTROLS.filter(c => c.g === gn).map(c =>
+      '<div class="ctl"><div class="name">' + c.n + '</div><div class="val" id="val-' + c.k + '"></div>' +
+      '<input type="range" id="in-' + c.k + '" min="' + c.min + '" max="' + c.max + '" step="' + c.step + '" value="' + S[c.k] + '" aria-label="' + esc(c.n) + '">' +
+      (c.note ? '<div class="note">' + c.note + '</div>' : "") + '</div>').join("") + '</div>').join("");
+  for (const c of CONTROLS){
+    document.getElementById("in-" + c.k).addEventListener("input", e => { S[c.k] = Number(e.target.value); render(); });
+  }
+}
+
+function fmt(v){ return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100); }
+
+function paintConsole(g){
+  for (const c of CONTROLS){
+    const applied = g[c.k];
+    const el = document.getElementById("val-" + c.k);
+    /* Янтарный — «уехало от стартового значения». */
+    el.className = "val" + (applied !== START[c.k] ? " changed" : "");
+    el.innerHTML = fmt(applied) + (c.u ? "&thinsp;" + c.u : "");
+    const inp = document.getElementById("in-" + c.k);
+    if (Number(inp.value) !== applied) inp.value = applied;
+  }
+}
+
+function paintSpec(g, rows){
+  const lines = CONTROLS.filter(c => g[c.k] !== START[c.k])
+    .map(c => "  " + c.n.padEnd(26, " ") + " " + fmt(START[c.k]).padStart(6) + " → <b>" + fmt(g[c.k]).padStart(6) + "</b> " + c.u);
+  const notes = [];
+  notes.push("плитка:          " + fmt(g.tileW) + " dp (" + g.tileWpx + " px), постер " + fmt(g.posterW) + " × " + fmt(g.posterH) +
+             " dp = " + g.posterWpx + " × " + g.posterHpx + " px");
+  const up = g.posterWpx / MEDIUM_PX;
+  notes.push(up <= 1
+    ? "постер:          <b>posters.medium</b> хватает — 250 px на " + g.posterWpx + " px, без растяжения"
+    : "постер:          medium растянут в <b>" + up.toFixed(2) + "×</b> — при ширине больше 125 dp нужен posters.big (500 px)");
+  const h0 = rows.length ? rows[0].h : 0;
+  const shown = (H - g.padTop + g.rowGap) / (h0 + g.rowGap);
+  notes.push("ряд:             " + fmt(Math.round(h0 * 10) / 10) + " dp, на экране " + shown.toFixed(2) + " ряда · " +
+             Math.floor(shown) * g.cols + " плиток целиком");
+  const grow = (g.focusScale - 1) * g.tileW / 2;
+  if (g.focusScale > 1 && grow > Math.min(g.colGap / 2, g.padH))
+    notes.push("<b>увеличение заходит на соседей:</b> плитка растёт на " + fmt(Math.round(grow * 10) / 10) + " dp с каждой стороны, " +
+               "\n                 а между колонками " + g.colGap + " dp, у края " + g.padH + " dp");
+  notes.push(S.flags === "web"
+    ? "CC / AC3:        <b>у каждой</b> — проверка места; в данных их нет (subtitles не в модели, ac3 = 0 у всех)"
+    : "CC / AC3:        по кэшу — не горит ни один: subtitles у элемента списка в модели нет, ac3 = 0 у всех 208");
+  notes.push("4K / HD:         quality ≥ 2160 → 4K, ≥ 720 → HD, ниже или пусто — ничего (в кэше 4K-разделов quality = 2160)");
+  if (S.names === "content") notes.push("<b>названия по содержимому:</b> плитки одного ряда разной высоты, рамки не на одной линии снизу");
+  if (S.tier === "big") notes.push("постер big есть только у первых шести карточек набора; остальные остаются medium");
+  notes.push(S.scroll === "edge"
+    ? "прокрутка:       до края — ряд под фокусом ровно входит в экран (BringIntoView по умолчанию; на боксе не проверено)"
+    : "прокрутка:       ряд под фокусом встаёт на 30 % высоты (как PositionFocusedItemInLazyLayout в каталоге)");
+  document.getElementById("spec").innerHTML =
+    (lines.length ? lines.join("\n") : "  пока ничего не изменено — стартовые значения") + "\n\n  " + notes.join("\n  ");
+}
+
+/* ── пульт ────────────────────────────────────────────────── */
+function move(dir){
+  const g = geom();
+  const n = items().length;
+  const i = FOCUS.index, c = i % g.cols;
+  if (dir === "left" && c > 0) FOCUS.index = i - 1;          /* из первой колонки влево — в меню */
+  if (dir === "right" && c < g.cols - 1 && i + 1 < n) FOCUS.index = i + 1;
+  if (dir === "up" && i - g.cols >= 0) FOCUS.index = i - g.cols;
+  if (dir === "down"){
+    if (i + g.cols < n) FOCUS.index = i + g.cols;
+    else if (Math.floor(i / g.cols) < Math.floor((n - 1) / g.cols)) FOCUS.index = n - 1;   /* неполный последний ряд */
+  }
+}
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" || t.tagName === "SELECT")) return;
+  const map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down"};
+  if (!map[e.key]) return;
+  e.preventDefault();
+  move(map[e.key]);
+  render();
+});
+
+/* ── подгонка ─────────────────────────────────────────────── */
+function fit(){
+  const wrap = document.getElementById("stagewrap");
+  const avail = wrap.parentElement.clientWidth - 48;
+  const scale = Math.min(1, avail / 1920);
+  wrap.style.width  = Math.round(1920 * scale) + "px";
+  wrap.style.height = Math.round(1080 * scale) + "px";
+  document.getElementById("stage").style.transform = "scale(" + scale + ")";
+  document.getElementById("scaleOut").innerHTML =
+    "масштаб <b>" + scale.toFixed(3) + "×</b> · 1 dp = 2 px на устройстве · TV-бокс 1920×1080 @ 320 dpi";
+}
+window.addEventListener("resize", fit);
+
+document.getElementById("reset").addEventListener("click", () => {
+  forget();
+  Object.assign(S, DEFAULTS);
+  FOCUS.index = 0; FOCUS.scroll = 0;
+  for (const c of CONTROLS) document.getElementById("in-" + c.k).value = DEFAULTS[c.k];
+  paintSwitches();
+  render();
+});
+
+restore();
+paintSwitches();
+buildConsole();
+fit();
+render();
+/* Roboto приезжает позже первой отрисовки — переносы перемеряются, когда шрифт готов. */
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+</script>
