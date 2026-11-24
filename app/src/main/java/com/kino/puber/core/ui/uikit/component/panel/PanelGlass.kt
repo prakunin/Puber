@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.kino.puber.ui.feature.player.component
+package com.kino.puber.core.ui.uikit.component.panel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,34 +17,34 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 
 /**
- * A lightweight glass-like material for overlays drawn above the player's SurfaceView.
+ * A lightweight glass-like material for overlays drawn above a video SurfaceView or a busy screen.
  *
  * Compose backdrop blur cannot sample video rendered by SurfaceView, so this material builds
  * depth from translucent tonal layers and a directional highlight instead. It remains cheap
  * enough for TV hardware and keeps the moving picture visible below the controls.
  */
-internal enum class PlayerGlass {
+internal enum class PanelGlass {
     Soft,
     Regular,
     Strong,
 }
 
 @Composable
-internal fun Modifier.playerGlass(
+internal fun Modifier.panelGlass(
     shape: Shape,
-    level: PlayerGlass = PlayerGlass.Regular,
+    level: PanelGlass = PanelGlass.Regular,
     elevation: Dp = 0.dp,
 ): Modifier = composed {
     val colors = MaterialTheme.colorScheme
     val surfaceAlpha = when (level) {
-        PlayerGlass.Soft -> 0.42f
-        PlayerGlass.Regular -> 0.58f
-        PlayerGlass.Strong -> 0.72f
+        PanelGlass.Soft -> 0.42f
+        PanelGlass.Regular -> 0.58f
+        PanelGlass.Strong -> 0.72f
     }
     val highlightAlpha = when (level) {
-        PlayerGlass.Soft -> 0.08f
-        PlayerGlass.Regular -> 0.12f
-        PlayerGlass.Strong -> 0.15f
+        PanelGlass.Soft -> 0.08f
+        PanelGlass.Regular -> 0.12f
+        PanelGlass.Strong -> 0.15f
     }
     val background = Brush.linearGradient(
         colorStops = arrayOf(

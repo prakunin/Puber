@@ -33,6 +33,8 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.kino.puber.core.ui.uikit.component.panel.PanelGlass
+import com.kino.puber.core.ui.uikit.component.panel.panelGlass
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.ui.feature.player.model.ResumeDialogState
@@ -109,9 +111,9 @@ private fun ResumeDialogCard(
     Column(
         modifier = Modifier
             .width(520.dp)
-            .playerGlass(
+            .panelGlass(
                 shape = RoundedCornerShape(24.dp),
-                level = PlayerGlass.Strong,
+                level = PanelGlass.Strong,
                 elevation = 24.dp,
             )
             .padding(horizontal = 30.dp, vertical = 26.dp),
