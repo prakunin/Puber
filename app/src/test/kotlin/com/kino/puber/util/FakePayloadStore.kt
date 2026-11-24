@@ -7,6 +7,9 @@ import com.kino.puber.data.repository.StoredPayload
 class FakePayloadStore : PersistentPayloadStore {
 
     private val rows = mutableMapOf<String, StoredPayload>()
+
+    /** Keys the store refuses to keep, as the Room store does for a payload over its row limit. */
+    var refusedKeys: Set<String> = emptySet()
     var readCount: Int = 0
     var onRead: (suspend (String) -> Unit)? = null
 
@@ -38,7 +41,11 @@ class FakePayloadStore : PersistentPayloadStore {
         before?.invoke(key)
         val after = onWrite
         onWrite = null
-        rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
+        if (key in refusedKeys) {
+            rows.remove(key)
+        } else {
+            rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
+        }
         after?.invoke(key)
     }
 
@@ -55,7 +62,7 @@ class FakePayloadStore : PersistentPayloadStore {
     override suspend fun writeAll(payloads: Map<String, StoredPayload>) {
         val hook = onWriteAll
         onWriteAll = null
-        payloads.forEach { (key, value) -> rows[key] = value }
+        payloads.forEach { (key, value) -> if (key in refusedKeys) rows.remove(key) else rows[key] = value }
         hook?.invoke(payloads.keys)
     }
 

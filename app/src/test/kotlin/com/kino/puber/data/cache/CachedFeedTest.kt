@@ -37,6 +37,32 @@ class CachedFeedTest {
     )
 
     @Test
+    fun aValueTheStoreRefusesIsStillServedFromMemoryInTheSameSession() = runTest {
+        store.refusedKeys = setOf("k")
+        val subject = feed()
+
+        subject.put("k", "v")
+
+        assertEquals("v", subject.peekAll(listOf("k"))["k"]?.value)
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun aLoadedValueTheStoreRefusesIsStillServedFromMemoryInTheSameSession() = runTest {
+        store.refusedKeys = setOf("k")
+        val subject = feed()
+        var loads = 0
+
+        subject.load("k") {
+            loads += 1
+            "v"
+        }.toList()
+
+        assertEquals("v", subject.peek("k")?.value)
+        assertEquals(1, loads)
+    }
+
+    @Test
     fun aBulkWriteCrossedByAnotherBulkWriteKeepsTheRow() = runTest {
         // Item payloads are shared, so two sections loading at once collide on every title they
         // have in common. Neither writer may delete: a list record written alongside them would be
