@@ -1,0 +1,8 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/test/kotlin/com/kino/puber/data/repository/PersistentPayloadStoreTest.kt:206 - `exact` is `"中".repeat(limit/3)`, which is 1,048,575 bytes, one under the limit. `over` is two bytes over. A store that rejected three-byte-heavy payloads at exactly the limit would still pass. The ASCII exact-limit case is pinned only in the instrumented `PersistentPayloadStoreDbTest`, which runs on a real database. Fix: append one ASCII byte to `exact` and use that payload plus one more ASCII byte for `over`.
+- [minor] app/src/test/kotlin/com/kino/puber/data/repository/PersistentPayloadStoreTest.kt:194 - `aFailingCleanupStillReturnsTheReadResult` makes only `oversizedKeys` throw, and for a key that was never stored. `deleteOversized` is never reached. If a failed delete escaped, `readAll` would drop valid rows and the test would still pass. Fix: seed an oversized row in the fake DAO, make `deleteOversized` throw, and assert that `readAll` still returns the valid row.
+- [major] docs/superpowers/evidence/2026-11-24-cached-payload-row-too-big-device.md - The only device evidence is from commit af7d459a, before the two-step select-then-delete cleanup and the swallowed cleanup errors were added in 23dfb968 and 69c61413. This is a persistence change to the read path, so `AGENTS.md` requires on-device verification. Re-run `PersistentPayloadStoreDbTest` and the shelf and grid checks on the TV box with the current branch APK, and record the commit.
+REJECTED:
+- None. Codex raised no other claims. It found no runtime defect in `PersistentPayloadStore.kt` or `CachedPayloadDao.kt`.
+VERDICT: changes needed
