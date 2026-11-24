@@ -28,13 +28,15 @@ class CachedFeedTest {
     private val store = FakePayloadStore()
     private var now = 1_000_000L
 
-    private fun feed(ttl: kotlin.time.Duration = 10.minutes) = CachedFeed(
-        store = store,
-        serializer = String.serializer(),
-        ttl = ttl,
-        keyPrefix = "",
-        clock = { now },
-    )
+    private fun feed(ttl: kotlin.time.Duration = 10.minutes, persistFallback: ((String) -> String)? = null) =
+        CachedFeed(
+            store = store,
+            serializer = String.serializer(),
+            ttl = ttl,
+            keyPrefix = "",
+            clock = { now },
+            persistFallback = persistFallback,
+        )
 
     @Test
     fun aValueTheStoreRefusesIsStillServedFromMemoryInTheSameSession() = runTest {
@@ -60,6 +62,130 @@ class CachedFeedTest {
 
         assertEquals("v", subject.peek("k")?.value)
         assertEquals(1, loads)
+    }
+
+    @Test
+    fun aRefusedLoadCrossedByABulkWriteKeepsTheNewerRow() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed()
+        store.onBeforeWrite = { subject.putAll(mapOf("k" to "card")) }
+
+        subject.load("k") { "v".repeat(REFUSAL_LIMIT) }.toList()
+
+        assertEquals("\"card\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRefusedLoadCrossedByABulkWriteWritesNoFallbackOverTheNewerRow() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed(persistFallback = { "small" })
+        store.onBeforeWrite = { subject.putAll(mapOf("k" to "card")) }
+
+        subject.load("k") { "v".repeat(REFUSAL_LIMIT) }.toList()
+
+        assertEquals("\"card\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRefusedPutPersistsItsFallbackAndServesTheFullValueFromMemory() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed(persistFallback = { "small" })
+        val full = "v".repeat(REFUSAL_LIMIT)
+
+        subject.put("k", full)
+
+        assertEquals("\"small\"", store.read("k")?.payload)
+        assertEquals(full, subject.peek("k")?.value)
+    }
+
+    @Test
+    fun aRefusedLoadPersistsItsFallback() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed(persistFallback = { "small" })
+
+        subject.load("k") { "v".repeat(REFUSAL_LIMIT) }.toList()
+
+        assertEquals("\"small\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aPutWhoseFallbackIsAlsoRefusedLeavesNoRow() = runTest {
+        store.write("k", "\"old\"", updatedAt = now)
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed(persistFallback = { it })
+
+        subject.put("k", "v".repeat(REFUSAL_LIMIT))
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun aSupersedingPutPersistsItsFallbackNeverTheSupersededPayload() = runTest {
+        store.write("fits", "\"old\"", updatedAt = now)
+        store.write("over", "\"old\"", updatedAt = now)
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val full = "v".repeat(REFUSAL_LIMIT)
+
+        feed(persistFallback = { "small" }).put("fits", full, supersede = true)
+        feed(persistFallback = { it }).put("over", full, supersede = true)
+
+        assertEquals("\"small\"", store.read("fits")?.payload)
+        assertNull(store.read("over"))
+    }
+
+    @Test
+    fun anOwnedPutRefusalWithNoFallbackLeavesNoRow() = runTest {
+        store.write("k", "\"old\"", updatedAt = now)
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed()
+
+        subject.put("k", "v".repeat(REFUSAL_LIMIT))
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun anOwnedLoadRefusalWithNoFallbackLeavesNoRow() = runTest {
+        store.write("k", "\"old\"", updatedAt = now)
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed()
+
+        subject.load("k", force = true) { "v".repeat(REFUSAL_LIMIT) }.toList()
+
+        assertNull(store.read("k"))
+    }
+
+    @Test
+    fun aRefusedBulkWriteCrossedByANewerWriteKeepsTheNewerRow() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed()
+        store.onWriteAll = { subject.putAll(mapOf("k" to "newer")) }
+
+        subject.putAll(mapOf("k" to "v".repeat(REFUSAL_LIMIT)))
+
+        assertEquals("\"newer\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRefusedBulkWriteWritesTheFallbackOnlyOverKeysItStillOwns() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed(persistFallback = { "small" })
+        store.onWriteAll = { subject.putAll(mapOf("k" to "newer")) }
+
+        subject.putAll(mapOf("k" to "v".repeat(REFUSAL_LIMIT)))
+
+        assertEquals("\"newer\"", store.read("k")?.payload)
+    }
+
+    @Test
+    fun aRefusedBulkWriteDoesNotDeleteAKeyTakenOverDuringAnEarlierDelete() = runTest {
+        store.maxPayloadLength = REFUSAL_LIMIT
+        val subject = feed()
+        store.onRemove = { subject.putAll(mapOf("b" to "newer")) }
+
+        subject.putAll(mapOf("a" to "v".repeat(REFUSAL_LIMIT), "b" to "v".repeat(REFUSAL_LIMIT)))
+
+        assertEquals("\"newer\"", store.read("b")?.payload)
     }
 
     @Test
@@ -826,6 +952,11 @@ class CachedFeedTest {
 
     @Serializable
     private data class Boxed(val value: Int)
+
+    private companion object {
+        /** Chars a refused payload exceeds; every payload the tests expect to keep is shorter. */
+        const val REFUSAL_LIMIT = 20
+    }
 
     // region key records
 

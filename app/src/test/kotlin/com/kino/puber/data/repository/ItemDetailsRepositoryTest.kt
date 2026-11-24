@@ -270,8 +270,9 @@ class ItemDetailsRepositoryTest {
 
         override suspend fun read(key: String): StoredPayload? = rows[key]
 
-        override suspend fun write(key: String, payload: String, updatedAt: Long) {
+        override suspend fun write(key: String, payload: String, updatedAt: Long): Boolean {
             rows[key] = StoredPayload(payload = payload, updatedAt = updatedAt)
+            return true
         }
 
         override suspend fun touch(key: String, updatedAt: Long) {

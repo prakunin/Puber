@@ -93,16 +93,36 @@ class PersistentPayloadStoreTest {
     }
 
     @Test
-    fun writeOfAnOversizedPayloadDeletesTheKeysOlderRow() = runTest {
+    fun writeReportsAnOversizedPayloadAsNotStored() = runTest {
+        val limit = RoomPersistentPayloadStore.MAX_ROW_BYTES
+
+        assertTrue(store.write(key = "exact", payload = "a".repeat(limit), updatedAt = 1))
+        assertFalse(store.write(key = "over", payload = "a".repeat(limit + 1), updatedAt = 1))
+    }
+
+    @Test
+    fun writeAllReturnsOnlyTheOversizedKeys() = runTest {
+        val refused = store.writeAll(
+            mapOf(
+                "big" to StoredPayload("a".repeat(RoomPersistentPayloadStore.MAX_ROW_BYTES + 1), 1),
+                "small" to StoredPayload("{}", 1),
+            )
+        )
+
+        assertEquals(setOf("big"), refused)
+    }
+
+    @Test
+    fun writeOfAnOversizedPayloadKeepsTheKeysOlderRow() = runTest {
         store.write(key = "k", payload = "{}", updatedAt = 1)
 
         store.write(key = "k", payload = "a".repeat(RoomPersistentPayloadStore.MAX_ROW_BYTES + 1), updatedAt = 2)
 
-        assertFalse("k" in dao.rows)
+        assertEquals("{}", dao.rows["k"]?.payload)
     }
 
     @Test
-    fun writeAllStoresTheSmallPayloadAndDropsTheOversizedKey() = runTest {
+    fun writeAllKeepsTheOlderRowOfAnOversizedKeyAndStoresTheSmallOne() = runTest {
         store.write(key = "old", payload = "{}", updatedAt = 1)
 
         store.writeAll(
@@ -112,7 +132,8 @@ class PersistentPayloadStoreTest {
             )
         )
 
-        assertEquals(setOf("other"), dao.rows.keys)
+        assertEquals(setOf("old", "other"), dao.rows.keys)
+        assertEquals("{}", dao.rows["old"]?.payload)
     }
 
     @ParameterizedTest
