@@ -13,6 +13,8 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.showall.content.ShowAllScreenContent
+import com.kino.puber.ui.feature.showall.content.resolve
+import com.kino.puber.ui.feature.showall.model.ShowAllTitle
 import com.kino.puber.ui.feature.showall.vm.ShowAllVM
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
@@ -26,7 +28,8 @@ import org.koin.dsl.module
 
 @Parcelize
 internal class ShowAllScreen(
-    private val config: SectionConfig,
+    internal val config: SectionConfig,
+    internal val title: ShowAllTitle,
 ) : PuberScreen {
 
     @IgnoredOnParcel
@@ -57,6 +60,7 @@ internal class ShowAllScreen(
         val state by vm.collectViewState()
         val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
         ShowAllScreenContent(
+            title = title.resolve(),
             state = state,
             onAction = onAction,
         )

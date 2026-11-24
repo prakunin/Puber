@@ -227,6 +227,40 @@ internal class SectionVMTest : SectionVMTestFixture() {
     }
 
     @Test
+    fun theStoresReplayedInitialEmptyIsPublishedAsLoadingUntilTheFirstLoadStarts() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage()
+        servesFirstPageFromTheNetwork(interactor)
+        val vm = createVM(paginator, config("movies"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        // Rendering is wired here and replays the store's initial Empty; no load has run yet.
+        vm.testOnStart()
+
+        assertEquals(SectionState.Loading, vm.testStateValue)
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
+    fun anEmptyFirstPageAfterTheLoadStartedIsPublishedAsEmpty() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = paginator(dispatcher)
+        val interactor = mockk<ContentListInteractor>(relaxed = true)
+        coEvery { interactor.loadPage(any(), page = 1) } returns emptyPage()
+        servesFirstPageFromTheNetwork(interactor)
+        val vm = createVM(paginator, config("movies"), interactor, ContentListRefreshCoordinator(), dispatcher)
+
+        vm.testOnStart()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SectionState.Empty, vm.testStateValue)
+        vm.testCancelScope()
+        paginator.close()
+    }
+
+    @Test
     fun coordinatorSubscriber_createdBeforeRefreshReceivesItWhenCollectionStartsAfter() = runTest {
         val coordinator = ContentListRefreshCoordinator()
         val refreshRequests = coordinator.refreshRequests()

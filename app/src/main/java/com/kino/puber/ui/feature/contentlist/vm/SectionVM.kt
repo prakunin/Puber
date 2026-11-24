@@ -49,6 +49,10 @@ internal class SectionVM(
 
     override val logName = "Section"
 
+    // The store starts in Empty and replays it as soon as rendering is wired, before any load. That
+    // one is not an answer, so it is held back as Loading: an Empty here always means a load finished.
+    private var storeLeftItsInitialState = false
+
     override fun onStart() {
         val refreshRequests = contentListRefreshCoordinator.refreshRequests()
         init()
@@ -101,9 +105,11 @@ internal class SectionVM(
 
     @Suppress("UNCHECKED_CAST")
     override fun dispatchListState(state: Paginator.State) {
+        if (state !is Paginator.State.Empty) storeLeftItsInitialState = true
         val newState = when (state) {
             is Paginator.State.Loading -> SectionState.Loading
-            is Paginator.State.Empty -> SectionState.Empty
+            is Paginator.State.Empty ->
+                if (storeLeftItsInitialState) SectionState.Empty else SectionState.Loading
             is Paginator.State.ErrorEmpty -> SectionState.Error(state.error.message)
             is Paginator.State.Data<*> -> SectionState.Content(
                 items = mapItems(state.data as List<Item>),

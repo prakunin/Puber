@@ -178,6 +178,14 @@
     <string name="content_section_popular">Popular</string>
     <string name="content_section_hot">Trending</string>
     <string name="content_section_all">All</string>
+    <string name="browse_all_movies">All movies</string>
+    <string name="browse_all_series">All series</string>
+    <string name="browse_all_concerts">All concerts</string>
+    <string name="browse_all_docmovies">All documentary movies</string>
+    <string name="browse_all_docseries">All documentary series</string>
+    <string name="browse_all_tvshows">All TV shows</string>
+    <string name="browse_all_4k">All in 4K</string>
+    <string name="show_all_title_shelf">%1$s · %2$s</string>
     <string name="settings_startup_tab">Startup tab</string>
     <string name="main_press_back_again_to_exit">Press Back again to exit</string>
     <string name="settings_menu_sections_title">Sections in the menu</string>

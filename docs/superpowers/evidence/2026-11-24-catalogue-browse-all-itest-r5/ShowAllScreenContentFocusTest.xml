@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="8" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-24T14:10:20" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" tests="8" failures="0" errors="0" skipped="0" time="42.365" timestamp="2026-11-24T14:10:20" hostname="localhost">
+    <properties>
+      <property name="device" value="192.168.1.110_5555" />
+    </properties>
+    <testcase name="showAllFocusReturnsToACardBelowTheFirstViewportAfterReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="11.328" />
+    <testcase name="showAllFocusMovesToTheNeighbourWhenTheFocusedCardLeavesTheList" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="3.350" />
+    <testcase name="showAllDoesNotTakeFocusAfterReentryWhileContentFocusIsInactive" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.583" />
+    <testcase name="showAllFocusMovesToTheNeighbourWhenTheFocusedCardLeftTheListBeforeReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="20.062" />
+    <testcase name="showAllHeaderIsShownInLoadingAndErrorStates" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="0.849" />
+    <testcase name="showAllLoadMoreFiresAgainWhenAPageLandsInsideTheThreshold" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="0.784" />
+    <testcase name="showAllHeaderShowsTheTitleAndFirstFocusStaysOnTheFirstCard" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="1.035" />
+    <testcase name="showAllFocusReturnsToTheFocusedCardAfterReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.374" />
+  </testsuite>
+</testsuites>

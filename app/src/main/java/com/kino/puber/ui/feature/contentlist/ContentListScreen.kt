@@ -53,6 +53,7 @@ internal class ContentListScreen(
                     navPrefs = get(),
                     trailerLinks = get(),
                     contentListRefreshCoordinator = get(),
+                    tabType = tabType,
                     heroConfigs = TabTypeConfig.heroConfigsFor(tabType),
                 )
             }
@@ -90,6 +91,7 @@ internal class ContentListScreen(
         ContentListScreenContent(
             state = state,
             sections = sections,
+            browseEntry = TabTypeConfig.browseEntryFor(tabType),
             onAction = onAction,
         )
     }
