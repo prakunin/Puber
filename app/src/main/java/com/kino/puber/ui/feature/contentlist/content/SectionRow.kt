@@ -63,6 +63,10 @@ internal fun SectionRowContent(
     // `onSectionFocused`, which only the Content-card path invokes.
     onFocusChanged: (Boolean) -> Unit = {},
     onItemPositionFocused: (PanelPosition) -> Unit = {},
+    // False while a header above the row (the browse entry) owns focus. `hasFocusRef` can still be
+    // true from the Loading shimmer, which is focusable, and the initial request below would then
+    // pull focus off the header the moment the cards arrive.
+    initialFocusEnabled: Boolean = true,
 ) {
     val contentFocusRequester = remember { FocusRequester() }
     val hasFocusRef = remember { booleanArrayOf(false) }
@@ -89,7 +93,7 @@ internal fun SectionRowContent(
             is SectionState.Content -> ContentSectionCards(
                 state = s,
                 isTargetRow = isTargetRow,
-                shouldRequestInitialFocus = hasFocusRef[0],
+                shouldRequestInitialFocus = hasFocusRef[0] && initialFocusEnabled,
                 contentFocusRequester = contentFocusRequester,
                 rowKey = config.id,
                 onItemClick = onItemClick,

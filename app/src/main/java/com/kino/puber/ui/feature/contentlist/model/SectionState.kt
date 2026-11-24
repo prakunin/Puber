@@ -16,8 +16,9 @@ internal sealed interface SectionState {
     data class Error(val message: String) : SectionState
 
     /**
-     * Not a startup content state: the paginator's store starts in its own Empty state and replays
-     * it before the first load, so marking this one would stamp first content before any data.
+     * A finished load that found nothing: SectionVM publishes the paginator's initial Empty, replayed
+     * before the first load, as [Loading]. Still not a startup content state, since an empty first
+     * page is no content.
      */
     data object Empty : SectionState
 }
