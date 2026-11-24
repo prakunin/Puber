@@ -63,3 +63,4 @@ nothing; follow-ups: catalogue-filters, showall-first-entry-rail-focus (second B
 - 2026-11-24 review r4 (triage-4: replayed Empty fixed at the source 538f5a48, hero test f4d4b22e), r5 (triage-5 clean; codex skipped, usage limit); qa r4 and r5 PASS except known deferred M-3 step 5 and 4K «Все»; stage judge
 - 2026-11-24 judge-1 CONCERNS (no must fix: AC-7 step 5 pre-existing, 4K «Все» deferred, codex r5 skipped, accidental short playback); gate 2 ship; stage handover
 - 2026-11-24 squashed to 4 commits (tree 884d033f unchanged); merged into master as 28db3a78; worktree removed, branch deleted; stage done
+- 2026-11-24 post-merge Codex review of the round-5 files: clean; one minor deferred as browse-entry-owner-without-entry
