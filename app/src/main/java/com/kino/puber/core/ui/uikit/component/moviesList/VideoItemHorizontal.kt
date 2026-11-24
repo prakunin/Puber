@@ -190,7 +190,7 @@ fun VideoItemHorizontal(
 private val DefaultCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
 private val DefaultMetaSpacing = 16.dp
 
-private fun Modifier.onSelectKeyClick(onClick: () -> Unit): Modifier {
+internal fun Modifier.onSelectKeyClick(onClick: () -> Unit): Modifier {
     return onPreviewKeyEvent { event ->
         if (!event.key.isSelectKey()) {
             return@onPreviewKeyEvent false

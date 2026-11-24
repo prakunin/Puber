@@ -11,9 +11,12 @@ import com.kino.puber.data.api.models.Posters
 import com.kino.puber.data.api.models.Season
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.api.models.WatchingInfo
+import com.kino.puber.core.ui.uikit.component.RatingUIState
+import com.kino.puber.core.ui.uikit.component.moviesList.VideoQualityBadge
 import com.kino.puber.util.FakeResourceProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.util.Locale
 
 class VideoItemUIMapperTest {
 
@@ -312,11 +315,208 @@ class VideoItemUIMapperTest {
 
     // endregion
 
+    // region poster card fields
+
+    @Test
+    fun mapShortItem_qualityBadgeUhd_whenQualityIs2160() {
+        assertEquals(VideoQualityBadge.UHD, mapper.mapShortItem(testItem(quality = 2160)).qualityBadge)
+    }
+
+    @Test
+    fun mapShortItem_qualityBadgeHd_whenQualityIs1080() {
+        assertEquals(VideoQualityBadge.HD, mapper.mapShortItem(testItem(quality = 1080)).qualityBadge)
+    }
+
+    @Test
+    fun mapShortItem_qualityBadgeHd_whenQualityIs720() {
+        assertEquals(VideoQualityBadge.HD, mapper.mapShortItem(testItem(quality = 720)).qualityBadge)
+    }
+
+    @Test
+    fun mapShortItem_qualityBadgeNull_whenQualityIs719() {
+        assertEquals(null, mapper.mapShortItem(testItem(quality = 719)).qualityBadge)
+    }
+
+    @Test
+    fun mapShortItem_qualityBadgeNull_whenQualityNull() {
+        assertEquals(null, mapper.mapShortItem(testItem(quality = null)).qualityBadge)
+    }
+
+    @Test
+    fun mapShortItem_originalTitleAndYear_whenTitleHasOriginalAndYear() {
+        val result = mapper.mapShortItem(testItem(title = "Рус / Orig", year = 2020))
+        assertEquals("Orig", result.originalTitle)
+        assertEquals("2020", result.year)
+    }
+
+    @Test
+    fun mapShortItem_yearOnly_whenTitleHasNoOriginal() {
+        val result = mapper.mapShortItem(testItem(title = "Рус", year = 2020))
+        assertEquals("", result.originalTitle)
+        assertEquals("2020", result.year)
+    }
+
+    @Test
+    fun mapShortItem_originalOnly_whenYearNull() {
+        val result = mapper.mapShortItem(testItem(title = "Рус / Orig", year = null))
+        assertEquals("Orig", result.originalTitle)
+        assertEquals("", result.year)
+    }
+
+    @Test
+    fun mapShortItem_noOriginalAndNoYear_whenBothMissing() {
+        val result = mapper.mapShortItem(testItem(title = "Рус", year = null))
+        assertEquals("", result.originalTitle)
+        assertEquals("", result.year)
+    }
+
+    @Test
+    fun mapShortItem_splitsLocalAndOriginalTitle_whenTitleHasSeparator() {
+        val result = mapper.mapShortItem(testItem(title = "Рус / Orig"))
+        assertEquals("Рус", result.localTitle)
+        assertEquals("Orig", result.originalTitle)
+    }
+
+    @Test
+    fun mapShortItem_leavesOriginalTitleEmpty_whenTitleHasNoSeparator() {
+        val result = mapper.mapShortItem(testItem(title = "Рус"))
+        assertEquals("Рус", result.localTitle)
+        assertEquals("", result.originalTitle)
+    }
+
+    @Test
+    fun mapShortItem_keepsBareSlashInLocalTitle() {
+        val result = mapper.mapShortItem(testItem(title = "Fate/Zero"))
+        assertEquals("Fate/Zero", result.localTitle)
+        assertEquals("", result.originalTitle)
+    }
+
+    @Test
+    fun mapShortItem_keepsRawTitle() {
+        assertEquals("Рус / Orig", mapper.mapShortItem(testItem(title = "Рус / Orig")).title)
+    }
+
+    @Test
+    fun mapShortItem_keepsYearText() {
+        assertEquals("2020", mapper.mapShortItem(testItem(year = 2020)).year)
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsPubWithoutTrailingZero() {
+        assertEquals(
+            listOf(RatingUIState.PUB("10")),
+            mapper.mapShortItem(testItem(ratingPercentage = 100)).pillRatings,
+        )
+        assertEquals(
+            listOf(RatingUIState.PUB("8.3")),
+            mapper.mapShortItem(testItem(ratingPercentage = 83)).pillRatings,
+        )
+    }
+
+    // Guards a future switch to locale-aware number formatting: the pill text must keep the dot.
+    @Test
+    fun mapShortItem_pillRatingsUseDotDecimal_underRussianLocale() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("ru"))
+        try {
+            assertEquals(
+                listOf(RatingUIState.PUB("8.3")),
+                mapper.mapShortItem(testItem(ratingPercentage = 83)).pillRatings,
+            )
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsOrderPubKpImdb() {
+        val result = mapper.mapShortItem(
+            testItem(ratingPercentage = 90, kinopoiskRating = "7.2", imdbRating = "7.1"),
+        )
+        assertEquals(
+            listOf(
+                RatingUIState.PUB::class,
+                RatingUIState.KP::class,
+                RatingUIState.IMDB::class,
+            ),
+            result.pillRatings.map { it::class },
+        )
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsSkipMissingRatings() {
+        val result = mapper.mapShortItem(
+            testItem(ratingPercentage = 0, kinopoiskRating = "7.2", imdbRating = ""),
+        )
+        assertEquals(listOf(RatingUIState.KP("7.2")), result.pillRatings)
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsRoundKpAndImdbToOneDecimal() {
+        val result = mapper.mapShortItem(testItem(kinopoiskRating = "7.43", imdbRating = "6.871"))
+        assertEquals(listOf(RatingUIState.KP("7.4"), RatingUIState.IMDB("6.9")), result.pillRatings)
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsKpAndImdbDropTrailingZero() {
+        val result = mapper.mapShortItem(testItem(kinopoiskRating = "5.978", imdbRating = "8.0"))
+        assertEquals(listOf(RatingUIState.KP("6"), RatingUIState.IMDB("8")), result.pillRatings)
+    }
+
+    @Test
+    fun mapShortItem_pillRatingsKpAndImdbUseDotDecimal_underRussianLocale() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("ru"))
+        try {
+            assertEquals(
+                listOf(RatingUIState.KP("7.4")),
+                mapper.mapShortItem(testItem(kinopoiskRating = "7.43")).pillRatings,
+            )
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun mapShortItem_yearEmpty_whenYearIsZero() {
+        assertEquals("", mapper.mapShortItem(testItem(year = 0)).year)
+    }
+
+    @Test
+    fun mapShortItem_usesOriginalAsLocalTitle_whenLocalPartEmpty() {
+        val result = mapper.mapShortItem(testItem(title = " / Orig", year = 2020))
+        assertEquals("Orig", result.localTitle)
+        assertEquals("", result.originalTitle)
+    }
+
+    @Test
+    fun buildRatings_keepsPubDecimalText() {
+        assertEquals(
+            listOf(RatingUIState.PUB("10.0")),
+            mapper.buildRatings(testItem(ratingPercentage = 100)),
+        )
+        assertEquals(
+            listOf(RatingUIState.PUB("8.3")),
+            mapper.buildRatings(testItem(ratingPercentage = 83)),
+        )
+    }
+
+    @Test
+    fun buildRatings_keepsRawKpAndImdbText() {
+        assertEquals(
+            listOf(RatingUIState.KP("5.978"), RatingUIState.IMDB("7.43")),
+            mapper.buildRatings(testItem(kinopoiskRating = "5.978", imdbRating = "7.43")),
+        )
+    }
+
+    // endregion
+
     private fun testItem(
         id: Int = 1,
         title: String = "Test",
         type: ItemType = ItemType.MOVIE,
         year: Int? = null,
+        quality: Int? = null,
         genres: List<Genre>? = null,
         countries: List<Country>? = null,
         duration: Duration? = null,
@@ -338,6 +538,7 @@ class VideoItemUIMapperTest {
         title = title,
         type = type,
         year = year,
+        quality = quality,
         genres = genres,
         countries = countries,
         duration = duration,

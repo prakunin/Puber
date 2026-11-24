@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.showall.content
 
+import android.view.KeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
@@ -20,12 +21,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.R
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.Heart
@@ -71,6 +76,32 @@ class ShowAllRailCloseFocusTest {
         val title = focusedTitle()
 
         repeat(Repeats) { closeRailAndAssertFocusOn(host.drawerState, title) }
+    }
+
+    @Test
+    fun showAllMenuOpenAndBackReturnsFocusToTheOpeningCard() {
+        setUpScreen()
+        awaitAnyFocus()
+        repeat(DeepRows) { press(Key.DirectionDown) }
+        val title = focusedTitle()
+        val firstActionTitle = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.context_menu_watch_movie)
+
+        composeRule.onNode(isFocused()).performKeyInput {
+            keyDown(Key.Enter)
+            advanceEventTime(LongPressDelayMillis)
+        }
+        val firstAction = composeRule.onNodeWithText(firstActionTitle, useUnmergedTree = true).onParent()
+        composeRule.waitUntil(TimeoutMillis) { runCatching { firstAction.assertIsFocused() }.isSuccess }
+        firstAction.performKeyInput {
+            advanceEventTime(NextRepeatDelayMillis)
+            keyUp(Key.Enter)
+        }
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+
+        composeRule.waitUntil(TimeoutMillis) { runCatching { focusedTitle() }.getOrNull() == title }
+        assertEquals(title, focusedTitle())
     }
 
     // The top-row case is a guard: it also passes on base. The scrolled case is the discriminating half.
@@ -192,11 +223,13 @@ class ShowAllRailCloseFocusTest {
     }
 
     private companion object {
-        const val ItemCount = 24
         const val DeepRows = 5
         const val Repeats = 3
         const val ScrollRows = 7
+        const val ItemCount = (ScrollRows + 1) * SHOW_ALL_GRID_COLUMNS
         const val SettleMillis = 500L
+        const val LongPressDelayMillis = 500L
+        const val NextRepeatDelayMillis = 50L
         const val TimeoutMillis = 12_000L
     }
 }

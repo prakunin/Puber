@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertTrue
@@ -172,6 +173,29 @@ class ShowAllScreenContentFocusTest {
         )
     }
 
+    @Test
+    fun showAllLoadMoreFiresAgainWhenAPageLandsInsideTheThreshold() {
+        var shown by mutableStateOf(items.take(SHOW_ALL_GRID_COLUMNS * 2))
+        var loadMoreCount = 0
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        ShowAllViewState.Content(shown),
+                        onAction = { if (it == CommonAction.LoadMore) loadMoreCount++ },
+                    )
+                }
+            }
+        }
+        composeRule.waitUntil(FocusTimeoutMillis) { loadMoreCount >= 1 }
+        composeRule.waitForIdle()
+        val beforeAppend = loadMoreCount
+
+        shown = items.take(SHOW_ALL_GRID_COLUMNS * 4)
+
+        composeRule.waitUntil(FocusTimeoutMillis) { loadMoreCount > beforeAppend }
+    }
+
     private fun awaitAnyFocus() {
         composeRule.waitUntil(FocusTimeoutMillis) {
             composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty()
@@ -194,9 +218,9 @@ class ShowAllScreenContentFocusTest {
     }
 
     private companion object {
-        const val ItemCount = 24
         const val DeepRows = 5
-        const val GridColumns = 3
+        const val GridColumns = SHOW_ALL_GRID_COLUMNS
+        const val ItemCount = (DeepRows + 3) * SHOW_ALL_GRID_COLUMNS
         const val SettleMillis = 300L
         const val FocusTimeoutMillis = 5_000L
     }

@@ -75,4 +75,6 @@
     <string name="diagnostics_summary_complete">Проверка двух серверов завершена.</string>
     <string name="diagnostics_summary_current_fastest">Текущий сервер показал лучшую скорость.</string>
     <string name="diagnostics_summary_faster_server">Сервер %1$s показал лучшую скорость.</string>
+    <string name="poster_card_badge_hd" translatable="false">HD</string>
+    <string name="poster_card_badge_4k" translatable="false">4K</string>
 </resources>
