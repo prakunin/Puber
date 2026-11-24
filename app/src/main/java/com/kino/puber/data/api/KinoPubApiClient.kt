@@ -629,11 +629,12 @@ class KinoPubApiClient(
     /**
      * Get genres
      */
-    suspend fun getGenres(type: String? = null): Result<List<Genre>> = apiCall {
-        httpClient.get("${mainApiBaseUrl()}genres") {
-            type?.let { parameter("type", it) }
-        }
-    }
+    suspend fun getGenres(type: String? = null): Result<List<Genre>> =
+        apiCall<ApiResponseList<Genre>> {
+            httpClient.get("${mainApiBaseUrl()}genres") {
+                type?.let { parameter("type", it) }
+            }
+        }.map { it.items.orEmpty() }
 
     /**
      * Get countries

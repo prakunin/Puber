@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.showall
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.screen.ScreenKey
 import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.paginator.Paginator
@@ -45,6 +46,7 @@ internal class ShowAllScreen(
                     paginator = Paginator.Store { old, new -> old.id == new.id },
                     config = config,
                     interactor = get(),
+                    genreInteractor = get(),
                     savedItemInteractor = get(),
                     mapper = get(),
                     router = get(),
@@ -58,11 +60,13 @@ internal class ShowAllScreen(
     override fun Content() = DIScope(scopeName = key, moduleFactory = ::buildModule) {
         val vm = puberViewModel<ShowAllVM>()
         val state by vm.collectViewState()
+        val filter by vm.filterState.collectAsStateWithLifecycle()
         val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
         ShowAllScreenContent(
             title = title.resolve(),
             state = state,
             onAction = onAction,
+            filter = filter,
         )
     }
 }

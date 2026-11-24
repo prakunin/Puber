@@ -74,7 +74,7 @@ internal open class SectionVMTestFixture {
      * subscription, which is what the interactor's own loader produces when nothing is stored.
      */
     protected fun servesFirstPageFromTheNetwork(interactor: ContentListInteractor) {
-        every { interactor.observeFirstPage(any(), any()) } answers {
+        every { interactor.observeFirstPage(any(), any(), any()) } answers {
             val config = firstArg<SectionConfig>()
             flow { emit(Cached.Value(interactor.loadPage(config, page = 1), isStale = false)) }
         }
@@ -649,7 +649,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val coordinator = ContentListRefreshCoordinator()
         val sectionConfig = config("popular")
         val forced = mutableListOf<Boolean>()
-        every { interactor.observeFirstPage(any(), any()) } answers {
+        every { interactor.observeFirstPage(any(), any(), any()) } answers {
             forced += secondArg<Boolean>()
             flow { emit(Cached.Value(page(item(7)), isStale = false)) }
         }
@@ -684,7 +684,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val sectionConfig = config("popular")
         val forced = mutableListOf<Boolean>()
         val release = CompletableDeferred<Unit>()
-        every { interactor.observeFirstPage(any(), any()) } answers {
+        every { interactor.observeFirstPage(any(), any(), any()) } answers {
             forced += secondArg<Boolean>()
             flow {
                 release.await()
@@ -716,7 +716,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val paginator = paginator(dispatcher)
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         val vm = createVM(
             paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
             mapper = mapperFor(1, 2),
@@ -756,7 +756,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val paginator = paginator(dispatcher)
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         val vm = createVM(
             paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
             mapper = mapperFor(1),
@@ -788,7 +788,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
         val releaseSecondPage = CompletableDeferred<PaginatedResponse<Item>>()
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         coEvery { interactor.loadPage(any(), page = 2) } coAnswers { releaseSecondPage.await() }
         val vm = createVM(
             paginator, config("popular"), interactor, ContentListRefreshCoordinator(), dispatcher,
@@ -824,7 +824,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
         val pagesRead = mutableListOf<Int>()
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         coEvery { interactor.loadPage(any(), any()) } answers {
             val requested = secondArg<Int>()
             pagesRead += requested
@@ -861,7 +861,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val paginator = paginator(dispatcher)
         val interactor = mockk<ContentListInteractor>(relaxed = true)
-        every { interactor.observeFirstPage(any(), any()) } returns flow {
+        every { interactor.observeFirstPage(any(), any(), any()) } returns flow {
             throw IllegalStateException("no network")
         }
         val vm = createVM(
@@ -887,7 +887,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
         val pagesRead = mutableListOf<Int>()
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         coEvery { interactor.loadPage(any(), any()) } answers {
             val requested = secondArg<Int>()
             pagesRead += requested
@@ -923,7 +923,7 @@ internal class SectionVMFirstPageTest : SectionVMTestFixture() {
         val paginator = paginator(paginatorDispatcher)
         val interactor = mockk<ContentListInteractor>(relaxed = true)
         val emissions = MutableSharedFlow<Cached<PaginatedResponse<Item>>>(extraBufferCapacity = 2)
-        every { interactor.observeFirstPage(any(), any()) } returns emissions
+        every { interactor.observeFirstPage(any(), any(), any()) } returns emissions
         coEvery { interactor.loadPage(any(), page = 2) } returns page(item(2), current = 2, total = 9)
         val vm = createVM(
             paginator, config("popular"), interactor, ContentListRefreshCoordinator(), paging,

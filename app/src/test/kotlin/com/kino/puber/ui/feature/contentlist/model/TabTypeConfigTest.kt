@@ -8,6 +8,7 @@ import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.showall.model.ShowAllTitle
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -293,5 +294,36 @@ class TabTypeConfigTest {
 
         assertEquals(R.string.content_section_fresh, title.titleRes)
         assertEquals(TabType.Movies.title, title.prefixRes)
+    }
+
+    @Test
+    fun isFilterable_trueForEveryBrowseEntryConfig() {
+        TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).forEach { entry ->
+            assertTrue(TabTypeConfig.isFilterable(entry.config), entry.config.id)
+        }
+    }
+
+    @Test
+    fun isFilterable_falseForShelvesAnd4kTypeGrids() {
+        val filterable = TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).map { it.config.id }.toSet()
+        val shelves = TabType.entries
+            .flatMap(TabTypeConfig::sectionsFor)
+            .filter { it.id !in filterable }
+        assertTrue(shelves.any { it.id.startsWith("fresh_") })
+        assertTrue(shelves.any { it.id.startsWith("hot_") })
+        assertTrue(shelves.any { it.id.startsWith("popular_") })
+        assertTrue(shelves.any { it.id.startsWith("4k_") })
+        assertTrue(shelves.any { it.id == "popular_4k" })
+        assertTrue(shelves.any { it.id == "all_cartoon" })
+        assertTrue(shelves.any { it.id == "all_anime" })
+        shelves.forEach { assertFalse(TabTypeConfig.isFilterable(it), it.id) }
+    }
+
+    @Test
+    fun browseEntryConfigs_haveTheDefaultFilterQuery() {
+        TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).forEach { entry ->
+            assertEquals("updated-", entry.config.sort, entry.config.id)
+            assertNull(entry.config.genre, entry.config.id)
+        }
     }
 }

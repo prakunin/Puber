@@ -13,7 +13,9 @@ data class ContentFilter(
     val imdbRating: ClosedFloatingPointRange<Float>? = null,
     val quality: String? = null,
     val finished: Boolean? = null,
-)
+) {
+    val isActive: Boolean get() = this != ContentFilter()
+}
 
 enum class SortField(val apiValue: String) {
     UPDATED("updated"),

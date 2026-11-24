@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="9" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-24T17:26:33" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" tests="9" failures="0" errors="0" skipped="0" time="44.119" timestamp="2026-11-24T17:26:33" hostname="localhost">
+    <properties>
+      <property name="device" value="192.168.1.110_5555" />
+    </properties>
+    <testcase name="showAllFocusReturnsToACardBelowTheFirstViewportAfterReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="11.250" />
+    <testcase name="showAllFocusMovesToTheNeighbourWhenTheFocusedCardLeavesTheList" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.899" />
+    <testcase name="showAllDoesNotTakeFocusAfterReentryWhileContentFocusIsInactive" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.546" />
+    <testcase name="showAllFocusMovesToTheNeighbourWhenTheFocusedCardLeftTheListBeforeReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="20.024" />
+    <testcase name="activeFilter_focusReturnsToTheFocusedCardAfterReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.676" />
+    <testcase name="showAllHeaderIsShownInLoadingAndErrorStates" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="0.804" />
+    <testcase name="showAllLoadMoreFiresAgainWhenAPageLandsInsideTheThreshold" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="0.784" />
+    <testcase name="showAllHeaderShowsTheTitleAndFirstFocusStaysOnTheFirstCard" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="1.013" />
+    <testcase name="showAllFocusReturnsToTheFocusedCardAfterReentry" classname="com.kino.puber.ui.feature.showall.content.ShowAllScreenContentFocusTest" time="2.123" />
+  </testsuite>
+</testsuites>

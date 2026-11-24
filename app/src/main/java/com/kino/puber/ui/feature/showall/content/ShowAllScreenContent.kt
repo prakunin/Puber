@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,6 +19,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
@@ -34,15 +38,19 @@ import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.LocalTvDialogFocusRestorer
+import com.kino.puber.core.ui.uikit.component.TvCompactButton
 import com.kino.puber.core.ui.uikit.component.TvDialogFocusRestorer
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
+import com.kino.puber.core.ui.uikit.component.modifier.ContentFocusGate
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemPoster
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.ui.feature.showall.model.ShowAllAction
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 
 internal const val SHOW_ALL_GRID_COLUMNS = 6
@@ -52,6 +60,7 @@ private val GridColumnSpacing = 12.dp
 private val GridRowSpacing = 16.dp
 private const val LOAD_MORE_ROWS = 4
 private const val LOAD_MORE_THRESHOLD = LOAD_MORE_ROWS * SHOW_ALL_GRID_COLUMNS
+private val EmptyResetGap = 12.dp
 private const val RESTORE_FOCUS_ATTEMPTS = 3
 
 @Composable
@@ -59,29 +68,138 @@ internal fun ShowAllScreenContent(
     title: String,
     state: ShowAllViewState,
     onAction: (UIAction) -> Unit,
+    filter: ShowAllFilterState = ShowAllFilterState.Unavailable,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        ShowAllHeader(title)
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            when (state) {
-                ShowAllViewState.Loading -> FullScreenProgressIndicator()
-                ShowAllViewState.Empty -> Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(stringResource(R.string.empty_state))
+    val filtersFocus = remember { FocusRequester() }
+    val rowOneFocus = remember { FocusRequester() }
+    val emptyResetFocus = remember { FocusRequester() }
+    // Whether focus last left the grid for the header. A side rail opened from «Фильтры» hands focus
+    // back to whoever held it, and the grid must not answer that handoff with a card.
+    val headerHoldsFocus = remember { mutableStateOf(false) }
+
+    // «Фильтры» sits ahead of the grid, so on a cold open it would be the first focusable thing and
+    // the grid's own first-focus request would never be the one that lands. It only becomes
+    // focusable once the first list has landed, and stays so: a reset or a new filter shows the
+    // loading state again with focus parked on it.
+    var filtersCanFocus by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state is ShowAllViewState.Loading) {
+        if (state !is ShowAllViewState.Loading) filtersCanFocus = true
+    }
+    val downTarget = when {
+        state is ShowAllViewState.Content -> rowOneFocus
+        state is ShowAllViewState.Empty && filter.isActive -> emptyResetFocus
+        else -> FocusRequester.Default
+    }
+    val upTarget = filtersFocus.takeIf { filter.available && filtersCanFocus }
+
+    // Closing the panel, by Back or by applying, puts focus back on «Фильтры»; without a restorer it
+    // would fall to the side rail.
+    val headerRestorer = remember(filtersFocus) {
+        TvDialogFocusRestorer(
+            onDialogOpening = {},
+            onDialogClosed = { runCatching { filtersFocus.requestFocus() } },
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ShowAllHeader(
+                title = title,
+                filter = filter,
+                filtersFocus = filtersFocus,
+                canFocus = filtersCanFocus,
+                downTarget = downTarget,
+                onAction = onAction,
+                modifier = Modifier.onFocusChanged { if (it.hasFocus) headerHoldsFocus.value = true },
+            )
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // A list that lands behind the open panel must not run its first-focus request.
+                ContentFocusGate(active = !filter.panelOpen) {
+                    ShowAllList(
+                        state = state,
+                        filter = filter,
+                        onAction = onAction,
+                        filtersFocus = filtersFocus,
+                        rowOneFocus = rowOneFocus,
+                        emptyResetFocus = emptyResetFocus,
+                        upTarget = upTarget,
+                        headerHoldsFocus = headerHoldsFocus,
+                    )
                 }
-                is ShowAllViewState.Error -> Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(state.message)
-                }
-                is ShowAllViewState.Content -> ShowAllContentBody(
-                    state = state,
-                    onAction = onAction,
+            }
+        }
+        if (filter.panelOpen) {
+            CompositionLocalProvider(LocalTvDialogFocusRestorer provides headerRestorer) {
+                ShowAllFilterPanel(filter = filter, onAction = onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShowAllList(
+    state: ShowAllViewState,
+    filter: ShowAllFilterState,
+    onAction: (UIAction) -> Unit,
+    filtersFocus: FocusRequester,
+    rowOneFocus: FocusRequester,
+    emptyResetFocus: FocusRequester,
+    upTarget: FocusRequester?,
+    headerHoldsFocus: MutableState<Boolean>,
+) {
+    when (state) {
+        ShowAllViewState.Loading -> FullScreenProgressIndicator()
+        ShowAllViewState.Empty -> ShowAllEmpty(
+            filter = filter,
+            filtersFocus = filtersFocus,
+            resetFocus = emptyResetFocus,
+            onAction = onAction,
+        )
+        is ShowAllViewState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(state.message)
+        }
+        // Keyed on the query: a new list can land without a Loading frame in between (a cached base
+        // page after «Сброс»), and without a remount the grid's first-focus request never fires
+        // and focus stays on «Фильтры».
+        is ShowAllViewState.Content -> key(state.queryGeneration) {
+            ShowAllContentBody(
+                state = state,
+                onAction = onAction,
+                upTarget = upTarget,
+                rowOneFocus = rowOneFocus,
+                headerHoldsFocus = headerHoldsFocus,
+            )
+        }
+    }
+}
+
+/** Nothing to show: the plain empty text, or while a filter is applied what it found and a way out. */
+@Composable
+private fun ShowAllEmpty(
+    filter: ShowAllFilterState,
+    filtersFocus: FocusRequester,
+    resetFocus: FocusRequester,
+    onAction: (UIAction) -> Unit,
+) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (filter.isActive) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(R.string.show_all_filtered_empty, filterSummary(filter)))
+                Spacer(Modifier.height(EmptyResetGap))
+                TvCompactButton(
+                    text = stringResource(R.string.show_all_filters_reset),
+                    onClick = {
+                        runCatching { filtersFocus.requestFocus() }
+                        onAction(ShowAllAction.FilterReset)
+                    },
+                    modifier = Modifier
+                        .focusRequester(resetFocus)
+                        .focusProperties { up = filtersFocus },
+                    outlined = true,
                 )
             }
+        } else {
+            Text(stringResource(R.string.empty_state))
         }
     }
 }
@@ -90,13 +208,22 @@ internal fun ShowAllScreenContent(
 private fun ShowAllContentBody(
     state: ShowAllViewState.Content,
     onAction: (UIAction) -> Unit,
+    upTarget: FocusRequester?,
+    rowOneFocus: FocusRequester,
+    headerHoldsFocus: MutableState<Boolean>,
 ) {
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     val gridState = rememberLazyGridState()
     var contextMenuItem by remember { mutableStateOf<VideoItemUIState?>(null) }
 
+    // The row-1 card focus last left from, which Down from the header returns to; the first card
+    // until one has been focused.
+    var lastRowOneId by remember { mutableStateOf<Int?>(null) }
+    val rowOneTargetId = state.items.take(SHOW_ALL_GRID_COLUMNS).firstOrNull { it.id == lastRowOneId }?.id
+        ?: state.items.firstOrNull()?.id
+
     val restoreFocus = remember { FocusRequester() }
-    val focusMemory = rememberGridFocusMemory(state.items, restoreFocus, mainContentFocus)
+    val focusMemory = rememberGridFocusMemory(state.items, restoreFocus, mainContentFocus, headerHoldsFocus)
 
     // Closing the menu puts focus back on the card that opened it; without a restorer focus falls
     // to the side rail.
@@ -150,13 +277,28 @@ private fun ShowAllContentBody(
                         state = item,
                         modifier = Modifier
                             .then(
+                                if (index < SHOW_ALL_GRID_COLUMNS && upTarget != null) {
+                                    Modifier.focusProperties { up = upTarget }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .then(
+                                if (item.id == rowOneTargetId) Modifier.focusRequester(rowOneFocus) else Modifier,
+                            )
+                            .then(
                                 if (item.id == focusMemory.restoreId) {
                                     Modifier.focusRequester(restoreFocus)
                                 } else {
                                     Modifier
                                 },
                             )
-                            .onFocusChanged { if (it.hasFocus) focusMemory.onCardFocused(item.id, index) },
+                            .onFocusChanged {
+                                if (it.hasFocus) {
+                                    focusMemory.onCardFocused(item.id, index)
+                                    if (index < SHOW_ALL_GRID_COLUMNS) lastRowOneId = item.id
+                                }
+                            },
                         onClick = clickCallback,
                         onContextMenu = { contextMenuItem = item },
                     )
@@ -186,6 +328,7 @@ private fun rememberGridFocusMemory(
     items: List<VideoItemUIState>,
     restoreFocus: FocusRequester,
     gridFocus: FocusRequester,
+    headerHoldsFocus: MutableState<Boolean>,
 ): GridFocusMemory {
     val lastFocusedId = rememberSaveable { mutableStateOf<Int?>(null) }
     val lastFocusedIndex = rememberSaveable { mutableStateOf(0) }
@@ -199,6 +342,7 @@ private fun rememberGridFocusMemory(
             contentFocusActive = { contentFocusActive },
             requestRestore = { restoreFocus.tryRequestFocus() },
             requestGrid = { gridFocus.tryRequestFocus() },
+            headerHoldsFocus = headerHoldsFocus,
         )
     }
     var latchedHandoffId by remember { mutableStateOf<Long?>(null) }
@@ -218,6 +362,7 @@ internal class GridFocusMemory(
     private val contentFocusActive: () -> Boolean,
     private val requestRestore: () -> Boolean,
     private val requestGrid: () -> Boolean,
+    private val headerHoldsFocus: MutableState<Boolean> = mutableStateOf(false),
 ) {
     var restoreId by mutableStateOf(
         Snapshot.withoutReadObservation {
@@ -243,6 +388,7 @@ internal class GridFocusMemory(
         // A lost focus with the focused card gone from the list is not a user move.
         if (hasFocus) {
             inGrid = true
+            headerHoldsFocus.value = false
             pendingEntry = false
         } else if (items().any { it.id == lastFocusedId.value }) {
             inGrid = false
@@ -261,14 +407,15 @@ internal class GridFocusMemory(
 
     /**
      * Answers a focus handoff from the side rail by focusing the remembered card again. Without a
-     * remembered card, with focus already in the grid, or with the content inactive it does nothing,
+     * remembered card, with focus already in the grid, with focus last held by the header or with the
+     * content inactive it does nothing,
      * and an id that was already answered is ignored, so a later recomposition never takes focus back.
      */
     suspend fun onHandoff(requestId: Long) {
         if (requestId == answeredHandoffId || !contentFocusActive()) return
         answeredHandoffId = requestId
         val focusedId = lastFocusedId.value
-        if (inGrid || focusedId == null) return
+        if (inGrid || focusedId == null || headerHoldsFocus.value) return
         restoreId = resolveRestoreId(focusedId, lastFocusedIndex.value, items())
         if (restoreId != null) requestRestoreFocus()
     }

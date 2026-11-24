@@ -1,7 +1,5 @@
 package com.kino.puber.ui.feature.contentlist.content
 
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,20 +13,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Button
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.kino.puber.core.ui.navigation.component.LocalRootAnchorFocusRestored
+import com.kino.puber.core.ui.uikit.component.TvCompactButton
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 
 private val EntryTopPadding = 4.dp
-private val EntryHeight = 24.dp
-private val EntryHorizontalPadding = 12.dp
 private const val ENTRY_FOCUS_ATTEMPTS = 3
 
 /**
@@ -75,28 +66,16 @@ internal fun BrowseAllEntry(
         }
     }
 
-    Button(
+    TvCompactButton(
+        text = label,
         onClick = onClick,
         modifier = modifier
             .padding(top = EntryTopPadding)
-            .height(EntryHeight)
             .focusRequester(focusRequester)
             .focusProperties { this.canFocus = canFocus }
             .onFocusChanged {
                 hasFocusRef[0] = it.hasFocus
                 if (it.hasFocus) onFocused()
             },
-        contentPadding = PaddingValues(horizontal = EntryHorizontalPadding),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+    )
 }
