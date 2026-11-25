@@ -12,6 +12,7 @@
 
 package com.kino.puber.core.ui.uikit.component.drawer
 
+import android.view.KeyEvent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusGroup
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -30,8 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -43,9 +47,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
+import androidx.core.view.ViewCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.tv.material3.NavigationDrawerScope
 
@@ -159,11 +166,14 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
         currentValue = DrawerValue.Closed
     }
 
-    /** The content never took focus. Reopening beats stranding focus in nothing. */
-    fun failHandoff(requestId: Long) {
+    /**
+     * The content never took focus. Reopening beats stranding focus in nothing, unless [reopen] is
+     * false because Back still has somewhere to go without the rail.
+     */
+    fun failHandoff(requestId: Long, reopen: Boolean = true) {
         if (pendingHandoffId != requestId) return
         pendingHandoffId = null
-        currentValue = DrawerValue.Open
+        currentValue = if (reopen) DrawerValue.Open else DrawerValue.Closed
     }
 
     companion object {
@@ -195,6 +205,7 @@ fun ModalNavigationDrawer(
 ) {
     val localDensity = LocalDensity.current
     val closedDrawerWidth: MutableState<Dp?> = remember { mutableStateOf(null) }
+    var contentHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(drawerState, handoff) {
         if (handoff != null) drawerState.beginInitialHandoff()
     }
@@ -210,6 +221,7 @@ fun ModalNavigationDrawer(
             modifier = internalDrawerModifier.align(Alignment.CenterStart),
             drawerState = drawerState,
             handoff = handoff,
+            contentHasFocus = { contentHasFocus },
             sizeAnimationFinishedListener = { _, targetSize ->
                 if (drawerState.currentValue == DrawerValue.Closed) {
                     with(localDensity) { closedDrawerWidth.value = targetSize.width.toDp() }
@@ -218,7 +230,9 @@ fun ModalNavigationDrawer(
             content = drawerContent,
         )
 
-        content()
+        Box(Modifier.fillMaxSize().onFocusChanged { contentHasFocus = it.hasFocus }) {
+            content()
+        }
 
         if (drawerState.currentValue == DrawerValue.Open) {
             Canvas(Modifier.fillMaxSize()) { drawRect(scrimBrush) }
@@ -231,18 +245,28 @@ private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
     handoff: ContentFocusHandoff? = null,
+    contentHasFocus: () -> Boolean,
     sizeAnimationFinishedListener: ((initialValue: IntSize, targetValue: IntSize) -> Unit)? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     var initializationComplete: Boolean by remember { mutableStateOf(false) }
     var focusState by remember { mutableStateOf<FocusState?>(null) }
     val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(key1 = drawerState.currentValue) {
         if (drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus == false) {
             focusRequester.requestFocus()
         }
+        // A handoff that failed into Closed leaves focus in the rail it never left; a collapsed rail
+        // with a focused item would let Center pick a tab the user cannot see. The refocus that
+        // follows is refused by the entry gate below, so Left reveals the rail again.
+        if (drawerState.currentValue == DrawerValue.Closed && focusState?.hasFocus == true) {
+            focusManager.clearFocus(force = true)
+        }
         initializationComplete = true
     }
+
+    RevealOnUnhandledLeft(drawerState, contentHasFocus)
 
     val internalModifier =
         Modifier.focusRequester(focusRequester)
@@ -285,12 +309,52 @@ private fun DrawerSheet(
                     else -> drawerState.focusExited()
                 }
             }
+            // A closed rail refuses entries other than Left, so focus that falls when a screen leaves
+            // does not reveal it. Open and HandingOff allow every entry, so the rail's own request
+            // and the handoff redirect above keep working.
+            .focusProperties {
+                onEnter = {
+                    if (drawerState.currentValue == DrawerValue.Closed &&
+                        requestedFocusDirection != FocusDirection.Left
+                    ) {
+                        cancelFocusChange()
+                    }
+                }
+            }
             .focusGroup()
 
     Box(modifier = internalModifier) {
         NavigationDrawerScopeImpl(drawerState.currentValue == DrawerValue.Open).apply {
             content(drawerState.currentValue)
         }
+    }
+}
+
+/**
+ * With nothing focused a D-pad key reaches Compose only as the framework's default-focus restore,
+ * which enters as FOCUS_DOWN exactly like the refocus the entry gate in [DrawerSheet] refuses. Left
+ * is the user asking for the rail, so it is taken from the keys no view handled, and the rail's own
+ * request in Open then focuses it.
+ *
+ * "Nothing focused" is read from Compose focus in the content, the state a screen in `Loading`
+ * leaves behind, rather than from the Android view's own focus flag.
+ */
+@Composable
+private fun RevealOnUnhandledLeft(drawerState: DrawerState, contentHasFocus: () -> Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, drawerState) {
+        val listener = ViewCompat.OnUnhandledKeyEventListenerCompat { _, event ->
+            val isLeftDown = event.action == KeyEvent.ACTION_DOWN &&
+                event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+            if (isLeftDown && drawerState.currentValue == DrawerValue.Closed && !contentHasFocus()) {
+                drawerState.reveal()
+                true
+            } else {
+                false
+            }
+        }
+        ViewCompat.addOnUnhandledKeyEventListener(view, listener)
+        onDispose { ViewCompat.removeOnUnhandledKeyEventListener(view, listener) }
     }
 }
 

@@ -51,6 +51,7 @@ import com.kino.puber.core.ui.navigation.puberReplaceAll
 import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
+import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.modifier.ContentFocusGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.yield
@@ -595,6 +596,12 @@ private fun TabFlowNavigator(
         onBackPressed = null,
         key = tabFlowNavigatorKey(navigationSlotKey),
     ) { navigator ->
+        // Main's Back handlers need to know whether this tab has a screen to pop.
+        val tabStack = LocalTabStackState.current
+        DisposableEffect(tabStack, navigator) {
+            tabStack?.attach(navigator) { navigator.canPop }
+            onDispose { tabStack?.detach(navigator) }
+        }
         DisposableEffect(tabHost, navigator) {
             // The tab host keeps this tab's saved stack while a root push covers it, so the screen that
             // reappears after Back is the live top; unbind freezes it.
@@ -749,7 +756,9 @@ private const val ROOT_RETURN_FOCUS_SETTLE_MAX_FRAMES = 12
 private fun TabBackHandler(navigator: Navigator, router: AppRouter) {
     // navigator.canPop is Voyager's Stack<Screen> property (size > 1),
     // not the private canPop() extension in this file that filters LoadingScreen.
-    BackHandler(enabled = navigator.canPop) {
+    // Enabled only when the tab owns Back: with the rail open, closing it comes first.
+    val owner = railBackOwner(LocalDrawerState.current?.currentValue, navigator.canPop)
+    BackHandler(enabled = owner == RailBackOwner.Tab) {
         if (!router.dispatchBackPressed()) {
             navigator.puberPop()
         }

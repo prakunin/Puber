@@ -4,6 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
@@ -50,6 +54,34 @@ internal class TabFlowSession(
         return previousKey != nextKey
     }
 }
+
+/**
+ * Whether the tab's current navigator has a screen to pop, as the Main-level Back handlers need it.
+ *
+ * The navigator lives below Main, so it attaches itself here. Attachment is owned: a tab that
+ * is replaced detaches after its successor attached, and must not clear the successor.
+ */
+@Stable
+internal class TabStackState {
+    private var owner by mutableStateOf<Any?>(null)
+    private var provider by mutableStateOf<(() -> Boolean)?>(null)
+
+    /** False when nothing is attached. Reads the provider, so snapshot reads inside it are tracked. */
+    val canPop: Boolean get() = provider?.invoke() ?: false
+
+    fun attach(owner: Any, canPop: () -> Boolean) {
+        this.owner = owner
+        provider = canPop
+    }
+
+    fun detach(owner: Any) {
+        if (this.owner !== owner) return
+        this.owner = null
+        provider = null
+    }
+}
+
+internal val LocalTabStackState = staticCompositionLocalOf<TabStackState?> { null }
 
 internal class TabAppRouterHolder(private val screens: Screens) {
     private data class Entry(val session: TabFlowSession, val scope: CoroutineScope)

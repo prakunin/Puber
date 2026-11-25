@@ -91,6 +91,17 @@ internal class DrawerStateTest {
     }
 
     @Test
+    fun `a failed handoff that must not reopen leaves the rail closed`() {
+        val state = openState()
+        val requestId = requireNotNull(state.beginHandoff(expectsNewContent = false))
+
+        state.failHandoff(requestId, reopen = false)
+
+        assertEquals(DrawerValue.Closed, state.currentValue)
+        assertNull(state.pendingHandoffId)
+    }
+
+    @Test
     fun `a handoff records whether it waits on content that does not exist yet`() {
         val state = openState()
 

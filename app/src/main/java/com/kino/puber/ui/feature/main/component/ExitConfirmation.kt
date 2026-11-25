@@ -19,7 +19,8 @@ private const val ExitConfirmationWindowMillis = 3_000L
  * this, a second press within the window leaves. Two presses rather than one so a stray press
  * cannot drop the user onto the launcher.
  *
- * Armed only by a Back that closed the rail — never by picking a tab, which also passes through
+ * Armed only by a Back that closed the rail at a tab root — never by a Back that closed it over a
+ * pushed screen, and never by picking a tab, which also passes through
  * `DrawerValue.HandingOff` and would otherwise offer to leave at a moment the user did not ask to.
  *
  * @param nowMillis monotonic clock, injectable so the window can be tested without waiting.
