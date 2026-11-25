@@ -20,6 +20,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onParent
@@ -38,6 +40,7 @@ import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.HandoffKind
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
 import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
@@ -52,6 +55,7 @@ import com.kino.puber.ui.feature.main.model.MainViewState
 import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 
@@ -204,6 +208,60 @@ class ShowAllRailCloseFocusTest {
         }
     }
 
+    // The «Сброс» of the outgoing empty tab must not take focus while a tab pick hands it to the arrival.
+    @Test
+    fun tabPickHandoff_outgoingEmptyResetDoesNotTakeFocus() {
+        val host = setUpScreen(
+            filter = ShowAllFilterState(available = true, isActive = true, genreTitle = "Драма"),
+            state = ShowAllViewState.Empty,
+        )
+        awaitAnyFocus()
+        val reset = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.show_all_filters_reset)
+        // Header «Сброс» is [0], the empty-state one is [1].
+        assertEquals(2, composeRule.onAllNodesWithText(reset).fetchSemanticsNodes().size)
+        composeRule.onAllNodesWithText(reset)[1].assertIsFocused()
+        // reveal() opens the rail without a Left search from the centred button.
+        composeRule.runOnIdle { host.drawerState.reveal() }
+        composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+
+        val id = composeRule.runOnIdle { host.drawerState.beginHandoff(HandoffKind.TabPick) }
+        assertNotNull(id)
+        repeat(HandoffFrames) { composeRule.mainClock.advanceTimeByFrame() }
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText(reset)[1].assertIsNotFocused()
+        assertEquals(DrawerValue.HandingOff, host.drawerState.currentValue)
+    }
+
+    // The arrival keeps its request: Empty composed during the pending tab pick takes «Сброс».
+    @Test
+    fun tabPickHandoff_arrivingEmptyResetTakesFocus() {
+        val host = setUpScreen(
+            filter = ShowAllFilterState(available = true, isActive = true, genreTitle = "Драма"),
+        )
+        awaitAnyFocus()
+        composeRule.runOnIdle { host.drawerState.reveal() }
+        composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+
+        // One idle block: the pick is pending when Empty is first composed.
+        composeRule.runOnIdle {
+            val id = host.drawerState.beginHandoff(HandoffKind.TabPick)
+            assertNotNull(id)
+            host.state = ShowAllViewState.Empty
+        }
+        assertEquals(DrawerValue.HandingOff, host.drawerState.currentValue)
+
+        val reset = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.show_all_filters_reset)
+        composeRule.waitUntil(TimeoutMillis) {
+            runCatching {
+                assertEquals(2, composeRule.onAllNodesWithText(reset).fetchSemanticsNodes().size)
+                composeRule.onAllNodesWithText(reset)[1].assertIsFocused()
+            }.isSuccess
+        }
+    }
+
     private fun flipContentActive(host: Host) {
         composeRule.runOnIdle { host.forcedInactive = true }
         composeRule.waitForIdle()
@@ -226,8 +284,9 @@ class ShowAllRailCloseFocusTest {
         initial: DrawerValue = DrawerValue.Closed,
         autoFocus: Boolean = true,
         filter: ShowAllFilterState = ShowAllFilterState.Unavailable,
+        state: ShowAllViewState = ShowAllViewState.Content(items),
     ): Host {
-        val host = Host()
+        val host = Host(state)
         composeRule.setContent {
             PuberTheme {
                 host.drawerState = rememberDrawerState(initial)
@@ -267,6 +326,7 @@ class ShowAllRailCloseFocusTest {
         const val ScrollRows = 7
         const val ItemCount = (ScrollRows + 1) * SHOW_ALL_GRID_COLUMNS
         const val SettleMillis = 500L
+        const val HandoffFrames = 5
         const val LongPressDelayMillis = 500L
         const val NextRepeatDelayMillis = 50L
         const val TimeoutMillis = 12_000L
@@ -276,7 +336,8 @@ class ShowAllRailCloseFocusTest {
 private const val PopupTag = "popup"
 
 /** Test-side switches read by [RailWithShowAll]. */
-private class Host {
+private class Host(initialState: ShowAllViewState) {
+    var state by mutableStateOf(initialState)
     lateinit var drawerState: DrawerState
     var forcedInactive by mutableStateOf(false)
     var popupShown by mutableStateOf(false)
@@ -324,7 +385,7 @@ private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>, filter: S
                     ) {
                         ShowAllScreenContent(
                             title = TestTitle,
-                            state = ShowAllViewState.Content(items),
+                            state = host.state,
                             onAction = {},
                             filter = filter,
                         )

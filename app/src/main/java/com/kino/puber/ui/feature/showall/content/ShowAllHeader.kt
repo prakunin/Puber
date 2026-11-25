@@ -39,8 +39,8 @@ private val ResetToSummaryGap = 12.dp
  * cards sits at the same height on every grid. The title is not focusable: first focus stays on the
  * first card.
  *
- * [downTarget] is where Down leaves the buttons for, and [canFocus] keeps «Фильтры» from taking the
- * first focus of a grid that is still loading.
+ * [downTarget] is where Down leaves the buttons for, and [canFocus] keeps «Фильтры» and «Сброс» from
+ * taking the first focus of a grid that is still loading.
  */
 @Composable
 internal fun ShowAllHeader(
@@ -92,6 +92,7 @@ internal fun ShowAllHeader(
                     modifier = Modifier
                         .focusRequester(resetFocus)
                         .focusProperties {
+                            this.canFocus = canFocus
                             up = FocusRequester.Cancel
                             down = downTarget
                             left = filtersFocus
