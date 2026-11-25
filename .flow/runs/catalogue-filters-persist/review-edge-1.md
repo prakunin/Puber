@@ -1,0 +1,11 @@
+LENS: edge  ROUND: 1  BASE: ef5987ec
+### F1 [minor] Changing only the sort on a grid with a skipped «Аниме» genre deletes the saved genre
+- Where: app/src/main/java/com/kino/puber/ui/feature/showall/vm/ShowAllVM.kt:376-379 (restoreFilter), :187-195 (closeFilterPanel)
+- Problem: `restoreFilter` removes the anime genre from `restored`, so `applied` starts without it. Spec Q3 ("skip on restore, keep stored") and the design ("Not rewriting keeps the genre for when show-anime is back on") say the saved genre should survive. The entry is protected only when the panel closes with nothing changed. Any other change to the draft writes `applied` without the genre and replaces the saved entry.
+- Failure scenario: «Аниме» + YEAR/ASC is saved on `all_movie`. The user turns show-anime off and opens Movies. The grid opens on YEAR/ASC with no genre, which is correct. The user opens «Фильтры», picks sort «по рейтингу» and presses Back. `filterRepository.write("all_movie", ContentFilter(sort = RATING, ...))` overwrites `genreId = 25`. Later the user turns show-anime back on, reopens the grid, and the anime genre is gone. AC-8 / Q3 only test the "closed unchanged" case (`restoredAnime_closedUnchanged_keepsTheStoredGenre`).
+- Fix: keep the skipped genre in the VM, for example `private val skippedGenre = stored.genre.takeIf { skipped }`. In `closeFilterPanel`, while the draft genre is null and show-anime is still off, write `applied.copy(genre = skippedGenre)`. Alternatively, record in the spec that a deliberate change to the sort drops the hidden genre, and leave the code as it is.
+
+### Unproven
+- CatalogueFilterRepository.kt:24 main-thread disk read: on a cold start, `getString` in the VM constructor (built during composition) waits for the `catalogue_filters` prefs file to load. Matters only if StrictMode or a frame-time trace shows a stall. The other preference repos follow the same pattern.
+- CatalogueFilterRepository.kt:44 stored `genreTitle`: if the API localises or renames genre titles, the header summary shows the old title until the genre is chosen again.
+- ShowAllVM.kt:193 two open `ShowAllVM`s on the same `config.id` write the same key, last write wins; matters only if navigation can stack the same browse grid twice.
