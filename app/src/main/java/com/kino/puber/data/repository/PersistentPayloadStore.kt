@@ -26,10 +26,14 @@ interface PersistentPayloadStore {
     suspend fun readAll(keys: List<String>): Map<String, StoredPayload> = buildMap {
         keys.forEach { key -> read(key)?.let { put(key, it) } }
     }
-    suspend fun write(key: String, payload: String, updatedAt: Long)
-    suspend fun writeAll(payloads: Map<String, StoredPayload>) {
-        payloads.forEach { (key, value) -> write(key, value.payload, value.updatedAt) }
-    }
+
+    /** Returns false when the payload is over the row limit: nothing is written and the key's row is untouched. */
+    suspend fun write(key: String, payload: String, updatedAt: Long): Boolean
+
+    /** Returns the keys [write] reported as not stored; the rest are stored. */
+    suspend fun writeAll(payloads: Map<String, StoredPayload>): Set<String> =
+        payloads.filter { (key, value) -> !write(key, value.payload, value.updatedAt) }.keys
+
     suspend fun touch(key: String, updatedAt: Long)
     suspend fun remove(key: String)
     suspend fun removeByPrefix(prefix: String)
@@ -96,20 +100,18 @@ class RoomPersistentPayloadStore(
         }
     }
 
-    override suspend fun write(key: String, payload: String, updatedAt: Long) {
-        if (isOversized(payload)) {
-            refuse(key, payload)
-            return
-        }
+    override suspend fun write(key: String, payload: String, updatedAt: Long): Boolean {
+        if (isOversized(payload)) return false
         val generation = this.generation
         dao.upsert(CachedPayloadEntity(key = key, payload = payload, updatedAt = updatedAt))
         if (generation != this.generation) {
             dao.delete(key)
         }
+        return true
     }
 
-    override suspend fun writeAll(payloads: Map<String, StoredPayload>) {
-        if (payloads.isEmpty()) return
+    override suspend fun writeAll(payloads: Map<String, StoredPayload>): Set<String> {
+        if (payloads.isEmpty()) return emptySet()
         val (oversized, kept) = payloads.entries.partition { isOversized(it.value.payload) }
         val generation = this.generation
         if (kept.isNotEmpty()) {
@@ -122,16 +124,10 @@ class RoomPersistentPayloadStore(
                 kept.forEach { dao.delete(it.key) }
             }
         }
-        oversized.forEach { (key, value) -> refuse(key, value.payload) }
+        return oversized.mapTo(HashSet()) { it.key }
     }
 
     private fun isOversized(payload: String): Boolean = utf8Size(payload, MAX_ROW_BYTES) > MAX_ROW_BYTES
-
-    /** Drops the key's older row too, so a stale record cannot outlive the newer value it replaces. */
-    private suspend fun refuse(key: String, payload: String) {
-        Timber.w("Refused cached payload %s: %d chars, over %d UTF-8 bytes", key, payload.length, MAX_ROW_BYTES)
-        dao.delete(key)
-    }
 
     override suspend fun touch(key: String, updatedAt: Long) {
         dao.touch(key = key, updatedAt = updatedAt)
