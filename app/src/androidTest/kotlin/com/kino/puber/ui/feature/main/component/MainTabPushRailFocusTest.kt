@@ -91,8 +91,8 @@ internal class MainTabPushRailFocusTest {
         host.awaitRailItemFocused()
 
         // Back hands focus to the content, which has nothing focusable while Loading: the rail waits
-        // in HandingOff until the content lands and would reopen at the 5 s handoff timeout, so it
-        // can reach Closed only after the content is supplied.
+        // in HandingOff until the content lands. A failed Dismiss would also end Closed, with focus
+        // cleared, so the focused child card below is what proves the handoff landed.
         host.back()
         host.assertDrawer(DrawerValue.HandingOff)
         host.endChildLoading()
