@@ -1,0 +1,12 @@
+CODEX: ran: review, adversarial
+
+CONFIRMED:
+- [minor] app/src/main/java/com/kino/puber/data/cache/CachedFeed.kt:475-477 (`persistRefused`) - The ownership `filter` over all unsaved keys runs before the first suspending `store.remove`. Scenario: a batch refuses keys A and B, and the delete of A is in flight. Another section's `load` or `putAll` then commits a small card for B, and the loop still deletes B from the stale snapshot. Lists that name B then point at nothing after eviction or restart. Fix: check `epochOf(key) == epochs[key]` inside the loop, immediately before each `remove`. The window that remains is the DAO delete being unconditional, which the spec accepts.
+- [minor] app/src/main/java/com/kino/puber/data/cache/CachedFeed.kt:444-471 (`persistLoaded` and the fallback write in `persistRefused`) - The fallback is encoded and upserted after the epoch check, and the upsert is unconditional. Scenario: a newer writer claims and commits the key while the old fallback is being encoded or is waiting on Room. The stale card-only row then lands last, and the settle logic sees a newer ticket and leaves it. A fresh card or full details record can then be replaced on disk by an older card-only copy. Memory is unaffected, so the damage shows after eviction or restart. This is the same window the base code has for its first write, so it is narrow and the damage is a stale card, not a missing row. The new tests do not cover a newer write landing during the fallback upsert. Fixing it needs a conditional or serialized store write. The cheaper option is to accept it and record it as a known limit.
+
+REJECTED:
+- `observeItemDetails` skips the refresh when it reads the full record from memory, memory then evicts that entry before `itemFeed.load` reads it, the feed serves the fresh card-only row, and the flow completes with no emission (ContentCacheRepository.kt:197-213) - unproven. It needs the memory tier to evict a fresh, oversized record in the gap between two back-to-back reads.
+- Both ownership races rated high (Codex adversarial) - regraded to minor. The damage is a stale or missing card row that a refetch repairs, and the window is the same one the base code already tolerates.
+- Device evidence does not exercise the oversized card through the 4K grid flow after a force-stop, and one cold start sent input to the Home hero (evidence.md:34-47) - a gap in the evidence, not a code defect.
+
+VERDICT: changes needed (minor only; the first minor is a one-line fix and the second can be accepted with a note)
