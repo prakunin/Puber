@@ -51,8 +51,9 @@ private const val HandoffContentGraceFrames = 5
  * A thin facade over [DrawerState] rather than a second store of state: the rail's value stays the
  * single source of truth, and this exposes only the part the content needs to see.
  *
- * @param closeOnFail read when a handoff fails: `true` leaves the rail closed instead of reopening
- *   it, for a host where Back still has somewhere to go without the rail.
+ * @param closeOnFail read when a [HandoffKind.TabPick] fails: `true` leaves the rail closed instead
+ *   of reopening it, for a host where Back still has somewhere to go without the rail. A failed
+ *   [HandoffKind.Dismiss] or [HandoffKind.Initial] always ends closed.
  */
 @Stable
 class ContentFocusHandoff(

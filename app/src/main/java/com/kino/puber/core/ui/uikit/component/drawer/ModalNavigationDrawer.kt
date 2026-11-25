@@ -74,6 +74,18 @@ enum class DrawerValue {
     HandingOff,
 }
 
+/** Why a handoff runs, which decides whether a pick may restart it and where a failed one ends. */
+enum class HandoffKind {
+    /** Cold start, or the content regaining focus after a dialog: no rail interaction began it. */
+    Initial,
+
+    /** A rail pick of another tab: the content that must confirm is not composed yet. */
+    TabPick,
+
+    /** Back, Right, or a re-pick of the selected tab: the rail closes over the content on screen. */
+    Dismiss,
+}
+
 /**
  * State of the [ModalNavigationDrawer], and the authority on whether the rail is open.
  *
@@ -104,6 +116,10 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     var pendingHandoffId: Long? by mutableStateOf(null)
         private set
 
+    /** The kind of the pending handoff, or `null` when none is pending. */
+    var handoffKind: HandoffKind? by mutableStateOf(null)
+        private set
+
     /**
      * Whether the pending handoff is waiting on content that does not exist yet.
      *
@@ -113,8 +129,8 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
      * over content that is about to be torn down — reproducing the very bug this state machine
      * exists to prevent. When `true`, only content composed after the handoff began may confirm it.
      */
-    var handoffExpectsNewContent: Boolean by mutableStateOf(false)
-        private set
+    val handoffExpectsNewContent: Boolean
+        get() = handoffKind == HandoffKind.TabPick
 
     private var lastHandoffId = 0L
 
@@ -126,28 +142,39 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     }
 
     /**
-     * A rail item was clicked, or Back was pressed while the rail was open — both change the rail
-     * without moving focus, so focus has to be handed over explicitly.
+     * A rail item was clicked, or Back or Right was pressed while the rail was open — each changes
+     * the rail without moving focus, so focus has to be handed over explicitly.
      *
-     * @param expectsNewContent `true` when the handoff accompanies a tab change, so the content
-     *   that must confirm it is not composed yet. See [handoffExpectsNewContent].
-     * @return the request id to confirm against, or `null` if the rail was not open.
+     * A [HandoffKind.TabPick] while an initial or tab-pick handoff is pending restarts it with a new
+     * id. The tab on screen was composed during the old id, so it cannot confirm the new one: the
+     * outgoing tab cannot close the rail over content about to be torn down, and the arriving tab
+     * gets the full budget. A pending [HandoffKind.Dismiss] is never restarted: the user cannot see
+     * the collapsed rail they would be picking from.
+     *
+     * @param kind [HandoffKind.TabPick] or [HandoffKind.Dismiss]; an initial handoff starts only
+     *   through [beginInitialHandoff].
+     * @return the request id to confirm against, or `null` if the handoff was refused.
      */
-    fun beginHandoff(expectsNewContent: Boolean): Long? {
-        if (currentValue != DrawerValue.Open) return null
-        return startHandoff(expectsNewContent)
+    fun beginHandoff(kind: HandoffKind): Long? {
+        require(kind != HandoffKind.Initial) { "an initial handoff starts through beginInitialHandoff" }
+        return when (currentValue) {
+            DrawerValue.Open -> startHandoff(kind)
+            DrawerValue.HandingOff ->
+                if (kind == HandoffKind.TabPick && handoffKind != HandoffKind.Dismiss) startHandoff(kind) else null
+            DrawerValue.Closed -> null
+        }
     }
 
     /** Starts the first content handoff before the user has interacted with the rail. */
     fun beginInitialHandoff(): Long? {
         if (currentValue != DrawerValue.Closed) return null
-        return startHandoff(expectsNewContent = false)
+        return startHandoff(HandoffKind.Initial)
     }
 
-    private fun startHandoff(expectsNewContent: Boolean): Long {
+    private fun startHandoff(kind: HandoffKind): Long {
         lastHandoffId += 1
         pendingHandoffId = lastHandoffId
-        handoffExpectsNewContent = expectsNewContent
+        handoffKind = kind
         currentValue = DrawerValue.HandingOff
         return lastHandoffId
     }
@@ -163,17 +190,24 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     fun settleHandoff(requestId: Long) {
         if (pendingHandoffId != requestId) return
         pendingHandoffId = null
+        handoffKind = null
         currentValue = DrawerValue.Closed
     }
 
     /**
-     * The content never took focus. Reopening beats stranding focus in nothing, unless [reopen] is
-     * false because Back still has somewhere to go without the rail.
+     * The content never took focus.
+     *
+     * After a [HandoffKind.TabPick] the rail reopens, since the user can pick again, unless [reopen]
+     * is false because Back still has somewhere to go without the rail. A [HandoffKind.Dismiss] or
+     * [HandoffKind.Initial] always ends closed: the user asked the rail away, or never asked for it,
+     * and reopening it would trap Back in the rail. Left and Back reveal it again.
      */
     fun failHandoff(requestId: Long, reopen: Boolean = true) {
         if (pendingHandoffId != requestId) return
+        val reopenRail = reopen && handoffKind == HandoffKind.TabPick
         pendingHandoffId = null
-        currentValue = if (reopen) DrawerValue.Open else DrawerValue.Closed
+        handoffKind = null
+        currentValue = if (reopenRail) DrawerValue.Open else DrawerValue.Closed
     }
 
     companion object {
@@ -289,7 +323,7 @@ private fun DrawerSheet(
                     return@onPreviewKeyEvent false
                 }
                 when (drawerState.currentValue) {
-                    DrawerValue.Open -> drawerState.beginHandoff(expectsNewContent = false) != null
+                    DrawerValue.Open -> drawerState.beginHandoff(HandoffKind.Dismiss) != null
                     DrawerValue.HandingOff -> true
                     DrawerValue.Closed -> false
                 }
