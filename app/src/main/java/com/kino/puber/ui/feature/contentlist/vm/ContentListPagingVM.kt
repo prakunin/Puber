@@ -30,7 +30,7 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 internal abstract class ContentListPagingVM<VS>(
     paginator: Paginator.Store<Item>,
-    private val config: SectionConfig,
+    initialConfig: SectionConfig,
     protected val interactor: ContentListInteractor,
     private val mapper: VideoItemUIMapper,
     router: AppRouter,
@@ -38,6 +38,17 @@ internal abstract class ContentListPagingVM<VS>(
     pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
 ) : PagingVM<Item, VS>(paginator, router, errorHandler, pagingCoroutineContext) {
 
+    /**
+     * The query this list pages. A grid that lets the user change it moves it through [changeQuery];
+     * every read below captures the value it was started under, so a read of the old query that is
+     * still in flight cannot land in the list of the new one.
+     */
+    @Volatile
+    private var config = initialConfig
+
+    /** Whether first pages of [config] may come from, and go to, the stored first-page cache. */
+    @Volatile
+    private var cacheable = true
     private var currentPage = 0
     private var emptyPageChain = 0
     private var resumeRounds = 0
@@ -70,6 +81,26 @@ internal abstract class ContentListPagingVM<VS>(
      * publishes under the number it was started with.
      */
     private val walkGeneration = AtomicInteger(0)
+
+    /**
+     * Which query the list belongs to. [walkGeneration] already drops the walk of an older
+     * publication, but a first page of the old query that is still being read has not published
+     * yet, and a depth restore reads further pages of it; both check this one before they publish.
+     */
+    private val queryGeneration = AtomicInteger(0)
+
+    /** Which query the list on screen belongs to; moves with every [changeQuery]. */
+    protected val currentQueryGeneration: Int
+        get() = queryGeneration.get()
+
+    /**
+     * Makes "this publication still belongs to the list" and "send it to the paginator" one step
+     * against [changeQuery]. The generations are checked before a page is handed over, and a query
+     * change that lands between the check and the hand-over would otherwise let the old page in
+     * behind the reset; the paginator's queue keeps the order of what is sent, so holding this
+     * across both is enough.
+     */
+    private val publishLock = Any()
 
     /**
      * Whether the last thing asked of this list was a reload rather than a reset, which is what
@@ -107,6 +138,26 @@ internal abstract class ContentListPagingVM<VS>(
         refreshPagingKeepingContent()
     }
 
+    /**
+     * Switches the list to another query: the pages of the old one are dropped, whatever of its
+     * reads is still in flight is ignored, and paging restarts from page one.
+     */
+    protected fun changeQuery(config: SectionConfig, cacheable: Boolean) {
+        synchronized(publishLock) {
+            this.config = config
+            this.cacheable = cacheable
+            queryGeneration.incrementAndGet()
+            walkGeneration.incrementAndGet()
+            // The depth, the blank-page budget and the walk's cursor belong to the old query: a
+            // refresh before the new first page lands would otherwise restore the old depth of it.
+            currentPage = 0
+            emptyPageChain = 0
+            resumeRounds = 0
+            publishedAnyItems = false
+            resetPaging(null)
+        }
+    }
+
     /** A reset is the other intent: it clears the list on purpose, so there is no depth to keep. */
     final override fun resetPaging(key: Any?) {
         reloadKeepsDepth = false
@@ -116,8 +167,12 @@ internal abstract class ContentListPagingVM<VS>(
     final override fun onLoadFirstPage() {
         val demanded = forcedReadsDemanded.get()
         val force = demanded > forcedReadsServed.get()
+        val query = config
+        val queryCacheable = cacheable
+        val generation = queryGeneration.get()
         pagingLaunch(errorHandlerGeneral) {
-            interactor.observeFirstPage(config, force = force).collect { cached ->
+            interactor.observeFirstPage(query, force = force, cacheable = queryCacheable).collect { cached ->
+                if (generation != queryGeneration.get()) return@collect
                 when (cached) {
                     is Cached.Value -> {
                         // The stored page is page one on its own. Drawing it while a deeper row is
@@ -126,14 +181,14 @@ internal abstract class ContentListPagingVM<VS>(
                         // The publication behind this one is what carries the depth.
                         val deferToTheReloadBehindIt = cached.isStale && depthToRestore() > 1
                         if (!deferToTheReloadBehindIt) {
-                            publishFirstPage(cached.value)
+                            publishFirstPage(cached.value, query, generation)
                         }
                     }
                     // Nobody asked for this refresh and there is already content on screen, so a
                     // failure is not the user's problem: the stored page stands.
                     is Cached.RefreshFailed -> log(
                         cached.error,
-                        "$logName ${config.id}: background refresh failed",
+                        "$logName ${query.id}: background refresh failed",
                     )
                 }
             }
@@ -162,11 +217,16 @@ internal abstract class ContentListPagingVM<VS>(
      * the previous list as [Paginator.State.Refreshing] and goes on drawing it, which is a better
      * answer than replacing a row the user is looking at with the part of it that did arrive.
      */
-    private suspend fun publishFirstPage(firstPage: PaginatedResponse<Item>) {
+    private suspend fun publishFirstPage(
+        firstPage: PaginatedResponse<Item>,
+        query: SectionConfig,
+        generation: Int,
+    ) {
         val depth = depthToRestore()
-        val response = if (depth > 1) restoreLoadedDepth(firstPage, depth) else firstPage
-        if (response != null) {
-            publish(response, isFirstPage = true)
+        val response = if (depth > 1) restoreLoadedDepth(firstPage, depth, query) else firstPage
+        if (response == null) return
+        synchronized(publishLock) {
+            if (generation == queryGeneration.get()) publish(response, isFirstPage = true)
         }
     }
 
@@ -194,10 +254,11 @@ internal abstract class ContentListPagingVM<VS>(
     private suspend fun restoreLoadedDepth(
         firstPage: PaginatedResponse<Item>,
         depth: Int,
+        query: SectionConfig,
     ): PaginatedResponse<Item>? {
         val restoreTo = depth.coerceAtMost(MAX_RESTORED_PAGES)
         if (depth > restoreTo) {
-            log("$logName ${config.id}: reload restores $restoreTo of the $depth pages loaded")
+            log("$logName ${query.id}: reload restores $restoreTo of the $depth pages loaded")
         }
         val items = LinkedHashMap<Int, Item>()
         firstPage.items.forEach { items.putIfAbsent(it.id, it) }
@@ -213,11 +274,11 @@ internal abstract class ContentListPagingVM<VS>(
             page += 1
             requests += 1
             val next = try {
-                interactor.loadPage(config, page)
+                interactor.loadPage(query, page)
             } catch (error: CancellationException) {
                 throw error
             } catch (@Suppress("TooGenericExceptionCaught") error: Throwable) {
-                log(error, "$logName ${config.id}: reload could not read page $page, row kept as it was")
+                log(error, "$logName ${query.id}: reload could not read page $page, row kept as it was")
                 return null
             }
             next.items.forEach { items.putIfAbsent(it.id, it) }
@@ -225,7 +286,7 @@ internal abstract class ContentListPagingVM<VS>(
             page = maxOf(page, next.pagination.current)
             emptyChain = if (next.items.isEmpty()) emptyChain + 1 else 0
             if (emptyChain > MAX_EMPTY_PAGE_CHAIN) {
-                log("$logName ${config.id}: reload stopped after $emptyChain empty pages at $page")
+                log("$logName ${query.id}: reload stopped after $emptyChain empty pages at $page")
                 break
             }
         }
@@ -246,14 +307,15 @@ internal abstract class ContentListPagingVM<VS>(
      * removes is the dispatch boundary, which is what makes that interleaving likely rather than
      * theoretical.
      */
-    private fun walkStep(page: Int, generation: Int = walkGeneration.get()) {
-        pagingLaunch(errorHandlerPaging) { publishWalkStep(page, generation) }
+    private fun walkStep(page: Int, generation: Int = walkGeneration.get(), query: SectionConfig = config) {
+        pagingLaunch(errorHandlerPaging) { publishWalkStep(page, generation, query) }
     }
 
-    private suspend fun publishWalkStep(page: Int, generation: Int) {
-        val response = interactor.loadPage(config, page)
-        if (generation != walkGeneration.get()) return
-        publish(response, isFirstPage = false)
+    private suspend fun publishWalkStep(page: Int, generation: Int, query: SectionConfig) {
+        val response = interactor.loadPage(query, page)
+        synchronized(publishLock) {
+            if (generation == walkGeneration.get()) publish(response, isFirstPage = false)
+        }
     }
 
     /**
@@ -330,13 +392,14 @@ internal abstract class ContentListPagingVM<VS>(
                 "resuming from page $resumeFrom (round $resumeRounds)"
         )
         val generation = walkGeneration.get()
+        val query = config
         pagingLaunch(errorHandlerPaging) {
             delay(WALK_RESUME_PAUSE)
             // A first page published during the pause starts a walk of its own, and this round is
             // part of the one it replaced — including the counter it would otherwise reset.
             if (generation != walkGeneration.get()) return@pagingLaunch
             emptyPageChain = 0
-            publishWalkStep(page = resumeFrom, generation = generation)
+            publishWalkStep(page = resumeFrom, generation = generation, query = query)
         }
     }
 

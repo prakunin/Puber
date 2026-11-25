@@ -27,6 +27,11 @@ val Error60 = Color(red = 228, green = 105, blue = 98)
  */
 val KinopoiskOrange = Color(0xFFFF6600)
 val ImdbYellow = Color(0xFFF5C518)
+
+/** Show all poster card colours, from the approved stand `docs/design/showall`. */
+val KinoPubGreen = Color(0xFF4CAF50)
+val OnKinoPubGreen = Color(0xFF0B1F0C)
+val PosterChipScrim = Color.Black.copy(alpha = 0.78f)
 val OledBackground = Color.Black
 
 val ColorScheme.focusHighlight: Color

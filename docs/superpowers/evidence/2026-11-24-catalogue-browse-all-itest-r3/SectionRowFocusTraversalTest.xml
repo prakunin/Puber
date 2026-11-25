@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="17" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-24T13:04:08" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" tests="17" failures="0" errors="0" skipped="0" time="29.798" timestamp="2026-11-24T13:04:08" hostname="localhost">
+    <properties>
+      <property name="device" value="192.168.1.110_5555" />
+    </properties>
+    <testcase name="dpadRightReportsFocusedPositionWithRowKeyAndIndex" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="4.683" />
+    <testcase name="browseEntryIsReachableWithUpWhenSectionZeroIsEmpty" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.923" />
+    <testcase name="browseEntryIsFocusableWhenEverySectionIsEmpty" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.212" />
+    <testcase name="browseEntryUpFromFirstShelfCardThenDownReturnsToThatCard" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.899" />
+    <testcase name="dpadUpIntoHeroThenDownReSettlesSameSectionFlushWithViewportTop" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.918" />
+    <testcase name="browseEntryHeaderKeepsSectionZeroFlushWithTheViewportTop" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.626" />
+    <testcase name="focusEnteringARetryRowClearsTheEntryOwnership" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.923" />
+    <testcase name="browseEntryIsNotFocusableWhileItsSectionIsLoading" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.689" />
+    <testcase name="dpadDownSettlesHeroAndEverySectionStateFlushWithViewportTop" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="2.016" />
+    <testcase name="withoutHeroAnEmptySectionOwnsNoPageAndDpadDownSkipsIt" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.163" />
+    <testcase name="launchFocusSkipsTheEntryWhenSectionZeroIsEmpty" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.862" />
+    <testcase name="launchFocusSkipsTheEntryWhenSectionZeroIsError" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.835" />
+    <testcase name="dpadFocusOnNonFallbackItemInNonTargetRowRecordsActualIdentity" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.943" />
+    <testcase name="browseEntryOwnerKeepsFocusWhenItsSectionFinishesLoading" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="0.885" />
+    <testcase name="horizontalRowShowsThreeCardsAndKeepsMovableFocusCentred" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.831" />
+    <testcase name="downToEndRightThenUpRestoresGenericRowTargetsInsideViewport" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="5.226" />
+    <testcase name="focusEnteringACardClearsTheEntryOwnership" classname="com.kino.puber.ui.feature.contentlist.content.SectionRowFocusTraversalTest" time="1.164" />
+  </testsuite>
+</testsuites>

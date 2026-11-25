@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.showall
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.screen.ScreenKey
 import com.kino.puber.core.di.DIScope
 import com.kino.puber.core.paginator.Paginator
@@ -13,6 +14,8 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.showall.content.ShowAllScreenContent
+import com.kino.puber.ui.feature.showall.content.resolve
+import com.kino.puber.ui.feature.showall.model.ShowAllTitle
 import com.kino.puber.ui.feature.showall.vm.ShowAllVM
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
@@ -26,7 +29,8 @@ import org.koin.dsl.module
 
 @Parcelize
 internal class ShowAllScreen(
-    private val config: SectionConfig,
+    internal val config: SectionConfig,
+    internal val title: ShowAllTitle,
 ) : PuberScreen {
 
     @IgnoredOnParcel
@@ -42,6 +46,7 @@ internal class ShowAllScreen(
                     paginator = Paginator.Store { old, new -> old.id == new.id },
                     config = config,
                     interactor = get(),
+                    genreInteractor = get(),
                     savedItemInteractor = get(),
                     mapper = get(),
                     router = get(),
@@ -55,10 +60,13 @@ internal class ShowAllScreen(
     override fun Content() = DIScope(scopeName = key, moduleFactory = ::buildModule) {
         val vm = puberViewModel<ShowAllVM>()
         val state by vm.collectViewState()
+        val filter by vm.filterState.collectAsStateWithLifecycle()
         val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
         ShowAllScreenContent(
+            title = title.resolve(),
             state = state,
             onAction = onAction,
+            filter = filter,
         )
     }
 }

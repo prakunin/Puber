@@ -125,4 +125,4 @@ shortcut, sort, quality, genre, required genre id, and an `AnimeFilterMode` of
 returns the sections for a tab, and `ContentListScreen` builds its scope from
 that list. Adding a shelf usually means adding a `SectionConfig`, not a screen.
 
-After any filter change, restart paging with `resetPaging()`.
+A grid changes its query through `ContentListPagingVM.changeQuery(config, cacheable)`, which drops the pages of the old query and calls `resetPaging`. `ShowAllVM` builds the query with `ContentFilter.applyTo(base)` and reads a filtered first page with `cacheable = false`.

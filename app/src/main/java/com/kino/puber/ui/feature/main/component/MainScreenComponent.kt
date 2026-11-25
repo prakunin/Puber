@@ -43,12 +43,17 @@ import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.navigation.TabRouter
+import com.kino.puber.core.ui.navigation.component.LocalTabStackState
+import com.kino.puber.core.ui.navigation.component.RailBackOwner
 import com.kino.puber.core.ui.navigation.component.TabAppRouterHolder
+import com.kino.puber.core.ui.navigation.component.TabStackState
+import com.kino.puber.core.ui.navigation.component.railBackOwner
 import com.kino.puber.core.ui.navigation.component.PuberCurrentTab
 import com.kino.puber.core.ui.navigation.component.TabComponent
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.HandoffKind
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
@@ -86,19 +91,31 @@ internal fun MainScreenComponent() {
 }
 
 @Composable
-private fun DrawerMainContent(
+internal fun DrawerMainContent(
     state: MainViewState,
     onAction: (UIAction) -> Unit,
     tabRouter: TabRouter,
     tabAppRouterHolder: TabAppRouterHolder,
+    exitConfirmation: ExitConfirmation = remember { ExitConfirmation() },
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val outerActive = LocalContentFocusActive.current
     val mainContentFocus = rememberFocusRequesterOnLaunch()
-    val handoff = remember(drawerState, mainContentFocus) {
-        ContentFocusHandoff(drawerState, mainContentFocus)
+    val tabStack = remember { TabStackState() }
+    // A failed Dismiss or Initial handoff leaves the rail closed at any depth. A failed tab pick
+    // reopens it at a tab root; over a pushed screen Back still has somewhere to go, so content that
+    // never takes focus (Show all in Error) leaves the rail closed and the next Back pops it.
+    val handoff = remember(drawerState, mainContentFocus, tabStack) {
+        ContentFocusHandoff(drawerState, mainContentFocus, closeOnFail = { tabStack.canPop })
     }
-    val exitConfirmation = remember { ExitConfirmation() }
+    // A tab pick takes the user somewhere else, so an exit armed at the root they left must not let
+    // the next Back there leave the app.
+    val onRailAction: (UIAction) -> Unit = remember(onAction, exitConfirmation) {
+        { action ->
+            if (action is CommonAction.ItemSelected<*>) exitConfirmation.disarm()
+            onAction(action)
+        }
+    }
 
     // A dialog over the screens (outerActive false) is dismissed by removing the node that holds
     // focus, and the focus system then lands on the rail, which reveals it. A handoff in flight is
@@ -112,11 +129,13 @@ private fun DrawerMainContent(
     CompositionLocalProvider(
         LocalDrawerState provides drawerState,
         LocalContentFocusHandoff provides handoff,
+        LocalTabStackState provides tabStack,
     ) {
-        // Registered BEFORE the tab content on purpose. OnBackPressedDispatcher gives the event to
-        // the last enabled callback, so a pushed tab screen — whose TabBackHandler registers later
-        // — keeps Back while the rail is closed. Only when there is nothing to pop does this fire.
-        RailClosedBackHandler(drawerState, exitConfirmation, outerActive)
+        // Back has one owner at a time, picked by railBackOwner from the rail's state and whether
+        // the tab can pop, so registration order does not decide: this handler is enabled only
+        // for a closed rail over a tab root.
+        RailClosedBackHandler(drawerState, tabStack, exitConfirmation, outerActive)
+        ExitDisarmOnTabPush(tabStack, exitConfirmation)
 
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -129,7 +148,7 @@ private fun DrawerMainContent(
             drawerContent = {
                 MainSideMenuContent(
                     state = state,
-                    onAction = onAction,
+                    onAction = onRailAction,
                     drawerState = drawerState,
                 )
             },
@@ -153,10 +172,8 @@ private fun DrawerMainContent(
             },
         )
 
-        // Registered AFTER the tab content, which is the only way the rail can win over
-        // TabBackHandler while it is on top: the dispatcher picks the last enabled callback, and
-        // `enabled` alone cannot reorder that. Disabled while closed so the handler above governs.
-        RailOpenBackHandler(drawerState, exitConfirmation, outerActive)
+        // Enabled only while the rail is open or handing off; TabBackHandler is disabled then too.
+        RailOpenBackHandler(drawerState, tabStack, exitConfirmation, outerActive)
     }
 }
 
@@ -170,13 +187,15 @@ private fun DrawerMainContent(
 @Composable
 private fun RailClosedBackHandler(
     drawerState: DrawerState,
+    tabStack: TabStackState,
     exitConfirmation: ExitConfirmation,
     outerActive: Boolean,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
 
-    BackHandler(enabled = outerActive && drawerState.currentValue == DrawerValue.Closed) {
+    val owner = railBackOwner(drawerState.currentValue, tabStack.canPop)
+    BackHandler(enabled = outerActive && owner == RailBackOwner.RailClosed) {
         if (exitConfirmation.isArmed) {
             activity?.finish()
         } else {
@@ -186,27 +205,54 @@ private fun RailClosedBackHandler(
     }
 }
 
-/** Back while the rail is open or handing off. Always consumed — the rail is what is on top. */
+/**
+ * Back while the rail is open or handing off. Always consumed — the rail is what is on top — and
+ * leaves the app when it is the second Back at a tab root while the first one's handoff is pending.
+ */
 @Composable
 private fun RailOpenBackHandler(
     drawerState: DrawerState,
+    tabStack: TabStackState,
     exitConfirmation: ExitConfirmation,
     outerActive: Boolean,
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val exitPrompt = stringResource(R.string.main_press_back_again_to_exit)
 
-    BackHandler(enabled = outerActive && drawerState.currentValue != DrawerValue.Closed) {
-        // HandingOff is swallowed rather than acted on: the rail is already closing, and letting
-        // the event through would pop the screen arriving underneath it.
-        if (drawerState.currentValue != DrawerValue.Open) return@BackHandler
+    val owner = railBackOwner(drawerState.currentValue, tabStack.canPop)
+    BackHandler(enabled = outerActive && owner == RailBackOwner.RailOpen) {
+        if (drawerState.currentValue != DrawerValue.Open) {
+            // An armed Dismiss is the second Back at the same root: only the Back below arms, and
+            // a pick or a push or pop disarms. Content with nothing focusable keeps that handoff
+            // pending, so the exit has to be taken here. Any other Back while handing off is
+            // swallowed: the rail is already closing, and letting it through would pop the screen
+            // arriving underneath.
+            if (drawerState.handoffKind == HandoffKind.Dismiss && exitConfirmation.isArmed) {
+                activity?.finish()
+                exitConfirmation.disarm()
+            }
+            return@BackHandler
+        }
 
-        drawerState.beginHandoff(expectsNewContent = false)
-        // The user has just walked back out of the menu, so the next Back has nowhere left to go
-        // inside the app.
-        exitConfirmation.arm()
-        Toast.makeText(context, exitPrompt, Toast.LENGTH_SHORT).show()
+        drawerState.beginHandoff(HandoffKind.Dismiss)
+        // Over a tab root the user has just walked back out of the menu, so the next Back has
+        // nowhere left to go inside the app. Over a pushed screen it still has: it pops.
+        if (!tabStack.canPop) {
+            exitConfirmation.arm()
+            Toast.makeText(context, exitPrompt, Toast.LENGTH_SHORT).show()
+        }
     }
+}
+
+/**
+ * Disarms the exit when a screen is pushed or popped in the tab, so an arm made at the root does
+ * not let a later Back leave the app from a different place. Its own composable so the read of
+ * [TabStackState.canPop] does not recompose [DrawerMainContent].
+ */
+@Composable
+private fun ExitDisarmOnTabPush(tabStack: TabStackState, exitConfirmation: ExitConfirmation) {
+    LaunchedEffect(tabStack.canPop) { exitConfirmation.disarm() }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -264,6 +310,19 @@ internal fun NavigationDrawerScope.MainSideMenuContent(
 private val DrawerState.isOpen: Boolean
     get() = currentValue == DrawerValue.Open
 
+/**
+ * A collapsed rail can still hold an item focused. During a Dismiss (Back, Right, re-pick), or
+ * Closed after a failed handoff, Center there must not pick a tab the user cannot see. During an
+ * initial or tab-pick handoff the tab may still be loading with the rail item focused, and a pick of
+ * another tab goes there instead or corrects a mistaken one; [DrawerState.beginHandoff] restarts
+ * the handoff for that tab.
+ */
+private fun DrawerState.acceptsPickOf(tab: MainTab): Boolean = when (currentValue) {
+    DrawerValue.Open -> true
+    DrawerValue.HandingOff -> handoffKind != HandoffKind.Dismiss && !tab.isSelected
+    DrawerValue.Closed -> false
+}
+
 @Composable
 private fun NavigationDrawerScope.MainSideMenuItem(
     tab: MainTab,
@@ -279,10 +338,12 @@ private fun NavigationDrawerScope.MainSideMenuItem(
         modifier = modifier,
         selected = tab.isSelected,
         onClick = {
-            onAction(CommonAction.ItemSelected(tab))
-            // Re-picking the active tab composes no new content, so the tab already on screen is
-            // the one that has to confirm the handoff.
-            drawerState.beginHandoff(expectsNewContent = !tab.isSelected)
+            if (drawerState.acceptsPickOf(tab)) {
+                onAction(CommonAction.ItemSelected(tab))
+                // A re-pick of the active tab composes no new content, so it dismisses the rail over
+                // the tab on screen, which is the one that has to confirm the handoff.
+                drawerState.beginHandoff(if (tab.isSelected) HandoffKind.Dismiss else HandoffKind.TabPick)
+            }
         },
         leadingContent = {
             Icon(

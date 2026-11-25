@@ -24,6 +24,30 @@ class CachedFeedMemoryWeightTest {
     )
 
     @Test
+    fun aRefusedValueStillWeighsItsFullPayloadInMemory() = runTest {
+        store.maxPayloadLength = 5
+        val subject = CachedFeed(
+            store = store,
+            serializer = String.serializer(),
+            ttl = 10.minutes,
+            keyPrefix = "",
+            clock = { 1_000_000L },
+            maximumMemoryWeight = 20L,
+            memoryWeigher = { it },
+            persistFallback = { "x" },
+        )
+        subject.put("older", "aaaaaaaaaa")
+        subject.put("newer", "bbbbbbbbbb")
+        store.readCount = 0
+
+        subject.load("newer") { error("served from memory") }.toList()
+        assertEquals(0, store.readCount)
+
+        subject.load("older") { error("served from the store") }.toList()
+        assertEquals(1, store.readCount)
+    }
+
+    @Test
     fun aValuePastTheWeightCapEvictsTheOldestFromMemory() = runTest {
         val subject = feed()
         subject.put("oldest", "aaaaaaaaaa")

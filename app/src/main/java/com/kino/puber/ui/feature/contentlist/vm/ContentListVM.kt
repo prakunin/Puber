@@ -10,12 +10,14 @@ import com.kino.puber.core.ui.uikit.component.details.VideoDetailsUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.domain.model.TabType
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
 import com.kino.puber.domain.interactor.trailer.TrailerLinkInteractor
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.ContentListViewState
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
+import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
 import com.kino.puber.ui.feature.showall.ShowAllScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -30,6 +32,7 @@ internal class ContentListVM(
     private val navPrefs: NavigationPreferencesRepository,
     private val trailerLinks: TrailerLinkInteractor,
     private val contentListRefreshCoordinator: ContentListRefreshCoordinator,
+    private val tabType: TabType,
     private val heroConfigs: List<SectionConfig> = emptyList(),
 ) : PuberVM<ContentListViewState>(router) {
 
@@ -51,6 +54,8 @@ internal class ContentListVM(
             is CommonAction.ItemSelected<*> -> onItemSelected(action.item as VideoItemUIState)
             is CommonAction.ItemPlayed<*> -> onItemPlayed(action.item as VideoItemUIState)
             is ContentListAction.ShowAll -> openShowAll(action.config)
+            is ContentListAction.BrowseAll ->
+                TabTypeConfig.browseEntryFor(tabType)?.let { openShowAll(it.config) }
             is ContentListAction.HeroSelected -> openDetails(action.itemId)
             is ContentListAction.TrailerPreviewFinished -> stopTrailerPreview()
             is ContentListAction.TrailerPreviewStopped -> stopTrailerPreview()
@@ -138,7 +143,7 @@ internal class ContentListVM(
     private fun openShowAll(config: SectionConfig) {
         stopTrailerPreview()
         router.navigateForResult<ContentChangeSet>(
-            screen = ShowAllScreen(config),
+            screen = ShowAllScreen(config, TabTypeConfig.showAllTitle(tabType, config)),
             requestCode = RESULT_CONTENT_CHANGED,
             listener = ::onReturnedFromShowAll,
         )

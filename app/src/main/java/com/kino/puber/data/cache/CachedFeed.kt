@@ -4,6 +4,7 @@ import androidx.annotation.VisibleForTesting
 import com.kino.puber.core.collections.TypedTtlCacheImpl
 import com.kino.puber.data.repository.PersistentPayloadStore
 import com.kino.puber.data.repository.StoredPayload
+import timber.log.Timber
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -53,6 +54,11 @@ class CachedFeed<V : Any>(
     maximumSize: Int = DEFAULT_MAXIMUM_SIZE,
     maximumMemoryWeight: Long = Long.MAX_VALUE,
     memoryWeigher: (encodedLength: Int) -> Int = { 1 },
+    /**
+     * A smaller stand-in for a value whose full payload the store refuses, persisted instead so the
+     * key keeps a row. Memory still holds the full value, and the weigher the full payload's length.
+     */
+    private val persistFallback: ((V) -> V)? = null,
 ) {
     private val defaultTtl = ttl
 
@@ -236,11 +242,7 @@ class CachedFeed<V : Any>(
                         var discardValue = false
                         val settled = epochOf(key)
                         if (settled == epoch) {
-                            store.write(
-                                key = key,
-                                payload = payload,
-                                updatedAt = updatedAt,
-                            )
+                            persistLoaded(key, value, payload, updatedAt, epoch)
                             // A store mutation can land while the database write is suspended, after
                             // the guard above passed. The old result must not survive in either tier —
                             // though the row goes only when this writer still owns it, since a newer
@@ -395,9 +397,10 @@ class CachedFeed<V : Any>(
             }
             val epochs = values.keys.associateWith(::epochOf)
             val payloads = values.mapValues { (_, value) -> json.encodeToString(serializer, value) }
-            store.writeAll(
+            val refused = store.writeAll(
                 payloads.mapValues { (_, payload) -> StoredPayload(payload = payload, updatedAt = updatedAt) }
             )
+            persistRefused(refused, values, payloads, epochs, updatedAt)
             values.forEach { (key, value) ->
                 val epoch = epochs.getValue(key)
                 val settled = epochOf(key)
@@ -430,6 +433,68 @@ class CachedFeed<V : Any>(
                     else -> memory.remove(key)
                 }
             }
+        }
+    }
+
+    /**
+     * Writes a loaded payload. A refused one leaves the key's older row in place, so what replaces it
+     * (the fallback, or nothing) is written only while this writer still owns the key: a newer
+     * writer's row is a real value, and every list naming the key points at it.
+     */
+    private suspend fun persistLoaded(key: String, value: V, payload: String, updatedAt: Long, epoch: Epoch) {
+        if (store.write(key = key, payload = payload, updatedAt = updatedAt) || epochOf(key) != epoch) return
+        val fallback = persistFallback?.let { json.encodeToString(serializer, it(value)) }
+        if (fallback != null && store.write(key = key, payload = fallback, updatedAt = updatedAt)) {
+            Timber.w(
+                "Cached payload %s over the row limit (%d chars); stored the fallback (%d chars)",
+                key,
+                payload.length,
+                fallback.length,
+            )
+            return
+        }
+        if (epochOf(key) == epoch) {
+            store.remove(key)
+            Timber.w("Refused cached payload %s: %d chars, nothing persisted", key, payload.length)
+        }
+    }
+
+    /** The bulk counterpart of [persistLoaded], for the keys [PersistentPayloadStore.writeAll] refused. */
+    @Suppress("LongParameterList")
+    private suspend fun persistRefused(
+        refused: Set<String>,
+        values: Map<String, V>,
+        payloads: Map<String, String>,
+        epochs: Map<String, Epoch>,
+        updatedAt: Long,
+    ) {
+        val owned = refused.filter { epochOf(it) == epochs.getValue(it) }
+        val toFallback = persistFallback
+        val fallbacks = if (toFallback == null) {
+            emptyMap()
+        } else {
+            owned.associateWith { key ->
+                StoredPayload(
+                    payload = json.encodeToString(serializer, toFallback(values.getValue(key))),
+                    updatedAt = updatedAt,
+                )
+            }
+        }
+        val unsaved = if (fallbacks.isEmpty()) owned.toSet() else store.writeAll(fallbacks)
+        (owned - unsaved).forEach { key ->
+            Timber.w(
+                "Cached payload %s over the row limit (%d chars); stored the fallback (%d chars)",
+                key,
+                payloads.getValue(key).length,
+                fallbacks.getValue(key).payload.length,
+            )
+        }
+        unsaved.forEach { key ->
+            // Each delete suspends, so ownership is re-checked right before it: a writer that took
+            // the key over during an earlier delete has put a real row here.
+            if (epochOf(key) != epochs.getValue(key)) return@forEach
+            store.remove(key)
+            Timber.w("Refused cached payload %s: %d chars, nothing persisted", key, payloads.getValue(key).length)
         }
     }
 

@@ -4,6 +4,7 @@ import com.kino.puber.core.ui.uikit.model.UIAction
 
 internal sealed interface ContentListAction : UIAction {
     data class ShowAll(val config: SectionConfig) : ContentListAction
+    data object BrowseAll : ContentListAction
     data class HeroSelected(val itemId: Int) : ContentListAction
     data object TrailerPreviewFinished : ContentListAction
 

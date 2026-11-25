@@ -1,10 +1,14 @@
 package com.kino.puber.data.cache
 
 import com.kino.puber.data.api.models.History
+import com.kino.puber.data.api.models.Episode
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.api.models.Season
+import com.kino.puber.data.api.models.Video
+import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.util.FakePayloadStore
 import com.kino.puber.util.MainDispatcherExtension
 import kotlinx.coroutines.CoroutineDispatcher
@@ -28,6 +32,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -252,6 +258,118 @@ class ContentCacheRepositoryTest {
         assertThrows<IllegalStateException> {
             subject.observeItemDetails(7) { error("offline") }.toList()
         }
+    }
+
+    @Test
+    fun aListMergeOverAnOversizedDetailsRecordPersistsACardOnlyRow() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        val fullLength = store.read(ContentCacheRepository.itemKey(7))!!.payload.length
+        assertTrue(fullLength > ROW_LIMIT)
+        store.maxPayloadLength = ROW_LIMIT
+
+        subject.mergeItems(listOf(item(7).copy(title = "Merged")))
+
+        val row = store.read(ContentCacheRepository.itemKey(7))
+        assertNotNull(row)
+        assertTrue(row!!.payload.length <= ROW_LIMIT)
+        val record = Json.parseToJsonElement(row.payload).jsonObject
+        val stored = record.getValue("item").jsonObject
+        assertEquals("Merged", stored.getValue("title").jsonPrimitive.content)
+        assertFalse(stored.containsKey("videos"))
+        assertFalse(record.containsKey("detailsUpdatedAt"))
+        val seasons = stored.getValue("seasons").jsonArray
+        assertEquals(SEASONS, seasons.size)
+        seasons.forEach { season ->
+            val fields = season.jsonObject
+            assertTrue(fields.containsKey("id") && fields.containsKey("number") && fields.containsKey("title"))
+            assertFalse(fields.containsKey("episodes"))
+        }
+    }
+
+    @Test
+    fun anOversizedDetailsRecordIsStillServedInFullInTheSameSession() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        store.maxPayloadLength = ROW_LIMIT
+        subject.mergeItems(listOf(item(7).copy(title = "Merged")))
+
+        val emissions = subject.observeItemDetails(7) { error("memory") }.toList()
+
+        val served = (emissions.single() as Cached.Value).value
+        assertEquals(EPISODES, served.seasons!!.first().episodes!!.size)
+        assertTrue(served.videos!!.isNotEmpty())
+    }
+
+    @Test
+    fun aCardOnlyRowServesTheListAfterARestartWithoutTheLoader() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        store.maxPayloadLength = ROW_LIMIT
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7).copy(title = "Merged")) }.toList()
+
+        var loads = 0
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = restarted.observeItems("home", CacheTtl.HomeSection) {
+            loads += 1
+            listOf(item(7))
+        }.toList()
+
+        assertEquals(0, loads)
+        val card = (emissions.last() as Cached.Value).value.single()
+        assertEquals("Merged", card.title)
+        assertEquals(SEASONS, card.seasons?.size)
+    }
+
+    @Test
+    fun detailsOverACardOnlyRowAfterARestartCallTheLoaderFirst() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        store.maxPayloadLength = ROW_LIMIT
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = restarted.observeItemDetails(7) { series(7) }.toList()
+
+        assertEquals(listOf(series(7)), emissions.map { (it as Cached.Value).value })
+    }
+
+    @Test
+    fun aCardOnlyRowKeepsTheCardInAnOfflineListAfterARestart() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        store.maxPayloadLength = ROW_LIMIT
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7).copy(title = "Merged")) }.toList()
+        now += CacheTtl.HomeSection.inWholeMilliseconds + 1
+
+        val restarted = ContentCacheRepository(store = store, clock = { now })
+        val emissions = mutableListOf<Cached<List<Item>>>()
+        runCatching {
+            restarted.observeItems("home", CacheTtl.HomeSection) { error("offline") }.collect { emissions += it }
+        }
+
+        val first = emissions.firstOrNull() as? Cached.Value
+        assertEquals(listOf("Merged"), first?.value?.map(Item::title))
+    }
+
+    @Test
+    fun markingACardOnlyRecordStaleStillMakesDetailsLoadFirst() = runTest {
+        subject.observeItems("home", CacheTtl.HomeSection) { listOf(item(7)) }.toList()
+        subject.markItemDetailsStale(7)
+
+        val emissions = subject.observeItemDetails(7) { series(7) }.toList()
+
+        assertEquals(listOf(series(7)), emissions.map { (it as Cached.Value).value })
+    }
+
+    @Test
+    fun markingAnOversizedDetailsRecordStaleKeepsACardOnlyRow() = runTest {
+        subject.observeItemDetails(7) { series(7) }.toList()
+        store.maxPayloadLength = ROW_LIMIT
+
+        subject.markItemDetailsStale(7)
+
+        val row = store.read(ContentCacheRepository.itemKey(7))
+        assertNotNull(row)
+        val record = Json.parseToJsonElement(row!!.payload).jsonObject
+        assertFalse(record.containsKey("detailsUpdatedAt"))
+        assertFalse(record.getValue("item").jsonObject.getValue("seasons").jsonArray.first().jsonObject
+            .containsKey("episodes"))
     }
 
     @Test
@@ -639,7 +757,30 @@ class ContentCacheRepositoryTest {
         const val DECODE_THREAD = "decode"
         const val BIG_PLOT_CHARS = 1_000_000
         const val BIG_ITEM_COUNT = 16
+        const val ROW_LIMIT = 4_000
+        const val SEASONS = 3
+        const val EPISODES = 20
     }
+
+    private fun series(id: Int) = item(id).copy(
+        type = ItemType.SERIAL,
+        seasons = (1..SEASONS).map { season ->
+            Season(
+                id = season,
+                number = season,
+                title = "Season $season",
+                episodes = (1..EPISODES).map { episode ->
+                    Episode(
+                        id = season * 100 + episode,
+                        number = episode,
+                        title = "Episode $episode",
+                        files = listOf(VideoFile(quality = "1080p", codec = "h264")),
+                    )
+                },
+            )
+        },
+        videos = listOf(Video(id = 1, title = "Extra", files = listOf(VideoFile(quality = "720p")))),
+    )
 
     private fun item(id: Int) = Item(id = id, title = "Item $id", type = ItemType.MOVIE)
 

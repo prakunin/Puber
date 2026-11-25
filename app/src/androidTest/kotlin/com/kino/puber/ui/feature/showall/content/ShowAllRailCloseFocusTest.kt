@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.showall.content
 
+import android.view.KeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
@@ -20,12 +21,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.R
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.Heart
@@ -44,6 +49,7 @@ import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.main.component.MainSideMenuContent
 import com.kino.puber.ui.feature.main.model.MainTab
 import com.kino.puber.ui.feature.main.model.MainViewState
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -54,6 +60,8 @@ import org.junit.Test
  * `FlowComponent` wire them. Closing the rail with RIGHT must give focus back to the card the user
  * left, not to whatever the tab box's default focus search finds after the handoff's grace frames.
  */
+private const val TestTitle = "Фильмы · Новинки"
+
 class ShowAllRailCloseFocusTest {
 
     @get:Rule
@@ -71,6 +79,32 @@ class ShowAllRailCloseFocusTest {
         val title = focusedTitle()
 
         repeat(Repeats) { closeRailAndAssertFocusOn(host.drawerState, title) }
+    }
+
+    @Test
+    fun showAllMenuOpenAndBackReturnsFocusToTheOpeningCard() {
+        setUpScreen()
+        awaitAnyFocus()
+        repeat(DeepRows) { press(Key.DirectionDown) }
+        val title = focusedTitle()
+        val firstActionTitle = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.context_menu_watch_movie)
+
+        composeRule.onNode(isFocused()).performKeyInput {
+            keyDown(Key.Enter)
+            advanceEventTime(LongPressDelayMillis)
+        }
+        val firstAction = composeRule.onNodeWithText(firstActionTitle, useUnmergedTree = true).onParent()
+        composeRule.waitUntil(TimeoutMillis) { runCatching { firstAction.assertIsFocused() }.isSuccess }
+        firstAction.performKeyInput {
+            advanceEventTime(NextRepeatDelayMillis)
+            keyUp(Key.Enter)
+        }
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+
+        composeRule.waitUntil(TimeoutMillis) { runCatching { focusedTitle() }.getOrNull() == title }
+        assertEquals(title, focusedTitle())
     }
 
     // The top-row case is a guard: it also passes on base. The scrolled case is the discriminating half.
@@ -135,6 +169,41 @@ class ShowAllRailCloseFocusTest {
         assertEquals(moved, focusedTitle())
     }
 
+    @Test
+    fun leftFromFilters_opensTheRail() {
+        val host = setUpScreen(filter = ShowAllFilterState(available = true))
+        awaitAnyFocus()
+        press(Key.DirectionUp)
+        composeRule.onNodeWithText(
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.show_all_filters),
+        ).assertIsFocused()
+
+        press(Key.DirectionLeft)
+
+        composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+    }
+
+    @Test
+    fun railOpenedFromFilters_closesWithFocusBackOnFilters() {
+        val host = setUpScreen(filter = ShowAllFilterState(available = true))
+        awaitAnyFocus()
+        press(Key.DirectionUp)
+        val filters = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.show_all_filters)
+        composeRule.onNodeWithText(filters).assertIsFocused()
+
+        repeat(Repeats) {
+            press(Key.DirectionLeft)
+            composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Open }
+            press(Key.DirectionRight)
+            composeRule.waitUntil(TimeoutMillis) { host.drawerState.currentValue == DrawerValue.Closed }
+            composeRule.waitForIdle()
+            composeRule.mainClock.advanceTimeBy(SettleMillis)
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText(filters).assertIsFocused()
+        }
+    }
+
     private fun flipContentActive(host: Host) {
         composeRule.runOnIdle { host.forcedInactive = true }
         composeRule.waitForIdle()
@@ -156,13 +225,14 @@ class ShowAllRailCloseFocusTest {
     private fun setUpScreen(
         initial: DrawerValue = DrawerValue.Closed,
         autoFocus: Boolean = true,
+        filter: ShowAllFilterState = ShowAllFilterState.Unavailable,
     ): Host {
         val host = Host()
         composeRule.setContent {
             PuberTheme {
                 host.drawerState = rememberDrawerState(initial)
                 CompositionLocalProvider(LocalAutoFocusOnLaunchEnabled provides autoFocus) {
-                    RailWithShowAll(host, items)
+                    RailWithShowAll(host, items, filter)
                 }
             }
         }
@@ -192,11 +262,13 @@ class ShowAllRailCloseFocusTest {
     }
 
     private companion object {
-        const val ItemCount = 24
         const val DeepRows = 5
         const val Repeats = 3
         const val ScrollRows = 7
+        const val ItemCount = (ScrollRows + 1) * SHOW_ALL_GRID_COLUMNS
         const val SettleMillis = 500L
+        const val LongPressDelayMillis = 500L
+        const val NextRepeatDelayMillis = 50L
         const val TimeoutMillis = 12_000L
     }
 }
@@ -211,7 +283,7 @@ private class Host {
 }
 
 @Composable
-private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>) {
+private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>, filter: ShowAllFilterState) {
     val drawerState = host.drawerState
     val contentFocusRequester = remember { FocusRequester() }
     val contentHasFocus = remember { booleanArrayOf(false) }
@@ -250,7 +322,12 @@ private fun RailWithShowAll(host: Host, items: List<VideoItemUIState>) {
                             .focusRestorer()
                             .focusGroup(),
                     ) {
-                        ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                        ShowAllScreenContent(
+                            title = TestTitle,
+                            state = ShowAllViewState.Content(items),
+                            onAction = {},
+                            filter = filter,
+                        )
                         if (host.popupShown) {
                             Box(Modifier.size(1.dp).testTag(PopupTag).focusable())
                         }

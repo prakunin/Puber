@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +48,7 @@ import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
 import com.kino.puber.core.ui.uikit.component.moviesList.nearestNonEmptyRowKey
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.ui.feature.contentlist.model.BrowseEntry
 import com.kino.puber.ui.feature.contentlist.model.ContentListAction
 import com.kino.puber.ui.feature.contentlist.model.ContentListViewState
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
@@ -60,6 +62,7 @@ import org.koin.core.qualifier.named
 internal fun ContentListScreenContent(
     state: ContentListViewState,
     sections: List<SectionConfig>,
+    browseEntry: BrowseEntry?,
     onAction: (UIAction) -> Unit,
 ) {
     val mainContentFocus = rememberFocusRequesterOnLaunch()
@@ -78,7 +81,6 @@ internal fun ContentListScreenContent(
     DisposableEffect(Unit) {
         onDispose { currentOnAction(ContentListAction.TrailerPreviewStopped) }
     }
-
     // Resolved through the ViewModelStore, so a section keeps the pages it has loaded while the
     // user is away on a card. Not remembered: the store is what holds them, and asking it again on
     // a recomposition hands back the same instances.
@@ -92,6 +94,17 @@ internal fun ContentListScreenContent(
         }
     }
 
+    // The browse entry sits in section 0's list item but is not one of its cards: while it holds
+    // focus no row is the target, or a return from the grid would land on the row's remembered card.
+    val browseEntryFocus = rememberBrowseEntryFocus(sectionStates)
+    // Focus stays inside the rows' list, so the leave-the-rows stop never fires for the entry.
+    val onBrowseEntryFocused = remember {
+        {
+            browseEntryFocus.onEntryFocused()
+            currentOnAction(ContentListAction.TrailerPreviewStopped)
+        }
+    }
+
     androidx.compose.foundation.layout.Box {
         DetailsPrefetchSurface {
             ContentListLayout(
@@ -100,6 +113,9 @@ internal fun ContentListScreenContent(
                 sectionVms = sectionVms,
                 sectionStates = sectionStates,
                 focusedSectionIndex = focusedSectionIndex,
+                browseEntry = browseEntry,
+                browseEntryFocus = browseEntryFocus,
+                onBrowseEntryFocused = onBrowseEntryFocused,
                 onSectionFocused = { focusedSectionIndex = it },
                 onContextMenu = { item, sectionVm ->
                     contextMenuTarget = ContentListContextMenuTarget(item, sectionVm)
@@ -107,7 +123,8 @@ internal fun ContentListScreenContent(
                 onAction = onAction,
                 modifier = Modifier
                     .fillMaxSize()
-                    .focusRequester(mainContentFocus),
+                    .focusRequester(mainContentFocus)
+                    .onFocusChanged { browseEntryFocus.onListFocusChanged(it.hasFocus) },
             )
         }
 
@@ -133,6 +150,9 @@ private fun ContentListLayout(
     sectionVms: List<SectionVM>,
     sectionStates: List<SectionState>,
     focusedSectionIndex: Int,
+    browseEntry: BrowseEntry?,
+    browseEntryFocus: BrowseEntryFocus,
+    onBrowseEntryFocused: () -> Unit,
     onSectionFocused: (Int) -> Unit,
     onContextMenu: (VideoItemUIState, SectionVM) -> Unit,
     onAction: (UIAction) -> Unit,
@@ -211,6 +231,9 @@ private fun ContentListLayout(
                     sectionVms = sectionVms,
                     sectionStates = sectionStates,
                     focusedSectionIndex = focusedSectionIndex,
+                    browseEntry = browseEntry,
+                    browseEntryFocus = browseEntryFocus,
+                    onBrowseEntryFocused = onBrowseEntryFocused,
                     isHeroItemPresent = isHeroItemPresent,
                     fillsViewport = itemsFillViewport,
                     onSectionFocused = onSectionFocused,
@@ -320,6 +343,9 @@ private fun LazyListScope.sectionItems(
     sectionVms: List<SectionVM>,
     sectionStates: List<SectionState>,
     focusedSectionIndex: Int,
+    browseEntry: BrowseEntry?,
+    browseEntryFocus: BrowseEntryFocus,
+    onBrowseEntryFocused: () -> Unit,
     isHeroItemPresent: Boolean,
     fillsViewport: Boolean,
     onSectionFocused: (Int) -> Unit,
@@ -335,10 +361,19 @@ private fun LazyListScope.sectionItems(
             sectionVm = sectionVms[index],
             sectionState = sectionStates[index],
             isLastSection = index == sections.lastIndex,
-            isTargetRow = index == focusedSectionIndex,
+            isTargetRow = !browseEntryFocus.isOwner && index == focusedSectionIndex,
+            browseEntry = browseEntry.takeIf { index == 0 },
+            browseEntryFocus = browseEntryFocus,
+            onBrowseEntryFocused = {
+                onBrowseEntryFocused()
+                onListItemFocused(sectionListItemIndex(0, isHeroItemPresent))
+            },
             fillsViewport = fillsViewport,
             onSectionFocused = onSectionFocused,
-            onRowFocused = { onListItemFocused(sectionListItemIndex(index, isHeroItemPresent)) },
+            onRowFocused = {
+                browseEntryFocus.onRowFocused(sectionStates[index])
+                onListItemFocused(sectionListItemIndex(index, isHeroItemPresent))
+            },
             onContextMenu = onContextMenu,
             onAction = onAction,
             onCardFocused = onCardFocused,
@@ -369,6 +404,9 @@ private fun LazyListScope.sectionItem(
     sectionState: SectionState,
     isLastSection: Boolean,
     isTargetRow: Boolean,
+    browseEntry: BrowseEntry?,
+    browseEntryFocus: BrowseEntryFocus,
+    onBrowseEntryFocused: () -> Unit,
     fillsViewport: Boolean,
     onSectionFocused: (Int) -> Unit,
     onRowFocused: () -> Unit,
@@ -407,6 +445,7 @@ private fun LazyListScope.sectionItem(
                 onRetry = { sectionVm.onAction(CommonAction.RetryClicked) },
                 onLoadMore = { sectionVm.onAction(CommonAction.LoadMore) },
                 onShowAll = rememberedOnShowAll,
+                initialFocusEnabled = !browseEntryFocus.isOwner,
                 // Whether a row pages in more used to ride on the same flag, so putting the
                 // button in every section would have stopped every section paging. They answer
                 // different questions: the button is a way out to the full grid, and «Все» is the
@@ -416,10 +455,26 @@ private fun LazyListScope.sectionItem(
             )
         }
 
+        val currentOnBrowseEntryFocused by rememberUpdatedState(onBrowseEntryFocused)
+        val onEntryFocused = remember { { currentOnBrowseEntryFocused() } }
+        val onEntryClick = remember(onAction) { { onAction(ContentListAction.BrowseAll) } }
+        val header: (@Composable () -> Unit)? = browseEntry?.let { entry ->
+            {
+                BrowseEntryHeader(
+                    label = stringResource(entry.labelRes),
+                    focus = browseEntryFocus,
+                    sectionState = sectionState,
+                    onFocused = onEntryFocused,
+                    onClick = onEntryClick,
+                )
+            }
+        }
+
         SectionListItem(
             title = config.titleRes?.let { stringResource(it) } ?: config.title,
             isEmpty = sectionState is SectionState.Empty,
             fillsViewport = fillsViewport,
+            header = header,
             row = row,
         )
     }
@@ -457,10 +512,14 @@ internal fun LazyItemScope.SectionListItem(
     isEmpty: Boolean,
     fillsViewport: Boolean,
     modifier: Modifier = Modifier,
+    header: (@Composable () -> Unit)? = null,
     row: @Composable () -> Unit,
 ) {
     if (isEmpty) {
-        Column(modifier = modifier) { row() }
+        Column(modifier = modifier) {
+            header?.let { SectionHeaderBand(it) }
+            row()
+        }
         return
     }
     Column(
@@ -468,10 +527,11 @@ internal fun LazyItemScope.SectionListItem(
             if (fillsViewport) Modifier.fillParentMaxHeight() else Modifier,
         ),
     ) {
+        header?.let { SectionHeaderBand(it) }
         Text(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = SectionTitleTopPadding)
+                .padding(top = if (header == null) SectionTitleTopPadding else 0.dp)
                 .padding(horizontal = SectionTitleSidePadding),
             text = title,
             style = SectionTitleStyle,
@@ -479,6 +539,20 @@ internal fun LazyItemScope.SectionListItem(
         Spacer(modifier = Modifier.height(SectionTitleToRow))
         row()
     }
+}
+
+/**
+ * The slot above the heading, as tall as the air the heading would otherwise carry on top, so a
+ * header takes the place of that air and the page keeps its height.
+ */
+@Composable
+private fun SectionHeaderBand(header: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(SectionTitleTopPadding)
+            .padding(start = SectionTitleSidePadding),
+    ) { header() }
 }
 
 /**

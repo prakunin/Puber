@@ -4,6 +4,7 @@ import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.History
 import com.kino.puber.data.api.models.PaginatedResponse
 import com.kino.puber.data.api.models.Pagination
+import com.kino.puber.data.api.models.Season
 import com.kino.puber.data.api.models.Video
 import com.kino.puber.data.repository.PersistentPayloadStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -34,7 +35,7 @@ class ContentCacheRepository(
 ) {
 
     // One feed per record type, so the memory tier holds the decoded record and a hit costs no decode.
-    private val itemFeed = newFeed(ItemRecord.serializer())
+    private val itemFeed = newFeed(ItemRecord.serializer(), persistFallback = ItemRecord::cardOnly)
     private val listFeed = newFeed(ItemListRecord.serializer())
     private val pageFeed = newFeed(ItemPageRecord.serializer())
     private val historyFeed = newFeed(HistoryPageRecord.serializer())
@@ -294,7 +295,8 @@ class ContentCacheRepository(
         val current = readItemRecord(itemId) ?: return@withContext
         itemFeed.put(
             key = itemKey(itemId),
-            value = current.copy(detailsUpdatedAt = STALE_TIMESTAMP),
+            // A card-only record has no details to distrust: stamping it would serve the bare card as details.
+            value = current.copy(detailsUpdatedAt = current.detailsUpdatedAt?.let { STALE_TIMESTAMP }),
             supersede = true,
         )
     }
@@ -386,7 +388,10 @@ class ContentCacheRepository(
         return ids.isNotEmpty() && readItemRecords(ids).size != ids.size
     }
 
-    private fun <V : Any> newFeed(serializer: KSerializer<V>): CachedFeed<V> = CachedFeed(
+    private fun <V : Any> newFeed(
+        serializer: KSerializer<V>,
+        persistFallback: ((V) -> V)? = null,
+    ): CachedFeed<V> = CachedFeed(
         store = store,
         serializer = serializer,
         ttl = CachedFeed.HardCeiling,
@@ -400,6 +405,7 @@ class ContentCacheRepository(
         // Room still has them all.
         maximumMemoryWeight = MEMORY_TIER_ENCODED_CHARS,
         memoryWeigher = { encodedLength -> encodedLength },
+        persistFallback = persistFallback,
     )
 
     /** A payload's type is the caller's, so its feed is made on first use and kept under its key. */
@@ -493,7 +499,20 @@ class ContentCacheRepository(
         val item: Item,
         val cardUpdatedAt: Long,
         val detailsUpdatedAt: Long? = null,
-    )
+    ) {
+        /**
+         * What is persisted when the whole record is over the store's row limit: the card, and the
+         * season list without its episodes, so "N seasons" survives. No `detailsUpdatedAt`, so a
+         * reader treats it as a card and loads the details.
+         */
+        fun cardOnly(): ItemRecord = copy(
+            item = item.copy(
+                seasons = item.seasons?.map { Season(id = it.id, number = it.number, title = it.title) },
+                videos = null,
+            ),
+            detailsUpdatedAt = null,
+        )
+    }
 
     @Serializable
     private data class ItemListRecord(val itemIds: List<Int>)

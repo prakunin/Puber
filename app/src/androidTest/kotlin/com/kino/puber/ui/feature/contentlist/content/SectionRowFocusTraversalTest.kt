@@ -15,11 +15,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
@@ -40,12 +46,17 @@ import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
 import com.kino.puber.core.ui.uikit.component.details.PanelPosition
+import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
+import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MILLIS
+import com.kino.puber.core.ui.uikit.component.moviesList.FocusableRow
+import com.kino.puber.core.ui.uikit.component.moviesList.nearestNonEmptyRowKey
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.model.SectionState
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -415,14 +426,351 @@ internal class SectionRowFocusTraversalTest {
         assertSettleFlush(settleSectionTag(3))
     }
 
+    @Test
+    fun browseEntryUpFromFirstShelfCardThenDownReturnsToThatCard() {
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = entryRows(), isHeroItemPresent = false, entryLabel = ENTRY_LABEL)
+            }
+        }
+        requestFocus(itemTitle(0, 0))
+        pressCurrent(Key.DirectionRight)
+        composeRule.onNodeWithText(itemTitle(0, 1)).assertIsFocused()
+
+        pressCurrent(Key.DirectionUp)
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsFocused()
+
+        pressLeafFocused(Key.DirectionDown)
+        composeRule.onNodeWithText(itemTitle(0, 1)).assertIsFocused()
+    }
+
+    @Test
+    fun browseEntryIsNotFocusableWhileItsSectionIsLoading() {
+        val rows = listOf(
+            RowFixture(SectionConfig(id = "entry_loading", title = "Loading"), SectionState.Loading),
+        )
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = rows, isHeroItemPresent = false, entryLabel = ENTRY_LABEL)
+            }
+        }
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assert(!isFocused())
+    }
+
+    @Test
+    fun browseEntryHeaderKeepsSectionZeroFlushWithTheViewportTop() {
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = entryRows(), isHeroItemPresent = false, entryLabel = ENTRY_LABEL)
+            }
+        }
+        assertSettleFlush(settleSectionTag(0))
+        val viewport = composeRule.onNodeWithTag(SETTLE_VIEWPORT_TAG).getUnclippedBoundsInRoot()
+        val card = composeRule.onNodeWithText(itemTitle(0, 0)).getUnclippedBoundsInRoot()
+        assertTrue(
+            "card bottom ${card.bottom} is below viewport ${viewport.bottom}",
+            card.bottom.value <= viewport.bottom.value + BOUNDS_TOLERANCE,
+        )
+
+        requestFocus(itemTitle(0, 0))
+        pressCurrent(Key.DirectionDown)
+
+        assertSettleFlush(settleSectionTag(1))
+        pressCurrent(Key.DirectionUp)
+        assertSettleFlush(settleSectionTag(0))
+    }
+
+    @Test
+    fun browseEntryIsReachableWithUpWhenSectionZeroIsEmpty() {
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = emptyThenContentRows(), isHeroItemPresent = false, entryLabel = ENTRY_LABEL)
+            }
+        }
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsDisplayed()
+        requestFocus(itemTitle(1, 0))
+        pressCurrent(Key.DirectionUp)
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsFocused()
+    }
+
+    @Test
+    fun launchFocusSkipsTheEntryWhenSectionZeroIsEmpty() {
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(
+                    rows = emptyThenContentRows(),
+                    isHeroItemPresent = false,
+                    entryLabel = ENTRY_LABEL,
+                    launchFocus = true,
+                )
+            }
+        }
+        composeRule.waitUntil(LAUNCH_WAIT_MILLIS) { focusedNodeCount() > 0 }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(itemTitle(1, 0)).assertIsFocused()
+        composeRule.onAllNodes(hasTestTag(SETTLE_ENTRY_TAG) and isFocused()).assertCountEquals(0)
+    }
+
+    // The sections load first (the shimmer holds focus), then every one turns out Empty: the shimmer
+    // is gone and focus would stay nowhere until a key press, so the entry takes it.
+    @Test
+    fun browseEntryTakesFocusWhenEverySectionTurnsEmptyAfterLoading() {
+        var rows by mutableStateOf(allRows(SectionState.Loading))
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(
+                    rows = rows,
+                    isHeroItemPresent = false,
+                    entryLabel = ENTRY_LABEL,
+                    launchFocus = true,
+                )
+            }
+        }
+        composeRule.waitUntil(LAUNCH_WAIT_MILLIS) { focusedNodeCount() > 0 }
+
+        rows = allRows(SectionState.Empty)
+        runCatching { composeRule.waitUntil(LAUNCH_WAIT_MILLIS) { entryIsFocused() } }
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsFocused()
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).performKeyInput {
+            keyDown(Key.DirectionDown)
+            keyUp(Key.DirectionDown)
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsFocused()
+    }
+
+    // The hero holds focus and every section is Empty: the entry must not take it once the launch
+    // delay has passed. The clock is held so the focus lands before the all-Empty delay can fire.
+    @Test
+    fun browseEntryDoesNotTakeFocusFromTheHeroWhenEverySectionIsEmpty() {
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(
+                    rows = allRows(SectionState.Empty),
+                    isHeroItemPresent = true,
+                    entryLabel = ENTRY_LABEL,
+                    // The entry has to be composed for the test to see it take focus.
+                    heroFillsViewport = false,
+                )
+            }
+        }
+        requestFocusOnFirstFocusableIn(SETTLE_HERO_TAG)
+        composeRule.onAllNodes(isFocused() and hasAnyAncestor(hasTestTag(SETTLE_HERO_TAG)), useUnmergedTree = true)
+            .assertCountEquals(1)
+
+        composeRule.mainClock.advanceTimeBy(FOCUS_ON_LAUNCH_DELAY_MILLIS * PAST_LAUNCH_DELAY_FACTOR)
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodes(isFocused() and hasAnyAncestor(hasTestTag(SETTLE_HERO_TAG)), useUnmergedTree = true)
+            .assertCountEquals(1)
+        composeRule.onAllNodes(hasTestTag(SETTLE_ENTRY_TAG) and isFocused()).assertCountEquals(0)
+    }
+
+    // The paginator replays an initial Empty ahead of the first real state, so one all-Empty frame
+    // followed by Content must not make the entry focusable before launch focus has landed on a card.
+    @Test
+    fun aOneFrameAllEmptyThenContentKeepsLaunchFocusOffTheEntry() {
+        var rows by mutableStateOf(allRows(SectionState.Empty))
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(
+                    rows = rows,
+                    isHeroItemPresent = false,
+                    entryLabel = ENTRY_LABEL,
+                    launchFocus = true,
+                )
+            }
+        }
+        rows = entryRows()
+        composeRule.waitUntil(LAUNCH_WAIT_MILLIS) { focusedNodeCount() > 0 }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(itemTitle(0, 0)).assertIsFocused()
+        composeRule.onAllNodes(hasTestTag(SETTLE_ENTRY_TAG) and isFocused()).assertCountEquals(0)
+    }
+
+    @Test
+    fun launchFocusSkipsTheEntryWhenSectionZeroIsError() {
+        val rows = listOf(
+            RowFixture(SectionConfig(id = "entry_error", title = "Error"), SectionState.Error("boom")),
+            RowFixture(
+                SectionConfig(id = "entry_next", title = "Next"),
+                SectionState.Content(items = listOf(item(1, 0), item(1, 1))),
+            ),
+        )
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(
+                    rows = rows,
+                    isHeroItemPresent = false,
+                    entryLabel = ENTRY_LABEL,
+                    launchFocus = true,
+                )
+            }
+        }
+        composeRule.waitUntil(LAUNCH_WAIT_MILLIS) { focusedNodeCount() > 0 }
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodes(hasTestTag(SETTLE_ENTRY_TAG) and isFocused()).assertCountEquals(0)
+    }
+
+    @Test
+    fun focusEnteringACardClearsTheEntryOwnership() {
+        val focus = BrowseEntryFocus(owner = true)
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = entryRows(), isHeroItemPresent = false, entryLabel = ENTRY_LABEL, focus = focus)
+            }
+        }
+        composeRule.runOnIdle { assertTrue(focus.isOwner) }
+
+        requestFocus(itemTitle(0, 0))
+
+        composeRule.runOnIdle { assertFalse("entry still owns focus", focus.isOwner) }
+    }
+
+    @Test
+    fun focusEnteringARetryRowClearsTheEntryOwnership() {
+        val focus = BrowseEntryFocus(owner = true)
+        val rows = listOf(
+            RowFixture(SectionConfig(id = "entry_error", title = "Error"), SectionState.Error("boom")),
+        )
+        composeRule.setContent {
+            PuberTheme {
+                SettleScene(rows = rows, isHeroItemPresent = false, entryLabel = ENTRY_LABEL, focus = focus)
+            }
+        }
+        composeRule.runOnIdle { assertTrue(focus.isOwner) }
+
+        composeRule
+            .onAllNodes(isFocusable() and !hasTestTag(SETTLE_ENTRY_TAG), useUnmergedTree = true)[0]
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+
+        composeRule.runOnIdle { assertFalse("entry still owns focus", focus.isOwner) }
+    }
+
+    // Returning from the browse grid recomposes the tab with the entry as owner while the first
+    // section is still Loading. Focus falls on the focusable shimmer there; when the cards arrive,
+    // the row's initial-focus request used to read that stale flag and pull focus off the entry.
+    @Test
+    fun browseEntryOwnerKeepsFocusWhenItsSectionFinishesLoading() {
+        var state by mutableStateOf<SectionState>(SectionState.Loading)
+        val focus = BrowseEntryFocus(owner = true)
+        composeRule.setContent {
+            PuberTheme {
+                OwnerEntryScene(state = state, focus = focus)
+            }
+        }
+        requestFocusOnFirstFocusableIn(OWNER_ROW_TAG)
+
+        state = SectionState.Content(items = listOf(item(0, 0), item(0, 1)))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(SETTLE_ENTRY_TAG).assertIsFocused()
+    }
+
+    @Composable
+    private fun OwnerEntryScene(state: SectionState, focus: BrowseEntryFocus) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().height(SETTLE_VIEWPORT_HEIGHT).focusGroup()) {
+            item(key = "owner_section") {
+                SectionListItem(
+                    title = "Owner row",
+                    isEmpty = false,
+                    fillsViewport = true,
+                    header = {
+                        BrowseEntryHeader(
+                            label = ENTRY_LABEL,
+                            focus = focus,
+                            sectionState = state,
+                            onFocused = {},
+                            onClick = {},
+                            modifier = Modifier.testTag(SETTLE_ENTRY_TAG),
+                        )
+                    },
+                ) {
+                    Box(Modifier.testTag(OWNER_ROW_TAG)) {
+                        SectionRowContent(
+                            state = state,
+                            config = SectionConfig(id = "owner_row", title = "Owner row"),
+                            isTargetRow = false,
+                            onItemClick = {},
+                            onItemContextMenu = {},
+                            onItemFocused = {},
+                            onSectionFocused = {},
+                            onFocusChanged = { if (it) focus.onRowFocused(state) },
+                            onRetry = {},
+                            onLoadMore = {},
+                            initialFocusEnabled = !focus.isOwner,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun emptyThenContentRows() = listOf(
+        RowFixture(SectionConfig(id = "entry_empty", title = "Empty"), SectionState.Empty),
+        RowFixture(
+            SectionConfig(id = "entry_next", title = "Next"),
+            SectionState.Content(items = listOf(item(1, 0), item(1, 1))),
+        ),
+    )
+
+    private fun allRows(state: SectionState) = listOf(
+        RowFixture(SectionConfig(id = "all_state_0", title = "Section 0"), state),
+        RowFixture(SectionConfig(id = "all_state_1", title = "Section 1"), state),
+    )
+
+    private fun entryIsFocused() = composeRule
+        .onAllNodes(hasTestTag(SETTLE_ENTRY_TAG) and isFocused())
+        .fetchSemanticsNodes()
+        .isNotEmpty()
+
+    private fun focusedNodeCount() = composeRule
+        .onAllNodes(isFocused(), useUnmergedTree = true)
+        .fetchSemanticsNodes()
+        .size
+
+    private fun entryRows() = listOf(
+        RowFixture(
+            config = SectionConfig(id = "entry_row_0", title = "Entry row 0"),
+            state = SectionState.Content(items = listOf(item(0, 0), item(0, 1), item(0, 2))),
+        ),
+        RowFixture(
+            config = SectionConfig(id = "entry_row_1", title = "Entry row 1"),
+            state = SectionState.Content(items = listOf(item(1, 0), item(1, 1))),
+        ),
+    )
+
     // Mirrors ContentListLayout's item wiring: an optional hero item followed by one item per
     // section, sharing the same `rememberFocusedListItemScroller`. The two pieces of arithmetic
     // this scene is here to guard -- where a section sits in the list, and what an empty section
     // collapses to -- come from production's `sectionListItemIndex` and `SectionListItem` rather
     // than from a copy of them, so changing either breaks these tests.
     @Composable
-    private fun SettleScene(rows: List<RowFixture>, isHeroItemPresent: Boolean = true) {
+    private fun SettleScene(
+        rows: List<RowFixture>,
+        isHeroItemPresent: Boolean = true,
+        entryLabel: String? = null,
+        focus: BrowseEntryFocus = rememberBrowseEntryFocus(rows.map { it.state }),
+        launchFocus: Boolean = false,
+        heroFillsViewport: Boolean = true,
+    ) {
         val lazyListState = rememberLazyListState()
+        // The launch path of ContentListScreenContent: the screen's launch request on the list, and
+        // the nearest non-empty section becoming the target row when the first one is Empty.
+        val launchRequester = rememberFocusRequesterOnLaunch()
+        var targetIndex by remember { mutableIntStateOf(0) }
         val onListItemFocused = rememberFocusedListItemScroller(lazyListState)
         Box(
             Modifier
@@ -436,6 +784,8 @@ internal class SectionRowFocusTraversalTest {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(SETTLE_VIEWPORT_HEIGHT)
+                        .then(if (launchFocus) Modifier.focusRequester(launchRequester) else Modifier)
+                        .onFocusChanged { focus.onListFocusChanged(it.hasFocus) }
                         .focusGroup(),
                 ) {
                     if (isHeroItemPresent) {
@@ -443,7 +793,9 @@ internal class SectionRowFocusTraversalTest {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .fillParentMaxHeight()
+                                    .then(
+                                        if (heroFillsViewport) Modifier.fillParentMaxHeight() else Modifier.height(SHORT_HERO_HEIGHT),
+                                    )
                                     .testTag(SETTLE_HERO_TAG),
                             ) {
                                 HeroCarousel(
@@ -462,18 +814,50 @@ internal class SectionRowFocusTraversalTest {
                             isEmpty = row.state is SectionState.Empty,
                             fillsViewport = true,
                             modifier = Modifier.testTag(settleSectionTag(rowIndex)),
+                            header = entryLabel?.takeIf { index == 0 }?.let { label ->
+                                {
+                                    BrowseEntryHeader(
+                                        label = label,
+                                        focus = focus,
+                                        sectionState = row.state,
+                                        onFocused = {
+                                            focus.onEntryFocused()
+                                            onListItemFocused(rowIndex)
+                                        },
+                                        onClick = {},
+                                        modifier = Modifier.testTag(SETTLE_ENTRY_TAG),
+                                    )
+                                }
+                            },
                         ) {
                             SectionRowContent(
                                 state = row.state,
                                 config = row.config,
-                                isTargetRow = false,
+                                isTargetRow = launchFocus && index == targetIndex,
                                 onItemClick = {},
                                 onItemContextMenu = {},
                                 onItemFocused = {},
                                 onSectionFocused = {},
-                                onFocusChanged = { hasFocus -> if (hasFocus) onListItemFocused(rowIndex) },
+                                onFocusChanged = { hasFocus ->
+                                    if (hasFocus) {
+                                        focus.onRowFocused(row.state)
+                                        onListItemFocused(rowIndex)
+                                    }
+                                },
                                 onRetry = {},
                                 onLoadMore = {},
+                                initialFocusEnabled = !focus.isOwner,
+                                onRowEmpty = {
+                                    val keys = rows.map { r ->
+                                        FocusableRow(
+                                            r.config.id,
+                                            (r.state as? SectionState.Content)?.items?.size ?: 0,
+                                        )
+                                    }
+                                    nearestNonEmptyRowKey(keys, index)?.let { key ->
+                                        targetIndex = rows.indexOfFirst { it.config.id == key }
+                                    }
+                                },
                             )
                         }
                     }
@@ -651,6 +1035,12 @@ internal class SectionRowFocusTraversalTest {
         // exact numbers behind the bug this test guards against.
         const val SETTLE_VIEWPORT_TAG = "settle_viewport"
         const val SETTLE_HERO_TAG = "settle_hero"
+        const val SETTLE_ENTRY_TAG = "settle_entry"
+        const val OWNER_ROW_TAG = "owner_row"
+        const val ENTRY_LABEL = "Все фильмы"
+        const val LAUNCH_WAIT_MILLIS = 3_000L
+        const val PAST_LAUNCH_DELAY_FACTOR = 5
+        val SHORT_HERO_HEIGHT = 120.dp
         val SETTLE_VIEWPORT_HEIGHT = 205.dp
         val focusedCardMatcher = isFocused() and hasAnyDescendant(
             hasText("row-", substring = true),

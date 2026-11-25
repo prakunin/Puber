@@ -5,7 +5,7 @@ and, below it, one section of horizontal cards at a time. Stood up 2026-08-26 ag
 `ContentListScreenContent.kt`, `SectionRow.kt` and `VideoItemHorizontal.kt` as they stand in
 `834ee23`. Nothing has been dialled yet — the stand opens on exactly what the code carries.
 
-Published copy: <https://claude.ai/code/artifact/4c3c6094-b6d2-4f1a-885b-07d768b9ac64>
+Published copy: <https://claude.ai/artifact/VQvEtgBxHe7G1SpHrRwWBf>
 
 «Фильмы», «Сериалы», «Концерты», «Документальные», «Док. сериалы», «ТВ-шоу» and «4К» all draw
 exactly this — a panel over one section at a time, differing only in the section list
@@ -120,7 +120,9 @@ says nothing about it. «Вернуть значения кода» restores tho
 
 ## Agreed sizes
 
-Dialled 2026-08-26 and carried by the code. The stand now opens on these.
+Dialled 2026-08-26. Since 85bfd1d2 the code no longer carries all of them: the stand now opens on
+the code's values, listed in "catalogue-browse-all starting values (2026-11-24)" below. This table
+stays as the record of what was agreed then.
 
 | | было | стало |
 |---|---|---|
@@ -162,6 +164,62 @@ and the heading does not.
 
 `FadeGradient` is still sized from `VideoItemHeight`, so at a 115 dp card its 180 dp now overhangs
 the row by 32 dp either side. Invisible on black, still wrong, still open.
+
+
+## catalogue-browse-all starting values (2026-11-24)
+
+Run `catalogue-browse-all` (`.flow/runs/catalogue-browse-all/design-ux.md`). Not dialled yet: the
+owner dials them on the TV box at AC-11.
+
+### Resynced to the code
+
+85bfd1d2 retuned the rows and changed neither this README nor the stand, so the stand drifted from
+what ships. The stand's start values now match the code at e4d75215. The storage key moved to
+`puber.stand.catalogue.v2`, so values remembered from the old edition do not come back.
+
+| | agreed 2026-08-26 | code at e4d75215 | where |
+|---|---|---|---|
+| панель / ряды | 67 / 33 % | **62 / 38** % (ряды 205.2 dp) | `PuberTheme.kt` `CatalogueDetailsWeight` / `CatalogueContentWeight` |
+| высота карточки | 115 | **150** dp (266.7 dp wide at 16:9) | `PuberTheme.Defaults.CatalogueRowItemHeight` |
+| кегль / интерлиньяж заголовка секции | 11 / 20 | **16 / 20** sp Medium | `Type.kt` `SectionTitleStyle` |
+| поле ряда | 0 | **16** dp, left and right only | `SectionRow.kt` `RowHorizontalPadding` |
+| между карточками | 10 | **16** dp | `SectionRow.kt` `CardSpacing` |
+| поле по бокам / сверху (карточка) | 7 / 10 | **12 / 10** dp | `VideoItemHorizontal.kt` `DefaultCardContentPadding` |
+| между годом и рейтингами | 9 | **16** dp | `VideoItemHorizontal.kt` `DefaultMetaSpacing` |
+| кегль / интерлиньяж названия карточки | 10 / 9 | **14 / 20** sp | `titleSmall` (no override any more) |
+| кегль / интерлиньяж описания | 12 / 15 | **14 / 17** sp | `DescriptionLayout.Catalogue` |
+| кнопка «Показать все» | 43 | **40** dp, one line of `labelLarge` | `Button` defaults |
+| ширина ряда | the whole content | **at most 864** dp: 3 cards + 2 gaps + 2 paddings (the stand rounds to whole device px: 863.5) | `SectionRow.kt` `CatalogueRowViewportWidth` |
+| прокрутка ряда | left edge at 30 %, a fully visible card does not move | **focused card centred** (0.5 / 0.5); the edges clamp | `SectionRow.kt` `PositionFocusedItemInLazyLayout` |
+
+Unchanged and still in code: поле над заголовком 30, заголовок → ряд 2, поле у заголовка 16, the
+panel numbers, the rail 60. A section page is 30 + 20 + 2 + 150 = 202 dp in the 205.2 dp viewport,
+3.2 dp to spare. «What the stand reproduces» and «What the stand is asking» above describe the
+2026-08-26 stand and are kept as history.
+
+### Browse entry «Все …»
+
+A button above the first section's heading, inside its 30 dp band. It is not a list item of its
+own. The heading and the cards of section 0 stay where they are on every other page.
+
+| | start | |
+|---|---|---|
+| панель → вход | **4** dp | air above the button; the `LazyColumn` clips at its top |
+| высота | **24** dp | slider max 26: focus scale 1.1 grows 24 dp by 1.2 dp at each edge |
+| вход → заголовок | **2** dp | 4 + 24 + 2 = 30 = `SectionTitleTopPadding` |
+| кегль / интерлиньяж надписи | **11 / 16** sp | `labelLarge` resized, Medium, one line |
+| поле по бокам | **12** dp | width wraps the label |
+| левый край | **16** dp | the heading's `SectionTitleSidePadding`: 76 dp = 152 px from the screen edge |
+| вид | **заливка** | tv-material3 `Button` defaults: surfaceVariant 80 % / onSurface 80 %, focused onSurface / inverseOnSurface #313033, scale 1.1. Switch «контур» = `OutlinedButton` defaults: transparent, 1.5 dp onSurfaceVariant at 40 %, focused 1.65 dp (D2, owner on the box) |
+
+Labels (switch «надпись входа»): «Все фильмы», «Все сериалы», «Все концерты», «Все док. фильмы»,
+«Все док. сериалы», «Все ТВ-шоу», «Всё в 4К». The stand draws the «Фильмы» tab; the other labels
+are there to check the width.
+
+Focus on the stand: Up from any card of the first section reaches the entry; Down returns to the
+row's remembered card; Left goes to the rail on the device (the stand keeps focus); Up and Right
+stay. While the entry is focused, the panel keeps the last focused card. Tab open still lands on
+the first card.
 
 ## Motion
 

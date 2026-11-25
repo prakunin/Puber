@@ -5,8 +5,36 @@ import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.model.TabType
+import com.kino.puber.ui.feature.showall.model.ShowAllTitle
 
 internal object TabTypeConfig {
+
+    fun browseEntryFor(tabType: TabType): BrowseEntry? {
+        val labelRes = when (tabType) {
+            TabType.Movies -> R.string.browse_all_movies
+            TabType.Series -> R.string.browse_all_series
+            TabType.Concerts -> R.string.browse_all_concerts
+            TabType.DocMovies -> R.string.browse_all_docmovies
+            TabType.DocSeries -> R.string.browse_all_docseries
+            TabType.TvShows -> R.string.browse_all_tvshows
+            TabType.For4k -> R.string.browse_all_4k
+            else -> return null
+        }
+        val config = sectionsFor(tabType).lastOrNull { it.id.startsWith("all_") } ?: return null
+        return BrowseEntry(config = config, labelRes = labelRes)
+    }
+
+    fun isFilterable(config: SectionConfig): Boolean =
+        TabType.entries.any { browseEntryFor(it)?.config?.id == config.id }
+
+    fun showAllTitle(tabType: TabType, config: SectionConfig): ShowAllTitle {
+        val entry = browseEntryFor(tabType)
+        return if (entry != null && entry.config.id == config.id) {
+            ShowAllTitle(titleRes = entry.labelRes)
+        } else {
+            ShowAllTitle(titleRes = config.titleRes, title = config.title, prefixRes = tabType.title)
+        }
+    }
 
     fun heroConfigsFor(tabType: TabType): List<SectionConfig> = when (tabType) {
         TabType.Cartoons -> heroConfigs(

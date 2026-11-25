@@ -11,6 +11,7 @@ import com.kino.puber.core.ui.navigation.RESULT_CONTENT_CHANGED
 import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
+import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
@@ -20,6 +21,16 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
+import com.kino.puber.domain.interactor.genre.GenreInteractor
+import com.kino.puber.domain.model.ContentFilter
+import com.kino.puber.domain.model.SortDirection
+import com.kino.puber.domain.model.SortField
+import com.kino.puber.domain.model.TabType
+import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
+import com.kino.puber.ui.feature.showall.model.FilterGenres
+import com.kino.puber.ui.feature.showall.model.ShowAllAction
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
+import com.kino.puber.ui.feature.showall.model.applyTo
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import com.kino.puber.util.MainDispatcherExtension
@@ -30,6 +41,15 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import org.junit.jupiter.api.Assertions.assertTrue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -53,6 +73,7 @@ class ShowAllVMTest {
     private lateinit var screens: Screens
     private lateinit var interactor: ContentListInteractor
     private lateinit var savedItemInteractor: SavedItemInteractor
+    private lateinit var genreInteractor: GenreInteractor
 
     @BeforeEach
     fun setup() {
@@ -61,6 +82,8 @@ class ShowAllVMTest {
         every { router.screens } returns screens
         interactor = mockk(relaxed = true)
         savedItemInteractor = mockk(relaxed = true)
+        genreInteractor = mockk()
+        coEvery { genreInteractor.getGenres(any()) } returns Result.success(emptyList())
     }
 
     @Test
@@ -311,6 +334,391 @@ class ShowAllVMTest {
         paginator.close()
     }
 
+    // region filter
+
+    private val allMovie = TabTypeConfig.browseEntryFor(TabType.Movies)!!.config
+    private val all4k = TabTypeConfig.browseEntryFor(TabType.For4k)!!.config
+    private val drama = Genre(9, "Драма")
+    private val dramaByYear = ContentFilter(genre = drama, sort = SortField.YEAR, sortDirection = SortDirection.ASC)
+
+    /** One `observeFirstPage` call: the config it was given and whether it may use the store. */
+    private data class FirstPageCall(val config: SectionConfig, val cacheable: Boolean)
+
+    private class FilterRig(
+        val vm: ShowAllVM,
+        val paginator: Paginator.Store<Item>,
+        val calls: MutableList<FirstPageCall>,
+        val scope: TestScope,
+    ) {
+        fun run() = scope.advanceUntilIdle()
+
+        fun act(vararg actions: UIAction) {
+            actions.forEach { vm.onAction(it) }
+            run()
+        }
+
+        fun applyFilter(filter: ContentFilter) {
+            act(
+                ShowAllAction.FilterPanelOpened,
+                ShowAllAction.SortFieldChosen(filter.sort),
+                ShowAllAction.SortDirectionChosen(filter.sortDirection),
+                ShowAllAction.GenreChosen(filter.genre),
+                ShowAllAction.FilterPanelClosed,
+            )
+        }
+
+        fun close() {
+            vm.testCancelScope()
+            paginator.close()
+        }
+    }
+
+    /**
+     * A grid on the test scheduler. [firstPage] answers the first page of a config and [loadPage]
+     * any later page; both default to a single page of the ids the config's genre implies.
+     */
+    private fun TestScope.filterRig(
+        config: SectionConfig = allMovie,
+        firstPage: suspend (SectionConfig) -> PaginatedResponse<Item> = { pageOf(1, 2, current = 1, total = 1) },
+    ): FilterRig {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val paginator = Paginator.Store<Item>(
+            comparator = { old, new -> old.id == new.id },
+            coroutineContext = dispatcher,
+        )
+        val calls = CopyOnWriteArrayList<FirstPageCall>()
+        every { interactor.observeFirstPage(any(), any(), any()) } answers {
+            val asked = firstArg<SectionConfig>()
+            calls += FirstPageCall(asked, thirdArg())
+            flow { emit(Cached.Value(firstPage(asked), isStale = false)) }
+        }
+        coEvery { interactor.loadPage(any(), page = 1) } coAnswers { firstPage(firstArg()) }
+        every { interactor.showAnimeEnabled } returns true
+        val mapper = mockk<VideoItemUIMapper>()
+        every { mapper.mapShortItemList(any()) } answers { firstArg<List<Item>>().map { videoItem(it.id) } }
+        val vm = createVM(config = config, paginator = paginator, mapper = mapper, pagingCoroutineContext = dispatcher)
+        vm.testOnStart()
+        val rig = FilterRig(vm, paginator, calls, this)
+        rig.run()
+        return rig
+    }
+
+    @Test
+    fun filterState_isUnavailableForAShelfConfig() = runTest {
+        val rig = filterRig(config = SectionConfig(id = "popular", title = "Popular"))
+
+        assertEquals(ShowAllFilterState.Unavailable, rig.vm.filterState.value)
+        rig.close()
+    }
+
+    @Test
+    fun filterActions_areIgnoredOnAShelfGrid() = runTest {
+        val rig = filterRig(config = SectionConfig(id = "popular", title = "Popular"))
+
+        rig.act(
+            ShowAllAction.FilterPanelOpened,
+            ShowAllAction.SortFieldChosen(SortField.YEAR),
+            ShowAllAction.FilterPanelClosed,
+            ShowAllAction.FilterReset,
+        )
+
+        assertEquals(1, rig.calls.size)
+        assertEquals(ShowAllFilterState.Unavailable, rig.vm.filterState.value)
+        rig.close()
+    }
+
+    @Test
+    fun filterPanelClosed_withoutAChange_doesNotRepage() = runTest {
+        val rig = filterRig()
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.FilterPanelClosed)
+        rig.act(
+            ShowAllAction.FilterPanelOpened,
+            ShowAllAction.SortFieldChosen(SortField.YEAR),
+            ShowAllAction.SortFieldChosen(SortField.UPDATED),
+            ShowAllAction.FilterPanelClosed,
+        )
+
+        assertEquals(1, rig.calls.size)
+        assertEquals(false, rig.vm.filterState.value.panelOpen)
+        rig.close()
+    }
+
+    @Test
+    fun filterPanelClosed_afterSortAndGenreChosen_repagesOnceWithTheFilteredQuery() = runTest {
+        val rig = filterRig()
+
+        rig.applyFilter(dramaByYear)
+
+        assertEquals(listOf(allMovie, dramaByYear.applyTo(allMovie)), rig.calls.map { it.config })
+        rig.close()
+    }
+
+    @Test
+    fun filterReset_restoresTheBaseQueryAndRepagesCached() = runTest {
+        val rig = filterRig()
+        rig.applyFilter(dramaByYear)
+
+        rig.act(ShowAllAction.FilterReset)
+
+        assertEquals(
+            listOf(
+                FirstPageCall(allMovie, cacheable = true),
+                FirstPageCall(dramaByYear.applyTo(allMovie), cacheable = false),
+                FirstPageCall(allMovie, cacheable = true),
+            ),
+            rig.calls.toList(),
+        )
+        val restored = rig.vm.filterState.value
+        assertEquals(ShowAllFilterState(available = true, genres = restored.genres), restored)
+        rig.close()
+    }
+
+    @Test
+    fun filterReset_withoutAnActiveFilter_doesNothing() = runTest {
+        val rig = filterRig()
+
+        rig.act(ShowAllAction.FilterReset)
+
+        assertEquals(1, rig.calls.size)
+        rig.close()
+    }
+
+    @Test
+    fun filterState_summarisesTheAppliedGenreAndSort() = runTest {
+        val rig = filterRig()
+
+        rig.act(
+            ShowAllAction.FilterPanelOpened,
+            ShowAllAction.GenreChosen(drama),
+            ShowAllAction.SortFieldChosen(SortField.YEAR),
+            ShowAllAction.SortDirectionChosen(SortDirection.ASC),
+        )
+        val whileEditing = rig.vm.filterState.value
+        rig.act(ShowAllAction.FilterPanelClosed)
+        val applied = rig.vm.filterState.value
+
+        assertEquals(dramaByYear, whileEditing.draft)
+        assertEquals(false, whileEditing.isActive)
+        assertEquals(null, whileEditing.genreTitle)
+        assertEquals(SortField.UPDATED, whileEditing.sort)
+        assertEquals(true, applied.isActive)
+        assertEquals("Драма", applied.genreTitle)
+        assertEquals(SortField.YEAR, applied.sort)
+        assertEquals(SortDirection.ASC, applied.direction)
+        rig.close()
+    }
+
+    @Test
+    fun filterPanelClosed_withAFilter_readsTheFirstPageUncached() = runTest {
+        val rig = filterRig()
+
+        rig.applyFilter(dramaByYear)
+
+        assertEquals(listOf(true, false), rig.calls.map { it.cacheable })
+        rig.close()
+    }
+
+    @Test
+    fun filterChange_dropsAnOldFirstPageStillInFlight() = runTest {
+        val oldPage = CompletableDeferred<Unit>()
+        val filtered = dramaByYear.applyTo(allMovie)
+        val rig = filterRig(firstPage = { asked ->
+            if (asked == filtered) {
+                pageOf(10, 11, current = 1, total = 1)
+            } else {
+                withContext(NonCancellable) { oldPage.await() }
+                pageOf(1, 2, current = 1, total = 1)
+            }
+        })
+
+        rig.applyFilter(dramaByYear)
+        oldPage.complete(Unit)
+        rig.run()
+
+        assertEquals(listOf(10, 11), shownIds(rig.vm))
+        rig.close()
+    }
+
+    @Test
+    fun filterChange_dropsAnOldWalkStepStillInFlight() = runTest {
+        val oldStep = CompletableDeferred<Unit>()
+        val filtered = dramaByYear.applyTo(allMovie)
+        val rig = filterRig(firstPage = { asked ->
+            if (asked == filtered) pageOf(10, 11, current = 1, total = 1) else pageOf(1, 2, current = 1, total = 3)
+        })
+        coEvery { interactor.loadPage(allMovie, page = 2) } coAnswers {
+            withContext(NonCancellable) { oldStep.await() }
+            pageOf(3, 4, current = 2, total = 3)
+        }
+        rig.act(CommonAction.LoadMore)
+
+        rig.applyFilter(dramaByYear)
+        oldStep.complete(Unit)
+        rig.run()
+
+        assertEquals(listOf(10, 11), shownIds(rig.vm))
+        rig.close()
+    }
+
+    @Test
+    fun filterChange_dropsAnOldDepthRestoreStillInFlight() = runTest {
+        val oldRestore = CompletableDeferred<Unit>()
+        val page2Reads = AtomicInteger()
+        val filtered = dramaByYear.applyTo(allMovie)
+        val rig = filterRig(firstPage = { asked ->
+            if (asked == filtered) pageOf(10, 11, current = 1, total = 1) else pageOf(1, 2, current = 1, total = 2)
+        })
+        coEvery { interactor.loadPage(allMovie, page = 2) } coAnswers {
+            if (page2Reads.incrementAndGet() > 1) withContext(NonCancellable) { oldRestore.await() }
+            pageOf(3, 4, current = 2, total = 2)
+        }
+        rig.act(CommonAction.LoadMore)
+        assertEquals(listOf(1, 2, 3, 4), shownIds(rig.vm))
+        rig.vm.refreshFirstPage()
+        rig.run()
+
+        rig.applyFilter(dramaByYear)
+        oldRestore.complete(Unit)
+        rig.run()
+
+        assertEquals(2, page2Reads.get())
+        assertEquals(listOf(10, 11), shownIds(rig.vm))
+        rig.close()
+    }
+
+    @Test
+    fun filterChange_thenRefreshBeforeFirstPage_readsOnlyPageOne() = runTest {
+        val filteredPage = CompletableDeferred<Unit>()
+        val filtered = dramaByYear.applyTo(allMovie)
+        val rig = filterRig(firstPage = { asked ->
+            if (asked == filtered) {
+                filteredPage.await()
+                pageOf(10, 11, current = 1, total = 3)
+            } else {
+                pageOf(1, 2, current = 1, total = 3)
+            }
+        })
+        coEvery { interactor.loadPage(allMovie, page = 2) } returns pageOf(3, 4, current = 2, total = 3)
+        coEvery { interactor.loadPage(filtered, page = 2) } returns pageOf(12, 13, current = 2, total = 3)
+        rig.act(CommonAction.LoadMore)
+
+        rig.applyFilter(dramaByYear)
+        rig.vm.refreshFirstPage()
+        rig.run()
+        filteredPage.complete(Unit)
+        rig.run()
+
+        coVerify(exactly = 0) { interactor.loadPage(filtered, page = 2) }
+        assertEquals(listOf(10, 11), shownIds(rig.vm))
+        rig.close()
+    }
+
+    @Test
+    fun filterChange_marksTheNewListWithAnotherQueryGeneration() = runTest {
+        val rig = filterRig()
+        val before = (rig.vm.testStateValue as ShowAllViewState.Content).queryGeneration
+
+        rig.applyFilter(dramaByYear)
+        val applied = (rig.vm.testStateValue as ShowAllViewState.Content).queryGeneration
+        rig.act(ShowAllAction.FilterReset)
+        val reset = (rig.vm.testStateValue as ShowAllViewState.Content).queryGeneration
+
+        assertEquals(3, setOf(before, applied, reset).size)
+        rig.close()
+    }
+
+    @Test
+    fun genreList_withAnimeHidden_omitsAnime() = runTest {
+        val rig = filterRig()
+        every { interactor.showAnimeEnabled } returns false
+        coEvery { genreInteractor.getGenres("movie") } returns
+            Result.success(listOf(drama, Genre(ANIME_GENRE_ID, "Аниме")))
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        assertEquals(FilterGenres.Loaded(listOf(drama)), rig.vm.filterState.value.genres)
+        rig.close()
+    }
+
+    @Test
+    fun genreList_withAnimeShown_keepsAnime() = runTest {
+        val rig = filterRig()
+        val anime = Genre(ANIME_GENRE_ID, "Аниме")
+        coEvery { genreInteractor.getGenres("movie") } returns Result.success(listOf(drama, anime))
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        assertEquals(FilterGenres.Loaded(listOf(drama, anime)), rig.vm.filterState.value.genres)
+        rig.close()
+    }
+
+    @Test
+    fun genreLoadFailure_showsFailedAndKeepsTheGrid() = runTest {
+        val rig = filterRig()
+        coEvery { genreInteractor.getGenres("movie") } returns Result.failure(IllegalStateException("down"))
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        assertEquals(FilterGenres.Failed, rig.vm.filterState.value.genres)
+        assertEquals(listOf(1, 2), shownIds(rig.vm))
+        assertEquals(1, rig.calls.size)
+        rig.close()
+    }
+
+    @Test
+    fun genresRetry_loadsAgainAfterAFailure() = runTest {
+        val rig = filterRig()
+        val release = CompletableDeferred<Unit>()
+        var reads = 0
+        coEvery { genreInteractor.getGenres("movie") } coAnswers {
+            reads += 1
+            if (reads == 1) {
+                Result.failure(IllegalStateException("down"))
+            } else {
+                release.await()
+                Result.success(listOf(drama))
+            }
+        }
+        rig.act(ShowAllAction.FilterPanelOpened)
+        assertEquals(FilterGenres.Failed, rig.vm.filterState.value.genres)
+
+        rig.act(ShowAllAction.GenresRetry, ShowAllAction.GenresRetry)
+        assertEquals(FilterGenres.Loading, rig.vm.filterState.value.genres)
+        release.complete(Unit)
+        rig.run()
+
+        assertEquals(2, reads)
+        assertEquals(FilterGenres.Loaded(listOf(drama)), rig.vm.filterState.value.genres)
+        rig.close()
+    }
+
+    @Test
+    fun genreList_forA4kGrid_requestsThe4kType() = runTest {
+        val rig = filterRig(config = all4k)
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        coVerify(exactly = 1) { genreInteractor.getGenres("4k") }
+        rig.close()
+    }
+
+    @Test
+    fun filteredEmptyPage_keepsTheFilterActive() = runTest {
+        val filtered = dramaByYear.applyTo(allMovie)
+        val rig = filterRig(firstPage = { asked ->
+            if (asked == filtered) emptyPage(current = 1, total = 1) else pageOf(1, 2, current = 1, total = 1)
+        })
+
+        rig.applyFilter(dramaByYear)
+
+        assertEquals(ShowAllViewState.Empty, rig.vm.testStateValue)
+        assertTrue(rig.vm.filterState.value.isActive)
+        rig.close()
+    }
+
+    // endregion
+
     private fun shownIds(vm: ShowAllVM): List<Int> =
         (vm.testStateValue as? ShowAllViewState.Content)?.items?.map { it.id }.orEmpty()
 
@@ -324,7 +732,7 @@ class ShowAllVMTest {
      * subscription, which is what the interactor's own loader produces when nothing is stored.
      */
     private fun servesFirstPageFromTheNetwork(interactor: ContentListInteractor) {
-        every { interactor.observeFirstPage(any(), any()) } answers {
+        every { interactor.observeFirstPage(any(), any(), any()) } answers {
             val config = firstArg<SectionConfig>()
             flow { emit(Cached.Value(interactor.loadPage(config, page = 1), isStale = false)) }
         }
@@ -335,14 +743,17 @@ class ShowAllVMTest {
         paginator: Paginator.Store<Item> = Paginator.Store { old, new -> old.id == new.id },
         mapper: VideoItemUIMapper = mockk(relaxed = true),
         contentListInteractor: ContentListInteractor = interactor,
+        pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
     ) = ShowAllVM(
         paginator = paginator,
         config = config,
         interactor = contentListInteractor,
+        genreInteractor = genreInteractor,
         savedItemInteractor = savedItemInteractor,
         mapper = mapper,
         router = router,
         errorHandler = mockk<ErrorHandler> { every { proceed(any()) } returns { } },
+        pagingCoroutineContext = pagingCoroutineContext,
     )
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")

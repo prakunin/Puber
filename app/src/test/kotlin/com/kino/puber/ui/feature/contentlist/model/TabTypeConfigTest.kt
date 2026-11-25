@@ -6,7 +6,10 @@ import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.CARTOON_GENRE_ID
 import com.kino.puber.data.api.models.ItemType
 import com.kino.puber.domain.model.TabType
+import com.kino.puber.ui.feature.showall.model.ShowAllTitle
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -224,5 +227,103 @@ class TabTypeConfigTest {
                     "$tabType unexpectedly generated catalog sections",
                 )
             }
+    }
+
+    private val browseTabs = mapOf(
+        TabType.Movies to R.string.browse_all_movies,
+        TabType.Series to R.string.browse_all_series,
+        TabType.Concerts to R.string.browse_all_concerts,
+        TabType.DocMovies to R.string.browse_all_docmovies,
+        TabType.DocSeries to R.string.browse_all_docseries,
+        TabType.TvShows to R.string.browse_all_tvshows,
+        TabType.For4k to R.string.browse_all_4k,
+    )
+
+    @Test
+    fun browseEntryFor_labelsEachCatalogueTabWithItsOwnString() {
+        browseTabs.forEach { (tabType, labelRes) ->
+            assertEquals(labelRes, TabTypeConfig.browseEntryFor(tabType)?.labelRes, "$tabType")
+        }
+        assertEquals(
+            browseTabs.size,
+            browseTabs.keys.mapNotNull { TabTypeConfig.browseEntryFor(it)?.labelRes }.toSet().size,
+        )
+    }
+
+    @Test
+    fun browseEntryFor_isNullForTabsWithoutAnEntry() {
+        TabType.entries.filterNot(browseTabs::containsKey).forEach { tabType ->
+            assertNull(TabTypeConfig.browseEntryFor(tabType), "$tabType")
+        }
+    }
+
+    @Test
+    fun browseEntryFor_returnsTheAllSectionOfEachCatalogueTab() {
+        browseTabs.keys.forEach { tabType ->
+            val config = TabTypeConfig.browseEntryFor(tabType)?.config
+            assertEquals(TabTypeConfig.sectionsFor(tabType).last(), config, "$tabType")
+            assertTrue(config!!.id.startsWith("all_"), "$tabType")
+            assertEquals("updated-", config.sort, "$tabType")
+        }
+        assertEquals("4k", TabTypeConfig.browseEntryFor(TabType.For4k)?.config?.quality)
+        listOf(TabType.Movies, TabType.Series).forEach { tabType ->
+            assertEquals(
+                AnimeFilterMode.FollowPreference,
+                TabTypeConfig.browseEntryFor(tabType)?.config?.animeFilterMode,
+            )
+        }
+    }
+
+    @Test
+    fun showAllTitle_namesTheAllGridWithTheEntryLabel() {
+        browseTabs.forEach { (tabType, labelRes) ->
+            val entry = TabTypeConfig.browseEntryFor(tabType)!!
+            assertEquals(
+                ShowAllTitle(titleRes = labelRes),
+                TabTypeConfig.showAllTitle(tabType, entry.config),
+                "$tabType",
+            )
+        }
+    }
+
+    @Test
+    fun showAllTitle_prefixesAShelfTitleWithTheTabTitle() {
+        val fresh = TabTypeConfig.sectionsFor(TabType.Movies).first()
+
+        val title = TabTypeConfig.showAllTitle(TabType.Movies, fresh)
+
+        assertEquals(R.string.content_section_fresh, title.titleRes)
+        assertEquals(TabType.Movies.title, title.prefixRes)
+    }
+
+    @Test
+    fun isFilterable_trueForEveryBrowseEntryConfig() {
+        TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).forEach { entry ->
+            assertTrue(TabTypeConfig.isFilterable(entry.config), entry.config.id)
+        }
+    }
+
+    @Test
+    fun isFilterable_falseForShelvesAnd4kTypeGrids() {
+        val filterable = TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).map { it.config.id }.toSet()
+        val shelves = TabType.entries
+            .flatMap(TabTypeConfig::sectionsFor)
+            .filter { it.id !in filterable }
+        assertTrue(shelves.any { it.id.startsWith("fresh_") })
+        assertTrue(shelves.any { it.id.startsWith("hot_") })
+        assertTrue(shelves.any { it.id.startsWith("popular_") })
+        assertTrue(shelves.any { it.id.startsWith("4k_") })
+        assertTrue(shelves.any { it.id == "popular_4k" })
+        assertTrue(shelves.any { it.id == "all_cartoon" })
+        assertTrue(shelves.any { it.id == "all_anime" })
+        shelves.forEach { assertFalse(TabTypeConfig.isFilterable(it), it.id) }
+    }
+
+    @Test
+    fun browseEntryConfigs_haveTheDefaultFilterQuery() {
+        TabType.entries.mapNotNull(TabTypeConfig::browseEntryFor).forEach { entry ->
+            assertEquals("updated-", entry.config.sort, entry.config.id)
+            assertNull(entry.config.genre, entry.config.id)
+        }
     }
 }

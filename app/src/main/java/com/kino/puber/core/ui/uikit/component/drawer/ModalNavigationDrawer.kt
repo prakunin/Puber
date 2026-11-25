@@ -12,6 +12,7 @@
 
 package com.kino.puber.core.ui.uikit.component.drawer
 
+import android.view.KeyEvent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusGroup
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -30,8 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -43,9 +47,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
+import androidx.core.view.ViewCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.tv.material3.NavigationDrawerScope
 
@@ -65,6 +72,18 @@ enum class DrawerValue {
      * projection of focus, and a `requestFocus()` that misses reads as the user reopening the menu.
      */
     HandingOff,
+}
+
+/** Why a handoff runs, which decides whether a pick may restart it and where a failed one ends. */
+enum class HandoffKind {
+    /** Cold start, or the content regaining focus after a dialog: no rail interaction began it. */
+    Initial,
+
+    /** A rail pick of another tab: the content that must confirm is not composed yet. */
+    TabPick,
+
+    /** Back, Right, or a re-pick of the selected tab: the rail closes over the content on screen. */
+    Dismiss,
 }
 
 /**
@@ -97,6 +116,10 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     var pendingHandoffId: Long? by mutableStateOf(null)
         private set
 
+    /** The kind of the pending handoff, or `null` when none is pending. */
+    var handoffKind: HandoffKind? by mutableStateOf(null)
+        private set
+
     /**
      * Whether the pending handoff is waiting on content that does not exist yet.
      *
@@ -106,8 +129,8 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
      * over content that is about to be torn down — reproducing the very bug this state machine
      * exists to prevent. When `true`, only content composed after the handoff began may confirm it.
      */
-    var handoffExpectsNewContent: Boolean by mutableStateOf(false)
-        private set
+    val handoffExpectsNewContent: Boolean
+        get() = handoffKind == HandoffKind.TabPick
 
     private var lastHandoffId = 0L
 
@@ -119,28 +142,39 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     }
 
     /**
-     * A rail item was clicked, or Back was pressed while the rail was open — both change the rail
-     * without moving focus, so focus has to be handed over explicitly.
+     * A rail item was clicked, or Back or Right was pressed while the rail was open — each changes
+     * the rail without moving focus, so focus has to be handed over explicitly.
      *
-     * @param expectsNewContent `true` when the handoff accompanies a tab change, so the content
-     *   that must confirm it is not composed yet. See [handoffExpectsNewContent].
-     * @return the request id to confirm against, or `null` if the rail was not open.
+     * A [HandoffKind.TabPick] while an initial or tab-pick handoff is pending restarts it with a new
+     * id. The tab on screen was composed during the old id, so it cannot confirm the new one: the
+     * outgoing tab cannot close the rail over content about to be torn down, and the arriving tab
+     * gets the full budget. A pending [HandoffKind.Dismiss] is never restarted: the user cannot see
+     * the collapsed rail they would be picking from.
+     *
+     * @param kind [HandoffKind.TabPick] or [HandoffKind.Dismiss]; an initial handoff starts only
+     *   through [beginInitialHandoff].
+     * @return the request id to confirm against, or `null` if the handoff was refused.
      */
-    fun beginHandoff(expectsNewContent: Boolean): Long? {
-        if (currentValue != DrawerValue.Open) return null
-        return startHandoff(expectsNewContent)
+    fun beginHandoff(kind: HandoffKind): Long? {
+        require(kind != HandoffKind.Initial) { "an initial handoff starts through beginInitialHandoff" }
+        return when (currentValue) {
+            DrawerValue.Open -> startHandoff(kind)
+            DrawerValue.HandingOff ->
+                if (kind == HandoffKind.TabPick && handoffKind != HandoffKind.Dismiss) startHandoff(kind) else null
+            DrawerValue.Closed -> null
+        }
     }
 
     /** Starts the first content handoff before the user has interacted with the rail. */
     fun beginInitialHandoff(): Long? {
         if (currentValue != DrawerValue.Closed) return null
-        return startHandoff(expectsNewContent = false)
+        return startHandoff(HandoffKind.Initial)
     }
 
-    private fun startHandoff(expectsNewContent: Boolean): Long {
+    private fun startHandoff(kind: HandoffKind): Long {
         lastHandoffId += 1
         pendingHandoffId = lastHandoffId
-        handoffExpectsNewContent = expectsNewContent
+        handoffKind = kind
         currentValue = DrawerValue.HandingOff
         return lastHandoffId
     }
@@ -156,14 +190,24 @@ class DrawerState(initialValue: DrawerValue = DrawerValue.Closed) {
     fun settleHandoff(requestId: Long) {
         if (pendingHandoffId != requestId) return
         pendingHandoffId = null
+        handoffKind = null
         currentValue = DrawerValue.Closed
     }
 
-    /** The content never took focus. Reopening beats stranding focus in nothing. */
-    fun failHandoff(requestId: Long) {
+    /**
+     * The content never took focus.
+     *
+     * After a [HandoffKind.TabPick] the rail reopens, since the user can pick again, unless [reopen]
+     * is false because Back still has somewhere to go without the rail. A [HandoffKind.Dismiss] or
+     * [HandoffKind.Initial] always ends closed: the user asked the rail away, or never asked for it,
+     * and reopening it would trap Back in the rail. Left and Back reveal it again.
+     */
+    fun failHandoff(requestId: Long, reopen: Boolean = true) {
         if (pendingHandoffId != requestId) return
+        val reopenRail = reopen && handoffKind == HandoffKind.TabPick
         pendingHandoffId = null
-        currentValue = DrawerValue.Open
+        handoffKind = null
+        currentValue = if (reopenRail) DrawerValue.Open else DrawerValue.Closed
     }
 
     companion object {
@@ -195,6 +239,7 @@ fun ModalNavigationDrawer(
 ) {
     val localDensity = LocalDensity.current
     val closedDrawerWidth: MutableState<Dp?> = remember { mutableStateOf(null) }
+    var contentHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(drawerState, handoff) {
         if (handoff != null) drawerState.beginInitialHandoff()
     }
@@ -210,6 +255,7 @@ fun ModalNavigationDrawer(
             modifier = internalDrawerModifier.align(Alignment.CenterStart),
             drawerState = drawerState,
             handoff = handoff,
+            contentHasFocus = { contentHasFocus },
             sizeAnimationFinishedListener = { _, targetSize ->
                 if (drawerState.currentValue == DrawerValue.Closed) {
                     with(localDensity) { closedDrawerWidth.value = targetSize.width.toDp() }
@@ -218,7 +264,9 @@ fun ModalNavigationDrawer(
             content = drawerContent,
         )
 
-        content()
+        Box(Modifier.fillMaxSize().onFocusChanged { contentHasFocus = it.hasFocus }) {
+            content()
+        }
 
         if (drawerState.currentValue == DrawerValue.Open) {
             Canvas(Modifier.fillMaxSize()) { drawRect(scrimBrush) }
@@ -231,18 +279,28 @@ private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
     handoff: ContentFocusHandoff? = null,
+    contentHasFocus: () -> Boolean,
     sizeAnimationFinishedListener: ((initialValue: IntSize, targetValue: IntSize) -> Unit)? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     var initializationComplete: Boolean by remember { mutableStateOf(false) }
     var focusState by remember { mutableStateOf<FocusState?>(null) }
     val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(key1 = drawerState.currentValue) {
         if (drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus == false) {
             focusRequester.requestFocus()
         }
+        // A handoff that failed into Closed leaves focus in the rail it never left; a collapsed rail
+        // with a focused item would let Center pick a tab the user cannot see. The refocus that
+        // follows is refused by the entry gate below, so Left reveals the rail again.
+        if (drawerState.currentValue == DrawerValue.Closed && focusState?.hasFocus == true) {
+            focusManager.clearFocus(force = true)
+        }
         initializationComplete = true
     }
+
+    RevealOnUnhandledLeft(drawerState, contentHasFocus)
 
     val internalModifier =
         Modifier.focusRequester(focusRequester)
@@ -265,7 +323,7 @@ private fun DrawerSheet(
                     return@onPreviewKeyEvent false
                 }
                 when (drawerState.currentValue) {
-                    DrawerValue.Open -> drawerState.beginHandoff(expectsNewContent = false) != null
+                    DrawerValue.Open -> drawerState.beginHandoff(HandoffKind.Dismiss) != null
                     DrawerValue.HandingOff -> true
                     DrawerValue.Closed -> false
                 }
@@ -285,12 +343,52 @@ private fun DrawerSheet(
                     else -> drawerState.focusExited()
                 }
             }
+            // A closed rail refuses entries other than Left, so focus that falls when a screen leaves
+            // does not reveal it. Open and HandingOff allow every entry, so the rail's own request
+            // and the handoff redirect above keep working.
+            .focusProperties {
+                onEnter = {
+                    if (drawerState.currentValue == DrawerValue.Closed &&
+                        requestedFocusDirection != FocusDirection.Left
+                    ) {
+                        cancelFocusChange()
+                    }
+                }
+            }
             .focusGroup()
 
     Box(modifier = internalModifier) {
         NavigationDrawerScopeImpl(drawerState.currentValue == DrawerValue.Open).apply {
             content(drawerState.currentValue)
         }
+    }
+}
+
+/**
+ * With nothing focused a D-pad key reaches Compose only as the framework's default-focus restore,
+ * which enters as FOCUS_DOWN exactly like the refocus the entry gate in [DrawerSheet] refuses. Left
+ * is the user asking for the rail, so it is taken from the keys no view handled, and the rail's own
+ * request in Open then focuses it.
+ *
+ * "Nothing focused" is read from Compose focus in the content, the state a screen in `Loading`
+ * leaves behind, rather than from the Android view's own focus flag.
+ */
+@Composable
+private fun RevealOnUnhandledLeft(drawerState: DrawerState, contentHasFocus: () -> Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, drawerState) {
+        val listener = ViewCompat.OnUnhandledKeyEventListenerCompat { _, event ->
+            val isLeftDown = event.action == KeyEvent.ACTION_DOWN &&
+                event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+            if (isLeftDown && drawerState.currentValue == DrawerValue.Closed && !contentHasFocus()) {
+                drawerState.reveal()
+                true
+            } else {
+                false
+            }
+        }
+        ViewCompat.addOnUnhandledKeyEventListener(view, listener)
+        onDispose { ViewCompat.removeOnUnhandledKeyEventListener(view, listener) }
     }
 }
 

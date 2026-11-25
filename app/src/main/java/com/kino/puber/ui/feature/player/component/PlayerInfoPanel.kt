@@ -122,7 +122,7 @@ internal fun cleanInfoParts(vararg parts: String?): String? {
 }
 
 /**
- * No glass of its own: the panel underneath is already [PlayerGlass.Strong], and a second
+ * No glass of its own: the panel underneath is already [com.kino.puber.core.ui.uikit.component.panel.PanelGlass.Strong], and a second
  * translucent layer only muddied the edge and cost height. The heading and the gap group
  * the rows well enough.
  */

@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isFocused
@@ -17,11 +19,15 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import com.kino.puber.core.ui.uikit.component.modifier.LocalContentFocusActive
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
+import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
+import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+
+private const val TestTitle = "Фильмы · Новинки"
 
 class ShowAllScreenContentFocusTest {
 
@@ -33,12 +39,48 @@ class ShowAllScreenContentFocusTest {
     }
 
     @Test
+    fun showAllHeaderShowsTheTitleAndFirstFocusStaysOnTheFirstCard() {
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(items),
+                        onAction = {},
+                    )
+                }
+            }
+        }
+        awaitAnyFocus()
+
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed().assert(!isFocused())
+        composeRule.onNodeWithText(items.first().title).assertIsFocused()
+    }
+
+    @Test
+    fun showAllHeaderIsShownInLoadingAndErrorStates() {
+        var state by mutableStateOf<ShowAllViewState>(ShowAllViewState.Loading)
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(title = TestTitle, state = state, onAction = {})
+                }
+            }
+        }
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed()
+
+        state = ShowAllViewState.Error("boom")
+
+        composeRule.onNodeWithText(TestTitle).assertIsDisplayed()
+    }
+
+    @Test
     fun showAllFocusReturnsToTheFocusedCardAfterReentry() {
         val restoration = StateRestorationTester(composeRule)
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -59,12 +101,49 @@ class ShowAllScreenContentFocusTest {
     }
 
     @Test
+    fun activeFilter_focusReturnsToTheFocusedCardAfterReentry() {
+        val filter = ShowAllFilterState(available = true, isActive = true, genreTitle = "Драма")
+        val restoration = StateRestorationTester(composeRule)
+        restoration.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(items),
+                        onAction = {},
+                        filter = filter,
+                    )
+                }
+            }
+        }
+        awaitAnyFocus()
+        composeRule.onNode(isFocused()).performDirection(Key.DirectionDown)
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+        repeat(2) {
+            composeRule.onNode(isFocused()).performDirection(Key.DirectionRight)
+            composeRule.mainClock.advanceTimeBy(SettleMillis)
+        }
+        val title = focusedTitle()
+        assertTrue(
+            "focus is on card 3 of row 2",
+            items.indexOfFirst { it.title == title } == GridColumns + 2,
+        )
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        composeRule.waitUntil(FocusTimeoutMillis) {
+            composeRule.onAllNodesFocusedWith(title)
+        }
+        composeRule.onNodeWithText(title).assertIsFocused()
+    }
+
+    @Test
     fun showAllFocusReturnsToACardBelowTheFirstViewportAfterReentry() {
         val restoration = StateRestorationTester(composeRule)
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -100,7 +179,7 @@ class ShowAllScreenContentFocusTest {
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(shown), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(shown), onAction = {})
                 }
             }
         }
@@ -128,7 +207,7 @@ class ShowAllScreenContentFocusTest {
         composeRule.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides true) {
-                    ShowAllScreenContent(ShowAllViewState.Content(shown), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(shown), onAction = {})
                 }
             }
         }
@@ -153,7 +232,7 @@ class ShowAllScreenContentFocusTest {
         restoration.setContent {
             PuberTheme {
                 CompositionLocalProvider(LocalContentFocusActive provides active) {
-                    ShowAllScreenContent(ShowAllViewState.Content(items), onAction = {})
+                    ShowAllScreenContent(title = TestTitle, state = ShowAllViewState.Content(items), onAction = {})
                 }
             }
         }
@@ -170,6 +249,30 @@ class ShowAllScreenContentFocusTest {
             "no node should hold focus",
             composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().isEmpty(),
         )
+    }
+
+    @Test
+    fun showAllLoadMoreFiresAgainWhenAPageLandsInsideTheThreshold() {
+        var shown by mutableStateOf(items.take(SHOW_ALL_GRID_COLUMNS * 2))
+        var loadMoreCount = 0
+        composeRule.setContent {
+            PuberTheme {
+                CompositionLocalProvider(LocalContentFocusActive provides true) {
+                    ShowAllScreenContent(
+                        title = TestTitle,
+                        state = ShowAllViewState.Content(shown),
+                        onAction = { if (it == CommonAction.LoadMore) loadMoreCount++ },
+                    )
+                }
+            }
+        }
+        composeRule.waitUntil(FocusTimeoutMillis) { loadMoreCount >= 1 }
+        composeRule.waitForIdle()
+        val beforeAppend = loadMoreCount
+
+        shown = items.take(SHOW_ALL_GRID_COLUMNS * 4)
+
+        composeRule.waitUntil(FocusTimeoutMillis) { loadMoreCount > beforeAppend }
     }
 
     private fun awaitAnyFocus() {
@@ -194,9 +297,9 @@ class ShowAllScreenContentFocusTest {
     }
 
     private companion object {
-        const val ItemCount = 24
         const val DeepRows = 5
-        const val GridColumns = 3
+        const val GridColumns = SHOW_ALL_GRID_COLUMNS
+        const val ItemCount = (DeepRows + 3) * SHOW_ALL_GRID_COLUMNS
         const val SettleMillis = 300L
         const val FocusTimeoutMillis = 5_000L
     }
