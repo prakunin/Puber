@@ -6,6 +6,7 @@ Slug: showall-rail-back-exits-app
 Kind: bug
 Size: M
 Tracks: none
+Amended by `2026-11-25-rail-handoff-nothing-focusable.md` (Design, prior rows): Decisions A5 (:98), Alternatives A5 (:145), Risk 1 check (:153), Risk 4 (:156), Open question 1 (:167), manual M11 step 5 (:292).
 
 ## Problem / Why
 
