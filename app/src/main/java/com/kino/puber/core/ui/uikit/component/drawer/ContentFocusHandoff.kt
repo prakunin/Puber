@@ -50,11 +50,15 @@ private const val HandoffContentGraceFrames = 5
  *
  * A thin facade over [DrawerState] rather than a second store of state: the rail's value stays the
  * single source of truth, and this exposes only the part the content needs to see.
+ *
+ * @param closeOnFail read when a handoff fails: `true` leaves the rail closed instead of reopening
+ *   it, for a host where Back still has somewhere to go without the rail.
  */
 @Stable
 class ContentFocusHandoff(
     private val drawerState: DrawerState,
     private val contentFocusRequester: FocusRequester,
+    private val closeOnFail: () -> Boolean = { false },
 ) {
     val pendingRequestId: Long?
         get() = drawerState.pendingHandoffId
@@ -64,7 +68,7 @@ class ContentFocusHandoff(
 
     fun settle(requestId: Long) = drawerState.settleHandoff(requestId)
 
-    fun fail(requestId: Long) = drawerState.failHandoff(requestId)
+    fun fail(requestId: Long) = drawerState.failHandoff(requestId, reopen = !closeOnFail())
 
     /**
      * Sends focus back to the content. Used while a handoff is in flight, when the focus system
