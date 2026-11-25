@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isNotSelected
 import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -105,6 +107,26 @@ private object ProbeState {
     val seenDrawerValues = CopyOnWriteArrayList<DrawerValue>()
     var exitConfirmation = probeExitConfirmation()
     var tabsByType: Map<TabType, PuberTab> = emptyMap()
+
+    /** The probe root name of each tab, so a pick can put the arriving tab in Loading. */
+    var rootNamesByType: Map<TabType, String> = emptyMap()
+
+    /** The tab the rail shows as selected; a rail pick moves it, as MainVM does. */
+    var selectedTab: TabType by mutableStateOf(TabType.Movies)
+
+    /** Rail picks Main received; a pick the rail refused leaves it unchanged. */
+    val railPicks = AtomicInteger()
+
+    /** The exit clock; see [probeExitConfirmation]. */
+    @Volatile
+    var exitNowMillis = 0L
+
+    /** Whether a rail pick puts the picked tab in Loading and so makes the outgoing tab focusable. */
+    var loadingFollowsPick = false
+
+    /** Whether a rail pick holds its tab swap in [heldTab] until [MainHostHarness.releaseTabSwap]. */
+    var holdTabSwap = false
+    var heldTab: PuberTab? = null
     var tabRouter: TabRouter? = null
     var tabAppRouterHolder: TabAppRouterHolder? = null
 
@@ -115,15 +137,22 @@ private object ProbeState {
         childBackHandler = false
         childBackConsumed.set(0)
         seenDrawerValues.clear()
+        selectedTab = TabType.Movies
+        railPicks.set(0)
+        exitNowMillis = 0L
+        loadingFollowsPick = false
+        holdTabSwap = false
+        heldTab = null
         exitConfirmation = probeExitConfirmation()
     }
 }
 
 /**
- * The clock stands still, so an arm never expires on its own: a test that proves a disarm cannot
- * pass because a slow run outlasted the 3 s window.
+ * The clock stands still unless a test advances it ([MainHostHarness.advanceExitClock]), so an arm
+ * never expires on its own: a test that proves a disarm cannot pass because a slow run outlasted
+ * the 3 s window.
  */
-private fun probeExitConfirmation() = ExitConfirmation(nowMillis = { 0L })
+private fun probeExitConfirmation() = ExitConfirmation(nowMillis = { ProbeState.exitNowMillis })
 
 /**
  * The real [DrawerMainContent] over a [FlowComponent] with probe tab screens, driven the way the
@@ -158,6 +187,11 @@ internal class MainHostHarness(private val rule: MainHostRule) {
             TabType.History to tabOther,
             TabType.Series to tabThird,
         )
+        ProbeState.rootNamesByType = mapOf(
+            TabType.Movies to "first",
+            TabType.History to "other",
+            TabType.Series to "third",
+        )
     }
 
     fun tearDown() {
@@ -176,9 +210,13 @@ internal class MainHostHarness(private val rule: MainHostRule) {
         childLoading: Boolean = false,
         childBackHandler: Boolean = false,
         loadingRoot: String? = null,
+        loadingFollowsPick: Boolean = false,
+        holdTabSwap: Boolean = false,
     ) {
         ProbeState.childLoading = childLoading
         ProbeState.loadingRoot = loadingRoot
+        ProbeState.loadingFollowsPick = loadingFollowsPick
+        ProbeState.holdTabSwap = holdTabSwap
         ProbeState.childBackHandler = childBackHandler
         rule.setContent {
             PuberTheme {
@@ -239,12 +277,35 @@ internal class MainHostHarness(private val rule: MainHostRule) {
         rule.waitForIdle()
     }
 
+    /** Changes which tab root stays in Loading with nothing focusable; `null` for none. */
+    fun setLoadingRoot(name: String?) {
+        rule.runOnUiThread { ProbeState.loadingRoot = name }
+        rule.waitForIdle()
+    }
+
+    /** Opens the tab of the rail pick held by `startMain(holdTabSwap = true)`. */
+    fun releaseTabSwap() {
+        rule.runOnUiThread {
+            requireNotNull(ProbeState.tabRouter).openTab(requireNotNull(ProbeState.heldTab) { "no tab swap is held" })
+            ProbeState.heldTab = null
+        }
+        rule.waitForIdle()
+    }
+
+    /** Moves the exit clock forward, so an arm older than the 3 s window expires. */
+    fun advanceExitClock(ms: Long) {
+        ProbeState.exitNowMillis += ms
+    }
+
     fun back() {
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
     }
 
     val childBackConsumed: Int get() = ProbeState.childBackConsumed.get()
+
+    /** Rail picks Main received since [setUp]. */
+    val railPicks: Int get() = ProbeState.railPicks.get()
 
     val isFinishing: Boolean get() = rule.activity.isFinishing
 
@@ -283,6 +344,12 @@ internal class MainHostHarness(private val rule: MainHostRule) {
             }.isSuccess
         }
         press(Key.Enter)
+    }
+
+    /** Focuses the rail item of the selected tab, matched as in [railItemFocused]. */
+    fun focusSelectedRailItem() {
+        rule.onNode(isSelectable() and isSelected()).requestFocus()
+        rule.waitForIdle()
     }
 
     /** Left from a focused content card through Compose, as on a remote. */
@@ -399,17 +466,27 @@ private data object ProbeMainHostScreen : PuberScreen {
         DrawerMainContent(
             state = MainViewState(
                 tabs = listOf(
-                    MainTab(TabType.Movies, PhosphorIcons.Duotone.FilmSlate, isSelected = true),
-                    MainTab(TabType.History, PhosphorIcons.Duotone.ClockCounterClockwise),
-                    MainTab(TabType.Series, PhosphorIcons.Duotone.TelevisionSimple),
+                    probeTab(TabType.Movies, PhosphorIcons.Duotone.FilmSlate),
+                    probeTab(TabType.History, PhosphorIcons.Duotone.ClockCounterClockwise),
+                    probeTab(TabType.Series, PhosphorIcons.Duotone.TelevisionSimple),
                 ),
-                selectedTab = TabType.Movies,
+                selectedTab = ProbeState.selectedTab,
             ),
             onAction = { action ->
-                // A rail pick switches the tab, as MainVM does.
+                // A rail pick selects the tab, then switches to it, as MainVM does.
                 if (action is CommonAction.ItemSelected<*>) {
                     val type = (action.item as MainTab).type
-                    requireNotNull(ProbeState.tabRouter).openTab(ProbeState.tabsByType.getValue(type))
+                    ProbeState.railPicks.incrementAndGet()
+                    ProbeState.selectedTab = type
+                    if (ProbeState.loadingFollowsPick) {
+                        ProbeState.loadingRoot = ProbeState.rootNamesByType.getValue(type)
+                    }
+                    val tab = ProbeState.tabsByType.getValue(type)
+                    if (ProbeState.holdTabSwap) {
+                        ProbeState.heldTab = tab
+                    } else {
+                        requireNotNull(ProbeState.tabRouter).openTab(tab)
+                    }
                 }
             },
             tabRouter = requireNotNull(ProbeState.tabRouter),
@@ -418,6 +495,9 @@ private data object ProbeMainHostScreen : PuberScreen {
         )
     }
 }
+
+private fun probeTab(type: TabType, icon: ImageVector) =
+    MainTab(type, icon, isSelected = type == ProbeState.selectedTab)
 
 @Parcelize
 private data class ProbeTabRootScreen(val name: String) : PuberScreen {

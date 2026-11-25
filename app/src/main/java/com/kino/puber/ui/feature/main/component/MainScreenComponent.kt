@@ -53,6 +53,7 @@ import com.kino.puber.core.ui.navigation.component.TabComponent
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.HandoffKind
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
@@ -101,8 +102,9 @@ internal fun DrawerMainContent(
     val outerActive = LocalContentFocusActive.current
     val mainContentFocus = rememberFocusRequesterOnLaunch()
     val tabStack = remember { TabStackState() }
-    // Over a pushed screen Back still has somewhere to go, so content that never takes focus (Show all
-    // in Error) leaves the rail closed and the next Back pops it, instead of reopening it.
+    // A failed Dismiss or Initial handoff leaves the rail closed at any depth. A failed tab pick
+    // reopens it at a tab root; over a pushed screen Back still has somewhere to go, so content that
+    // never takes focus (Show all in Error) leaves the rail closed and the next Back pops it.
     val handoff = remember(drawerState, mainContentFocus, tabStack) {
         ContentFocusHandoff(drawerState, mainContentFocus, closeOnFail = { tabStack.canPop })
     }
@@ -203,7 +205,10 @@ private fun RailClosedBackHandler(
     }
 }
 
-/** Back while the rail is open or handing off. Always consumed — the rail is what is on top. */
+/**
+ * Back while the rail is open or handing off. Always consumed — the rail is what is on top — and
+ * leaves the app when it is the second Back at a tab root while the first one's handoff is pending.
+ */
 @Composable
 private fun RailOpenBackHandler(
     drawerState: DrawerState,
@@ -212,15 +217,25 @@ private fun RailOpenBackHandler(
     outerActive: Boolean,
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val exitPrompt = stringResource(R.string.main_press_back_again_to_exit)
 
     val owner = railBackOwner(drawerState.currentValue, tabStack.canPop)
     BackHandler(enabled = outerActive && owner == RailBackOwner.RailOpen) {
-        // HandingOff is swallowed rather than acted on: the rail is already closing, and letting
-        // the event through would pop the screen arriving underneath it.
-        if (drawerState.currentValue != DrawerValue.Open) return@BackHandler
+        if (drawerState.currentValue != DrawerValue.Open) {
+            // An armed Dismiss is the second Back at the same root: only the Back below arms, and
+            // a pick or a push or pop disarms. Content with nothing focusable keeps that handoff
+            // pending, so the exit has to be taken here. Any other Back while handing off is
+            // swallowed: the rail is already closing, and letting it through would pop the screen
+            // arriving underneath.
+            if (drawerState.handoffKind == HandoffKind.Dismiss && exitConfirmation.isArmed) {
+                activity?.finish()
+                exitConfirmation.disarm()
+            }
+            return@BackHandler
+        }
 
-        drawerState.beginHandoff(expectsNewContent = false)
+        drawerState.beginHandoff(HandoffKind.Dismiss)
         // Over a tab root the user has just walked back out of the menu, so the next Back has
         // nowhere left to go inside the app. Over a pushed screen it still has: it pops.
         if (!tabStack.canPop) {
@@ -296,14 +311,15 @@ private val DrawerState.isOpen: Boolean
     get() = currentValue == DrawerValue.Open
 
 /**
- * A collapsed rail can still hold an item focused. After Back or Right (a handoff that expects no
- * new content), or Closed after a failed handoff, Center there must not pick a tab the user cannot
- * see. During a tab-pick handoff the arriving tab may still be loading with the rail item focused,
- * and a pick of another tab corrects a mistaken one; the pending handoff then settles on that tab.
+ * A collapsed rail can still hold an item focused. During a Dismiss (Back, Right, re-pick), or
+ * Closed after a failed handoff, Center there must not pick a tab the user cannot see. During an
+ * initial or tab-pick handoff the tab may still be loading with the rail item focused, and a pick of
+ * another tab goes there instead or corrects a mistaken one; [DrawerState.beginHandoff] restarts
+ * the handoff for that tab.
  */
 private fun DrawerState.acceptsPickOf(tab: MainTab): Boolean = when (currentValue) {
     DrawerValue.Open -> true
-    DrawerValue.HandingOff -> handoffExpectsNewContent && !tab.isSelected
+    DrawerValue.HandingOff -> handoffKind != HandoffKind.Dismiss && !tab.isSelected
     DrawerValue.Closed -> false
 }
 
@@ -324,9 +340,9 @@ private fun NavigationDrawerScope.MainSideMenuItem(
         onClick = {
             if (drawerState.acceptsPickOf(tab)) {
                 onAction(CommonAction.ItemSelected(tab))
-                // Re-picking the active tab composes no new content, so the tab already on screen
-                // is the one that has to confirm the handoff.
-                drawerState.beginHandoff(expectsNewContent = !tab.isSelected)
+                // A re-pick of the active tab composes no new content, so it dismisses the rail over
+                // the tab on screen, which is the one that has to confirm the handoff.
+                drawerState.beginHandoff(if (tab.isSelected) HandoffKind.Dismiss else HandoffKind.TabPick)
             }
         },
         leadingContent = {

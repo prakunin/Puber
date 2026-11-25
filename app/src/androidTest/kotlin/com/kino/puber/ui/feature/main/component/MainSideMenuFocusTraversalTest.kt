@@ -35,6 +35,7 @@ import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.ContentFocusHandoffEffect
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerState
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
+import com.kino.puber.core.ui.uikit.component.drawer.HandoffKind
 import com.kino.puber.core.ui.uikit.component.drawer.LocalContentFocusHandoff
 import com.kino.puber.core.ui.uikit.component.drawer.ModalNavigationDrawer
 import com.kino.puber.core.ui.uikit.component.drawer.rememberDrawerState
@@ -147,7 +148,7 @@ internal class MainSideMenuFocusTraversalTest {
         // rail used to sit in HandingOff until the budget ran out and then reopen itself.
         composeRule.onNodeWithTag(ContentTag).assertIsFocused()
         composeRule.runOnIdle { drawerState.reveal() }
-        composeRule.runOnIdle { drawerState.beginHandoff(expectsNewContent = false) }
+        composeRule.runOnIdle { drawerState.beginHandoff(HandoffKind.Dismiss) }
 
         composeRule.waitUntil(HandoffTimeoutMillis) {
             drawerState.currentValue != DrawerValue.HandingOff
