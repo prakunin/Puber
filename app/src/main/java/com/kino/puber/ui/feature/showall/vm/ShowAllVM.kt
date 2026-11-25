@@ -18,6 +18,7 @@ import com.kino.puber.ui.feature.contentlist.vm.ContentListPagingVM
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.Genre
+import com.kino.puber.data.preferences.CatalogueFilterRepository
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.model.ContentFilter
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
@@ -37,7 +38,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.joinAll
 
-internal class ShowAllVM(
+internal class ShowAllVM private constructor(
     paginator: Paginator.Store<Item>,
     config: SectionConfig,
     interactor: ContentListInteractor,
@@ -46,27 +47,59 @@ internal class ShowAllVM(
     mapper: VideoItemUIMapper,
     router: AppRouter,
     errorHandler: ErrorHandler,
-    pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
+    private val filterRepository: CatalogueFilterRepository,
+    pagingCoroutineContext: CoroutineContext,
+    restored: ContentFilter,
 ) : ContentListPagingVM<ShowAllViewState>(
     paginator,
-    config,
+    restored.applyTo(config),
     interactor,
     mapper,
     router,
     errorHandler,
     pagingCoroutineContext,
+    initialCacheable = !restored.isActive,
 ) {
+
+    /**
+     * The filter is restored here, before the super call, so the first load already pages the
+     * filtered query: restoring through [changeQuery] after start would load the unfiltered page first.
+     */
+    constructor(
+        paginator: Paginator.Store<Item>,
+        config: SectionConfig,
+        interactor: ContentListInteractor,
+        genreInteractor: GenreInteractor,
+        savedItemInteractor: SavedItemInteractor,
+        mapper: VideoItemUIMapper,
+        router: AppRouter,
+        errorHandler: ErrorHandler,
+        filterRepository: CatalogueFilterRepository,
+        pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
+    ) : this(
+        paginator,
+        config,
+        interactor,
+        genreInteractor,
+        savedItemInteractor,
+        mapper,
+        router,
+        errorHandler,
+        filterRepository,
+        pagingCoroutineContext,
+        restored = restoreFilter(config, filterRepository, interactor),
+    )
 
     private val base = config
     private val filterable = TabTypeConfig.isFilterable(config)
     private val mutableFilterState = MutableStateFlow(
-        if (filterable) ShowAllFilterState(available = true) else ShowAllFilterState.Unavailable,
+        if (filterable) ShowAllFilterState(available = true).withApplied(restored) else ShowAllFilterState.Unavailable,
     )
 
     /** What the grid header and the filter panel draw; [ShowAllFilterState.Unavailable] on a shelf grid. */
     val filterState: StateFlow<ShowAllFilterState> = mutableFilterState.asStateFlow()
 
-    private var applied = ContentFilter()
+    private var applied = restored
     private var rawGenres: List<Genre>? = null
     private var genresJob: Job? = null
 
@@ -156,12 +189,16 @@ internal class ShowAllVM(
         val changed = draft != applied
         applied = draft
         mutableFilterState.update { it.withApplied(applied).copy(panelOpen = false) }
-        if (changed) changeQuery(applied.applyTo(base), cacheable = !applied.isActive)
+        if (changed) {
+            filterRepository.write(base.id, applied)
+            changeQuery(applied.applyTo(base), cacheable = !applied.isActive)
+        }
     }
 
     private fun resetFilter() {
         if (!applied.isActive) return
         applied = ContentFilter()
+        filterRepository.clear(base.id)
         mutableFilterState.update { it.withApplied(applied).copy(draft = applied) }
         changeQuery(base, cacheable = true)
     }
@@ -321,6 +358,26 @@ internal class ShowAllVM(
             val activeJobs = pendingMutations.filter(Job::isActive)
             if (activeJobs.isEmpty()) return
             activeJobs.joinAll()
+        }
+    }
+
+    private companion object {
+        /**
+         * The stored filter of a browse grid, or none on a shelf. A stored «Аниме» genre is left out
+         * while the catalogue hides anime: paging it would walk an empty grid. The entry stays until the
+         * next changed filter replaces it, «Аниме» included.
+         */
+        fun restoreFilter(
+            config: SectionConfig,
+            repository: CatalogueFilterRepository,
+            interactor: ContentListInteractor,
+        ): ContentFilter {
+            if (!TabTypeConfig.isFilterable(config)) return ContentFilter()
+            val stored = repository.read(config.id)
+            val skipAnime = stored.genre?.id == ANIME_GENRE_ID &&
+                config.animeFilterMode == AnimeFilterMode.FollowPreference &&
+                !interactor.showAnimeEnabled
+            return if (skipAnime) stored.copy(genre = null) else stored
         }
     }
 }

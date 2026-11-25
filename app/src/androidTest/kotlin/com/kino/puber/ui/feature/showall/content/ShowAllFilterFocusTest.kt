@@ -1,13 +1,16 @@
 package com.kino.puber.ui.feature.showall.content
 
 import android.view.KeyEvent
+import android.view.View
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -51,11 +54,13 @@ class ShowAllFilterFocusTest {
     private var state by mutableStateOf<ShowAllViewState>(ShowAllViewState.Content(items))
     private var filter by mutableStateOf(ShowAllFilterState(available = true))
     private val actions = mutableListOf<UIAction>()
+    private var hostView: View? = null
 
     private val activeFilter = ShowAllFilterState(available = true, isActive = true, genreTitle = "Драма")
 
     private fun setScreen() {
         composeRule.setContent {
+            hostView = LocalView.current
             PuberTheme {
                 // The key the navigation stack provides: the grid's first-focus flag is keyed on it, which
                 // is what makes a remounted list ask for focus again. Without it the host cannot tell
@@ -101,6 +106,67 @@ class ShowAllFilterFocusTest {
 
         composeRule.onNodeWithText(items.first().title).assertIsFocused()
         composeRule.onNodeWithText(text(R.string.show_all_filters)).assertIsDisplayed()
+    }
+
+    @Test
+    fun coldOpenWithRestoredFilter_focusesTheFirstCardNotReset() {
+        filter = activeFilter
+        state = ShowAllViewState.Loading
+        setScreen()
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+
+        // A real cold open hands the window's initial focus to the first focusable node while the
+        // grid is still loading; here that is the only thing that could take it. The host is already
+        // focused, so the entry is forced the way a window gaining focus does it.
+        composeRule.runOnUiThread {
+            hostView?.clearFocus()
+            hostView?.requestFocus()
+        }
+        composeRule.waitForIdle()
+        // The guard assertions: they fail when «Фильтры» or «Сброс» is focusable while loading.
+        composeRule.onAllNodesWithText(text(R.string.show_all_filters_reset))[0].assertIsNotFocused()
+        composeRule.onNodeWithText(text(R.string.show_all_filters)).assertIsNotFocused()
+
+        state = ShowAllViewState.Content(items)
+        awaitAnyFocus()
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+
+        composeRule.onNodeWithText(items.first().title).assertIsFocused()
+        val reset = composeRule.onAllNodesWithText(text(R.string.show_all_filters_reset))[0]
+        reset.assertIsDisplayed()
+        reset.assertIsNotFocused()
+    }
+
+    @Test
+    fun coldOpenWithRestoredFilter_thatPagesEmpty_focusesTheEmptyStateReset() {
+        filter = activeFilter
+        state = ShowAllViewState.Loading
+        setScreen()
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+
+        state = ShowAllViewState.Empty
+        awaitAnyFocus()
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+
+        val reset = text(R.string.show_all_filters_reset)
+        assertEquals(2, composeRule.onAllNodesWithText(reset).fetchSemanticsNodes().size)
+        composeRule.onAllNodesWithText(reset)[1].assertIsFocused()
+    }
+
+    @Test
+    fun panelClosedThenFilteredEmpty_keepsFocusOnFiltersNotReset() {
+        openPanel()
+        pressBack()
+        awaitFocusOn(text(R.string.show_all_filters))
+        filter = activeFilter
+
+        state = ShowAllViewState.Loading
+        composeRule.waitForIdle()
+        state = ShowAllViewState.Empty
+        composeRule.mainClock.advanceTimeBy(SettleMillis)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(text(R.string.show_all_filters)).assertIsFocused()
     }
 
     @Test

@@ -153,6 +153,7 @@ private fun ShowAllList(
             filter = filter,
             filtersFocus = filtersFocus,
             resetFocus = emptyResetFocus,
+            headerHoldsFocus = headerHoldsFocus,
             onAction = onAction,
         )
         is ShowAllViewState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -173,14 +174,32 @@ private fun ShowAllList(
     }
 }
 
-/** Nothing to show: the plain empty text, or while a filter is applied what it found and a way out. */
+/**
+ * Nothing to show: the plain empty text, or while a filter is applied what it found and a way out.
+ * On a cold open with a restored filter nothing holds focus (the header is gated while loading), so
+ * «Сброс» takes it; after a panel close focus is already on «Фильтры» and is left there.
+ */
 @Composable
 private fun ShowAllEmpty(
     filter: ShowAllFilterState,
     filtersFocus: FocusRequester,
     resetFocus: FocusRequester,
+    headerHoldsFocus: MutableState<Boolean>,
     onAction: (UIAction) -> Unit,
 ) {
+    val contentFocusActive = LocalContentFocusActive.current
+    // A tab pick in flight hands focus to the arriving content; taking it here from the outgoing
+    // content would steal it. Content born during the request is the arrival and keeps its request,
+    // the same test as ContentFocusHandoffEffect.
+    val handoff = LocalContentFocusHandoff.current
+    val bornDuringRequest = remember { handoff?.pendingRequestId }
+    val outgoingDuringTabPick = handoff?.expectsNewContent == true && bornDuringRequest != handoff.pendingRequestId
+    LaunchedEffect(filter.isActive, contentFocusActive, outgoingDuringTabPick) {
+        val mayTakeFocus = contentFocusActive && !outgoingDuringTabPick
+        if (filter.isActive && mayTakeFocus && !headerHoldsFocus.value) {
+            runCatching { resetFocus.requestFocus() }
+        }
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (filter.isActive) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

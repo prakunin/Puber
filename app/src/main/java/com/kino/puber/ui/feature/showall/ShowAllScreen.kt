@@ -51,6 +51,7 @@ internal class ShowAllScreen(
                     mapper = get(),
                     router = get(),
                     errorHandler = get(),
+                    filterRepository = get(),
                 )
             }
         }

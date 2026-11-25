@@ -39,6 +39,7 @@ import com.kino.puber.data.repository.SkipSegmentService
 import com.kino.puber.data.repository.TmdbIdRepository
 import com.kino.puber.data.repository.WatchStateRepository
 import com.kino.puber.data.preferences.AppLanguageRepository
+import com.kino.puber.data.preferences.CatalogueFilterRepository
 import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.data.api.IntroDbAppApiClient
 import com.kino.puber.data.api.TheIntroDbApiClient
@@ -107,6 +108,7 @@ val repositoryModule = module {
     singleOf(::SkipSegmentRepository)
     singleOf(::SkipSegmentService)
     singleOf(::NavigationPreferencesRepository)
+    singleOf(::CatalogueFilterRepository)
     singleOf(::AppLanguageRepository)
     single { PuberDatabase.create(androidContext()) }
     single { get<PuberDatabase>().watchStateDao() }
