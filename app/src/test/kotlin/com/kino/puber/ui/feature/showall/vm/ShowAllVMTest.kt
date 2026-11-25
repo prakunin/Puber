@@ -12,6 +12,7 @@ import com.kino.puber.core.ui.navigation.Screens
 import com.kino.puber.core.ui.uikit.component.moviesList.VideoItemUIState
 import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
+import com.kino.puber.data.preferences.CatalogueFilterRepository
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
@@ -33,7 +34,9 @@ import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.applyTo
 import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
+import com.kino.puber.util.FakeSharedPreferences
 import com.kino.puber.util.MainDispatcherExtension
+import android.content.Context
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -61,6 +64,7 @@ import org.junit.jupiter.api.extension.RegisterExtension
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
+@Suppress("LargeClass")
 class ShowAllVMTest {
 
     companion object {
@@ -338,6 +342,12 @@ class ShowAllVMTest {
 
     private val allMovie = TabTypeConfig.browseEntryFor(TabType.Movies)!!.config
     private val all4k = TabTypeConfig.browseEntryFor(TabType.For4k)!!.config
+    private val allSerial = TabTypeConfig.browseEntryFor(TabType.Series)!!.config
+    private val animeByYear = ContentFilter(
+        genre = Genre(ANIME_GENRE_ID, "Аниме"),
+        sort = SortField.YEAR,
+        sortDirection = SortDirection.ASC,
+    )
     private val drama = Genre(9, "Драма")
     private val dramaByYear = ContentFilter(genre = drama, sort = SortField.YEAR, sortDirection = SortDirection.ASC)
 
@@ -380,6 +390,8 @@ class ShowAllVMTest {
     private fun TestScope.filterRig(
         config: SectionConfig = allMovie,
         firstPage: suspend (SectionConfig) -> PaginatedResponse<Item> = { pageOf(1, 2, current = 1, total = 1) },
+        filterRepository: CatalogueFilterRepository = filterRepositoryOn(FakeSharedPreferences()),
+        showAnime: Boolean = true,
     ): FilterRig {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val paginator = Paginator.Store<Item>(
@@ -393,15 +405,202 @@ class ShowAllVMTest {
             flow { emit(Cached.Value(firstPage(asked), isStale = false)) }
         }
         coEvery { interactor.loadPage(any(), page = 1) } coAnswers { firstPage(firstArg()) }
-        every { interactor.showAnimeEnabled } returns true
+        every { interactor.showAnimeEnabled } returns showAnime
         val mapper = mockk<VideoItemUIMapper>()
         every { mapper.mapShortItemList(any()) } answers { firstArg<List<Item>>().map { videoItem(it.id) } }
-        val vm = createVM(config = config, paginator = paginator, mapper = mapper, pagingCoroutineContext = dispatcher)
+        val vm = createVM(
+            config = config,
+            paginator = paginator,
+            mapper = mapper,
+            pagingCoroutineContext = dispatcher,
+            filterRepository = filterRepository,
+        )
         vm.testOnStart()
         val rig = FilterRig(vm, paginator, calls, this)
         rig.run()
         return rig
     }
+
+    // region persisted filter
+
+    @Test
+    fun restoredFilter_firstPageReadsOnlyTheFilteredQueryUncached() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, dramaByYear)
+
+        val rig = filterRig(filterRepository = repository)
+
+        assertEquals(listOf(FirstPageCall(dramaByYear.applyTo(allMovie), cacheable = false)), rig.calls.toList())
+        rig.close()
+    }
+
+    @Test
+    fun restoredFilter_headerShowsSummaryAndResetBeforeTheFirstPage() {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, dramaByYear)
+
+        val vm = createVM(config = allMovie, filterRepository = repository)
+
+        val state = vm.filterState.value
+        assertTrue(state.isActive)
+        assertEquals("Драма", state.genreTitle)
+        assertEquals(SortField.YEAR, state.sort)
+        assertEquals(SortDirection.ASC, state.direction)
+    }
+
+    @Test
+    fun filterApplied_reopenedGridStartsWithIt() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        val first = filterRig(filterRepository = repository)
+        first.applyFilter(dramaByYear)
+        first.close()
+
+        val reopened = filterRig(filterRepository = repository)
+
+        assertEquals(
+            listOf(FirstPageCall(dramaByYear.applyTo(allMovie), cacheable = false)),
+            reopened.calls.toList(),
+        )
+        reopened.close()
+    }
+
+    @Test
+    fun filterOnMovies_isNotInheritedBySerialOr4k() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        val movies = filterRig(filterRepository = repository)
+        movies.applyFilter(dramaByYear)
+        movies.close()
+
+        listOf(allSerial, all4k).forEach { config ->
+            val rig = filterRig(config = config, filterRepository = repository)
+
+            assertEquals(listOf(FirstPageCall(config, cacheable = true)), rig.calls.toList())
+            assertEquals(false, rig.vm.filterState.value.isActive)
+            rig.close()
+        }
+    }
+
+    @Test
+    fun filterReset_removesTheStoredFilterAndTheReopenedGridReadsCached() = runTest {
+        val preferences = FakeSharedPreferences()
+        val repository = filterRepositoryOn(preferences)
+        val first = filterRig(filterRepository = repository)
+        first.applyFilter(dramaByYear)
+        assertTrue(preferences.values.containsKey("filter_all_movie"))
+
+        first.act(ShowAllAction.FilterReset)
+        first.close()
+
+        assertEquals(false, preferences.values.containsKey("filter_all_movie"))
+        val reopened = filterRig(filterRepository = repository)
+        assertEquals(listOf(FirstPageCall(allMovie, cacheable = true)), reopened.calls.toList())
+        reopened.close()
+    }
+
+    @Test
+    fun restoredFilter_panelDraftEqualsIt() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, dramaByYear)
+        val rig = filterRig(filterRepository = repository)
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        assertEquals(dramaByYear, rig.vm.filterState.value.draft)
+        rig.close()
+    }
+
+    @Test
+    fun restoredFilter_closedUnchanged_writesNothingAndDoesNotRepage() = runTest {
+        val preferences = FakeSharedPreferences()
+        val repository = filterRepositoryOn(preferences)
+        repository.write(allMovie.id, dramaByYear)
+        val writes = preferences.transactions.size
+        val rig = filterRig(filterRepository = repository)
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.FilterPanelClosed)
+
+        assertEquals(1, rig.calls.size)
+        assertEquals(writes, preferences.transactions.size)
+        rig.close()
+    }
+
+    @Test
+    fun restoredAnime_withShowAnimeOff_skipsTheGenreKeepsTheSort() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, animeByYear)
+
+        val rig = filterRig(filterRepository = repository, showAnime = false)
+
+        val sortOnly = ContentFilter(sort = SortField.YEAR, sortDirection = SortDirection.ASC)
+        assertEquals(listOf(FirstPageCall(sortOnly.applyTo(allMovie), cacheable = false)), rig.calls.toList())
+        assertEquals(null, rig.vm.filterState.value.genreTitle)
+        rig.close()
+    }
+
+    @Test
+    fun restoredAnime_withShowAnimeOn_isApplied() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, animeByYear)
+
+        val rig = filterRig(filterRepository = repository, showAnime = true)
+
+        assertEquals(ANIME_GENRE_ID.toString(), rig.calls.single().config.genre)
+        rig.close()
+    }
+
+    @Test
+    fun restoredAnime_onANonFollowPreferenceGrid_isApplied() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(all4k.id, animeByYear)
+
+        val rig = filterRig(config = all4k, filterRepository = repository, showAnime = false)
+
+        assertEquals(ANIME_GENRE_ID.toString(), rig.calls.single().config.genre)
+        rig.close()
+    }
+
+    @Test
+    fun filterReset_ofARestoredFilter_readsTheBaseQueryCachedAndRemovesTheEntry() = runTest {
+        val preferences = FakeSharedPreferences()
+        val repository = filterRepositoryOn(preferences)
+        repository.write(allMovie.id, dramaByYear)
+        val rig = filterRig(filterRepository = repository)
+
+        rig.act(ShowAllAction.FilterReset)
+
+        assertEquals(FirstPageCall(allMovie, cacheable = true), rig.calls.last())
+        assertEquals(false, preferences.values.containsKey("filter_all_movie"))
+        rig.close()
+    }
+
+    @Test
+    fun restoredAnime_closedUnchanged_keepsTheStoredGenre() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        repository.write(allMovie.id, animeByYear)
+        val rig = filterRig(filterRepository = repository, showAnime = false)
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.FilterPanelClosed)
+
+        assertEquals(ANIME_GENRE_ID, repository.read(allMovie.id).genre?.id)
+        rig.close()
+    }
+
+    @Test
+    fun shelfGrid_neverReadsOrWritesTheStore() = runTest {
+        val preferences = FakeSharedPreferences()
+        preferences.values["filter_popular"] =
+            """{"genreId":9,"genreTitle":"Драма","sort":"YEAR","direction":"ASC"}"""
+        val popular = SectionConfig(id = "popular", title = "Popular")
+
+        val rig = filterRig(config = popular, filterRepository = filterRepositoryOn(preferences))
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.FilterPanelClosed, ShowAllAction.FilterReset)
+
+        assertEquals(listOf(FirstPageCall(popular, cacheable = true)), rig.calls.toList())
+        assertTrue(preferences.transactions.isEmpty())
+        rig.close()
+    }
+
+    // endregion
 
     @Test
     fun filterState_isUnavailableForAShelfConfig() = runTest {
@@ -744,6 +943,7 @@ class ShowAllVMTest {
         mapper: VideoItemUIMapper = mockk(relaxed = true),
         contentListInteractor: ContentListInteractor = interactor,
         pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
+        filterRepository: CatalogueFilterRepository = filterRepositoryOn(FakeSharedPreferences()),
     ) = ShowAllVM(
         paginator = paginator,
         config = config,
@@ -753,8 +953,15 @@ class ShowAllVMTest {
         mapper = mapper,
         router = router,
         errorHandler = mockk<ErrorHandler> { every { proceed(any()) } returns { } },
+        filterRepository = filterRepository,
         pagingCoroutineContext = pagingCoroutineContext,
     )
+
+    private fun filterRepositoryOn(preferences: FakeSharedPreferences): CatalogueFilterRepository {
+        val context = mockk<Context>()
+        every { context.getSharedPreferences(any(), Context.MODE_PRIVATE) } returns preferences.sharedPreferences
+        return CatalogueFilterRepository(context)
+    }
 
     private fun videoItem(id: Int) = VideoItemUIState(id, "Item $id", "", "")
 

@@ -36,6 +36,7 @@ internal abstract class ContentListPagingVM<VS>(
     router: AppRouter,
     errorHandler: ErrorHandler,
     pagingCoroutineContext: CoroutineContext = Dispatchers.Default,
+    initialCacheable: Boolean = true,
 ) : PagingVM<Item, VS>(paginator, router, errorHandler, pagingCoroutineContext) {
 
     /**
@@ -48,7 +49,7 @@ internal abstract class ContentListPagingVM<VS>(
 
     /** Whether first pages of [config] may come from, and go to, the stored first-page cache. */
     @Volatile
-    private var cacheable = true
+    private var cacheable = initialCacheable
     private var currentPage = 0
     private var emptyPageChain = 0
     private var resumeRounds = 0
