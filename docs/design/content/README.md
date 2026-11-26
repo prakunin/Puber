@@ -51,6 +51,8 @@ than parameterised again.
 | рейтинги → фишки | 8 | **3** dp |
 | фишки → описание | 10 | **3** dp |
 | ширина описания | 450 | **590** dp |
+| шаг ширины описания | — | **70** dp |
+| минимум ширины описания | — | **460** dp |
 | кегль описания | 13 | **13** sp |
 | интерлиньяж описания | 19 | **18** sp |
 | минимум высоты описания | 57 | **110** dp |
@@ -76,6 +78,17 @@ than parameterised again.
 | кегль названия карточки | 14 | **8** sp |
 | интерлиньяж в карточке | 20 | **14** sp |
 | место строки «Дорожек» | 0 | **95** % свободного |
+
+The plot narrows in steps (590, 520, 460 dp) when it fits. The 70 and 460 dp are start values: the
+owner has not confirmed them on the stand yet, and the «ширина описания» switch stays on the fixed
+width until then. The rule is option A: the box keeps the
+height it has at 590 dp (text plus the 2 dp border, not below the minimum, not above the share
+snapped to whole lines), so the fact lines and the buttons stay where they are. A step is taken when
+its text still fits that height, the narrowest one not below the floor wins; a plot that already
+scrolls at 590 dp stays at 590 dp. A narrowed plot ends on denser scrim, so it reads better but
+sits nearer the still. The stand shows both modes on the «ширина описания» switch and the
+«текст описания» samples; `PLOT_WIDTH_STEPS` and `PLOT_MIN_WIDTH` in `DetailsScreenContent.kt`
+carry the two rows above.
 
 Zero page edges and 11 dp at the left put the screen nearer the edge than Google's 48 dp TV
 safe zone allows — the same call the player's overlay makes, and deliberate. Not a mistake to be
