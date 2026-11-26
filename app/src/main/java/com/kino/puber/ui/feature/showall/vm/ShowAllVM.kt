@@ -17,16 +17,23 @@ import com.kino.puber.ui.feature.contentlist.model.SectionConfig
 import com.kino.puber.ui.feature.contentlist.vm.ContentListPagingVM
 import com.kino.puber.ui.feature.showall.model.ShowAllViewState
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
+import com.kino.puber.data.api.models.Country
 import com.kino.puber.data.api.models.Genre
+import com.kino.puber.data.api.models.ItemType
+import com.kino.puber.data.api.models.isSeriesLike
 import com.kino.puber.data.preferences.CatalogueFilterRepository
+import com.kino.puber.domain.interactor.country.CountryInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.model.ContentFilter
 import com.kino.puber.ui.feature.contentlist.model.AnimeFilterMode
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
+import com.kino.puber.ui.feature.showall.model.FilterCountries
 import com.kino.puber.ui.feature.showall.model.FilterGenres
 import com.kino.puber.ui.feature.showall.model.ShowAllAction
 import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
 import com.kino.puber.ui.feature.showall.model.applyTo
+import com.kino.puber.ui.feature.showall.model.yearOptions
+import java.time.Year
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +50,7 @@ internal class ShowAllVM private constructor(
     config: SectionConfig,
     interactor: ContentListInteractor,
     private val genreInteractor: GenreInteractor,
+    private val countryInteractor: CountryInteractor,
     private val savedItemInteractor: SavedItemInteractor,
     mapper: VideoItemUIMapper,
     router: AppRouter,
@@ -70,6 +78,7 @@ internal class ShowAllVM private constructor(
         config: SectionConfig,
         interactor: ContentListInteractor,
         genreInteractor: GenreInteractor,
+        countryInteractor: CountryInteractor,
         savedItemInteractor: SavedItemInteractor,
         mapper: VideoItemUIMapper,
         router: AppRouter,
@@ -81,6 +90,7 @@ internal class ShowAllVM private constructor(
         config,
         interactor,
         genreInteractor,
+        countryInteractor,
         savedItemInteractor,
         mapper,
         router,
@@ -92,8 +102,17 @@ internal class ShowAllVM private constructor(
 
     private val base = config
     private val filterable = TabTypeConfig.isFilterable(config)
+    private val statusAvailable = ItemType.entries.any { it.value == config.type && it.isSeriesLike() }
     private val mutableFilterState = MutableStateFlow(
-        if (filterable) ShowAllFilterState(available = true).withApplied(restored) else ShowAllFilterState.Unavailable,
+        if (filterable) {
+            ShowAllFilterState(
+                available = true,
+                statusAvailable = statusAvailable,
+                yearOptions = yearOptions(Year.now().value),
+            ).withApplied(restored)
+        } else {
+            ShowAllFilterState.Unavailable
+        },
     )
 
     /** What the grid header and the filter panel draw; [ShowAllFilterState.Unavailable] on a shelf grid. */
@@ -102,6 +121,8 @@ internal class ShowAllVM private constructor(
     private var applied = restored
     private var rawGenres: List<Genre>? = null
     private var genresJob: Job? = null
+    private var rawCountries: List<Country>? = null
+    private var countriesJob: Job? = null
 
     private var contentChanges = ContentChangeSet.empty()
     private val pendingMutations = mutableSetOf<Job>()
@@ -166,6 +187,12 @@ internal class ShowAllVM private constructor(
             is ShowAllAction.SortDirectionChosen -> updateDraft { copy(sortDirection = action.direction) }
             is ShowAllAction.GenreChosen -> updateDraft { copy(genre = action.genre) }
             ShowAllAction.GenresRetry -> loadGenres()
+            is ShowAllAction.CountryChosen -> updateDraft { copy(country = action.country) }
+            ShowAllAction.CountriesRetry -> loadCountries()
+            is ShowAllAction.YearChosen -> updateDraft { copy(yearRange = action.range) }
+            is ShowAllAction.StatusChosen -> if (statusAvailable) {
+                updateDraft { copy(finished = if (action.finishedOnly) true else null) }
+            }
             ShowAllAction.FilterReset -> resetFilter()
         }
     }
@@ -181,6 +208,12 @@ internal class ShowAllVM private constructor(
             mutableFilterState.update { it.copy(genres = FilterGenres.Loaded(visibleGenres(genres))) }
         } else {
             loadGenres()
+        }
+        val countries = rawCountries
+        if (countries != null) {
+            mutableFilterState.update { it.copy(countries = FilterCountries.Loaded(countries)) }
+        } else {
+            loadCountries()
         }
     }
 
@@ -206,6 +239,9 @@ internal class ShowAllVM private constructor(
     private fun ShowAllFilterState.withApplied(filter: ContentFilter) = copy(
         isActive = filter.isActive,
         genreTitle = filter.genre?.title,
+        countryTitle = filter.country?.title,
+        yearRange = filter.yearRange,
+        finishedOnly = filter.finished == true,
         sort = filter.sort,
         direction = filter.sortDirection,
     )
@@ -227,6 +263,21 @@ internal class ShowAllVM private constructor(
                 }
                 .onFailure {
                     mutableFilterState.update { state -> state.copy(genres = FilterGenres.Failed) }
+                }
+        }
+    }
+
+    private fun loadCountries() {
+        if (countriesJob?.isActive == true) return
+        mutableFilterState.update { it.copy(countries = FilterCountries.Loading) }
+        countriesJob = launch {
+            countryInteractor.getCountries()
+                .onSuccess { countries ->
+                    rawCountries = countries
+                    mutableFilterState.update { it.copy(countries = FilterCountries.Loaded(countries)) }
+                }
+                .onFailure {
+                    mutableFilterState.update { state -> state.copy(countries = FilterCountries.Failed) }
                 }
         }
     }

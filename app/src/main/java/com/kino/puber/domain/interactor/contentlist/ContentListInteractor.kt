@@ -132,7 +132,15 @@ internal class ContentListInteractor(
         config.animeFilterMode,
         showAnime,
         hideWatched,
-    ).joinToString(separator = "_")
+    ).plus(browseFilterKeyParts(config)).joinToString(separator = "_")
+
+    /** Empty when no browse filter is set, so a page stored before these filters existed keeps its key. */
+    private fun browseFilterKeyParts(config: SectionConfig): List<Any> =
+        if (config.country == null && config.year == null && config.finished == null) {
+            emptyList()
+        } else {
+            listOf(config.country.toString(), config.year.toString(), config.finished.toString())
+        }
 
     private suspend fun fetchFilteredPage(
         config: SectionConfig,
@@ -199,7 +207,16 @@ internal class ContentListInteractor(
             config.shortcut != null ->
                 api.getItemsByShortcut(config.shortcut, config.type, page, config.genre)
             else ->
-                api.getItems(config.type, config.sort, page, config.quality, config.genre)
+                api.getItems(
+                    type = config.type,
+                    sort = config.sort,
+                    page = page,
+                    quality = config.quality,
+                    genre = config.genre,
+                    country = config.country,
+                    year = config.year,
+                    finished = config.finished,
+                )
         }
         return result.getOrThrow()
     }

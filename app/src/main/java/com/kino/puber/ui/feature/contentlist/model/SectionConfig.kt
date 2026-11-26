@@ -18,6 +18,9 @@ internal data class SectionConfig(
     val genre: String? = null,
     val requiredGenreId: Int? = null,
     val animeFilterMode: AnimeFilterMode = AnimeFilterMode.None,
+    val country: Int? = null,
+    val year: String? = null,
+    val finished: Boolean? = null,
 ) : Parcelable
 
 @Parcelize

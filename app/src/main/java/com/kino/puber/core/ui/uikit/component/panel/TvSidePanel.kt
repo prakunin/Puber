@@ -48,7 +48,8 @@ private const val PANEL_ENTER_DURATION_MS = 210
  * The card is measured by what is in it, not by the screen: [IntrinsicSize.Max] takes the width
  * of its longest row and the height wraps the content, clamped to [minWidth] and [maxWidth] so a
  * long title cannot make it absurdly narrow or wide. Content therefore cannot be a lazy list,
- * which has no intrinsic width. Focus is trapped in the card: the arrows do not leave it.
+ * which has no intrinsic width, unless the page gives the card a [fixedWidth], which replaces the
+ * intrinsic measure. Focus is trapped in the card: the arrows do not leave it.
  */
 @Composable
 internal fun TvSidePanelSurface(
@@ -56,14 +57,20 @@ internal fun TvSidePanelSurface(
     modifier: Modifier = Modifier,
     minWidth: Dp = 240.dp,
     maxWidth: Dp = 420.dp,
+    fixedWidth: Dp? = null,
     cornerRadius: Dp = 20.dp,
     padding: PaddingValues = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 16.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = modifier
-            .widthIn(min = minWidth, max = maxWidth)
-            .width(IntrinsicSize.Max)
+            .then(
+                if (fixedWidth != null) {
+                    Modifier.width(fixedWidth)
+                } else {
+                    Modifier.widthIn(min = minWidth, max = maxWidth).width(IntrinsicSize.Max)
+                },
+            )
             // Pages differ in height, and without this the panel snaps on every step in and out
             // of a page.
             .animateContentSize(

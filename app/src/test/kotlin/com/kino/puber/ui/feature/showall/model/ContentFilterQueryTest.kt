@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.showall.model
 
+import com.kino.puber.data.api.models.Country
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.domain.model.ContentFilter
 import com.kino.puber.domain.model.SortDirection
@@ -32,6 +33,32 @@ class ContentFilterQueryTest {
 
             assertEquals("rating-", query.sort, base.id)
             assertEquals("9", query.genre, base.id)
+            assertEquals(base.id, query.id)
+            assertEquals(base.type, query.type)
+            assertEquals(base.quality, query.quality)
+            assertEquals(base.animeFilterMode, query.animeFilterMode)
+        }
+    }
+
+    @Test
+    fun applyTo_yearRange_sendsTheExactYearOrAnInclusiveRange() {
+        fun yearOf(range: IntRange) = ContentFilter(yearRange = range).applyTo(allMovie).year
+
+        assertEquals("2020", yearOf(2020..2020))
+        assertEquals("2010-2019", yearOf(2010..2019))
+        assertEquals("1900-1979", yearOf(1900..1979))
+    }
+
+    @Test
+    fun applyTo_countryYearFinished_keepsIdTypeAndQuality() {
+        val filter = ContentFilter(country = Country(1, "США"), yearRange = 2010..2019, finished = true)
+
+        listOf(allMovie, all4k).forEach { base ->
+            val query = filter.applyTo(base)
+
+            assertEquals(1, query.country, base.id)
+            assertEquals("2010-2019", query.year, base.id)
+            assertEquals(true, query.finished, base.id)
             assertEquals(base.id, query.id)
             assertEquals(base.type, query.type)
             assertEquals(base.quality, query.quality)

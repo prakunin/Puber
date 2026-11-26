@@ -48,6 +48,17 @@
     <string name="show_all_filters_sort_order">Порядок</string>
     <string name="show_all_filters_genre">Жанр</string>
     <string name="show_all_filters_genre_all">Все жанры</string>
+    <string name="show_all_filters_country">Страна</string>
+    <string name="show_all_filters_country_all">Все страны</string>
+    <string name="show_all_filters_countries_error">Не удалось загрузить страны</string>
+    <string name="show_all_filters_year">Год</string>
+    <string name="show_all_filters_year_any">Любой год</string>
+    <string name="show_all_filters_year_decade">%d-е</string>
+    <string name="show_all_filters_year_before_1980">до 1980</string>
+    <string name="show_all_filters_year_range">%1$d–%2$d</string>
+    <string name="show_all_filters_status">Статус</string>
+    <string name="show_all_filters_status_any">Любой статус</string>
+    <string name="show_all_filters_status_finished">Завершённые</string>
     <string name="show_all_sort_updated">по обновлению</string>
     <string name="show_all_sort_created">по дате добавления</string>
     <string name="show_all_sort_year">по году</string>

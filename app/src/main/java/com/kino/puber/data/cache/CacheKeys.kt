@@ -21,6 +21,7 @@ object CacheKeys {
     const val CollectionsPrefix = "collections:"
     const val GenresPrefix = "genres:"
     const val BookmarkFolders = "bookmark-folders"
+    const val Countries = "countries"
 
     fun home(section: String): String = HomePrefix + section
 
@@ -62,6 +63,9 @@ object CacheTtl {
     val Collections: Duration = 3.minutes
 
     val Genres: Duration = 5.minutes
+
+    /** The country list is near static and the filter panel opens often, so it outlives the genres. */
+    val Countries: Duration = 30.minutes
 
     /** Long enough to collapse simultaneous Home rows, short enough to see folders made elsewhere. */
     val BookmarkFolders: Duration = 20.seconds

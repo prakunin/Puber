@@ -14,6 +14,7 @@ import com.kino.puber.core.ui.uikit.model.CommonAction
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.data.preferences.CatalogueFilterRepository
 import com.kino.puber.data.api.models.ANIME_GENRE_ID
+import com.kino.puber.data.api.models.Country
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.data.api.models.Item
 import com.kino.puber.data.api.models.ItemType
@@ -22,12 +23,14 @@ import com.kino.puber.data.api.models.Pagination
 import com.kino.puber.data.cache.Cached
 import com.kino.puber.domain.interactor.bookmarks.SavedItemInteractor
 import com.kino.puber.domain.interactor.contentlist.ContentListInteractor
+import com.kino.puber.domain.interactor.country.CountryInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.model.ContentFilter
 import com.kino.puber.domain.model.SortDirection
 import com.kino.puber.domain.model.SortField
 import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.contentlist.model.TabTypeConfig
+import com.kino.puber.ui.feature.showall.model.FilterCountries
 import com.kino.puber.ui.feature.showall.model.FilterGenres
 import com.kino.puber.ui.feature.showall.model.ShowAllAction
 import com.kino.puber.ui.feature.showall.model.ShowAllFilterState
@@ -78,6 +81,7 @@ class ShowAllVMTest {
     private lateinit var interactor: ContentListInteractor
     private lateinit var savedItemInteractor: SavedItemInteractor
     private lateinit var genreInteractor: GenreInteractor
+    private lateinit var countryInteractor: CountryInteractor
 
     @BeforeEach
     fun setup() {
@@ -88,6 +92,8 @@ class ShowAllVMTest {
         savedItemInteractor = mockk(relaxed = true)
         genreInteractor = mockk()
         coEvery { genreInteractor.getGenres(any()) } returns Result.success(emptyList())
+        countryInteractor = mockk()
+        coEvery { countryInteractor.getCountries() } returns Result.success(emptyList())
     }
 
     @Test
@@ -343,12 +349,17 @@ class ShowAllVMTest {
     private val allMovie = TabTypeConfig.browseEntryFor(TabType.Movies)!!.config
     private val all4k = TabTypeConfig.browseEntryFor(TabType.For4k)!!.config
     private val allSerial = TabTypeConfig.browseEntryFor(TabType.Series)!!.config
+    private val allDocSerial = TabTypeConfig.browseEntryFor(TabType.DocSeries)!!.config
+    private val allTvShow = TabTypeConfig.browseEntryFor(TabType.TvShows)!!.config
+    private val allDocMovie = TabTypeConfig.browseEntryFor(TabType.DocMovies)!!.config
+    private val allConcert = TabTypeConfig.browseEntryFor(TabType.Concerts)!!.config
     private val animeByYear = ContentFilter(
         genre = Genre(ANIME_GENRE_ID, "Аниме"),
         sort = SortField.YEAR,
         sortDirection = SortDirection.ASC,
     )
     private val drama = Genre(9, "Драма")
+    private val usa = Country(1, "США")
     private val dramaByYear = ContentFilter(genre = drama, sort = SortField.YEAR, sortDirection = SortDirection.ASC)
 
     /** One `observeFirstPage` call: the config it was given and whether it may use the store. */
@@ -373,6 +384,9 @@ class ShowAllVMTest {
                 ShowAllAction.SortFieldChosen(filter.sort),
                 ShowAllAction.SortDirectionChosen(filter.sortDirection),
                 ShowAllAction.GenreChosen(filter.genre),
+                ShowAllAction.CountryChosen(filter.country),
+                ShowAllAction.YearChosen(filter.yearRange),
+                ShowAllAction.StatusChosen(filter.finished == true),
                 ShowAllAction.FilterPanelClosed,
             )
         }
@@ -669,7 +683,15 @@ class ShowAllVMTest {
             rig.calls.toList(),
         )
         val restored = rig.vm.filterState.value
-        assertEquals(ShowAllFilterState(available = true, genres = restored.genres), restored)
+        assertEquals(
+            ShowAllFilterState(
+                available = true,
+                genres = restored.genres,
+                countries = restored.countries,
+                yearOptions = restored.yearOptions,
+            ),
+            restored,
+        )
         rig.close()
     }
 
@@ -902,6 +924,190 @@ class ShowAllVMTest {
         rig.close()
     }
 
+    // region country, year and status
+
+    private val seriesGrids get() = listOf(allSerial, allDocSerial, allTvShow)
+
+    @Test
+    fun countryChosen_panelClosed_readsTheCountryQueryUncachedAndSummarisesIt() = runTest {
+        val rig = filterRig()
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.CountryChosen(usa), ShowAllAction.FilterPanelClosed)
+
+        val call = rig.calls.last()
+        assertEquals(1, call.config.country)
+        assertEquals("movie", call.config.type)
+        assertEquals(false, call.cacheable)
+        assertEquals("США", rig.vm.filterState.value.countryTitle)
+        rig.close()
+    }
+
+    @Test
+    fun yearChosen_panelClosed_sendsThePresetAndSummarisesIt() = runTest {
+        val rig = filterRig()
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.YearChosen(2010..2019), ShowAllAction.FilterPanelClosed)
+
+        assertEquals("2010-2019", rig.calls.last().config.year)
+        assertEquals(2010..2019, rig.vm.filterState.value.yearRange)
+        rig.close()
+    }
+
+    @Test
+    fun statusChosen_onSeriesGrids_sendsFinished() = runTest {
+        seriesGrids.forEach { config ->
+            val rig = filterRig(config = config)
+
+            rig.act(
+                ShowAllAction.FilterPanelOpened,
+                ShowAllAction.StatusChosen(true),
+                ShowAllAction.FilterPanelClosed,
+            )
+
+            assertTrue(rig.vm.filterState.value.statusAvailable, config.id)
+            assertEquals(true, rig.calls.last().config.finished, config.id)
+            rig.close()
+        }
+    }
+
+    @Test
+    fun statusChosen_anyStatusOnASeriesGrid_clearsFinished() = runTest {
+        val rig = filterRig(config = allSerial)
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.StatusChosen(true), ShowAllAction.FilterPanelClosed)
+        assertEquals(true, rig.calls.last().config.finished)
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.StatusChosen(false), ShowAllAction.FilterPanelClosed)
+
+        assertEquals(null, rig.calls.last().config.finished)
+        assertEquals(null, rig.vm.filterState.value.draft.finished)
+        rig.close()
+    }
+
+    @Test
+    fun statusDoor_isUnavailableOnMovieDocumovieConcertAnd4k() = runTest {
+        listOf(allMovie, allDocMovie, allConcert, all4k).forEach { config ->
+            val rig = filterRig(config = config)
+
+            assertEquals(false, rig.vm.filterState.value.statusAvailable, config.id)
+            rig.close()
+        }
+    }
+
+    @Test
+    fun statusChosen_onAMovieGrid_isIgnored() = runTest {
+        val rig = filterRig()
+
+        rig.act(ShowAllAction.FilterPanelOpened, ShowAllAction.StatusChosen(true), ShowAllAction.FilterPanelClosed)
+
+        assertEquals(1, rig.calls.size)
+        assertTrue(rig.calls.all { it.config.finished == null })
+        rig.close()
+    }
+
+    @Test
+    fun filterPanelClosed_withEveryFilterSet_readsOneQueryCarryingAllOfThem() = runTest {
+        val rig = filterRig(config = allSerial)
+
+        rig.applyFilter(
+            ContentFilter(
+                genre = drama,
+                country = usa,
+                sort = SortField.YEAR,
+                sortDirection = SortDirection.ASC,
+                yearRange = 2010..2019,
+                finished = true,
+            ),
+        )
+
+        assertEquals(2, rig.calls.size)
+        val config = rig.calls.last().config
+        assertEquals("9", config.genre)
+        assertEquals("year", config.sort)
+        assertEquals(1, config.country)
+        assertEquals("2010-2019", config.year)
+        assertEquals(true, config.finished)
+        rig.close()
+    }
+
+    @Test
+    fun restoredCountryYearAndStatus_headerShowsSummaryBeforeTheFirstPage() = runTest {
+        val repository = filterRepositoryOn(FakeSharedPreferences())
+        val stored = ContentFilter(country = usa, yearRange = 2010..2019, finished = true)
+        repository.write(allSerial.id, stored)
+
+        val headerOnly = createVM(config = allSerial, filterRepository = repository).filterState.value
+        val rig = filterRig(config = allSerial, filterRepository = repository)
+
+        assertEquals("США", headerOnly.countryTitle)
+        assertEquals(2010..2019, headerOnly.yearRange)
+        assertTrue(headerOnly.finishedOnly)
+        assertEquals(listOf(FirstPageCall(stored.applyTo(allSerial), cacheable = false)), rig.calls.toList())
+        coVerify(exactly = 0) { countryInteractor.getCountries() }
+        rig.close()
+    }
+
+    @Test
+    fun filterReset_clearsCountryYearAndStatusRemovesTheEntryAndReadsCached() = runTest {
+        val preferences = FakeSharedPreferences()
+        val rig = filterRig(config = allSerial, filterRepository = filterRepositoryOn(preferences))
+        rig.applyFilter(ContentFilter(country = usa, yearRange = 2010..2019, finished = true))
+        assertTrue(preferences.values.containsKey("filter_all_serial"))
+
+        rig.act(ShowAllAction.FilterReset)
+
+        val state = rig.vm.filterState.value
+        assertEquals(null, state.countryTitle)
+        assertEquals(null, state.yearRange)
+        assertEquals(false, state.finishedOnly)
+        assertEquals(false, preferences.values.containsKey("filter_all_serial"))
+        assertEquals(FirstPageCall(allSerial, cacheable = true), rig.calls.last())
+        rig.close()
+    }
+
+    @Test
+    fun countryLoadFailure_showsFailedAndKeepsGenresUsable() = runTest {
+        val rig = filterRig()
+        coEvery { countryInteractor.getCountries() } returns Result.failure(IllegalStateException("down"))
+
+        rig.act(ShowAllAction.FilterPanelOpened)
+
+        val state = rig.vm.filterState.value
+        assertEquals(FilterCountries.Failed, state.countries)
+        assertTrue(state.genres is FilterGenres.Loaded)
+        assertEquals(listOf(1, 2), shownIds(rig.vm))
+        assertEquals(1, rig.calls.size)
+        rig.close()
+    }
+
+    @Test
+    fun countriesRetry_loadsAgainAfterAFailure() = runTest {
+        val rig = filterRig()
+        val release = CompletableDeferred<Unit>()
+        var reads = 0
+        coEvery { countryInteractor.getCountries() } coAnswers {
+            reads += 1
+            if (reads == 1) {
+                Result.failure(IllegalStateException("down"))
+            } else {
+                release.await()
+                Result.success(listOf(usa))
+            }
+        }
+        rig.act(ShowAllAction.FilterPanelOpened)
+        assertEquals(FilterCountries.Failed, rig.vm.filterState.value.countries)
+
+        rig.act(ShowAllAction.CountriesRetry, ShowAllAction.CountriesRetry)
+        assertEquals(FilterCountries.Loading, rig.vm.filterState.value.countries)
+        release.complete(Unit)
+        rig.run()
+
+        assertEquals(2, reads)
+        assertEquals(FilterCountries.Loaded(listOf(usa)), rig.vm.filterState.value.countries)
+        rig.close()
+    }
+
+    // endregion
+
     @Test
     fun filteredEmptyPage_keepsTheFilterActive() = runTest {
         val filtered = dramaByYear.applyTo(allMovie)
@@ -949,6 +1155,7 @@ class ShowAllVMTest {
         config = config,
         interactor = contentListInteractor,
         genreInteractor = genreInteractor,
+        countryInteractor = countryInteractor,
         savedItemInteractor = savedItemInteractor,
         mapper = mapper,
         router = router,

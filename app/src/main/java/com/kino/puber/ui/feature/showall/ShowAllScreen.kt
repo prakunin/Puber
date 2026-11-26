@@ -47,6 +47,7 @@ internal class ShowAllScreen(
                     config = config,
                     interactor = get(),
                     genreInteractor = get(),
+                    countryInteractor = get(),
                     savedItemInteractor = get(),
                     mapper = get(),
                     router = get(),
