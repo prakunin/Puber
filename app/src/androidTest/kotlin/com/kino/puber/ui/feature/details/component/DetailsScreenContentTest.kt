@@ -1,14 +1,29 @@
 package com.kino.puber.ui.feature.details.component
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.duotone.Play
@@ -21,6 +36,8 @@ import com.kino.puber.ui.feature.details.model.DetailsButtonUIState
 import com.kino.puber.ui.feature.details.model.DetailsInfoUIState
 import com.kino.puber.ui.feature.details.model.DetailsScreenState
 import com.kino.puber.ui.feature.details.model.DetailsSeasonUIState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -40,11 +57,34 @@ private const val FIRST_SEASON_EPISODE = "First season episode"
 private const val SECOND_SEASON_EPISODE = "Second season episode"
 private const val SIMILAR_ITEM_TITLE = "A similar film"
 
+private const val LAYOUT_TOLERANCE_DP = 0.5f
+// Below the 110 dp minimum's snapped block (about 126 dp), so the resize lands on the cramped path
+// whatever slack the layout leaves.
+private const val CRAMPED_PLOT_TARGET_DP = 108f
+// The fixed-height host that gives the hero room for the plot's eight lines; a 540 dp hero never does.
+private const val TALL_HOST_HEIGHT_DP = 1000
+private val TALL_PLOT_LINES = listOf(
+    "Первая короткая строка",
+    "Вторая короткая строка",
+    "Третья короткая строка",
+    "Четвертая короткая строка",
+    "Пятая короткая строка",
+    "Шестая короткая строка",
+    "Седьмая короткая строка",
+    "Восьмая короткая строка",
+)
+
 /**
  * A plot longer than its block. Only such a text grows the focusable scrolling that replaced the
  * auto-scroll.
  */
 private val LONG_DESCRIPTION = "Довольно длинное описание. ".repeat(60)
+
+/**
+ * A plot that wraps to several lines at the floor width yet stays within the block's six lines at
+ * 590 dp, so it is the one that narrows.
+ */
+private val SHORT_DESCRIPTION = "Довольно длинное описание. ".repeat(8)
 
 internal class DetailsScreenContentTest {
 
@@ -189,7 +229,160 @@ internal class DetailsScreenContentTest {
             .fetchSemanticsNode()
             .config
             .getOrNull(SemanticsProperties.Focused)
-            .let { focused -> assert(focused != true) { "кнопка удержала фокус вместо описания" } }
+            .let { focused -> assertTrue("кнопка удержала фокус вместо описания", focused != true) }
+    }
+
+    @Test
+    fun aShortPlotNarrowsToTheFloorAndLeavesFocusOnTheActions() {
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = seriesContent(description = SHORT_DESCRIPTION),
+                    onAction = {},
+                )
+            }
+        }
+
+        val width = composeRule.onNodeWithText(SHORT_DESCRIPTION).getUnclippedBoundsInRoot().width
+        assertTrue(
+            "описание шире минимума: $width",
+            width <= PLOT_MIN_WIDTH - PLOT_FOCUS_BORDER * 2,
+        )
+
+        // The narrowed text still fits its block, so it does not scroll and takes no focus.
+        composeRule.waitForFocus(PRIMARY_ACTION)
+        composeRule.onNodeWithText(PRIMARY_ACTION).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(PRIMARY_ACTION).assertIsFocused()
+    }
+
+    @Test
+    fun aShortPlotLeavesTheFactLinesWhereAOneLinePlotLeavesThem() {
+        val description = mutableStateOf(HERO_DESCRIPTION)
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = seriesContent(description = description.value),
+                    onAction = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val factsTop = composeRule.onNodeWithText(HERO_FACTS_LINE).getUnclippedBoundsInRoot().top
+        val actionTop = composeRule.onNodeWithText(PRIMARY_ACTION).getUnclippedBoundsInRoot().top
+
+        description.value = SHORT_DESCRIPTION
+        composeRule.waitForIdle()
+
+        assertEquals(
+            factsTop.value,
+            composeRule.onNodeWithText(HERO_FACTS_LINE).getUnclippedBoundsInRoot().top.value,
+            LAYOUT_TOLERANCE_DP,
+        )
+        assertEquals(
+            actionTop.value,
+            composeRule.onNodeWithText(PRIMARY_ACTION).getUnclippedBoundsInRoot().top.value,
+            LAYOUT_TOLERANCE_DP,
+        )
+    }
+
+    @Test
+    fun aNarrowedPlotTallerThanTheMinimumMovesTheFactLinesByItsHeight() {
+        val description = mutableStateOf(HERO_DESCRIPTION)
+        composeRule.setContent {
+            PuberTheme {
+                // A tall host so the block's budget reaches eight lines; the box's own hero cannot.
+                Box(Modifier.fillMaxWidth().requiredHeight(TALL_HOST_HEIGHT_DP.dp)) {
+                    DetailsScreenContent(
+                        state = seriesContent(description = description.value),
+                        onAction = {},
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val factsTop = composeRule.onNodeWithText(HERO_FACTS_LINE).getUnclippedBoundsInRoot().top.value
+
+        // Eight short lines, each narrower than the floor width, so the plot is above the minimum at
+        // 590 dp and keeps its line count when narrowed.
+        val text = TALL_PLOT_LINES.joinToString("\n")
+        description.value = text
+        composeRule.waitForIdle()
+        val bounds = composeRule.onNodeWithText(text).getUnclippedBoundsInRoot()
+        assertTrue(
+            "the plot is not narrowed: ${bounds.width}",
+            bounds.width < PLOT_WIDTH - PLOT_FOCUS_BORDER * 2,
+        )
+        assertTrue(
+            "the plot is not above the minimum in a ${TALL_HOST_HEIGHT_DP} dp host: ${bounds.height}",
+            bounds.height.value + 2f > PLOT_MIN_HEIGHT.value,
+        )
+        val tallHeight = bounds.height.value
+
+        // The block is as tall as its text plus the border, so the facts sit that far below where
+        // they sit under the 110 dp minimum.
+        assertEquals(
+            factsTop + (tallHeight + 2f - PLOT_MIN_HEIGHT.value),
+            composeRule.onNodeWithText(HERO_FACTS_LINE).getUnclippedBoundsInRoot().top.value,
+            LAYOUT_TOLERANCE_DP,
+        )
+    }
+
+    @Test
+    fun aPlotInACrampedHeroLaysOutWithoutCrashing() {
+        val hostHeight = mutableStateOf<Float?>(null)
+        var density = Density(1f)
+        composeRule.setContent {
+            density = LocalDensity.current
+            PuberTheme {
+                val hostDp = hostHeight.value
+                Box(
+                    modifier = if (hostDp == null) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier.fillMaxWidth().height(hostDp.dp)
+                    },
+                ) {
+                    DetailsScreenContent(
+                        state = seriesContent(description = LONG_DESCRIPTION),
+                        onAction = {},
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val rootHeight = composeRule.onRoot().getUnclippedBoundsInRoot().height.value
+        // boundsInRoot of the scrolled text is clipped to the snapped share; add the 2 dp border.
+        val share = composeRule.onNodeWithText(LONG_DESCRIPTION)
+            .fetchSemanticsNode().boundsInRoot.height / density.density + 2f
+
+        // The plot is left a 108 dp target, under its 110 dp minimum.
+        hostHeight.value = rootHeight - 2 * (share - CRAMPED_PLOT_TARGET_DP)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(PRIMARY_ACTION).assertIsDisplayed()
+        // The resize put the plot on the below-minimum path: its block is no taller than the minimum.
+        val block = composeRule.onNodeWithText(LONG_DESCRIPTION)
+            .fetchSemanticsNode().boundsInRoot.height / density.density + 2f
+        assertTrue(
+            "блок описания выше минимума: $block",
+            block <= PLOT_MIN_HEIGHT.value + LAYOUT_TOLERANCE_DP,
+        )
+    }
+
+    @Test
+    fun aPlotTooLongForItsBlockKeepsTheWidestWidth() {
+        composeRule.setContent {
+            PuberTheme {
+                DetailsScreenContent(
+                    state = seriesContent(description = LONG_DESCRIPTION),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText(LONG_DESCRIPTION)
+            .assertWidthIsEqualTo(PLOT_WIDTH - PLOT_FOCUS_BORDER * 2)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitForFocus(text: String) {
