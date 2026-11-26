@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +50,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
@@ -313,18 +314,28 @@ private fun PlotBlock(
 
     Box(
         modifier = modifier
-            .width(PLOT_WIDTH)
-            .heightIn(min = PLOT_MIN_HEIGHT)
             // The block ends on a line boundary rather than through one: a line cut in half
-            // reads as breakage, not as "there is more below".
+            // reads as breakage, not as "there is more below". Its width is the narrowest step
+            // that keeps the height it has at the widest one, so a short plot narrows and a long
+            // one stays at PLOT_WIDTH and scrolls.
             .layout { measurable, constraints ->
                 val line = PLOT_LINE.roundToPx().coerceAtLeast(1)
-                val snapped = if (constraints.hasBoundedHeight) {
+                val budget = if (constraints.hasBoundedHeight) {
                     (constraints.maxHeight / line * line).coerceAtLeast(line)
                 } else {
                     constraints.maxHeight
                 }
-                val placeable = measurable.measure(constraints.copy(maxHeight = snapped))
+                val fit = choosePlotWidth(
+                    stepsPx = PLOT_WIDTH_STEPS.map {
+                        it.roundToPx().coerceIn(constraints.minWidth, constraints.maxWidth)
+                    },
+                    floorPx = PLOT_MIN_WIDTH.roundToPx(),
+                    budgetPx = budget,
+                    minHeightPx = PLOT_MIN_HEIGHT.roundToPx(),
+                    heightAt = measurable::maxIntrinsicHeight,
+                )
+                val height = fit.heightPx.coerceIn(constraints.minHeight, constraints.maxHeight)
+                val placeable = measurable.measure(Constraints.fixed(fit.widthPx, height))
                 layout(placeable.width, placeable.height) { placeable.place(0, 0) }
             }
             .onPreviewKeyEvent { event ->
@@ -858,11 +869,22 @@ private val CHIP_BORDER = 1.dp
 private val CHIP_TEXT_SIZE = 10.sp
 private const val CHIP_BORDER_ALPHA = 0.38F
 
-private val PLOT_WIDTH = 590.dp
+internal val PLOT_WIDTH = 590.dp
+internal val PLOT_MIN_WIDTH = 460.dp
+private val PLOT_WIDTH_STEP = 70.dp
+
+/**
+ * The widths a plot may take, widest first: [PLOT_WIDTH] down in steps of [PLOT_WIDTH_STEP], the
+ * last one [PLOT_MIN_WIDTH]. The three are the stand's «ширина блока», «шаг ширины» and «минимум
+ * ширины» sliders (docs/design/content/README.md).
+ */
+private val PLOT_WIDTH_STEPS: List<Dp> =
+    plotWidthSteps(PLOT_WIDTH.value.toInt(), PLOT_WIDTH_STEP.value.toInt(), PLOT_MIN_WIDTH.value.toInt())
+        .map { it.dp }
 private val PLOT_TEXT_SIZE = 13.sp
 private val PLOT_LINE = 18.sp
-private val PLOT_MIN_HEIGHT = 110.dp
-private val PLOT_FOCUS_BORDER = 1.dp
+internal val PLOT_MIN_HEIGHT = 110.dp
+internal val PLOT_FOCUS_BORDER = 1.dp
 private val PLOT_FOCUS_RADIUS = 4.dp
 
 private val HERO_LINE_SIZE = 9.sp
@@ -870,7 +892,7 @@ private val HERO_LINE_HEIGHT = 13.sp
 
 /**
  * Nearly the whole screen: 940 of the 949 dp left of [SIDE_EDGE]. Wider than the plot on purpose
- * -- the plot is a block to read and stays at [PLOT_WIDTH], while these are one line each and
+ * -- the plot is a block to read and is at most [PLOT_WIDTH], while these are one line each and
  * every character they gain is a name that no longer falls off the end.
  */
 private val HERO_LINE_WIDTH = 940.dp
