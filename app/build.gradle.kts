@@ -233,6 +233,18 @@ android {
             versionCode = Versions.VersionCode
             resValue("string", "app_name", "Puber")
         }
+
+        // Runs against a loopback mock with synthetic auth and no credentials; only baseline
+        // profile generation uses it.
+        create("instrumentation") {
+            dimension = "buildType"
+            applicationIdSuffix = ".instrumentation"
+            resValue("string", "app_name", "Puber(Instrumentation)")
+            buildConfigField("String", "CLIENT_SECRET", "\"\"")
+            buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"\"")
+            buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"\"")
+            buildConfigField("int", "BASELINE_MOCK_PORT", providers.gradleProperty("puber.baselineMockPort").get())
+        }
     }
 
 }
@@ -435,15 +447,13 @@ dependencies {
     implementation(libs.androidx.profileinstaller)
 }
 
-// The plugin creates the per-variant baselineProfile configurations after this block runs. Only
-// the dev flavor generates: its package is the one the generator can drive.
-configurations.configureEach {
-    if (name == "devReleaseBaselineProfile") {
-        dependencies.add(project.dependencies.create(project(":baselineprofile")))
-    }
-}
-
 baselineProfile {
+    // Only the instrumentation flavor generates: it talks to the loopback mock with synthetic auth.
+    variants {
+        create("instrumentationRelease") {
+            from(project(":baselineprofile"))
+        }
+    }
     saveInSrc = true
     automaticGenerationDuringBuild = false
     mergeIntoMain = true

@@ -1,7 +1,5 @@
 package com.kino.puber.baselineprofile
 
-import android.os.Build
-import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -9,7 +7,9 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import org.junit.AfterClass
 import org.junit.Before
+import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,20 +22,42 @@ class BaselineProfileGenerator {
     val baselineProfileRule = BaselineProfileRule()
 
     private val packageName: String
-        get() = InstrumentationRegistry.getArguments().getString("targetAppId")
-            ?: error("targetAppId not found in instrumentation args")
+        get() = targetPackage()
 
     @Before
-    fun requireInPlaceReset() {
-        check(Build.VERSION.SDK_INT >= 34) {
-            "Below API 34 without root the benchmark library uninstalls the target before each journey, " +
-                "which drops the pairing; generate on an emulator with API 34 or newer."
-        }
+    fun resetMock() {
+        if (lateCheckDue) BaselineProfileTestControl.checkLate(packageName, backend)
+        lateCheckDue = true
+        backend.resetTest()
+        BaselineProfileTestControl.resetJournal(packageName)
+    }
+
+    /**
+     * One profile collection: before each iteration the target is killed and its caches dropped, so
+     * every journey requests what it shows again; after it, the mock and the target's egress
+     * journal must show a clean run that hit every required route.
+     */
+    private fun collectJourney(
+        scenario: BaselineScenario,
+        maxIterations: Int = DEFAULT_MAX_ITERATIONS,
+        includeInStartupProfile: Boolean = false,
+        journey: MacrobenchmarkScope.() -> Unit,
+    ) = baselineProfileRule.collect(
+        packageName = packageName,
+        maxIterations = maxIterations,
+        includeInStartupProfile = includeInStartupProfile,
+        filterPredicate = { "com/kino/puber/profile/" !in it },
+    ) {
+        killProcess()
+        BaselineProfileTestControl.clearTarget(packageName)
+        backend.startIteration(scenario)
+        journey()
+        BaselineProfileTestControl.checkIteration(packageName, backend)
     }
 
     @Test
-    fun startupProfile() = baselineProfileRule.collect(
-        packageName = packageName,
+    fun startupProfile() = collectJourney(
+        BaselineScenario.Startup,
         includeInStartupProfile = true,
     ) {
         pressHome()
@@ -44,13 +66,10 @@ class BaselineProfileGenerator {
         // Outlast the splash reveal cap (REVEAL_CAP_MS in core/startup/RevealGate.kt) so the late frames are profiled.
         Thread.sleep(REVEAL_CAP_WAIT_MS)
         device.waitForIdle()
-        requirePairedApp()
     }
 
     @Test
-    fun browseAndDetailsProfile() = baselineProfileRule.collect(
-        packageName = packageName,
-    ) {
+    fun browseAndDetailsProfile() = collectJourney(BaselineScenario.BrowseAndDetails) {
         startActivityAndWait()
         device.waitForIdle()
         Thread.sleep(2000)
@@ -86,20 +105,20 @@ class BaselineProfileGenerator {
         // BACK → main screen
         device.pressBack()
         device.waitForIdle()
-        requirePairedApp()
     }
 
     @Test
-    fun railNavigationProfile() = baselineProfileRule.collect(
-        packageName = packageName,
-        maxIterations = RAIL_MAX_ITERATIONS,
-    ) {
+    fun railNavigationProfile() = collectJourney(BaselineScenario.Rail, maxIterations = RAIL_MAX_ITERATIONS) {
         startActivityAndWait()
         device.waitForIdle()
         Thread.sleep(2000)
 
         // Side rail: LEFT from content opens the ModalNavigationDrawer
         device.pressDPadLeft()
+        device.waitForIdle()
+        // LEFT lands on the rail entry level with the focused content, which depends on the layout:
+        // go to the top so the loop below always starts from Home.
+        repeat(RAIL_TOTAL_ENTRIES) { device.pressDPadUp() }
         device.waitForIdle()
 
         // Every rail entry: DOWN to the next one, OK to open it, back to the rail. Search moves focus
@@ -138,18 +157,11 @@ class BaselineProfileGenerator {
             device.pressDPadDown()
             device.waitForIdle()
         }
-        requirePairedApp()
     }
 
-    /**
-     * Opens the player on the first Home item. Leaving the player saves a watch position
-     * (`PlayerVM.exitPlayer`), so every run of this journey writes to the paired KinoPub account
-     * (docs/release.md, Refresh Baseline Profiles).
-     */
+    /** Opens the player on the first Home item; the watch position it saves goes to the mock. */
     @Test
-    fun playbackProfile() = baselineProfileRule.collect(
-        packageName = packageName,
-    ) {
+    fun playbackProfile() = collectJourney(BaselineScenario.Playback) {
         startActivityAndWait()
         device.waitForIdle()
         Thread.sleep(2000)
@@ -173,22 +185,6 @@ class BaselineProfileGenerator {
             device.pressBack()
             device.waitForIdle()
         }
-        requirePairedApp()
-    }
-
-    /**
-     * The generator never writes tokens. The app must already be paired on the device; the
-     * benchmark library resets it in place on API 34 and above, which keeps app data.
-     */
-    private fun MacrobenchmarkScope.requirePairedApp() {
-        val output = device.executeShellCommand("content query --uri content://$packageName.profile.auth/tokens")
-        val paired = Regex("name=access_token, value_base64=\\S+").containsMatchIn(output) &&
-            Regex("name=refresh_token, value_base64=\\S+").containsMatchIn(output)
-        Log.i(LOG_TAG, "journey end: paired=$paired")
-        check(paired) {
-            "The app is not paired on this device; pair it once (docs/release.md, Refresh Baseline Profiles). " +
-                "The generator never writes tokens."
-        }
     }
 
     private fun MacrobenchmarkScope.railShows(titleRes: String): Boolean {
@@ -199,9 +195,31 @@ class BaselineProfileGenerator {
         return device.wait(Until.hasObject(By.text(resources.getString(id))), RAIL_WAIT_MS)
     }
 
-    private companion object {
-        private const val LOG_TAG = "PuberGen"
+    companion object {
+        private lateinit var backend: BaselineMockBackend
+        private var lateCheckDue = false
 
+        private fun targetPackage(): String = InstrumentationRegistry.getArguments().getString("targetAppId")
+            ?: error("targetAppId not found in instrumentation args")
+
+        @JvmStatic
+        @BeforeClass
+        fun startBackend() {
+            backend = BaselineProfileTestControl.createBackend(InstrumentationRegistry.getArguments())
+            backend.start()
+        }
+
+        @JvmStatic
+        @AfterClass
+        fun stopBackend() {
+            try {
+                BaselineProfileTestControl.checkLate(targetPackage(), backend)
+            } finally {
+                backend.close()
+            }
+        }
+
+        private const val DEFAULT_MAX_ITERATIONS = 15
         private const val REVEAL_CAP_WAIT_MS = 3_000L
         // Rail order after Home: Search, Favourites, History, Movies, Series, 4K (TabType, enabled tabs).
         private val RAIL_TITLE_RES = listOf(
@@ -215,6 +233,8 @@ class BaselineProfileGenerator {
         // The journey takes about 30 s per iteration; the default 15 ran past 7 minutes on the emulator.
         private const val RAIL_MAX_ITERATIONS = 5
         private val RAIL_ENTRIES = RAIL_TITLE_RES.size
+        // Every entry of the rail, enabled tabs and Settings included; more UPs than entries is harmless.
+        private const val RAIL_TOTAL_ENTRIES = 12
         private const val SEARCH_INDEX = 0
         private const val RAIL_WAIT_MS = 5_000L
         private const val PLAYER_RES_ID = "player"

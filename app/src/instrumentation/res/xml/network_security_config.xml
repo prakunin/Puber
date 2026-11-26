@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Replaces the main config: only the loopback mock's test root is trusted, over HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="@raw/baseline_mock_ca" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
