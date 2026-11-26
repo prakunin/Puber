@@ -186,6 +186,32 @@ Open: placement of «Сброс» against the summary; glass over posters vs a p
 box); genre pick stays or returns to root; the icon. The panel width follows the widest row including
 the check, so it can change by a few dp when the selection moves to a longer row.
 
+## catalogue-filters-country-year-status starting values (2026-11-25)
+
+Not dialled on the box; every number below is a starting value. Scene «catalogue-filters», panel
+«Страна», «Год», «Статус»; switch «статус» swaps the door for a toggle row; slider «ширина: Страна».
+Inherited numbers (glass, padding, rows, focus) are those of the section above.
+
+| What | Start value |
+|---|---|
+| root doors | «Сортировка», «Жанр», «Страна», «Год», «Статус»; «Статус» only on `all_serial`, `all_docuserial`, `all_tvshow` |
+| root trailing values | «Все страны» or the country; «Любой год» or the preset; «Любой статус» or «Завершённые» |
+| root height | 5 doors 266 dp, 4 doors 226 dp, no scroll |
+| «Страна» page | «Все страны», then 102 countries in API order; width fixed 320 dp (slider 280-420); ten whole rows and a cut eleventh |
+| «Год» page | «Любой год», «2026», «2025», «2020-е», «2010-е», «2000-е», «1990-е», «1980-е», «до 1980»; 426 dp, no scroll |
+| «Статус» page | «Любой статус», «Завершённые» |
+| failure | «Не удалось загрузить страны», then «Повторить» |
+| summary | genre · country · year · status · sort: «Драма · США · 2010-е · Завершённые · по году ↓» |
+
+Focus: OK on a door opens its page on the selected value, or the first row; the country page opens
+scrolled to the selected country before focus is requested; Up on the first row and Down on the last stay;
+a value row selects and stays on the page; Back returns to the door it came from.
+
+Open for the owner: «Статус» as a door with a page (start) or one toggle row «Только завершённые»;
+country page width 320 or the widest country title; reaching the end of 102 countries takes about 103
+presses, a «Популярные» section is a follow-up. The stand's country titles are placeholders in
+alphabetical order, not taken from the box.
+
 ## Open items
 
 1. **CC and AC3** — follow-up run `catalogue-card-audio-subtitle-badges` (source: file audio tracks and
