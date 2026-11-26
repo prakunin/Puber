@@ -56,9 +56,11 @@ internal class DnsOverHttpsFactoryTest {
     )
 
     private val failures = AtomicInteger()
+    private val requestedUrls = mutableListOf<String>()
 
     private fun fakeDohServer() = Interceptor { chain ->
         queries.incrementAndGet()
+        requestedUrls += chain.request().url.toString()
         if (failures.getAndUpdate { maxOf(it - 1, 0) } > 0) throw IOException("resolver blip")
         val request = chain.request()
         val query = Buffer().also { request.body!!.writeTo(it) }.readByteArray()
@@ -82,6 +84,28 @@ internal class DnsOverHttpsFactoryTest {
             .message("OK")
             .body((body + answer).toResponseBody("application/dns-message".toMediaType()))
             .build()
+    }
+
+    @Test
+    fun googleResolver_isDnsGoogleWithBootstrap8844And8888() {
+        assertEquals(
+            DohResolver("https://dns.google/dns-query", listOf("8.8.4.4", "8.8.8.8")),
+            DohResolver.GOOGLE,
+        )
+    }
+
+    @Test
+    fun create_queriesTheGivenResolverUrl() {
+        val resolver = DohResolver("https://dns.baseline.test:18765/dns-query", listOf("127.0.0.1"))
+        val pinned = DnsOverHttpsFactory.create(
+            client = OkHttpClient.Builder().addInterceptor(fakeDohServer()).build(),
+            cache = HttpStack.createDnsCache(),
+            resolver = resolver,
+        )
+
+        pinned.lookup("media.example")
+
+        assertEquals(listOf(resolver.url), requestedUrls)
     }
 
     @Test

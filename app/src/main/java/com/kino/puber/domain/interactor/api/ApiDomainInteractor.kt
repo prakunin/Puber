@@ -44,7 +44,10 @@ internal sealed interface ApiDomainAutoResolveResult {
     data object NotFound : ApiDomainAutoResolveResult
 }
 
-/** While [KinoPubConfig] holds a pinned endpoint, every mutator below returns the current state and touches nothing. */
+/**
+ * While [KinoPubConfig] holds a pinned endpoint, every mutator below except [autoResolveWorkingDomain]
+ * returns the current state and touches nothing; the walk probes the pin alone and never switches.
+ */
 internal class ApiDomainInteractor(
     private val preferences: ICryptoPreferenceRepository,
     private val contentCache: ContentCacheRepository,
@@ -133,7 +136,6 @@ internal class ApiDomainInteractor(
         }
 
     suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult {
-        if (KinoPubConfig.IS_PINNED_ENDPOINT) return ApiDomainAutoResolveResult.Success(getState(), changed = false)
         // One walk at a time: a concurrent caller (the startup warm-up and Home) joins the walk in
         // flight and takes its result, a NotFound included, instead of repeating the same failing probes.
         while (true) {
@@ -256,6 +258,7 @@ internal class ApiDomainInteractor(
 
     private fun buildAutoResolveCandidates(): List<ApiEndpointPreset> {
         val currentEndpoint = KinoPubConfig.CURRENT_ENDPOINT
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return listOf(currentEndpoint)
         return (listOf(currentEndpoint) + KinoPubConfig.BUILT_IN_ENDPOINTS)
             .distinctBy { it.domain }
     }

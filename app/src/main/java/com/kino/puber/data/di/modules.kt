@@ -71,7 +71,7 @@ val apiModule = module {
     single {
         HttpStack.create(
             if (BuildConfig.DEBUG) NetworkStats::factory else null,
-            useDoh = !KinoPubConfig.IS_PINNED_ENDPOINT,
+            resolver = KinoPubConfig.DNS_RESOLVER,
         )
     }
     single<OkHttpClient> { get<HttpStack>().client }
@@ -94,7 +94,7 @@ val apiModule = module {
 
 val repositoryModule = module {
     single { ContentSharer(androidContext()) }
-    singleOf(::AppUpdateRepository) { bind<IAppUpdateRepository>() }
+    single<IAppUpdateRepository> { AppUpdateRepository(get()) }
     singleOf(::AppUpdatePreferencesRepository)
     singleOf(::AppUpdateInstaller)
     singleOf(::AppUpdateDownloader)

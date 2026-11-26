@@ -4,6 +4,7 @@ import android.util.Base64
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import com.kino.puber.data.api.network.DohResolver
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
@@ -167,6 +168,22 @@ internal class KinoPubConfigTest {
         KinoPubConfig.clearPinnedEndpoint()
         assertGettersMatch("mirror.example")
         assertFalse(KinoPubConfig.IS_PINNED_ENDPOINT)
+    }
+
+    @Test
+    fun dnsResolver_isGoogle_whenUnpinned() {
+        assertEquals(DohResolver.GOOGLE, KinoPubConfig.DNS_RESOLVER)
+    }
+
+    @Test
+    fun clearPinnedEndpoint_restoresTheGoogleResolver() {
+        val resolver = DohResolver("https://dns.baseline.test:18765/dns-query", listOf("127.0.0.1"))
+        KinoPubConfig.setPinnedEndpoint(pin, resolver)
+        assertEquals(resolver, KinoPubConfig.DNS_RESOLVER)
+
+        KinoPubConfig.clearPinnedEndpoint()
+
+        assertEquals(DohResolver.GOOGLE, KinoPubConfig.DNS_RESOLVER)
     }
 
     @Test

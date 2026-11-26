@@ -1,12 +1,14 @@
 package com.kino.puber.data.repository
 
 import com.kino.puber.core.logger.log
+import com.kino.puber.data.api.GITHUB_API_BASE_URL
 import com.kino.puber.data.api.KinoPubApiClient
 import com.kino.puber.data.api.models.GitHubReleaseAssetResponse
 import com.kino.puber.data.api.models.GitHubReleaseResponse
 
 internal class AppUpdateRepository(
     private val apiClient: KinoPubApiClient,
+    private val githubApiBaseUrl: String = GITHUB_API_BASE_URL,
 ) : IAppUpdateRepository {
 
     override suspend fun getAvailableUpdate(currentVersionName: String): Result<AvailableUpdate?> {
@@ -15,7 +17,7 @@ internal class AppUpdateRepository(
                 log("App update: ignoring malformed current version '$currentVersionName'")
             }
 
-        return apiClient.getLatestGitHubRelease(GITHUB_OWNER, GITHUB_REPO).mapCatching { release ->
+        return apiClient.getLatestGitHubRelease(GITHUB_OWNER, GITHUB_REPO, githubApiBaseUrl).mapCatching { release ->
             release.toAvailableUpdate(currentVersion)
         }
     }

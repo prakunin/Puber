@@ -17,12 +17,12 @@ internal class HttpStackTest {
     }
 
     @Test
-    fun create_usesSystemDns_withoutDoh() {
-        assertSame(Dns.SYSTEM, HttpStack.create(useDoh = false).client.dns)
+    fun create_usesSystemDns_whenResolverIsNull() {
+        assertSame(Dns.SYSTEM, HttpStack.create(resolver = null).client.dns)
     }
 
     @Test
-    fun create_keepsTheAppEventListenerAndRequestsNoDohOne_withoutDoh() {
+    fun create_keepsTheAppEventListenerAndRequestsNoDohOne_whenResolverIsNull() {
         val requested = mutableListOf<String>()
         val factory = EventListener.Factory { _: Call -> EventListener.NONE }
 
@@ -31,7 +31,7 @@ internal class HttpStackTest {
                 requested += label
                 factory
             },
-            useDoh = false,
+            resolver = null,
         )
 
         assertEquals(listOf("app"), requested)

@@ -9,7 +9,8 @@ import kotlin.time.Duration
 /**
  * The one HTTP stack of the app: every caller derives from [client], so they share a connection
  * pool and a resolver. The resolver is DNS-over-HTTPS, whose answers live in [dnsCache], unless
- * the endpoint is pinned, where it is the system one and [dnsCache] stays unused.
+ * the resolver is null (a pinned endpoint without one), where it is the system one and [dnsCache]
+ * stays unused.
  */
 class HttpStack(val client: OkHttpClient, val dnsCache: DnsCache) {
 
@@ -23,15 +24,15 @@ class HttpStack(val client: OkHttpClient, val dnsCache: DnsCache) {
 
         /**
          * [listeners] maps a label (`doh`, `app`) to the event listener that counts that client.
-         * [useDoh] false leaves the app client on the system resolver and builds no DoH client.
+         * [resolver] null leaves the app client on the system resolver and builds no DoH client.
          */
         fun create(
             listeners: ((String) -> EventListener.Factory)? = null,
-            useDoh: Boolean = true,
+            resolver: DohResolver? = DohResolver.GOOGLE,
         ): HttpStack {
             val base = OkHttpClient.Builder().build()
             val dnsCache = createDnsCache()
-            if (!useDoh) {
+            if (resolver == null) {
                 val client = base.newBuilder()
                     .apply { listeners?.invoke("app")?.let(::eventListenerFactory) }
                     .build()
@@ -42,7 +43,7 @@ class HttpStack(val client: OkHttpClient, val dnsCache: DnsCache) {
                 .dispatcher(Dispatcher())
                 .apply { listeners?.invoke("doh")?.let(::eventListenerFactory) }
                 .build()
-            val doh = DnsOverHttpsFactory.create(dohClient, dnsCache)
+            val doh = DnsOverHttpsFactory.create(dohClient, dnsCache, resolver)
             val client = base.newBuilder()
                 .dns(doh)
                 .apply { listeners?.invoke("app")?.let(::eventListenerFactory) }
