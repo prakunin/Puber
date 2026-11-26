@@ -632,7 +632,7 @@ const SHIPPED = {
 
   chipH:16, chipPad:7, chipSp:10, gapChips:5, gapChipsToPlot:3,
 
-  plotW:590, plotSp:13, plotLine:18, plotMin:110, gapPlotToFacts:13,
+  plotW:590, plotStep:70, plotFloor:460, plotSp:13, plotLine:18, plotMin:110, gapPlotToFacts:13,
 
   heroLineSp:9, heroLineH:13, heroLineW:940, heroLineAlpha:70,
   posFacts:95, posDirector:0, posCast:0,
@@ -690,6 +690,10 @@ const CONTROLS = [
 
   {g:"Описание", k:"plotW",         n:"ширина блока",      min:240,max:640,step:5, u:"dp",
    note:"кадр начинается на 331 dp — описание заходит под него"},
+  {g:"Описание", k:"plotStep",      n:"шаг ширины",        min:10, max:200,step:5, u:"dp",
+   note:"на сколько dp сужается блок за один шаг от «ширина блока»"},
+  {g:"Описание", k:"plotFloor",     n:"минимум ширины",    min:320,max:590,step:5, u:"dp",
+   note:"кадр начинается на 331 dp"},
   {g:"Описание", k:"plotSp",        n:"кегль",             min:9,  max:22, step:1, u:"sp"},
   {g:"Описание", k:"plotLine",      n:"интерлиньяж",       min:11, max:32, step:1, u:"sp"},
   {g:"Описание", k:"plotMin",       n:"минимум высоты",    min:0,  max:160,step:1, u:"dp"},
@@ -740,8 +744,18 @@ const SWITCHES = [
   {k:"facts", n:"строки фактов", opts:[["one","одна с многоточием"],["two","две строки"],["scroll","целиком, в несколько строк"]]},
   {k:"pin",   n:"низ героя", opts:[["flow","как сейчас"],["pin","прижать кнопки к низу"]]},
   {k:"rail",  n:"нижний ряд", opts:[["auto","как в коде"],["episodes","серии"],["similar","похожее"],["empty","пусто"]]},
+  {k:"plotFit", n:"ширина описания", opts:[["fixed","фиксированная"],["steps","по шагам"]]},
+  {k:"plotText",n:"текст описания",  opts:[["item","из карточки"],["short","короткое"],["long","длинное"]]},
   {k:"guides",n:"направляющие", opts:[["off","выкл"],["on","вкл"]]},
 ];
+
+/* Образцы для «текст описания»: короткий (120-200 знаков) и длинный (1500+) заменяют описание
+   только текущей карточки. */
+const PLOT_SAMPLES = {
+  short: "Довольно длинное описание. ".repeat(6).trim(),
+  long: ("Герои оказываются в месте, откуда нет простого выхода, и каждое решение стоит им чего-то важного. " +
+    "Старые союзы рушатся, новые держатся на недосказанности, а прошлое возвращается именно тогда, когда о нём меньше всего хочется думать. ").repeat(6),
+};
 
 /* Иконки Phosphor Duotone заменены силуэтами того же кегля: на стенде решается
    размер и место, а не рисунок. */
@@ -766,6 +780,7 @@ const SIMILAR_FROM = ["89797","13337","30","111985"];
 const S = {
   ...SHIPPED,
   item:"89797", media:"still", fit:"width", facts:"one", pin:"flow", rail:"auto", guides:"off",
+  plotFit:"fixed", plotText:"item",
   focus:"btn0", plotScroll:0, cardIndex:0, seasonIndex:null,
 };
 
@@ -838,6 +853,27 @@ function focusChain(){
 
 let plotScrollable = false;
 let plotLines = 1, plotVisibleLines = 1;
+/* Что выбрал блок описания: ширина, строки на ширине и по шагам, высота. */
+let plotFitInfo = null;
+
+function plotText(){ return PLOT_SAMPLES[S.plotText] ?? item().plot; }
+
+/* Ширины шагов от «ширины блока» вниз, не уже минимума; минимум — последний шаг, если до него не дошли. */
+function plotSteps(g){
+  const steps = [g.plotW];
+  while (steps[steps.length - 1] - g.plotStep >= g.plotFloor) steps.push(steps[steps.length - 1] - g.plotStep);
+  if (steps[steps.length - 1] > g.plotFloor) steps.push(g.plotFloor);
+  return steps;
+}
+
+/* Подложка слева направо: 100 % у края кадра, scrimAlpha на scrimEdge, 0 на scrimEnd. */
+function scrimAlphaAt(g, xDp){
+  const pct = (xDp - g.mediaX) / g.mediaW * 100;
+  if (pct <= 0) return 100;
+  if (pct >= g.scrimEnd) return 0;
+  if (pct <= g.scrimEdge) return 100 + (g.scrimAlpha - 100) * pct / Math.max(g.scrimEdge, 0.001);
+  return g.scrimAlpha * (g.scrimEnd - pct) / Math.max(g.scrimEnd - g.scrimEdge, 0.001);
+}
 
 /* ── измерение переносов настоящим шрифтом ────────────────── */
 function measureLines(text, widthDp, sizeSp, lineSp){
@@ -915,8 +951,8 @@ function heroHTML(g){
     + actionsH + g.heroBottom;
 
   const avail = g.heroH - g.heroTop - fixed;
-  plotLines = measureLines(it.plot, g.plotW - 2, g.plotSp, g.plotLine);
-  const naturalH = plotLines * g.plotLine;
+  const plot = plotText();
+  plotLines = measureLines(plot, g.plotW - 2, g.plotSp, g.plotLine);
 
   /* Compose: weight(1f, fill=false) у описания и weight(1f) у распорки делят остаток пополам.
      Описание берёт не больше своей половины и не отдаёт неиспользованное — оттого кнопки
@@ -924,8 +960,23 @@ function heroHTML(g){
   const share = S.pin === "pin" ? avail : avail / 2;
   const capLines = Math.max(1, Math.floor(share / g.plotLine));
   plotVisibleLines = Math.min(plotLines, capLines);
-  let plotH = Math.max(plotVisibleLines * g.plotLine, Math.min(g.plotMin, share));
-  plotScrollable = plotLines > plotVisibleLines;
+  /* Высота блока: текст на plotW плюс 2 dp рамки, не меньше минимума и не выше доли по строкам. */
+  const snappedShare = capLines * g.plotLine;
+  const plotH = Math.min(snappedShare,
+    Math.max(Math.min(g.plotMin, share), plotVisibleLines * g.plotLine + 2));
+  plotScrollable = plotLines * g.plotLine + 2 > snappedShare;
+
+  /* Ширина: самый узкий шаг не уже минимума, на котором текст не выше блока; длинное описание
+     прокручивается на plotW и остаётся широким. Высота блока одна в обоих режимах. */
+  const steps = plotSteps(g);
+  const stepLines = steps.map(w => measureLines(plot, w - 2, g.plotSp, g.plotLine));
+  let plotWidth = g.plotW;
+  if (S.plotFit === "steps" && !plotScrollable){
+    for (let i = steps.length - 1; i > 0; i--){
+      if (stepLines[i] * g.plotLine + 2 <= plotH){ plotWidth = steps[i]; break; }
+    }
+  }
+  plotFitInfo = { width: plotWidth, lines: stepLines[steps.indexOf(plotWidth)], steps, stepLines, height: plotH };
   if (!plotScrollable) S.plotScroll = 0;
   const maxScroll = Math.max(0, plotLines - plotVisibleLines);
   S.plotScroll = Math.min(S.plotScroll, maxScroll);
@@ -954,10 +1005,10 @@ function heroHTML(g){
   }
 
   parts.push(`<div style="height:${px(g.gapChipsToPlot)}px"></div>`);
-  parts.push(`<div class="plot" data-id="plot" style="width:${px(g.plotW)}px;height:${px(plotH)}px;
+  parts.push(`<div class="plot" data-id="plot" style="width:${px(plotWidth)}px;height:${px(plotH)}px;
       ${focusedPlot ? `outline:${px(1)}px solid var(--p-primary);outline-offset:0;border-radius:${px(4)}px` : ""}">
     <div class="inner" style="font-size:${px(g.plotSp)}px;line-height:${px(g.plotLine)}px;
-         padding:0 ${px(1)}px;top:${-px(S.plotScroll * g.plotLine)}px">${esc(it.plot)}</div>
+         padding:0 ${px(1)}px;top:${-px(S.plotScroll * g.plotLine)}px">${esc(plot)}</div>
   </div>`);
 
   /* Свободное место режется каскадом: каждая строка забирает свою долю того, что не
@@ -1071,7 +1122,8 @@ function guidesHTML(g){
   return `<div class="guides">
     <div class="v" style="left:${px(g.sideEdge)-1}px;background:${A}"></div>
     <div class="v" style="left:${px(g.mediaX)-1}px;background:${B}"></div>
-    <div class="v" style="left:${px(g.sideEdge + g.plotW)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.sideEdge + plotFitInfo.width)-1}px;background:${C}"></div>
+    <div class="v" style="left:${px(g.sideEdge + g.plotW)-1}px;background:rgba(255,255,255,.07)"></div>
     <div class="v" style="left:${px(g.sideEdge + g.heroLineW)-1}px;background:${C}"></div>
     <div class="v" style="left:96px;background:${C}"></div>
     <div class="h" style="top:${px(g.pageEdge)-1}px;background:${A}"></div>
@@ -1079,7 +1131,7 @@ function guidesHTML(g){
     <div class="h" style="bottom:${px(g.pageEdge)-1}px;background:${A}"></div>
     <div class="lab" style="left:${px(g.sideEdge)+10}px;top:${px(g.pageEdge)+8}px;color:${A}">поле ${g.pageEdge} / ${g.sideEdge} dp</div>
     <div class="lab" style="left:${px(g.mediaX)+10}px;top:${px(g.pageEdge)+46}px;color:${B}">кадр ${Math.round(g.mediaW)} dp · ${g.mediaFrac}%</div>
-    <div class="lab" style="left:${px(g.sideEdge + g.plotW)+10}px;top:${px(g.pageEdge)+120}px;color:${C}">описание ${g.plotW} dp</div>
+    <div class="lab" style="left:${px(g.sideEdge + plotFitInfo.width)+10}px;top:${px(g.pageEdge)+120}px;color:${C}">описание ${plotFitInfo.width} dp</div>
     <div class="lab" style="left:${px(g.sideEdge + g.heroLineW)+10}px;top:${px(g.pageEdge)+158}px;color:${C}">строки фактов ${g.heroLineW} dp</div>
     <div class="lab" style="left:106px;top:${railTop-46}px;color:${C}">безопасная зона 48 dp</div>
     <div class="lab" style="left:${px(g.sideEdge)+10}px;top:${railTop+8}px;color:${A}">нижний ряд ${g.railHeight} dp</div>
@@ -1119,9 +1171,10 @@ function paintSwitches(){
   host.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     S[b.dataset.sw] = b.dataset.v;
     if (b.dataset.sw === "item"){ S.seasonIndex = null; S.plotScroll = 0; S.focus = "btn0"; }
-    const flat = focusChain().flat();
-    if (!flat.includes(S.focus)) S.focus = flat[0] || "btn0";
     paintSwitches(); render();
+    /* Цепочка фокуса зависит от прокрутки, а её знает только отрисовка: сверяем после неё. */
+    const flat = focusChain().flat();
+    if (!flat.includes(S.focus)){ S.focus = flat[0] || "btn0"; render(); }
   }));
 }
 
@@ -1189,7 +1242,11 @@ function paintSpec(g){
   if (railKind() === "empty") notes.push(`нижний ряд:     у фильма похожего нет — ${g.railHeight} dp пустой полосы`);
 
   const measured = `  описание:       ${plotLines} строк, видно ${plotVisibleLines}` +
-    (plotScrollable ? " — прокручивается с пульта" : " — целиком");
+    (plotScrollable ? " — прокручивается с пульта" : " — целиком") + "\n" +
+    `  ширина:         <b>${plotFitInfo.width} dp</b>, ${plotFitInfo.lines} строк; по шагам: ` +
+    plotFitInfo.steps.map((w, i) => `${w} → ${plotFitInfo.stepLines[i]}`).join(" · ") + "\n" +
+    `  под кадром:     ${Math.max(0, Math.round(g.sideEdge + plotFitInfo.width - g.mediaX))} dp, подложка у правого края ` +
+    `${Math.round(scrimAlphaAt(g, g.sideEdge + plotFitInfo.width))} %`;
 
   document.getElementById("spec").innerHTML =
     (rows.length ? rows.join("\n") : "  пока ничего не изменено") +
