@@ -44,7 +44,9 @@ on `origin/master`. If a tag already exists and points somewhere other than the
 intended commit, stop and say so.
 
 The workflow builds `prodRelease`, uploads the APK and SHA-256 checksum as a workflow artifact, and attaches both files
-to the GitHub Release for the tag.
+to the GitHub Release for the tag. The release job fails unless the APK signer SHA-256 equals the pin in
+`.github/workflows/release.yml` (step "Verify release signer"), checked by `tools/verify-apk-signer.sh`. The script is taken from the workflow's own revision (`github.sha`), so a
+`workflow_dispatch` recovery of a tag cut before the script existed still runs the check.
 
 GitHub Actions also supports a recovery/manual run through `workflow_dispatch`. Use `release_tag=vX.Y.Z` only for a tag
 that already names the intended merged release commit; this does not replace the version PR, tag approval, monitoring, or
