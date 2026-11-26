@@ -44,6 +44,7 @@ internal sealed interface ApiDomainAutoResolveResult {
     data object NotFound : ApiDomainAutoResolveResult
 }
 
+/** While [KinoPubConfig] holds a pinned endpoint, every mutator below returns the current state and touches nothing. */
 internal class ApiDomainInteractor(
     private val preferences: ICryptoPreferenceRepository,
     private val contentCache: ContentCacheRepository,
@@ -59,6 +60,7 @@ internal class ApiDomainInteractor(
     private val domainVersion = AtomicInteger()
 
     fun initialize() {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return
         KinoPubConfig.setDomainOverride(
             resolveStartupDomain(
                 savedDomain = preferences.getApiDomain(),
@@ -76,18 +78,23 @@ internal class ApiDomainInteractor(
     }
 
     suspend fun saveCustomDomain(input: String): ApiDomainUpdateResult {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return ApiDomainUpdateResult.Success(getState())
         val normalized = normalizeDomain(input)
-        if (normalized.isEmpty()) return ApiDomainUpdateResult.Empty
-        if (!normalized.isValidHostname()) return ApiDomainUpdateResult.Invalid
-
-        domainVersion.incrementAndGet()
-        preferences.saveApiDomain(normalized)
-        KinoPubConfig.setDomainOverride(normalized)
-        clearDomainSensitiveCaches()
-        return ApiDomainUpdateResult.Success(getState())
+        return when {
+            normalized.isEmpty() -> ApiDomainUpdateResult.Empty
+            !normalized.isValidHostname() -> ApiDomainUpdateResult.Invalid
+            else -> {
+                domainVersion.incrementAndGet()
+                preferences.saveApiDomain(normalized)
+                KinoPubConfig.setDomainOverride(normalized)
+                clearDomainSensitiveCaches()
+                ApiDomainUpdateResult.Success(getState())
+            }
+        }
     }
 
     suspend fun detectAndSaveWorkingDomain(): ApiDomainDetectionResult = withContext(Dispatchers.IO) {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return@withContext ApiDomainDetectionResult.Success(getState())
         val preset = KinoPubConfig.BUILT_IN_ENDPOINTS.firstOrNull(::isEndpointReachable)
             ?: return@withContext ApiDomainDetectionResult.NotFound
 
@@ -96,6 +103,7 @@ internal class ApiDomainInteractor(
     }
 
     suspend fun detectAndSaveAlternativeBuiltInDomain(): ApiDomainDetectionResult = withContext(Dispatchers.IO) {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return@withContext ApiDomainDetectionResult.Success(getState())
         val currentEndpoint = KinoPubConfig.CURRENT_ENDPOINT
         val preset = KinoPubConfig.BUILT_IN_ENDPOINTS
             .filterNot { it.domain == currentEndpoint.domain }
@@ -116,6 +124,7 @@ internal class ApiDomainInteractor(
      */
     suspend fun switchToBuiltInDomain(domain: String): ApiDomainState? =
         withContext(Dispatchers.IO) {
+            if (KinoPubConfig.IS_PINNED_ENDPOINT) return@withContext getState()
             val preset = KinoPubConfig.BUILT_IN_ENDPOINTS.firstOrNull { it.domain == domain }
                 ?: return@withContext null
 
@@ -124,6 +133,7 @@ internal class ApiDomainInteractor(
         }
 
     suspend fun autoResolveWorkingDomain(): ApiDomainAutoResolveResult {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return ApiDomainAutoResolveResult.Success(getState(), changed = false)
         // One walk at a time: a concurrent caller (the startup warm-up and Home) joins the walk in
         // flight and takes its result, a NotFound included, instead of repeating the same failing probes.
         while (true) {
@@ -198,6 +208,7 @@ internal class ApiDomainInteractor(
     }
 
     suspend fun resetToDefault(): ApiDomainState {
+        if (KinoPubConfig.IS_PINNED_ENDPOINT) return getState()
         domainVersion.incrementAndGet()
         preferences.saveApiDomain(null)
         KinoPubConfig.setDomainOverride(null)
