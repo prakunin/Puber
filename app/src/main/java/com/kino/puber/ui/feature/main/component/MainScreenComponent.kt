@@ -30,7 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -289,7 +292,9 @@ internal fun NavigationDrawerScope.MainSideMenuContent(
             .padding(horizontal = 4.dp)
             .verticalScroll(rememberScrollState())
             .focusRestorer(fallbackFocusItem)
-            .focusGroup(),
+            .focusGroup()
+            .semantics { testTagsAsResourceId = true }
+            .testTag("main_rail"),
         horizontalAlignment = Alignment.Start,
     ) {
         Spacer(Modifier.height(16.dp))

@@ -123,22 +123,22 @@ class BaselineProfileGenerator {
 
         // Every rail entry: DOWN to the next one, OK to open it, back to the rail. Search moves focus
         // into its text field, where LEFT no longer reaches the rail, so it is left with BACK. After
-        // each entry the rail must show the next title; a journey that lost its place fails here
-        // instead of profiling fewer tabs.
-        RAIL_TITLE_RES.forEachIndexed { index, _ ->
+        // each entry the rail must have reopened (its titles are visible); a LEFT that did not reach
+        // the rail fails here instead of profiling fewer tabs. This does not tell which entry is
+        // selected: see the KDoc of railShows.
+        RAIL_TITLE_RES.forEachIndexed { index, titleRes ->
             device.pressDPadDown()
             device.pressDPadCenter()
             device.waitForIdle()
             Thread.sleep(1000)
             if (index == SEARCH_INDEX) device.pressBack() else device.pressDPadLeft()
             device.waitForIdle()
-            val expectedTitle = RAIL_TITLE_RES.getOrNull(index + 1) ?: RAIL_TITLE_RES[index]
-            if (index == SEARCH_INDEX && !railShows(expectedTitle)) {
+            if (index == SEARCH_INDEX && !railShows(titleRes)) {
                 // The first BACK only closed the keyboard.
                 device.pressBack()
                 device.waitForIdle()
             }
-            check(railShows(expectedTitle)) {
+            check(railShows(titleRes)) {
                 "The rail did not reopen after entry ${index + 1} of $RAIL_ENTRIES; the journey lost its place"
             }
         }
@@ -187,12 +187,21 @@ class BaselineProfileGenerator {
         }
     }
 
+    /**
+     * True once the rail ("main_rail" test tag, MainScreenComponent.kt) is open and lists [titleRes].
+     * The collapsed rail exposes no item text, and the scope to the rail keeps a title elsewhere on
+     * screen from counting, such as the "4K" section header on the Series screen (TabTypeConfig.kt).
+     * The check does not tell which entry is selected or focused: a probe on the emulator showed LEFT
+     * can land on another entry (Settings), so a selected-entry check (`By.checked(true)`, the
+     * rail item View carries the selected state) fails the journey at entry 5 until
+     * rail-left-focus-nearest-entry lands.
+     */
     private fun MacrobenchmarkScope.railShows(titleRes: String): Boolean {
         val resources = InstrumentationRegistry.getInstrumentation().context.packageManager
             .getResourcesForApplication(packageName)
         val id = resources.getIdentifier(titleRes, "string", packageName)
         check(id != 0) { "string resource $titleRes not found in $packageName" }
-        return device.wait(Until.hasObject(By.text(resources.getString(id))), RAIL_WAIT_MS)
+        return device.wait(Until.hasObject(By.res("main_rail").hasDescendant(By.text(resources.getString(id)))), RAIL_WAIT_MS)
     }
 
     companion object {
