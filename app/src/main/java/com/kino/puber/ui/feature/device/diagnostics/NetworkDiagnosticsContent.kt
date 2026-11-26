@@ -53,6 +53,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.kino.puber.R
+import com.kino.puber.core.system.ConnectionTransport
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
 import com.kino.puber.core.ui.uikit.component.modifier.FOCUS_ON_LAUNCH_DELAY_MILLIS
@@ -144,6 +145,15 @@ internal fun NetworkDiagnosticsContent(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            state.transport?.let { transport ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.diagnostics_transport_label, transport.label()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(NetworkDiagnosticsTestTags.Transport),
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
@@ -573,6 +583,17 @@ private fun qualityForSpeed(speedMbit: Float): String = stringResource(
         speedMbit >= FULL_HD_MIN_MBIT -> R.string.diagnostics_quality_full_hd
         speedMbit >= HD_MIN_MBIT -> R.string.diagnostics_quality_hd
         else -> R.string.diagnostics_quality_sd
+    }
+)
+
+@Composable
+private fun ConnectionTransport.label(): String = stringResource(
+    when (this) {
+        ConnectionTransport.Ethernet -> R.string.diagnostics_transport_ethernet
+        ConnectionTransport.Wifi -> R.string.diagnostics_transport_wifi
+        ConnectionTransport.Cellular -> R.string.diagnostics_transport_cellular
+        ConnectionTransport.Other -> R.string.diagnostics_transport_other
+        ConnectionTransport.None -> R.string.diagnostics_transport_none
     }
 )
 

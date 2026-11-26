@@ -395,6 +395,12 @@
     <string name="diagnostics_settings_subtitle">Compare the Amsterdam and Moscow servers.</string>
     <string name="diagnostics_screen_title">Speed test</string>
     <string name="diagnostics_screen_subtitle">Select a server to test. One run takes up to 25 seconds and uses up to 100 MB of data.</string>
+    <string name="diagnostics_transport_label">Connection: %1$s</string>
+    <string name="diagnostics_transport_ethernet">Ethernet</string>
+    <string name="diagnostics_transport_wifi">Wi-Fi</string>
+    <string name="diagnostics_transport_cellular">Cellular</string>
+    <string name="diagnostics_transport_other">Other</string>
+    <string name="diagnostics_transport_none">No connection</string>
     <string name="diagnostics_server_amsterdam">Amsterdam</string>
     <string name="diagnostics_server_moscow">Moscow</string>
     <string name="diagnostics_current_server">Current server</string>

@@ -13,9 +13,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performClick
+import com.kino.puber.core.system.ConnectionTransport
 import com.kino.puber.core.ui.uikit.model.UIAction
 import com.kino.puber.core.ui.uikit.component.drawer.DrawerValue
 import com.kino.puber.core.ui.uikit.component.drawer.LocalDrawerState
@@ -37,6 +40,8 @@ import com.kino.puber.ui.feature.device.diagnostics.model.NetworkDiagnosticsView
 import com.kino.puber.ui.feature.device.diagnostics.model.ServerSpeedUi
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 
@@ -168,6 +173,30 @@ internal class NetworkDiagnosticsContentFocusTest {
         restoration.emulateSavedInstanceStateRestore()
 
         awaitFocus(amsterdamTag)
+        composeRule.onNodeWithTag(amsterdamTag).assertIsFocused()
+    }
+
+    @Test
+    fun transportLine_isAbsent_whenTransportNull() {
+        setContent(NetworkDiagnosticsViewState())
+
+        awaitFocus(NetworkDiagnosticsTestTags.server(SpeedTestServer.Amsterdam.name))
+
+        composeRule.onAllNodesWithTag(NetworkDiagnosticsTestTags.Transport).assertCountEquals(0)
+    }
+
+    @Test
+    fun transportLine_isShownAndNotFocused_whenEthernet() {
+        setContent(NetworkDiagnosticsViewState(transport = ConnectionTransport.Ethernet))
+        val amsterdamTag = NetworkDiagnosticsTestTags.server(SpeedTestServer.Amsterdam.name)
+
+        awaitFocus(amsterdamTag)
+
+        composeRule.onNodeWithTag(NetworkDiagnosticsTestTags.Transport).assertExists()
+        val transportConfig = composeRule.onNodeWithTag(NetworkDiagnosticsTestTags.Transport)
+            .fetchSemanticsNode().config
+        assertNotEquals(true, transportConfig.getOrNull(SemanticsProperties.Focused))
+        assertNull(transportConfig.getOrNull(SemanticsActions.RequestFocus))
         composeRule.onNodeWithTag(amsterdamTag).assertIsFocused()
     }
 
