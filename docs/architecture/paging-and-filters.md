@@ -121,8 +121,9 @@ hardcodes an API sort string.
 What a catalogue tab shows is configured, not coded: `SectionConfig`
 (`ui/feature/contentlist/model/SectionConfig.kt`) describes one shelf - type,
 shortcut, sort, quality, genre, required genre id, and an `AnimeFilterMode` of
-`None`, `FollowPreference`, `Exclude`, or `Only`. `TabTypeConfig.sectionsFor(tabType)`
+`None`, `FollowPreference`, `Exclude`, or `Only`. A browse grid's query adds `country`, `year` and
+`finished`; each joins `ContentListInteractor.cacheKey`. `TabTypeConfig.sectionsFor(tabType)`
 returns the sections for a tab, and `ContentListScreen` builds its scope from
 that list. Adding a shelf usually means adding a `SectionConfig`, not a screen.
 
-A grid changes its query through `ContentListPagingVM.changeQuery(config, cacheable)`, which drops the pages of the old query and calls `resetPaging`. `ShowAllVM` builds the query with `ContentFilter.applyTo(base)` and reads a filtered first page with `cacheable = false`. A browse grid's applied filter is stored per config id in `CatalogueFilterRepository` and restored at VM construction, the first load running with `initialCacheable = false`.
+A grid changes its query through `ContentListPagingVM.changeQuery(config, cacheable)`, which drops the pages of the old query and calls `resetPaging`. `ShowAllVM` builds the query with `ContentFilter.applyTo(base)` and reads a filtered first page with `cacheable = false`. A browse grid's applied filter - genre, sort, country, the year bounds and the finished flag - is stored per config id in `CatalogueFilterRepository` and restored at VM construction, the first load running with `initialCacheable = false`. The year goes to `items` as `y` or `y1-y2` (`IntRange.toYearParam`), `finished` only as `1`.

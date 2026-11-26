@@ -311,7 +311,7 @@ const START = {
      (.flow/runs/catalogue-filters/design-ux.md, Element A и B). Стартовые значения, не выкручены. */
   fHdrTop:10, fRowH:24, fToGrid:8, fGapTitle:16, fGapReset:8, fGapSummary:12,
   fBtnPadH:12, fLblSp:11, fLblLine:16, fSumSp:11, fSumLine:16, fIconSz:15, fIconGap:6, fFocusScale:1.1,
-  fPanelMin:240, fPanelMax:420, fPanelMaxH:500, fCorner:20, fPadS:20, fPadT:20, fPadE:20, fPadB:16,
+  fPanelMin:240, fPanelMax:420, fCountryW:320, fPanelMaxH:500, fCorner:20, fPadS:20, fPadT:20, fPadE:20, fPadB:16,
   fTitleSp:14, fTitleLine:18, fTitleGap:12, fSecSp:11, fSecLine:14,
   fRowMin:40, fRowPadH:12, fRowPadV:6, fRowRadius:12, fRowSp:14, fRowLine:18, fTrailSp:13, fCheck:18,
   fScrimA:62, fEmptyGap:12,
@@ -399,6 +399,7 @@ const CONTROLS = [
 
   {g:"Фильтры: панель", k:"fPanelMin", n:"ширина: минимум", min:160, max:420, step:4, u:"dp", note:"PanelMinWidth 240; панель по самой длинной строке, IntrinsicSize.Max"},
   {g:"Фильтры: панель", k:"fPanelMax", n:"ширина: максимум", min:240, max:560, step:4, u:"dp", note:"PanelMaxWidth 420; в плеере не выкручивался"},
+  {g:"Фильтры: панель", k:"fCountryW", n:"ширина: Страна", min:280, max:420, step:4, u:"dp", note:"страница Страна — ленивый список без intrinsic-ширины, ширина фиксирована; не выверено, решает владелец"},
   {g:"Фильтры: панель", k:"fPanelMaxH", n:"высота: максимум", min:240, max:540, step:4, u:"dp", note:"540 − 2 × 20; длиннее — список листается под заголовком"},
   {g:"Фильтры: панель", k:"fCorner", n:"скругление (слева)", min:0, max:40, step:1, u:"dp", note:"PanelCornerRadius 20, только topStart / bottomStart"},
   {g:"Фильтры: панель", k:"fPadS", n:"поле слева", min:0, max:40, step:1, u:"dp"},
@@ -436,7 +437,8 @@ const SWITCHES = [
   {k:"scene",  n:"сцена", opts:[["grid","сетка (согласовано)"],["filters","catalogue-filters"]]},
   {k:"fGrid",  n:"фильтры: сетка", opts:[["browse","вход «Все …» (кнопки)"],["shelf","полка (только заголовок)"]]},
   {k:"fPreset",n:"фильтр", opts:[["none","нет"],["dramaYear","Драма · по году ↓"],["ratingAsc","по рейтингу ↑"],["drama","Драма"]]},
-  {k:"fPanel", n:"панель", opts:[["closed","закрыта"],["root","корень"],["sort","Сортировка"],["genre","Жанр"]]},
+  {k:"fPanel", n:"панель", opts:[["closed","закрыта"],["root","корень"],["sort","Сортировка"],["genre","Жанр"],["country","Страна"],["year","Год"],["status","Статус"]]},
+  {k:"fStatus",n:"статус", opts:[["door","вход «Статус»"],["toggle","строка «Только завершённые»"]]},
   {k:"fGenres",n:"жанры", opts:[["loaded","загружены"],["loading","загрузка"],["error","ошибка"]]},
   {k:"fOrder", n:"порядок", opts:[["reset","[Фильтры] [Сброс] [сводка]"],["summary","[Фильтры] [сводка] [Сброс]"]]},
   {k:"fPick",  n:"выбор жанра", opts:[["stay","остаётся на странице"],["root","возвращает в корень"]]},
@@ -491,7 +493,7 @@ const DEFAULTS = {
   tier:"medium", scroll:"edge", year:"line", marks:"on", guides:"off",
   header:"on", hdrText:"k4",
   scene:"filters", fGrid:"browse", fPreset:"dramaYear", fPanel:"closed", fGenres:"loaded", fOrder:"reset",
-  fPick:"stay", fIcon:"off", fBtn:"filledOutlined", fScrim:"flat", fEmpty:"cards",
+  fPick:"stay", fStatus:"door", fIcon:"off", fBtn:"filledOutlined", fScrim:"flat", fEmpty:"cards",
 };
 const S = {...DEFAULTS};
 const FOCUS = {set:"k4", index:0, scroll:0};
@@ -823,25 +825,39 @@ const GENRES = ["Биография","Боевик","Вестерн","Военн
   "Игра","Исторический","Комедия","Концерт","Короткометражка","Криминал","Мелодрама","Музыка","Мультфильм",
   "Мюзикл","Новости","Приключения","Реальное ТВ","Семейный","Спорт","Ток-шоу","Триллер","Ужасы",
   "Фантастика","Фильм-нуар","Фэнтези"];
-const FILTER_DEFAULT = {sort:"updated", dir:"desc", genre:null};
+/* Страны для type=movie: на боксе 102, по алфавиту (api-check, 2026-11-25); здесь правдоподобные названия, не снятые с бокса. */
+const COUNTRIES = ["Австралия","Австрия","Аргентина","Бельгия","Бразилия","Великобритания","Германия","Гонконг",
+  "Дания","Индия","Ирландия","Испания","Италия","Канада","Китай","Мексика","Нидерланды","Новая Зеландия",
+  "Норвегия","Польша","Россия","СССР","США","Таиланд","Турция","Украина","Финляндия","Франция","Чехия",
+  "Швейцария","Швеция","Южная Корея","Япония"];
+/* Пресеты года: этот год, прошлый, десятилетия до 1980, «до 1980» (1900–1979). */
+const YEARS = ["2026","2025","2020-е","2010-е","2000-е","1990-е","1980-е","до 1980"];
+const FILTER_DEFAULT = {sort:"updated", dir:"desc", genre:null, country:null, year:null, status:false};
 const PRESETS = {
-  none:      {sort:"updated", dir:"desc", genre:null},
-  dramaYear: {sort:"year",    dir:"desc", genre:"Драма"},
-  ratingAsc: {sort:"rating",  dir:"asc",  genre:null},
-  drama:     {sort:"updated", dir:"desc", genre:"Драма"},
+  none:      {...FILTER_DEFAULT},
+  dramaYear: {...FILTER_DEFAULT, sort:"year", genre:"Драма"},
+  ratingAsc: {...FILTER_DEFAULT, sort:"rating", dir:"asc"},
+  drama:     {...FILTER_DEFAULT, genre:"Драма"},
 };
+const DOOR_IDX = {sort:0, genre:1, country:2, year:3, status:4};
 const FF = {zone:"grid", applied:{...PRESETS.dramaYear}, draft:{...PRESETS.dramaYear}, idx:0, scroll:0,
   lastGrid:0, railFrom:"filters", retryTimer:0};
 
-function sameFilter(a, b){ return a.sort === b.sort && a.dir === b.dir && a.genre === b.genre; }
+function sameFilter(a, b){
+  return a.sort === b.sort && a.dir === b.dir && a.genre === b.genre && a.country === b.country &&
+    a.year === b.year && a.status === b.status;
+}
 function isActive(f){ return !sameFilter(f, FILTER_DEFAULT); }
 function sortLabel(f){
   return SORT_FIELDS.find(s => s[0] === f.sort)[1] + " " + SORT_DIRS.find(d => d[0] === f.dir)[2];
 }
-/* Сводка: жанр, потом сортировка — только если она не по умолчанию; части через « · ». */
+/* Сводка: жанр, страна, год, «Завершённые», потом сортировка — только если она не по умолчанию; части через « · ». */
 function summaryOf(f){
   const parts = [];
   if (f.genre) parts.push(f.genre);
+  if (f.country) parts.push(f.country);
+  if (f.year) parts.push(f.year);
+  if (f.status) parts.push("Завершённые");
   if (!(f.sort === FILTER_DEFAULT.sort && f.dir === FILTER_DEFAULT.dir)) parts.push(sortLabel(f));
   return parts.join(" · ");
 }
@@ -930,12 +946,25 @@ function emptyHTML(g){
 }
 
 /* ── панель ── */
-function pageTitle(page){ return {root:"Фильтры", sort:"Сортировка", genre:"Жанр"}[page]; }
+function pageTitle(page){ return {root:"Фильтры", sort:"Сортировка", genre:"Жанр", country:"Страна", year:"Год", status:"Статус"}[page]; }
 function pageItems(page){
   const d = FF.draft, out = [];
   if (page === "root"){
     out.push({k:"row", label:"Сортировка", trail:sortLabel(d), act:"door:sort"});
     out.push({k:"row", label:"Жанр", trail:d.genre || "Все жанры", act:"door:genre"});
+    out.push({k:"row", label:"Страна", trail:d.country || "Все страны", act:"door:country"});
+    out.push({k:"row", label:"Год", trail:d.year || "Любой год", act:"door:year"});
+    if (S.fStatus === "toggle") out.push({k:"row", label:"Только завершённые", sel:d.status, act:"status:toggle"});
+    else out.push({k:"row", label:"Статус", trail:d.status ? "Завершённые" : "Любой статус", act:"door:status"});
+  } else if (page === "country"){
+    out.push({k:"row", label:"Все страны", sel:d.country === null, act:"country:"});
+    COUNTRIES.forEach(t => out.push({k:"row", label:t, sel:d.country === t, act:"country:" + t}));
+  } else if (page === "year"){
+    out.push({k:"row", label:"Любой год", sel:d.year === null, act:"year:"});
+    YEARS.forEach(t => out.push({k:"row", label:t, sel:d.year === t, act:"year:" + t}));
+  } else if (page === "status"){
+    out.push({k:"row", label:"Любой статус", sel:!d.status, act:"status:any"});
+    out.push({k:"row", label:"Завершённые", sel:d.status, act:"status:finished"});
   } else if (page === "sort"){
     out.push({k:"sec", label:"Поле"});
     SORT_FIELDS.forEach(s => out.push({k:"row", label:s[1], sel:d.sort === s[0], act:"sort:" + s[0]}));
@@ -977,7 +1006,7 @@ function panelLayout(g, page){
   const head = g.fPadT + g.fTitleLine + g.fTitleGap;
   const minW = Math.min(g.fPanelMin, g.fPanelMax);
   const natural = g.fPadS + wMax + g.fPadE;
-  const w = clamp(Math.ceil(natural), minW, g.fPanelMax);
+  const w = page === "country" ? g.fCountryW : clamp(Math.ceil(natural), minW, g.fPanelMax);
   const fullH = head + listH + g.fPadB;
   const h = Math.min(fullH, g.fPanelMaxH, H);
   return {items, rowH, listH, head, w, natural, fullH, h, viewH:h - head - g.fPadB};
@@ -1055,7 +1084,7 @@ function closePanel(){
   S.fPanel = "closed"; FF.zone = "filters";
 }
 function resetFilter(){
-  FF.applied = {...FILTER_DEFAULT}; FF.draft = {...FILTER_DEFAULT};
+  FF.applied = {...FILTER_DEFAULT}; FF.draft = {...FILTER_DEFAULT};   /* страна, год и статус сбрасываются вместе с жанром и сортировкой */
   S.fPreset = "none"; FOCUS.index = 0; FOCUS.scroll = 0; FF.lastGrid = 0;
   FF.zone = "filters";   /* кнопка уходит; фокус — на «Фильтры», не в меню */
 }
@@ -1067,7 +1096,10 @@ function panelAct(act){
     FF.retryTimer = setTimeout(() => { if (S.fGenres === "loading"){ S.fGenres = "loaded"; if (S.fPanel === "genre") goPage("genre"); paintSwitches(); render(); } }, 1200);
     return;
   }
-  if (kind === "door"){ FF.rootFrom = val === "sort" ? 0 : 1; goPage(val); return; }
+  if (kind === "door"){ FF.rootFrom = DOOR_IDX[val]; goPage(val); return; }
+  if (kind === "country") FF.draft.country = val || null;
+  if (kind === "year") FF.draft.year = val || null;
+  if (kind === "status") FF.draft.status = val === "toggle" ? !FF.draft.status : val === "finished";
   if (kind === "sort") FF.draft.sort = val;
   if (kind === "dir") FF.draft.dir = val;
   if (kind === "genre"){
@@ -1084,7 +1116,7 @@ function filtersKey(dir){
     if (dir === "ok" && items[FF.idx] && items[FF.idx].act) panelAct(items[FF.idx].act);
     if (dir === "back"){
       if (S.fPanel === "root") closePanel();
-      else { const from = S.fPanel === "sort" ? 0 : 1; S.fPanel = "root"; FF.idx = from; FF.scroll = 0; }
+      else { const from = DOOR_IDX[S.fPanel]; S.fPanel = "root"; FF.idx = from; FF.scroll = 0; }
     }
     return;   /* влево / вправо заперты TvDialogOverlay */
   }
@@ -1175,7 +1207,7 @@ function filtersNotes(g, rows){
   const L = panelLayout(g, page);
   out.push("панель «" + pageTitle(page) + "»: ширина " + r(L.w) + " dp (по строкам " + r(L.natural) + ", зажим " + Math.min(g.fPanelMin, g.fPanelMax) + "–" + g.fPanelMax +
     "), высота " + r(L.fullH) + (L.fullH > L.h ? " → <b>" + r(L.h) + " dp, листается</b>" : " dp, без прокрутки"));
-  ["root", "sort", "genre"].filter(p => p !== page).forEach(p => {
+  ["root", "sort", "genre", "country", "year", "status"].filter(p => p !== page).forEach(p => {
     const l = panelLayout(g, p);
     out.push("                 «" + pageTitle(p) + "»: " + r(l.w) + " × " + r(l.h) + " dp" + (l.fullH > l.h ? " (листается, полностью " + r(l.fullH) + ")" : ""));
   });

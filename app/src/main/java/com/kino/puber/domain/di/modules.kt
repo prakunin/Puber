@@ -19,6 +19,7 @@ import com.kino.puber.domain.interactor.device.DeviceSettingInteractor
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.domain.interactor.device.IDeviceSettingInteractor
 import com.kino.puber.domain.interactor.diagnostics.NetworkDiagnosticsInteractor
+import com.kino.puber.domain.interactor.country.CountryInteractor
 import com.kino.puber.domain.interactor.genre.GenreInteractor
 import com.kino.puber.domain.interactor.home.HomeInteractor
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
@@ -40,6 +41,7 @@ val interactorModule = module {
     singleOf(::DeviceInfoInteractor) { bind<IDeviceInfoInteractor>() }
     singleOf(::DeviceSettingInteractor) { bind<IDeviceSettingInteractor>() }
     singleOf(::GenreInteractor)
+    singleOf(::CountryInteractor)
     singleOf(::BookmarkFoldersInteractor)
     singleOf(::WatchLaterBookmarkInteractor)
     singleOf(::SavedItemInteractor)

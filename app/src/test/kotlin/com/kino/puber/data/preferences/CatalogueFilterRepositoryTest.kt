@@ -1,6 +1,7 @@
 package com.kino.puber.data.preferences
 
 import android.content.Context
+import com.kino.puber.data.api.models.Country
 import com.kino.puber.data.api.models.Genre
 import com.kino.puber.domain.model.ContentFilter
 import com.kino.puber.domain.model.SortDirection
@@ -86,6 +87,53 @@ internal class CatalogueFilterRepositoryTest {
             ContentFilter(Genre(9, "Драма"), sort = SortField.UPDATED, sortDirection = SortDirection.ASC),
             repository.read("all_movie"),
         )
+    }
+
+    @Test
+    fun write_thenRead_returnsCountryYearAndFinished() {
+        val filter = ContentFilter(country = Country(1, "США"), yearRange = 2010..2019, finished = true)
+
+        repository.write("all_serial", filter)
+
+        assertEquals(filter, repository.read("all_serial"))
+    }
+
+    @Test
+    fun read_entryOfThePreviousVersion_hasNoCountryYearOrStatus() {
+        preferences.values["filter_all_movie"] =
+            """{"genreId":9,"genreTitle":"Драма","sort":"YEAR","direction":"ASC"}"""
+
+        val filter = repository.read("all_movie")
+
+        assertEquals(
+            ContentFilter(Genre(9, "Драма"), sort = SortField.YEAR, sortDirection = SortDirection.ASC),
+            filter,
+        )
+        assertNull(filter.country)
+        assertNull(filter.yearRange)
+        assertNull(filter.finished)
+    }
+
+    @Test
+    fun read_yearWithAMissingOrInvertedBound_isDropped() {
+        listOf(
+            """{"sort":"YEAR","yearFrom":2010}""",
+            """{"sort":"YEAR","yearFrom":2019,"yearTo":2010}""",
+        ).forEach { raw ->
+            preferences.values["filter_all_movie"] = raw
+
+            val filter = repository.read("all_movie")
+
+            assertNull(filter.yearRange, raw)
+            assertEquals(SortField.YEAR, filter.sort, raw)
+        }
+    }
+
+    @Test
+    fun read_countryWithoutTitle_isDropped() {
+        preferences.values["filter_all_movie"] = """{"countryId":1}"""
+
+        assertNull(repository.read("all_movie").country)
     }
 
     @Test

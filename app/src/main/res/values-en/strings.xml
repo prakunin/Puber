@@ -194,6 +194,17 @@
     <string name="show_all_filters_sort_order">Order</string>
     <string name="show_all_filters_genre">Genre</string>
     <string name="show_all_filters_genre_all">All genres</string>
+    <string name="show_all_filters_country">Country</string>
+    <string name="show_all_filters_country_all">All countries</string>
+    <string name="show_all_filters_countries_error">Could not load countries</string>
+    <string name="show_all_filters_year">Year</string>
+    <string name="show_all_filters_year_any">Any year</string>
+    <string name="show_all_filters_year_decade">%ds</string>
+    <string name="show_all_filters_year_before_1980">before 1980</string>
+    <string name="show_all_filters_year_range">%1$d–%2$d</string>
+    <string name="show_all_filters_status">Status</string>
+    <string name="show_all_filters_status_any">Any status</string>
+    <string name="show_all_filters_status_finished">Finished</string>
     <string name="show_all_sort_updated">by update</string>
     <string name="show_all_sort_created">by date added</string>
     <string name="show_all_sort_year">by year</string>

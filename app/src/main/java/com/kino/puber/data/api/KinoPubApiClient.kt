@@ -314,7 +314,10 @@ class KinoPubApiClient(
         page: Int? = null,
         quality: String? = null,
         genre: String? = null,
-        conditions: List<String>? = null
+        conditions: List<String>? = null,
+        country: Int? = null,
+        year: String? = null,
+        finished: Boolean? = null,
     ): Result<PaginatedResponse<Item>> = apiCall {
         httpClient.get("${mainApiBaseUrl()}items") {
             type?.let { parameter("type", it) }
@@ -323,6 +326,9 @@ class KinoPubApiClient(
             quality?.let { parameter("quality", it) }
             genre?.let { parameter("genre", it) }
             conditions?.forEach { parameter("conditions[]", it) }
+            country?.let { parameter("country", it) }
+            year?.let { parameter("year", it) }
+            finished?.let { parameter("finished", if (it) 1 else 0) }
         }
     }
 
@@ -697,9 +703,10 @@ class KinoPubApiClient(
     /**
      * Get countries
      */
-    suspend fun getCountries(): Result<List<Country>> = apiCall {
-        httpClient.get("${mainApiBaseUrl()}countries")
-    }
+    suspend fun getCountries(): Result<List<Country>> =
+        apiCall<ApiResponseList<Country>> {
+            httpClient.get("${mainApiBaseUrl()}countries")
+        }.map { it.items.orEmpty() }
 
     // Reference data API (based on official documentation)
 
