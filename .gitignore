@@ -32,3 +32,6 @@
 
 # Foglamp scan publication metadata (contains a secret edit token).
 .foglamp/
+
+# Backup of the profile while baseline generation runs
+/app/src/main/generated/baselineProfiles/*.bak

@@ -124,6 +124,10 @@ check:
 ITEST_ADB_PORT ?= 5038
 ITEST_ADB = ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(ADB)
 
+# Baseline profile generation has its own adb server, so it never touches the one itest uses.
+BASELINE_ADB_PORT ?= 5039
+BASELINE_ADB = ANDROID_ADB_SERVER_PORT=$(BASELINE_ADB_PORT) $(ADB)
+
 .PHONY: itest baseline-profile auth-save auth-restore
 
 itest: require-device build
@@ -136,46 +140,82 @@ itest: require-device build
 		$(if $(TESTS),-Pandroid.testInstrumentationRunnerArguments.class=$(TESTS),) \
 		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit $$status
 
-# Baseline profile generation drives the app through UiAutomator on a device, so it gets the same
-# private adb server as itest.
+# Baseline profile generation drives the app through UiAutomator on a device, so it gets its own
+# private adb server on BASELINE_ADB_PORT: a concurrent itest on ITEST_ADB_PORT keeps its devices.
 baseline-profile: require-device
-	@$(ITEST_ADB) start-server >/dev/null 2>&1
-	@$(ITEST_ADB) disconnect >/dev/null 2>&1 || true
-	@case "$(DEVICE)" in *:*) $(ITEST_ADB) connect $(DEVICE) >/dev/null;; esac
+	@case "$(BASELINE_ADB_PORT)" in $(ITEST_ADB_PORT)|5037) \
+		echo "refused: BASELINE_ADB_PORT=$(BASELINE_ADB_PORT) is the itest port ($(ITEST_ADB_PORT)) or the default adb server (5037)"; exit 1;; \
+	esac
+	@$(BASELINE_ADB) start-server >/dev/null 2>&1
+	@$(BASELINE_ADB) disconnect >/dev/null 2>&1 || true
+	@case "$(DEVICE)" in *:*) $(BASELINE_ADB) connect $(DEVICE) >/dev/null;; esac
 	@for i in $$(seq 1 30); do \
-		$(ITEST_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" && break; \
+		$(BASELINE_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" && break; \
 		sleep 2; \
 	done; \
-	$(ITEST_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" \
-		|| { echo "$(DEVICE) did not show up on the private adb server within 60 s"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
-	@serials=$$($(ITEST_ADB) devices | sed -n '2,$$p' | awk 'NF {print $$1}'); \
+	$(BASELINE_ADB) devices | grep -q "^$(DEVICE)[[:space:]]*device$$" \
+		|| { echo "$(DEVICE) did not show up on the private adb server within 60 s"; $(BASELINE_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@serials=$$($(BASELINE_ADB) devices | sed -n '2,$$p' | awk 'NF {print $$1}'); \
 	for s in $$serials; do \
-		[ "$$s" = "$(DEVICE)" ] || { echo "refused: the private adb server lists $$s besides $(DEVICE)"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }; \
+		[ "$$s" = "$(DEVICE)" ] || { echo "refused: the private adb server lists $$s besides $(DEVICE)"; $(BASELINE_ADB) kill-server >/dev/null 2>&1; exit 1; }; \
 	done
-	@sdk=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.build.version.sdk | tr -d '\r'); \
+	@sdk=$$($(BASELINE_ADB) -s $(DEVICE) shell getprop ro.build.version.sdk | tr -d '\r'); \
 	[ "$${sdk:-0}" -ge 34 ] 2>/dev/null \
-		|| { echo "refused: $(DEVICE) is API '$$sdk'; generation needs API 34 or newer, where the benchmark reset keeps app data"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
-	@qemu=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.boot.qemu | tr -d '\r'); \
-	kqemu=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.kernel.qemu | tr -d '\r'); \
-	hw=$$($(ITEST_ADB) -s $(DEVICE) shell getprop ro.hardware | tr -d '\r'); \
+		|| { echo "refused: $(DEVICE) is API '$$sdk'; generation needs API 34 or newer, where the benchmark library resets compilation in place instead of reinstalling the app"; $(BASELINE_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@qemu=$$($(BASELINE_ADB) -s $(DEVICE) shell getprop ro.boot.qemu | tr -d '\r'); \
+	kqemu=$$($(BASELINE_ADB) -s $(DEVICE) shell getprop ro.kernel.qemu | tr -d '\r'); \
+	hw=$$($(BASELINE_ADB) -s $(DEVICE) shell getprop ro.hardware | tr -d '\r'); \
 	[ "$$qemu" = 1 ] || [ "$$kqemu" = 1 ] || [ "$$hw" = ranchu ] \
-		|| { echo "refused: $(DEVICE) is not an emulator (ro.boot.qemu=$$qemu ro.kernel.qemu=$$kqemu ro.hardware=$$hw)"; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 1; }
-	@echo "baseline profile run sees:"; $(ITEST_ADB) devices | sed -n '2,$$p'
+		|| { echo "refused: $(DEVICE) is not an emulator (ro.boot.qemu=$$qemu ro.kernel.qemu=$$kqemu ro.hardware=$$hw)"; $(BASELINE_ADB) kill-server >/dev/null 2>&1; exit 1; }
+	@echo "baseline profile run sees:"; $(BASELINE_ADB) devices | sed -n '2,$$p'
 	@# The target APK embeds the checked-in profile; with every rule marked H the compile reset between
-	@# journeys flaked, so generate against an S/P-only copy and restore it if the run fails.
-	@f=app/src/main/generated/baselineProfiles/baseline-prof.txt; \
-	cp $$f $$f.bak; \
-	trap 'mv -f $$f.bak $$f; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit 130' INT TERM; \
-	sed -E -i '/->/ s/^H([SP]*L)/\1/' $$f; \
-	ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(GRADLE) :app:generateBaselineProfile \
-		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
-		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; \
-	if [ $$status -eq 0 ]; then \
-		sed -E -i '/->/ s/^([SP]*)L/H\1L/' $$f; rm -f $$f.bak; \
-	else \
-		mv -f $$f.bak $$f; \
+	@# journeys flaked, so generate against an S/P-only copy. The merge task of the plugin deletes and
+	@# rewrites both outputs (baseline-prof.txt and startup-prof.txt), so both are backed up; an absent
+	@# startup-prof.txt is a valid state, kept as the marker startup-prof.txt.none.bak. Leftover backups
+	@# belong to a run that died before it could restore: they go back whenever baseline-prof.txt is missing,
+	@# empty or holds a method rule without H (the stripped copy and a fresh merge result do; a merge result
+	@# also carries H rules, so H proves nothing). A non-empty file with only H rules was re-marked or
+	@# edited after the run: the backups are out of date and dropped. The copies are made through temp
+	@# files, so a failed copy never leaves a partial backup. The EXIT trap, installed before any backup so
+	@# that it also stops the private adb server on an early exit, is the only restore: it runs on a failure,
+	@# on HUP/INT/TERM (their traps just exit) and finds nothing to do after the success path; the success
+	@# path re-arms it without the restore before it deletes the backups, so a signal there cannot restore
+	@# a mixed pair. A Gradle
+	@# daemon outlives its killed client and may still write the outputs after the restore; wait for it
+	@# to stop (or run it with --no-daemon) before the next run.
+	@d=app/src/main/generated/baselineProfiles; f=$$d/baseline-prof.txt; s=$$d/startup-prof.txt; \
+	b=$$f.bak; t=$$f.new.bak; sb=$$s.bak; st=$$s.new.bak; sn=$$s.none.bak; \
+	restore() { \
+		if [ -f $$b ]; then mv -f $$b $$f || return 1; fi; \
+		if [ -f $$sb ]; then mv -f $$sb $$s || return 1; elif [ -f $$sn ]; then rm -f $$s $$sn || return 1; fi; \
+	}; \
+	trap 'restore; $(BASELINE_ADB) kill-server >/dev/null 2>&1' EXIT; \
+	trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; \
+	rm -f $$t $$st; \
+	if [ -f $$b ]; then \
+		if [ -s $$f ] && ! grep -qE '^[SP]*L.*->' $$f; then \
+			echo "$$b is out of date (the profile changed since the interrupted run); removed it and kept $$f"; \
+			rm -f $$b $$sb $$sn || exit 1; \
+		else \
+			echo "restored $$f from $$b left by an interrupted run; a generation that finished just before that interruption is discarded; $$s goes back with it"; \
+			restore || exit 1; \
+		fi; \
 	fi; \
-	trap - INT TERM; \
+	cp $$f $$t && mv -f $$t $$b || { rm -f $$t; echo "could not back up $$f"; exit 1; }; \
+	if [ -f $$s ]; then \
+		cp $$s $$st && mv -f $$st $$sb || { rm -f $$st; echo "could not back up $$s"; exit 1; }; \
+	else \
+		: >$$sn || exit 1; \
+	fi; \
+	sed -E -i '/->/ s/^H([SP]*L)/\1/' $$f || exit 1; \
+	ANDROID_ADB_SERVER_PORT=$(BASELINE_ADB_PORT) $(GRADLE) :app:generateBaselineProfile \
+		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+		; status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		sed -E -i '/->/ s/^([SP]*)L/H\1L/' $$f || { echo "could not mark the generated rules hot in $$f; restoring the original baseline-prof.txt and startup-prof.txt"; exit 1; }; \
+		trap '$(BASELINE_ADB) kill-server >/dev/null 2>&1' EXIT; \
+		rm -f $$sb $$sn; rm -f $$b; \
+	fi; \
 	exit $$status
 
 # The pairing itself, saved and put back. `make itest` is meant to keep it, but
