@@ -1,0 +1,7 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/main/java/com/kino/puber/domain/interactor/contentlist/ContentListInteractor.kt:133-135 - `cacheKey` now always includes `country`, `year` and `finished`, so every cached unfiltered shelf or grid page written before the upgrade gets a different key (`..._null_null_null_...`). Scenario: a user with a warm cache updates and opens a shelf offline, or while the API is down, on the first launch. The stored first page is unreachable and the screen shows nothing where it used to show cached content. The effect lasts until the first online fetch, and the old rows age out through the TTL. Codex's fix is sound: leave the key unchanged when all three filters are null, and append a suffix only when one is set. I did not run this; it follows from reading the diff.
+REJECTED:
+- The device evidence file quotes the raw 403 response body from the authenticated API (P3) - the quoted text is only `{"status":403,"error":"user_banned"}`. It holds no tokens, account data or user content. It is the error status the app reported, not a captured authenticated payload.
+- Adversarial "next step": run the live-catalogue TV checks with a valid session and get AC-11 sign-off - this is not a defect in the code. The evidence file already records M1-M6 as NOT RUN because the account was rejected with HTTP 403. The conductor decides what to do about that gap.
+VERDICT: changes needed
