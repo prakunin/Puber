@@ -31,11 +31,13 @@ import com.kino.puber.ui.feature.history.component.HistoryScreen
 import com.kino.puber.ui.feature.collections.component.CollectionsScreen
 import com.kino.puber.ui.feature.bookmarks.component.BookmarksScreen
 import com.kino.puber.domain.model.TabType
+import com.kino.puber.core.session.SessionEndReason
+import com.kino.puber.ui.feature.auth.model.AuthScreenParams
 import kotlinx.parcelize.Parcelize
 
 internal object ScreensImpl : Screens {
-    override fun auth(): PuberScreen {
-        return AuthScreen()
+    override fun auth(sessionEndReason: SessionEndReason?): PuberScreen {
+        return AuthScreen(AuthScreenParams(sessionEndReason))
     }
 
     override fun main(): PuberScreen {

@@ -19,7 +19,7 @@ internal class LauncherScreen : PuberScreen, GlobalRemoteHotkeyBlockedScreen {
     @Suppress("unused")
     private fun buildModule(scopeId: ScopeID, parentScope: Scope) = module {
         scope(named(scopeId)) {
-            viewModel { LauncherVM(get(), get(), get(), get()) }
+            viewModel { LauncherVM(get(), get(), get(), get(), get()) }
         }
     }
 

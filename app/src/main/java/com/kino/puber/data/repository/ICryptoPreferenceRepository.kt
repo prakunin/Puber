@@ -14,4 +14,7 @@ interface ICryptoPreferenceRepository {
     fun getAndroidId(): String?
     fun saveApiDomain(domain: String?)
     fun getApiDomain(): String?
+    fun saveSessionEndReason(reason: String)
+    fun getSessionEndReason(): String?
+    fun clearSessionEndReason()
 }

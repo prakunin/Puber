@@ -2,6 +2,9 @@ package com.kino.puber.ui.feature.home.vm
 
 import com.kino.puber.core.content.ContentChangeSet
 import com.kino.puber.core.content.ContentChangeType
+import com.kino.puber.R
+import com.kino.puber.core.error.ApiError
+import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.startup.StartupReveal
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -36,6 +39,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -50,6 +54,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 
 class HomeVMTest {
 
@@ -102,6 +108,71 @@ class HomeVMTest {
     @AfterEach
     fun tearDown() {
         StartupReveal.resetForTests()
+    }
+
+    private fun <T> failing(error: Throwable) = flow<T> { throw error }
+
+    private fun failEverySection(
+        hot: Throwable = ApiError.Unauthorized("user_banned"),
+        refused: Throwable = ApiError.Unauthorized("user_banned"),
+    ) {
+        every { interactor.observeWatchingItems(any()) } returns failing(refused)
+        every { interactor.observeHotItems() } returns failing(hot)
+        every { interactor.observeFreshItems() } returns failing(refused)
+        every { interactor.observePopularMovies() } returns failing(refused)
+        every { interactor.observePopularSeries() } returns failing(refused)
+        every { interactor.observeWatchLaterItems(any()) } returns failing(refused)
+        every { interactor.observeBookmarkItems(any()) } returns failing(refused)
+        every { interactor.observeCollections() } returns failing(refused)
+    }
+
+    @Test
+    fun allSectionsRefusedUnauthorized_showsErrorWithoutMirrorAction() {
+        failEverySection()
+        val vm = createVM()
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as HomeViewState.Error
+        assertFalse(state.showMirrorAction)
+        assertEquals(FakeResourceProvider().getString(R.string.error_generic), state.message)
+    }
+
+    @Test
+    fun allSectionsRefusedWithoutEndingTheSession_keepMirrorAction() {
+        val keepsSession = ApiError.Unauthorized("deny page", endsSession = false)
+        failEverySection(hot = keepsSession, refused = keepsSession)
+        val vm = createVM()
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as HomeViewState.Error
+        assertTrue(state.showMirrorAction)
+        assertEquals(FakeResourceProvider().getString(R.string.error_generic), state.message)
+    }
+
+    @Test
+    fun mixedSectionFailures_keepMirrorAction() {
+        failEverySection(hot = ApiError.Network())
+        val vm = createVM()
+
+        vm.testOnStart()
+
+        assertTrue((vm.testStateValue as HomeViewState.Error).showMirrorAction)
+    }
+
+    @ParameterizedTest
+    @CsvSource("Unauthorized,false", "Network,true")
+    fun unauthorizedDispatchError_hidesMirrorAction(code: String, expectedMirrorAction: Boolean) {
+        coEvery { apiDomainInteractor.autoResolveWorkingDomain() } throws IllegalStateException("x")
+        every { errorHandler.proceedInvoke(any(), any()) } answers {
+            secondArg<((ErrorEntity) -> Unit)?>()?.invoke(ErrorEntity("x", code))
+        }
+        val vm = createVM()
+
+        vm.testOnStart()
+
+        assertEquals(expectedMirrorAction, (vm.testStateValue as HomeViewState.Error).showMirrorAction)
     }
 
     @Test

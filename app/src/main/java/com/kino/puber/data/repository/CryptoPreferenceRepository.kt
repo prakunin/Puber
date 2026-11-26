@@ -60,6 +60,12 @@ internal class CryptoPreferenceRepository(
 
     override fun getApiDomain(): String? = getString(API_DOMAIN_KEY_NAME)
 
+    override fun saveSessionEndReason(reason: String) = saveString(SESSION_END_REASON_KEY_NAME, reason)
+
+    override fun getSessionEndReason(): String? = getString(SESSION_END_REASON_KEY_NAME)?.ifEmpty { null }
+
+    override fun clearSessionEndReason() = saveString(SESSION_END_REASON_KEY_NAME, null)
+
     private fun saveString(name: String, value: String?) {
         sharedPreferences.edit {
             putString(name, encrypt(value.orEmpty()))
@@ -163,6 +169,7 @@ internal class CryptoPreferenceRepository(
         internal const val REFRESH_TOKEN_KEY_NAME = "KINOPUBER_REFRESH_TOKEN"
         private const val USERNAME_KEY_NAME = "KINOPUBER_USERNAME_KEY_NAME"
         private const val API_DOMAIN_KEY_NAME = "KINOPUBER_API_DOMAIN"
+        private const val SESSION_END_REASON_KEY_NAME = "KINOPUBER_SESSION_END_REASON"
         private const val SECURITY_KEY_ALIAS = "SECURITY_KEY_ALIAS"
 
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"

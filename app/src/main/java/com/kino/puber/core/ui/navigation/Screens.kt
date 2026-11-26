@@ -1,12 +1,13 @@
 package com.kino.puber.core.ui.navigation
 
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.domain.model.TabType
 import com.kino.puber.ui.feature.details.model.DetailsEpisodeTarget
 import com.kino.puber.ui.feature.episodeschedule.model.EpisodeScheduleScreenParams
 import com.kino.puber.ui.feature.player.model.PlayerStartMode
 
 interface Screens {
-    fun auth(): PuberScreen
+    fun auth(sessionEndReason: SessionEndReason? = null): PuberScreen
 
     fun main(): PuberScreen
 

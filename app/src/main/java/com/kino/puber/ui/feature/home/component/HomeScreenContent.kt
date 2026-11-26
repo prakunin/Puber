@@ -47,6 +47,7 @@ import com.kino.puber.core.ui.uikit.component.FullScreenProgressIndicator
 import com.kino.puber.core.ui.uikit.component.HeroCarousel
 import com.kino.puber.core.ui.uikit.component.HeroItemState
 import com.kino.puber.core.ui.uikit.component.PositionFocusedItemInLazyLayout
+import com.kino.puber.core.ui.uikit.component.modifier.rememberFocusRequesterOnLaunch
 import com.kino.puber.core.ui.uikit.component.TvSafeButton
 import com.kino.puber.core.ui.uikit.component.VideoItemContextMenuDialog
 import com.kino.puber.core.ui.uikit.component.moviesList.DetailsPrefetchRow
@@ -82,6 +83,7 @@ internal fun HomeScreenContent(
 
             is HomeViewState.Error -> ErrorView(
                 message = state.message,
+                showMirrorAction = state.showMirrorAction,
                 onRetry = { onAction(CommonAction.RetryClicked) },
                 onConfigureApiDomain = { onAction(HomeAction.OpenApiDomainDialog) },
             )
@@ -128,9 +130,12 @@ private fun LoadingView(message: String?) {
 @Composable
 private fun ErrorView(
     message: String,
+    showMirrorAction: Boolean,
     onRetry: () -> Unit,
     onConfigureApiDomain: () -> Unit,
 ) {
+    val retryFocusRequester = rememberFocusRequesterOnLaunch()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -148,13 +153,16 @@ private fun ErrorView(
         TvSafeButton(
             text = stringResource(R.string.error_button_retry),
             onClick = onRetry,
+            modifier = Modifier.focusRequester(retryFocusRequester),
             primary = true,
         )
-        Spacer(Modifier.height(8.dp))
-        TvSafeButton(
-            text = stringResource(R.string.api_domain_open_action),
-            onClick = onConfigureApiDomain,
-        )
+        if (showMirrorAction) {
+            Spacer(Modifier.height(8.dp))
+            TvSafeButton(
+                text = stringResource(R.string.api_domain_open_action),
+                onClick = onConfigureApiDomain,
+            )
+        }
     }
 }
 

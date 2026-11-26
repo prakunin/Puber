@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.home.vm
 
+import com.kino.puber.core.error.ApiError
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.logger.log
@@ -179,7 +180,11 @@ internal class HomeVM(
         if (stateValue is HomeViewState.Content) {
             showMessage(error.message)
         } else {
-            updateViewState(HomeViewState.Error(error.message, apiDomainDialog = currentDialogState()))
+            updateViewState(HomeViewState.Error(
+                    message = error.message,
+                    showMirrorAction = error.code != ErrorEntity.CODE_UNAUTHORIZED,
+                    apiDomainDialog = currentDialogState(),
+                ))
         }
     }
 
@@ -365,6 +370,7 @@ internal class HomeVM(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
+            if (error is ApiError.Unauthorized && error.endsSession) run.unauthorizedFailures += 1
             log(error, "Failed to load $type")
             markHeroSettled(type)
         } finally {
@@ -402,6 +408,7 @@ internal class HomeVM(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
+            if (error is ApiError.Unauthorized && error.endsSession) run.unauthorizedFailures += 1
             log(error, "Failed to load collections")
         } finally {
             onSectionFinished(run)
@@ -425,6 +432,8 @@ internal class HomeVM(
         updateViewState(
             HomeViewState.Error(
                 message = resources.getString(R.string.error_generic),
+                // A refusal of every section is the account's, not the mirror's; only a mix keeps it.
+                showMirrorAction = run.unauthorizedFailures < TOTAL_SECTIONS,
                 apiDomainDialog = currentDialogState(),
             )
         )
@@ -572,6 +581,7 @@ internal class HomeVM(
     private class LoadRun {
         var finishedSections = 0
         var publishedAnything = false
+        var unauthorizedFailures = 0
     }
 
     private fun openApiDomainDialog() {

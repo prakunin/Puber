@@ -6,6 +6,7 @@
     <string name="error_no_connection">No internet connection. Check the network and try again.</string>
     <string name="error_network">The server is not responding. Check the connection and try again.</string>
     <string name="error_server_response">The server answered with error %1$d. Please try again.</string>
+    <string name="auth_account_blocked">The KinoPub account is blocked. Pairing this device again with the same account will not help.</string>
     <string name="error_unauthorized">The session has expired. Sign in again.</string>
     <string name="error_malformed_response">The server sent an unexpected response. Please try again.</string>
     <string name="error_auth_pending">Confirm the sign-in on the website — the code is not active yet.</string>

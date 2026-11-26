@@ -2,6 +2,9 @@ package com.kino.puber.ui.feature.root.vm
 
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.ContentUriCodec
+import com.kino.puber.core.session.SessionEndReason
+import com.kino.puber.core.session.SessionEvent
+import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.startup.AppStartup
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -40,7 +43,11 @@ internal class LauncherVMTest {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
 
         vm.testOnStart()
         advanceUntilIdle()
@@ -59,7 +66,11 @@ internal class LauncherVMTest {
                 readOn.complete(Thread.currentThread().name)
                 "token"
             }
-            val vm = LauncherVM(router(), preferences, coordinator(), startup(), executor.asCoroutineDispatcher())
+            val vm = LauncherVM(router(), preferences, coordinator(),
+            startup(),
+            SessionEventBus(),
+            executor.asCoroutineDispatcher(),
+        )
 
             vm.testOnStart()
             advanceUntilIdle()
@@ -79,7 +90,7 @@ internal class LauncherVMTest {
         every { router.screens.main() } returns mainScreen
         val preferences = preferences(accessToken = "token")
         val gate = CompletableDeferred<Unit>()
-        val vm = LauncherVM(router, preferences, coordinator(), startup(gate), dispatcher)
+        val vm = LauncherVM(router, preferences, coordinator(), startup(gate), SessionEventBus(), dispatcher)
 
         vm.testOnStart()
         advanceUntilIdle()
@@ -99,7 +110,11 @@ internal class LauncherVMTest {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
 
         vm.testOnStart()
         advanceUntilIdle()
@@ -113,7 +128,97 @@ internal class LauncherVMTest {
         val router = router()
         val authScreen = mockk<PuberScreen>()
         every { router.screens.auth() } returns authScreen
-        val vm = LauncherVM(router, preferences(accessToken = null), coordinator(), startup(), dispatcher)
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = null),
+            coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { router.newRootScreen(authScreen) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_leavesAuthRoutingToTheSessionHandler_whenASessionEndIsPending() = runTest(dispatcher) {
+        val router = router()
+        val bus = SessionEventBus().apply { emit(SessionEvent.Unauthorized(SessionEndReason.Blocked)) }
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = null),
+            coordinator(),
+            startup(),
+            bus,
+            dispatcher,
+        )
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { router.newRootScreen(*anyVararg()) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_leavesRoutingToTheSessionHandler_whenATokenIsStillReadableAndAnEndIsPending() = runTest(dispatcher) {
+        val router = router()
+        val bus = SessionEventBus().apply { emit(SessionEvent.Unauthorized(SessionEndReason.Expired)) }
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = "token"),
+            coordinator(),
+            startup(),
+            bus,
+            dispatcher,
+        )
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { router.newRootScreen(*anyVararg()) }
+        verify(exactly = 0) { router.newRootScreens(any()) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_opensAuthWithThePersistedReason_afterTheProcessDiedPastASessionEnd() = runTest(dispatcher) {
+        val router = router()
+        val authScreen = mockk<PuberScreen>()
+        every { router.screens.auth(SessionEndReason.Blocked) } returns authScreen
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = null, endReason = "Blocked"),
+            coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
+
+        vm.testOnStart()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { router.newRootScreen(authScreen) }
+        vm.testCancelScope()
+    }
+
+    @Test
+    fun start_opensPlainAuth_whenThePersistedReasonIsUnknown() = runTest(dispatcher) {
+        val router = router()
+        val authScreen = mockk<PuberScreen>()
+        every { router.screens.auth() } returns authScreen
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = null, endReason = "Gone"),
+            coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
 
         vm.testOnStart()
         advanceUntilIdle()
@@ -132,7 +237,14 @@ internal class LauncherVMTest {
         every { screens.main() } returns mainScreen
         every { screens.details(42) } returns detailsScreen
         val coordinator = coordinator().apply { accept("puber://content/items/42") }
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator, startup(), dispatcher)
+        val vm = LauncherVM(
+            router,
+            preferences(accessToken = "token"),
+            coordinator,
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
 
         vm.testOnStart()
         advanceUntilIdle()
@@ -146,7 +258,11 @@ internal class LauncherVMTest {
         val router = router()
         val mainScreen = mockk<PuberScreen>()
         every { router.screens.main() } returns mainScreen
-        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(), startup(), dispatcher)
+        val vm = LauncherVM(router, preferences(accessToken = "token"), coordinator(),
+            startup(),
+            SessionEventBus(),
+            dispatcher,
+        )
 
         vm.testOnStart()
         vm.testOnStart()
@@ -165,9 +281,10 @@ internal class LauncherVMTest {
         return router
     }
 
-    private fun preferences(accessToken: String?): ICryptoPreferenceRepository {
+    private fun preferences(accessToken: String?, endReason: String? = null): ICryptoPreferenceRepository {
         return mockk<ICryptoPreferenceRepository>(relaxed = true).apply {
             every { getAccessToken() } returns accessToken
+            every { getSessionEndReason() } returns endReason
         }
     }
 

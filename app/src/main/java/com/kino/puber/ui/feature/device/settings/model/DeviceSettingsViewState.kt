@@ -18,7 +18,7 @@ internal data class DeviceSettingsViewState(
 @Immutable
 internal sealed interface DeviceSettingsState {
     object Loading : DeviceSettingsState
-    data class Error(val error: String) : DeviceSettingsState
+    data class Error(val error: String, val showMirrorAction: Boolean = true) : DeviceSettingsState
     @Immutable
     data class Success(
         val settings: DeviceSettingsListUi,

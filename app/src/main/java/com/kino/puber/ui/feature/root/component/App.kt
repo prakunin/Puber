@@ -19,14 +19,13 @@ import com.kino.puber.core.di.puberViewModel
 import androidx.tv.material3.Surface
 import com.kino.puber.core.lifecycle.ReportAppForeground
 import com.kino.puber.core.startup.StartupReveal
-import com.kino.puber.core.logger.log
 import com.kino.puber.core.session.SessionEvent
+import com.kino.puber.core.session.SessionEndCleanup
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.tvhome.TvHomeSyncCoordinator
 import com.kino.puber.data.cache.ContentCacheRepository
 import com.kino.puber.domain.interactor.prefetch.DetailsPrefetcher
 import com.kino.puber.domain.interactor.watchstate.WatchStateSyncInteractor
-import kotlinx.coroutines.CancellationException
 import com.kino.puber.core.ui.uikit.component.LifecycleAction
 import com.kino.puber.core.ui.model.VideoItemTypeMapper
 import com.kino.puber.core.ui.model.VideoItemUIMapper
@@ -75,36 +74,29 @@ private fun SessionExpiredHandler() {
     val detailsPrefetcher = getKoin().get<DetailsPrefetcher>()
     val contentLaunchCoordinator = getKoin().get<ContentLaunchCoordinator>()
     val tvHomeSyncCoordinator = getKoin().get<TvHomeSyncCoordinator>()
+    val cleanup = remember {
+        SessionEndCleanup(
+            bus = sessionEventBus,
+            resetDeepLink = contentLaunchCoordinator::clearSession,
+            // The watch-state index and the content cache belong to the ended account; the details
+            // prefetcher goes last so it forgets a cache that is already gone.
+            clears = listOf(
+                { tvHomeSyncCoordinator.clearAccountPrograms() },
+                { watchStateSyncInteractor.invalidate() },
+                { contentCache.clear() },
+                { detailsPrefetcher.invalidate() },
+            ),
+        )
+    }
     LaunchedEffect(Unit) {
-        // This collect is the app's only subscriber to session-expiry events. An exception escaping
-        // it would kill the collector, and every later Unauthorized event for the rest of the
-        // process would then go unhandled — so the clears below must never be able to do that.
-        suspend fun clearWithoutFailing(clear: suspend () -> Unit) {
-            try {
-                clear()
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Throwable) {
-                log(error, "Failed to clear session-scoped state on logout")
-            }
-        }
-
+        // The bus keeps the latest end until a pairing succeeds, so an end that happened before this
+        // collect started (the cold-start warm-up, core/startup/AppStartup.kt) is handled here too.
         sessionEventBus.events.collect { event ->
             when (event) {
-                SessionEvent.Unauthorized -> {
-                    contentLaunchCoordinator.clearSession()
-                    clearWithoutFailing { tvHomeSyncCoordinator.clearAccountPrograms() }
-                    // The watch-state index is one account's viewing history, and the content cache
-                    // is that account's cached view of one domain's catalogue; neither must outlive
-                    // the session. Ejecting the user to auth is the part that must not be optional,
-                    // so it runs unconditionally below; these clears ahead of it are best-effort,
-                    // same as clearDomainSensitiveCaches's clears on a domain switch.
-                    clearWithoutFailing { watchStateSyncInteractor.invalidate() }
-                    clearWithoutFailing { contentCache.clear() }
-                    // Last, so it forgets a cache that is already gone rather than one a warm in
-                    // flight could still refill behind it.
-                    clearWithoutFailing { detailsPrefetcher.invalidate() }
-                    router.newRootScreen(router.screens.auth())
+                is SessionEvent.Unauthorized -> {
+                    // Routing to auth must not depend on the clears, which are best-effort.
+                    cleanup.run()
+                    router.newRootScreen(router.screens.auth(event.reason))
                 }
             }
         }

@@ -3,6 +3,8 @@ package com.kino.puber.ui.feature.auth.vm
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.toScreen
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.session.SessionEndReason
+import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
@@ -19,6 +21,7 @@ import com.kino.puber.R
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.ui.feature.auth.model.AuthAction
+import com.kino.puber.ui.feature.auth.model.AuthScreenParams
 import com.kino.puber.ui.feature.auth.model.AuthViewState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,9 +38,13 @@ internal class AuthVM(
     private val contentLaunchCoordinator: ContentLaunchCoordinator,
     override val errorHandler: ErrorHandler,
     router: AppRouter,
+    private val params: AuthScreenParams,
+    private val sessionEventBus: SessionEventBus,
 ) : PuberVM<AuthViewState>(router) {
 
     override val initialViewState = AuthViewState.Loading()
+
+    private val accountBlocked: Boolean get() = params.sessionEndReason == SessionEndReason.Blocked
 
     private var authJob: Job? = null
     private var timerJob: Job? = null
@@ -61,6 +68,7 @@ internal class AuthVM(
         hasRetriedAlternativeDomainAfterAuthError = false
         updateViewState(
             AuthViewState.Loading(
+                accountBlocked = accountBlocked,
                 statusMessage = startupMode.loadingStatusMessage(),
                 apiDomainDialog = currentDialogState(),
             )
@@ -80,6 +88,7 @@ internal class AuthVM(
             ApiDomainAutoResolveResult.NotFound -> {
                 updateViewState(
                     AuthViewState.Loading(
+                        accountBlocked = accountBlocked,
                         showMirrorHint = true,
                         statusMessage = resources.getString(R.string.api_domain_auto_failed),
                         apiDomainDialog = apiDomainInteractor.getState().toDialogState(),
@@ -91,6 +100,7 @@ internal class AuthVM(
             is ApiDomainAutoResolveResult.Success -> {
                 updateViewState(
                     AuthViewState.Loading(
+                        accountBlocked = accountBlocked,
                         apiDomainDialog = currentDialogState(),
                     )
                 )
@@ -121,6 +131,7 @@ internal class AuthVM(
                             AuthViewState.Content(
                                 code = it.code,
                                 url = it.url,
+                                accountBlocked = accountBlocked,
                                 apiDomainDialog = currentDialogState(),
                             )
                         )
@@ -128,6 +139,7 @@ internal class AuthVM(
                     }
 
                     AuthState.Success -> {
+                        sessionEventBus.clearPendingEnd()
                         timerJob?.cancel()
                         val target = contentLaunchCoordinator.consumeAfterAuthentication()
                         if (target == null) {
@@ -166,6 +178,7 @@ internal class AuthVM(
             hasRetriedAlternativeDomainAfterAuthError = true
             updateViewState(
                 AuthViewState.Loading(
+                    accountBlocked = accountBlocked,
                     showMirrorHint = true,
                     statusMessage = resources.getString(R.string.api_domain_auto_searching),
                     apiDomainDialog = currentDialogState(),
@@ -189,6 +202,7 @@ internal class AuthVM(
     private fun showManualFallback() {
         updateViewState(
             AuthViewState.Loading(
+                accountBlocked = accountBlocked,
                 showMirrorHint = true,
                 statusMessage = resources.getString(R.string.api_domain_auto_failed),
                 apiDomainDialog = apiDomainInteractor.getState().toDialogState(),

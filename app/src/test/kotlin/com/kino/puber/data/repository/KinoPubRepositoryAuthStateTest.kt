@@ -157,6 +157,21 @@ class KinoPubRepositoryAuthStateTest {
     }
 
     @Test
+    fun aSuccessfulPairingClearsThePersistedSessionEndReason() = test {
+        every { client.isAuthenticated() } returns false
+        every { client.getDeviceLoginCode() } returns flowOf(
+            Result.success(DeviceFlowResult(DEVICE_CODE.copy(expiresIn = 10, interval = 2), token = null)),
+        )
+        every { client.getDeviceLoginStatus(any()) } returns flowOf(
+            Result.success(DeviceFlowResult(DEVICE_CODE, TOKEN)),
+        )
+
+        subject.getAuthState().toList()
+
+        verify { preferences.clearSessionEndReason() }
+    }
+
+    @Test
     fun aCodeThatIsAlreadyExpiredStillWaitsAnIntervalBeforeRenewing() = test {
         assertRenewalGapAtLeast(expiresIn = 0, interval = 5, minGapMillis = 5000L)
     }

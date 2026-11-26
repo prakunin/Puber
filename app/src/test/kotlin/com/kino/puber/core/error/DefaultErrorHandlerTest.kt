@@ -58,6 +58,14 @@ class DefaultErrorHandlerTest {
     }
 
     @Test
+    fun map_keepsTheGenericMessageForARefusalThatLeavesTheSessionAlone() {
+        val error = subject.map(ApiError.Unauthorized("deny page", endsSession = false))
+
+        assertEquals("string_${R.string.error_generic}", error.message)
+        assertNotEquals(ErrorEntity.CODE_UNAUTHORIZED, error.code)
+    }
+
+    @Test
     fun map_namesAMalformedAnswerAsSuch() {
         val error = subject.map(ApiError.Serialization(IllegalStateException("bad json")))
 

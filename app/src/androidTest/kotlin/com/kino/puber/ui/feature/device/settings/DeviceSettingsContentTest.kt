@@ -2,14 +2,21 @@ package com.kino.puber.ui.feature.device.settings
 
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
+import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.ui.feature.device.settings.model.DeviceSettingsListUi
@@ -59,6 +66,30 @@ internal class DeviceSettingsContentTest {
             .assertIsDisplayed()
             .assertRendersTmdbGradient()
         composeRule.onNodeWithText(TMDB_ATTRIBUTION_NOTICE).assertIsDisplayed()
+    }
+
+    @Test
+    fun errorWithoutMirrorAction_showsOnlyFocusedRetry() {
+        val mirrorAction = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.api_domain_open_action)
+        composeRule.setContent {
+            PuberTheme {
+                DeviceSettingsContent(
+                    state = DeviceSettingsState.Error("x", showMirrorAction = false),
+                    apiDomain = ApiDomainDialogState(
+                        currentDomain = "service-kp.com",
+                        customDomain = null,
+                    ),
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithText(mirrorAction).assertCountEquals(0)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodes(hasTestTag(SettingsTestTags.ErrorRetry) and isFocused())
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(SettingsTestTags.ErrorRetry).assertIsFocused()
     }
 }
 

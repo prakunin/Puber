@@ -2,6 +2,8 @@ package com.kino.puber.ui.feature.root.vm
 
 import com.kino.puber.core.contentlink.ContentLaunchCoordinator
 import com.kino.puber.core.contentlink.toScreen
+import com.kino.puber.core.session.SessionEndReason
+import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.startup.AppStartup
 import com.kino.puber.core.ui.PuberVM
 import com.kino.puber.core.ui.navigation.AppRouter
@@ -15,6 +17,7 @@ internal class LauncherVM(
     private val cryptoPreferenceRepository: ICryptoPreferenceRepository,
     private val contentLaunchCoordinator: ContentLaunchCoordinator,
     private val appStartup: AppStartup,
+    private val sessionEventBus: SessionEventBus,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : PuberVM<Any>(router) {
     override val initialViewState: Any = Unit
@@ -29,13 +32,18 @@ internal class LauncherVM(
     override fun onStart() {
         launch {
             appStartup.awaitDomainInitialized()
-            val token = withContext(ioDispatcher) { cryptoPreferenceRepository.getAccessToken() }
-            openStartScreen(isAuthenticated = !token.isNullOrEmpty())
+            val (token, endReason) = withContext(ioDispatcher) {
+                cryptoPreferenceRepository.getAccessToken() to cryptoPreferenceRepository.getSessionEndReason()
+            }
+            openStartScreen(isAuthenticated = !token.isNullOrEmpty(), persistedEndReason = endReason)
         }
     }
 
-    private fun openStartScreen(isAuthenticated: Boolean) {
+    private fun openStartScreen(isAuthenticated: Boolean, persistedEndReason: String?) {
         if (startScreenOpened) return
+        // The token above is read outside the session lock, so it can predate an end that is already
+        // pending. The handler in App routes an end, to Auth with its reason.
+        if (sessionEventBus.hasPendingEnd) return
         startScreenOpened = true
 
         if (isAuthenticated) {
@@ -52,7 +60,9 @@ internal class LauncherVM(
             }
         } else {
             contentLaunchCoordinator.waitForAuthentication()
-            router.newRootScreen(router.screens.auth())
+            // No end is pending in this process: after a restart only the persisted reason is left.
+            val reason = SessionEndReason.entries.firstOrNull { it.name == persistedEndReason }
+            router.newRootScreen(router.screens.auth(reason))
         }
     }
 }

@@ -6,6 +6,9 @@ import com.kino.puber.core.contentlink.ContentUriCodec
 import com.kino.puber.core.error.DefaultErrorHandler
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
+import com.kino.puber.core.session.SessionEndReason
+import com.kino.puber.core.session.SessionEvent
+import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.uikit.model.ApiDomainDialogState
 import com.kino.puber.core.ui.uikit.model.SnackbarMessage
@@ -16,6 +19,7 @@ import com.kino.puber.domain.interactor.auth.IAuthInteractor
 import com.kino.puber.domain.model.AuthState
 import com.kino.puber.domain.interactor.device.IDeviceInfoInteractor
 import com.kino.puber.ui.feature.auth.model.AuthAction
+import com.kino.puber.ui.feature.auth.model.AuthScreenParams
 import com.kino.puber.ui.feature.auth.model.AuthViewState
 import com.kino.puber.util.FakeResourceProvider
 import com.kino.puber.util.MainDispatcherExtension
@@ -24,15 +28,20 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.NullSource
 import java.io.IOException
 
 class AuthVMTest {
@@ -51,6 +60,8 @@ class AuthVMTest {
 
     private fun createVM(
         authErrorHandler: ErrorHandler = errorHandler,
+        params: AuthScreenParams = AuthScreenParams(),
+        sessionEventBus: SessionEventBus = SessionEventBus(),
     ): AuthVM {
         every { apiDomainInteractor.getState() } returns ApiDomainState(
             domain = "api.example.com",
@@ -64,7 +75,91 @@ class AuthVMTest {
             contentLaunchCoordinator = ContentLaunchCoordinator(ContentUriCodec()),
             errorHandler = authErrorHandler,
             router = router,
+            params = params,
+            sessionEventBus = sessionEventBus,
         )
+    }
+
+    private fun stubDeviceCode() {
+        every { authInteractor.isAuthenticated() } returns false
+        every { authInteractor.getAuthState() } returns flowOf(
+            AuthState.Code(
+                code = "123456",
+                url = "https://example.com",
+                expireTimeSeconds = 120,
+            )
+        )
+    }
+
+    private fun stubNoCode() {
+        every { authInteractor.isAuthenticated() } returns false
+        every { authInteractor.getAuthState() } returns flow { awaitCancellation() }
+    }
+
+    @Test
+    fun onStart_showsAccountBlockedLine_whenSessionEndedBlocked() {
+        stubDeviceCode()
+        val vm = createVM(params = AuthScreenParams(SessionEndReason.Blocked))
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as AuthViewState.Content
+        assertTrue(state.accountBlocked)
+        assertEquals("123456", state.code)
+    }
+
+    @Test
+    fun loading_showsAccountBlockedLine_whenNoCodeArrives() {
+        stubNoCode()
+        val vm = createVM(params = AuthScreenParams(SessionEndReason.Blocked))
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as AuthViewState.Loading
+        assertTrue(state.accountBlocked)
+    }
+
+    @ParameterizedTest
+    @EnumSource(SessionEndReason::class, names = ["Expired"])
+    @NullSource
+    fun loading_hidesAccountBlockedLine_whenSessionExpired(reason: SessionEndReason?) {
+        stubNoCode()
+        val vm = createVM(params = AuthScreenParams(reason))
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as AuthViewState.Loading
+        assertFalse(state.accountBlocked)
+    }
+
+    @Test
+    fun authSuccess_clearsThePendingSessionEnd() {
+        val bus = SessionEventBus().apply { emit(SessionEvent.Unauthorized(SessionEndReason.Blocked)) }
+        val mainScreen = mockk<com.kino.puber.core.ui.navigation.PuberScreen>()
+        every { router.screens.main() } returns mainScreen
+        every { authInteractor.isAuthenticated() } returns false
+        every { authInteractor.getAuthState() } returns flowOf(AuthState.Success)
+        every { deviceInfoInteractor.setDeviceInformation() } returns flowOf(Unit)
+        val vm = createVM(sessionEventBus = bus)
+
+        vm.testOnStart()
+
+        assertFalse(bus.hasPendingEnd)
+        verify(exactly = 1) { router.newRootScreen(mainScreen) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(SessionEndReason::class, names = ["Expired"])
+    @NullSource
+    fun onStart_hidesAccountBlockedLine_whenSessionExpired(reason: SessionEndReason?) {
+        stubDeviceCode()
+        val vm = createVM(params = AuthScreenParams(reason))
+
+        vm.testOnStart()
+
+        val state = vm.testStateValue as AuthViewState.Content
+        assertFalse(state.accountBlocked)
+        assertEquals("123456", state.code)
     }
 
     @Test

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.core.ui.navigation.AppLauncher
 import com.kino.puber.core.ui.navigation.AppRemoteHotkeyHandler
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -98,7 +99,7 @@ private object NoOpAppLauncher : AppLauncher {
 }
 
 private object ProbeScreens : Screens {
-    override fun auth(): PuberScreen = unsupported()
+    override fun auth(sessionEndReason: SessionEndReason?): PuberScreen = unsupported()
 
     override fun main(): PuberScreen = unsupported()
 
