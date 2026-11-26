@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.device.diagnostics.model
 
 import androidx.compose.runtime.Immutable
+import com.kino.puber.core.system.ConnectionTransport
 import com.kino.puber.domain.interactor.diagnostics.ServerTestState
 import com.kino.puber.domain.interactor.diagnostics.SpeedTestServer
 
@@ -17,4 +18,5 @@ internal data class NetworkDiagnosticsViewState(
     val running: Boolean = false,
     val finished: Boolean = false,
     val recommendedServer: SpeedTestServer? = null,
+    val transport: ConnectionTransport? = null,
 )

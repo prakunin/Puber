@@ -5,6 +5,7 @@ package com.kino.puber.ui.feature.device.diagnostics
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
+import com.kino.puber.core.system.ConnectionTransport
 import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import com.kino.puber.data.api.network.diagnostics.LatencySample
 import com.kino.puber.data.api.network.diagnostics.ThroughputSample
@@ -17,7 +18,10 @@ import com.kino.puber.ui.feature.device.diagnostics.model.ServerSpeedUi
 @Composable
 private fun SpeedTestReadyPreview() = PuberTheme {
     NetworkDiagnosticsContent(
-        NetworkDiagnosticsViewState(currentServer = SpeedTestServer.Amsterdam)
+        NetworkDiagnosticsViewState(
+            currentServer = SpeedTestServer.Amsterdam,
+            transport = ConnectionTransport.Ethernet,
+        )
     )
 }
 

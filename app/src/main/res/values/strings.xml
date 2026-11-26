@@ -51,6 +51,12 @@
     <string name="diagnostics_settings_subtitle">Сравнить скорость серверов Amsterdam и Moscow.</string>
     <string name="diagnostics_screen_title">Проверка скорости</string>
     <string name="diagnostics_screen_subtitle">Выберите сервер для проверки. Один тест займёт до 25 секунд и использует до 100 МБ трафика.</string>
+    <string name="diagnostics_transport_label">Подключение: %1$s</string>
+    <string name="diagnostics_transport_ethernet">Ethernet</string>
+    <string name="diagnostics_transport_wifi">Wi-Fi</string>
+    <string name="diagnostics_transport_cellular">Мобильная сеть</string>
+    <string name="diagnostics_transport_other">Другое</string>
+    <string name="diagnostics_transport_none">Нет подключения</string>
     <string name="diagnostics_server_amsterdam">Amsterdam</string>
     <string name="diagnostics_server_moscow">Moscow</string>
     <string name="diagnostics_current_server">Текущий сервер</string>
