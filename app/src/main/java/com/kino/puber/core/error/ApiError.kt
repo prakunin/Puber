@@ -37,6 +37,8 @@ sealed class ApiError(
     class Unauthorized(
         val serverMessage: String? = null,
         cause: Throwable? = null,
+        /** False for a 403 the API does not list as an account refusal: the session is kept. */
+        val endsSession: Boolean = true,
     ) : ApiError("Unauthorized" + serverMessage?.let { ": $it" }.orEmpty(), cause)
 
     /** The body arrived but is not the shape the model claims. */

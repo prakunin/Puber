@@ -2,6 +2,7 @@ package com.kino.puber.data.api
 
 import com.kino.puber.core.coroutine.runCatchingCancellable
 import com.kino.puber.core.error.ApiError
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.data.api.auth.OAuthError
 import com.kino.puber.data.api.network.NoConnectivityException
 import io.ktor.client.call.NoTransformationFoundException
@@ -49,10 +50,25 @@ internal fun httpFailure(statusCode: Int, body: String?): ApiError {
     val serverMessage = body?.let(::parseApiErrorMessage)
     return when (statusCode) {
         HttpStatusCode.Unauthorized.value, HttpStatusCode.Forbidden.value ->
-            ApiError.Unauthorized(serverMessage)
+            ApiError.Unauthorized(
+                serverMessage,
+                endsSession = sessionEndReasonFor(statusCode, serverMessage) != null,
+            )
 
         else -> ApiError.Http(statusCode, serverMessage)
     }
+}
+
+/** The `error` values of a 403 that mean the account itself is refused, not one resource. */
+internal val SESSION_ENDING_FORBIDDEN_ERRORS = setOf("user_banned")
+
+/** Whether a refusal of a bearer request means the session is over, and why; `null` when it does not. */
+internal fun sessionEndReasonFor(statusCode: Int, serverMessage: String?): SessionEndReason? = when {
+    statusCode == HttpStatusCode.Unauthorized.value -> SessionEndReason.Expired
+    statusCode == HttpStatusCode.Forbidden.value && serverMessage in SESSION_ENDING_FORBIDDEN_ERRORS ->
+        SessionEndReason.Blocked
+
+    else -> null
 }
 
 /**

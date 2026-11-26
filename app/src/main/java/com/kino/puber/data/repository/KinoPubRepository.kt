@@ -36,6 +36,8 @@ class KinoPubRepository(
             if (token != null) {
                 cryptoPreferenceRepository.saveAccessToken(token.accessToken)
                 cryptoPreferenceRepository.saveRefreshToken(token.refreshToken)
+                // A login ends the story of the last session; the reason must not outlive it.
+                cryptoPreferenceRepository.clearSessionEndReason()
                 send(AuthState.Success)
                 return@channelFlow
             }

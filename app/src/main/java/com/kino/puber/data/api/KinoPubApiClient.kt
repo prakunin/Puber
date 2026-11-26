@@ -13,6 +13,7 @@ import com.kino.puber.data.api.auth.TokenResponse
 import com.kino.puber.data.api.history.HistoryPageResponse
 import com.kino.puber.data.api.history.clearHistoryMedia
 import com.kino.puber.data.api.history.fetchHistoryPage
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.core.session.SessionEvent
 import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.data.api.config.KinoPubConfig
@@ -64,6 +65,7 @@ import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
+import io.ktor.client.plugins.auth.clearAuthTokens
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -132,6 +134,7 @@ class KinoPubApiClient(
         isLenient = true
         prettyPrint = true
     }
+    private val sessionLock = Any()
     private val httpClient: HttpClient = createHttpClient()
 
     private fun createHttpClient(): HttpClient = HttpClient(OkHttp) {
@@ -147,14 +150,26 @@ class KinoPubApiClient(
         install(Auth) {
             bearer {
                 loadTokens {
+                    // No pair, not an empty one: the OAuth requests of a pairing load the cache while
+                    // nothing is stored, and an empty pair kept there would be sent after the pairing.
                     val accessToken = cryptoPreferenceRepository.getAccessToken()
-                    val refreshToken = cryptoPreferenceRepository.getRefreshToken()
-                    BearerTokens(accessToken.orEmpty(), refreshToken.orEmpty())
+                    if (accessToken.isNullOrEmpty()) {
+                        null
+                    } else {
+                        BearerTokens(accessToken, cryptoPreferenceRepository.getRefreshToken().orEmpty())
+                    }
                 }
 
                 sendWithoutRequest { request -> shouldSendKinoPubToken(request.url.host) }
 
                 refreshTokens { refreshBearerTokens(client) }
+            }
+
+            // Defensive: the host check in sendWithoutRequest already keeps the bearer off other hosts.
+            // Without this Ktor refreshes the KinoPub session for any 401, GitHub's included.
+            reAuthorizeOnResponse { response ->
+                response.status == HttpStatusCode.Unauthorized &&
+                    shouldSendKinoPubToken(response.call.request.url.host)
             }
         }
 
@@ -196,6 +211,7 @@ class KinoPubApiClient(
 
     private suspend fun refreshBearerTokens(client: HttpClient): BearerTokens {
         val refreshToken = cryptoPreferenceRepository.getRefreshToken().orEmpty()
+        if (refreshToken.isEmpty()) sessionExpiredFailure()
         log("Attempting to refresh access token")
 
         try {
@@ -230,19 +246,61 @@ class KinoPubApiClient(
 
     /** Drops the session and aborts the refresh; callers treat this as "sign in again". */
     private fun sessionExpiredFailure(cause: Throwable? = null): Nothing {
-        onSessionExpired()
+        onSessionExpired(SessionEndReason.Expired, presentedToken = null)
         val error = ApiError.Unauthorized(serverMessage = "Failed to refresh token", cause = cause)
         if (Telemetry.isEnabled) Telemetry.record(TelemetryEvent.Err(Telemetry.nowMs(), ErrSource.AUTH, error))
         throw error
     }
 
-    fun isAuthenticated(): Boolean =
+    /** Under [sessionLock] so it cannot read the token between the end event and the clear. */
+    fun isAuthenticated(): Boolean = synchronized(sessionLock) {
         cryptoPreferenceRepository.getAccessToken().isNullOrEmpty().not()
+    }
 
-    private fun onSessionExpired() {
-        cryptoPreferenceRepository.clearAccessToken()
-        cryptoPreferenceRepository.clearRefreshToken()
-        sessionEventBus.emit(SessionEvent.Unauthorized)
+    /**
+     * Ends the session once, however many refusals arrive. A refusal that carried a bearer acts only
+     * while that bearer is still the stored one, so a burst of parallel refusals, or one landing
+     * after the user paired again, cannot end a second session. The refresh path has no bearer to
+     * compare and acts only while some token is still stored.
+     */
+    private fun onSessionExpired(reason: SessionEndReason, presentedToken: String?) {
+        synchronized(sessionLock) {
+            val access = cryptoPreferenceRepository.getAccessToken()
+            val stillThisSession = if (presentedToken != null) {
+                access == presentedToken
+            } else {
+                !access.isNullOrEmpty() || !cryptoPreferenceRepository.getRefreshToken().isNullOrEmpty()
+            }
+            if (!stillThisSession) return
+            // Emitted first: a reader that finds no token (the launcher) also finds the end pending.
+            sessionEventBus.emit(SessionEvent.Unauthorized(reason))
+            // Survives a process death, so a cold start still tells the user why Auth is showing.
+            runCatching { cryptoPreferenceRepository.saveSessionEndReason(reason.name) }
+                .onFailure { log(it, "Cannot persist the session end reason") }
+            cryptoPreferenceRepository.clearAccessToken()
+            cryptoPreferenceRepository.clearRefreshToken()
+            // Ktor caches the bearer pair; without this a new pairing keeps sending the old token.
+            httpClient.clearAuthTokens()
+        }
+    }
+
+    /**
+     * [requireSuccessful] for the content API: a refusal that means the session is over also ends
+     * it. Only a request that carried the KinoPub bearer may do so.
+     */
+    @PublishedApi
+    internal suspend fun HttpResponse.requireSuccessfulSession(): HttpResponse {
+        if (status.isSuccess()) return this
+        val body = runCatchingCancellable { bodyAsText() }.getOrNull()
+        val failure = httpFailure(status.value, body)
+        val reason = sessionEndReasonFor(status.value, (failure as? ApiError.Unauthorized)?.serverMessage)
+        if (reason != null && shouldSendKinoPubToken(call.request.url.host)) {
+            val presented = call.request.headers[HttpHeaders.Authorization]
+                ?.removePrefix("Bearer ")
+                .orEmpty()
+            if (presented.isNotEmpty()) onSessionExpired(reason, presented)
+        }
+        throw failure
     }
 
     // Content API
@@ -1028,7 +1086,7 @@ class KinoPubApiClient(
         // domain this request actually went to.
         val domain = KinoPubConfig.CURRENT_API_DOMAIN
         return try {
-            val response = block().requireSuccessful()
+            val response = block().requireSuccessfulSession()
             Result.success(withContext(decodeDispatcher) { response.body<T>() })
         } catch (e: CancellationException) {
             throw e

@@ -32,10 +32,17 @@ internal class DefaultErrorHandler(
             code = CODE_NETWORK,
         )
 
-        is ApiError.Unauthorized -> ErrorEntity(
-            message = resources.getString(R.string.error_unauthorized),
-            code = CODE_UNAUTHORIZED,
-        )
+        is ApiError.Unauthorized -> if (e.endsSession) {
+            ErrorEntity(
+                message = resources.getString(R.string.error_unauthorized),
+                code = ErrorEntity.CODE_UNAUTHORIZED,
+            )
+        } else {
+            ErrorEntity(
+                message = resources.getString(R.string.error_generic),
+                code = CODE_REFUSED,
+            )
+        }
 
         is ApiError.Http -> ErrorEntity(
             message = resources.getString(R.string.error_server_response, e.statusCode),
@@ -71,7 +78,7 @@ internal class DefaultErrorHandler(
         const val CODE_UNKNOWN = "Unknown"
         const val CODE_OFFLINE = "Offline"
         const val CODE_NETWORK = "Network"
-        const val CODE_UNAUTHORIZED = "Unauthorized"
+        const val CODE_REFUSED = "Refused"
         const val CODE_SERIALIZATION = "Serialization"
         const val CODE_HTTP = "Http"
         const val CODE_OAUTH = "OAuth:"
