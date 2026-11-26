@@ -1,5 +1,6 @@
 package com.kino.puber.ui
 
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.ui.feature.search.SearchScreen
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -14,6 +15,15 @@ internal class ScreensImplTest {
 
         assertTrue(screen is SearchScreen)
         assertEquals("SearchScreen", screen.key)
+    }
+
+    @Test
+    fun auth_carriesTheSessionEndReasonIntoTheScreenKey() {
+        val blocked = ScreensImpl.auth(SessionEndReason.Blocked)
+
+        assertNotEquals(blocked.key, ScreensImpl.auth(null).key)
+        assertEquals(blocked.key, ScreensImpl.auth(SessionEndReason.Blocked).key)
+        assertEquals("AuthScreen", ScreensImpl.auth(null).key)
     }
 
     @Test

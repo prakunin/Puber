@@ -10,6 +10,7 @@ internal sealed interface AuthViewState {
     data class Loading(
         val showMirrorHint: Boolean = false,
         val statusMessage: String? = null,
+        val accountBlocked: Boolean = false,
         val apiDomainDialog: ApiDomainDialogState? = null,
     ) : AuthViewState
 
@@ -18,6 +19,7 @@ internal sealed interface AuthViewState {
         val code: String,
         val url: String,
         val timeLeft: String = "",
+        val accountBlocked: Boolean = false,
         val apiDomainDialog: ApiDomainDialogState? = null,
     ) : AuthViewState, StartupContentState
 }

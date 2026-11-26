@@ -5,10 +5,13 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import com.kino.puber.core.ui.uikit.theme.PuberTheme
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,8 +24,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kino.puber.R
 import com.kino.puber.core.ui.uikit.component.ApiDomainDialog
@@ -69,10 +74,12 @@ internal fun AuthScreenComponent() {
                 code = state.code,
                 url = state.url,
                 timeLeft = state.timeLeft,
+                accountBlocked = state.accountBlocked,
             )
             is AuthViewState.Loading -> LoadingInfo(
                 showMirrorHint = state.showMirrorHint,
                 statusMessage = state.statusMessage,
+                accountBlocked = state.accountBlocked,
             )
         }
         ApiDomainDialog(
@@ -93,9 +100,17 @@ internal fun AuthScreenComponent() {
 private fun LoadingInfo(
     showMirrorHint: Boolean,
     statusMessage: String?,
+    accountBlocked: Boolean,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         FullScreenProgressIndicator()
+        if (accountBlocked) {
+            AccountBlockedLine(
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(bottom = 160.dp),
+            )
+        }
         if (statusMessage != null) {
             Text(
                 text = statusMessage,
@@ -116,10 +131,14 @@ private fun LoadingInfo(
 }
 
 @Composable
-internal fun CodeInfo(code: String, url: String, timeLeft: String) {
+internal fun CodeInfo(code: String, url: String, timeLeft: String, accountBlocked: Boolean = false) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        if (accountBlocked) {
+            AccountBlockedLine()
+            Spacer(modifier = Modifier.height(20.dp))
+        }
         Text(code, fontSize = 32.sp)
         Spacer(modifier = Modifier.height(20.dp))
         Image(
@@ -134,6 +153,17 @@ internal fun CodeInfo(code: String, url: String, timeLeft: String) {
         Spacer(modifier = Modifier.height(20.dp))
         Text(stringResource(R.string.auth_mirror_content_hint))
     }
+}
+
+@Composable
+private fun AccountBlockedLine(modifier: Modifier = Modifier) {
+    Text(
+        text = stringResource(R.string.auth_account_blocked),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.error,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.widthIn(max = 560.dp).then(modifier),
+    )
 }
 
 private fun AuthViewState.apiDomainDialog() = when (this) {
@@ -156,4 +186,19 @@ private const val REQUEST_FOCUS_DELAY_MS = 100L
 @Composable
 internal fun CodeInfoPreview() {
     CodeInfo(code = "123456", url = "https://www.example.com", timeLeft = "02:00")
+}
+
+@Preview(device = "spec:width=960dp,height=540dp,dpi=320")
+@Composable
+internal fun CodeInfoBlockedPreview() {
+    PuberTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            CodeInfo(code = "123456", url = "https://www.example.com", timeLeft = "02:00", accountBlocked = true)
+        }
+    }
 }
