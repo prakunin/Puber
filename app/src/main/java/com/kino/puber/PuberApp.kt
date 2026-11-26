@@ -41,6 +41,7 @@ import okio.Path.Companion.toOkioPath
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
+import org.koin.core.module.Module
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import kotlinx.coroutines.CoroutineScope
@@ -65,7 +66,7 @@ private val handlersModule = module {
 private const val IMAGE_MEMORY_CACHE_BYTES = 48L * 1024 * 1024
 private const val IMAGE_DISK_CACHE_BYTES = 100L * 1024 * 1024
 
-class PuberApp : Application(), SingletonImageLoader.Factory {
+open class PuberApp : Application(), SingletonImageLoader.Factory {
 
     // Runs before onCreate, and therefore before Koin exists, which is why the chosen language is
     // read straight from preferences here. Wrapping the application itself is what keeps strings
@@ -77,23 +78,38 @@ class PuberApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         val appCreateMs = SystemClock.elapsedRealtime()
         super.onCreate()
+        if (!shouldInitializeRuntime()) return
 
         TelemetryRuntime.install(this, appCreateMs)
         StartupReveal.installFrameWait()
+        configureRuntime()
         initDi()
         initLogger()
     }
+
+    // The three hooks below are seams with no production caller until hermetic-baseline-generation.
+
+    /** False makes [onCreate] stop after `super.onCreate()`: no telemetry, no Koin, no startup work. */
+    protected open fun shouldInitializeRuntime(): Boolean = true
+
+    /** Runs after telemetry and directly before Koin starts. */
+    protected open fun configureRuntime() = Unit
+
+    /** Modules appended after the app's own, so they can override its definitions. */
+    protected open fun runtimeModules(): List<Module> = emptyList()
 
     private fun initDi() {
         val koinApplication = startKoin {
             androidContext(this@PuberApp)
             modules(
-                resourceModule,
-                handlersModule,
-                apiModule,
-                repositoryModule,
-                interactorModule,
-                telemetryModule,
+                listOf(
+                    resourceModule,
+                    handlersModule,
+                    apiModule,
+                    repositoryModule,
+                    interactorModule,
+                    telemetryModule,
+                ) + runtimeModules()
             )
         }
         koinApplication.koin.get<AppStartup>().start()
