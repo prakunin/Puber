@@ -8,7 +8,8 @@ import kotlin.time.Duration
 
 /**
  * The one HTTP stack of the app: every caller derives from [client], so they share a connection
- * pool and a DNS-over-HTTPS resolver whose answers live in [dnsCache].
+ * pool and a resolver. The resolver is DNS-over-HTTPS, whose answers live in [dnsCache], unless
+ * the endpoint is pinned, where it is the system one and [dnsCache] stays unused.
  */
 class HttpStack(val client: OkHttpClient, val dnsCache: DnsCache) {
 
@@ -20,10 +21,22 @@ class HttpStack(val client: OkHttpClient, val dnsCache: DnsCache) {
          */
         internal fun createDnsCache(): DnsCache = DnsCache(failureTimeToLive = Duration.ZERO)
 
-        /** [listeners] maps a label (`doh`, `app`) to the event listener that counts that client. */
-        fun create(listeners: ((String) -> EventListener.Factory)? = null): HttpStack {
+        /**
+         * [listeners] maps a label (`doh`, `app`) to the event listener that counts that client.
+         * [useDoh] false leaves the app client on the system resolver and builds no DoH client.
+         */
+        fun create(
+            listeners: ((String) -> EventListener.Factory)? = null,
+            useDoh: Boolean = true,
+        ): HttpStack {
             val base = OkHttpClient.Builder().build()
             val dnsCache = createDnsCache()
+            if (!useDoh) {
+                val client = base.newBuilder()
+                    .apply { listeners?.invoke("app")?.let(::eventListenerFactory) }
+                    .build()
+                return HttpStack(client, dnsCache)
+            }
             // Own dispatcher: DoH queries never queue behind calls blocked in a lookup.
             val dohClient = base.newBuilder()
                 .dispatcher(Dispatcher())
