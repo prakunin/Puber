@@ -50,6 +50,49 @@ internal class BaselineProfileContentTest {
     }
 
     @Test
+    fun profilesHaveNoInstrumentationOrGeneratorClasses() {
+        listOf("baseline" to baseline, "startup" to startup).forEach { (name, lines) ->
+            listOf("com/kino/puber/profile/", "com/kino/puber/baselineprofile/")
+                .forEach { assertTrue(!lines.hasRuleFor(it), "$name profile holds $it") }
+        }
+    }
+
+    @Test
+    fun baselineProfileCoversImageTlsAndHlsPaths() {
+        listOf(
+            "coil3/network/",
+            "coil3/decode/",
+            "androidx/media3/exoplayer/hls/",
+            "okhttp3/internal/tls/",
+        ).forEach { assertTrue(baseline.hasRuleFor(it), "no baseline rule for $it") }
+    }
+
+    /**
+     * The prod cold start the generation must keep warm: token decrypt, DNS-over-HTTPS, the endpoint
+     * probe, the update check and the TV home publish. Each substring is a method (`;->`) or class a
+     * run against the paired app records; the instrumentation app reaches them through the mock.
+     */
+    @Test
+    fun profilesCoverProdColdStartPaths() {
+        val guards = listOf(
+            "com/kino/puber/data/repository/CryptoPreferenceRepository;->decrypt",
+            "com/kino/puber/data/repository/CryptoPreferenceRepository;->secretKey",
+            "com/kino/puber/data/api/network/DnsOverHttpsFactory;->create",
+            "okhttp3/dnsoverhttps/DnsOverHttps;->",
+            "okhttp3/dnsoverhttps/BootstrapDns;->lookup",
+            "com/kino/puber/domain/interactor/api/ApiDomainInteractor;->walkForWorkingDomain",
+            "com/kino/puber/data/api/network/HttpEndpointProbe;->isReachable",
+            "com/kino/puber/domain/interactor/update/AppUpdateInteractor;->checkForUpdate",
+            "com/kino/puber/data/repository/AppUpdateRepository;->getAvailableUpdate",
+            "androidx/tvprovider/media/tv/PreviewProgram",
+            "com/kino/puber/core/tvhome/AndroidTvHomePublisher;->publish",
+        )
+        listOf("baseline" to baseline, "startup" to startup).forEach { (name, lines) ->
+            guards.forEach { assertTrue(lines.hasRuleFor(it), "$name profile has no rule for $it") }
+        }
+    }
+
+    @Test
     fun startupProfileHasNoDetailsOrPlayerRules() {
         listOf(
             "com/kino/puber/ui/feature/details/",
