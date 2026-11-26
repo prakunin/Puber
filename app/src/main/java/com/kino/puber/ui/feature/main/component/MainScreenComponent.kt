@@ -74,7 +74,7 @@ import com.kino.puber.core.di.puberViewModel
 internal fun MainScreenComponent() {
     val vm = puberViewModel<MainVM>()
     val state by vm.collectViewState()
-    val onAction: (UIAction) -> Unit = remember { vm::onAction }
+    val onAction: (UIAction) -> Unit = remember(vm) { vm::onAction }
     // The watch-state index goes stale while the TV sits idle for hours; coming back is the moment
     // to catch it up.
     LifecycleAction(

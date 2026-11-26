@@ -188,14 +188,6 @@ internal class MainVM(
         }
     }
 
-    fun onSearchClick() {
-        router.navigateTo(router.screens.search())
-    }
-
-    fun onSettingsClick() {
-        router.navigateTo(router.screens.deviceSettings())
-    }
-
     override fun onCleared() {
         tabAppRouterHolder.dispose()
     }
