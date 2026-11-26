@@ -22,6 +22,9 @@ object KinoPubConfig {
     @Volatile
     private var snapshot: Snapshot? = null
 
+    @Volatile
+    private var pinnedEndpoint: ApiEndpointPreset? = null
+
     private val defaultEndpoint: ApiEndpointPreset by lazy {
         val apiHost = "api.$defaultDomain"
         ApiEndpointPreset(
@@ -50,13 +53,14 @@ object KinoPubConfig {
     )
 
     private val activeEndpoint: ApiEndpointPreset
-        get() = snapshot?.endpoint ?: defaultEndpoint
+        get() = pinnedEndpoint ?: snapshot?.endpoint ?: defaultEndpoint
 
     val DEFAULT_API_DOMAIN: String get() = defaultDomain
     val CURRENT_API_DOMAIN: String get() = activeEndpoint.domain
     val CURRENT_API_HOST: String get() = activeEndpoint.apiHost
     val CURRENT_ENDPOINT: ApiEndpointPreset get() = activeEndpoint
     val CUSTOM_API_DOMAIN: String? get() = snapshot?.override
+    val IS_PINNED_ENDPOINT: Boolean get() = pinnedEndpoint != null
     val BUILT_IN_ENDPOINTS: List<ApiEndpointPreset> by lazy {
         listOf(defaultEndpoint, aladorEndpoint, legacyCdnEndpoint)
     }
@@ -71,6 +75,18 @@ object KinoPubConfig {
 
     fun setDomainOverride(domain: String?) {
         snapshot = Snapshot(domain, domain?.let(::resolveEndpoint) ?: defaultEndpoint)
+    }
+
+    /**
+     * Pins every endpoint getter to [endpoint], whatever the domain override says, until cleared.
+     * A seam with no production caller until hermetic-baseline-generation wires it.
+     */
+    fun setPinnedEndpoint(endpoint: ApiEndpointPreset) {
+        pinnedEndpoint = endpoint
+    }
+
+    fun clearPinnedEndpoint() {
+        pinnedEndpoint = null
     }
 
     private fun resolveEndpoint(domain: String): ApiEndpointPreset {

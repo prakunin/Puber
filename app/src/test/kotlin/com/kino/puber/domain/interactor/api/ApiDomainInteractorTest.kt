@@ -158,6 +158,24 @@ internal class ApiDomainInteractorTest {
     }
 
     @Test
+    fun saveCustomDomain_returnsEmptyAndSavesNothing_whenTheInputHasNoHost() = runTest {
+        val result = interactor.saveCustomDomain("https:///path")
+
+        assertEquals(ApiDomainUpdateResult.Empty, result)
+        verify(exactly = 0) { preferences.saveApiDomain(any()) }
+        assertEquals(0, evictCalls)
+    }
+
+    @Test
+    fun saveCustomDomain_returnsInvalidAndSavesNothing_whenTheHostIsMalformed() = runTest {
+        val result = interactor.saveCustomDomain("bad_host.example")
+
+        assertEquals(ApiDomainUpdateResult.Invalid, result)
+        verify(exactly = 0) { preferences.saveApiDomain(any()) }
+        assertEquals(0, evictCalls)
+    }
+
+    @Test
     fun saveCustomDomain_completesEvenWhenTheContentCacheFailsToClear() = runTest {
         coEvery { contentCache.clear() } throws IllegalStateException("disk full")
 
@@ -524,5 +542,51 @@ internal class ApiDomainInteractorTest {
         // Any save at all, not just one carrying the rejected string: falling through to a default
         // preset would be the mistake worth catching, and it would never save "evil.test".
         verify(exactly = 0) { preferences.saveApiDomain(any()) }
+    }
+
+    @Test
+    fun initialize_appliesTheSavedDomain_whenNotPinned() {
+        every { preferences.getApiDomain() } returns "mirror.example"
+
+        interactor.initialize()
+
+        verify { KinoPubConfig.setDomainOverride("mirror.example") }
+    }
+
+    @Test
+    fun detectAndSaveWorkingDomain_savesTheFirstReachableBuiltIn_whenNotPinned() = runTest {
+        reachableDomains = setOf("api.alador.test")
+
+        val result = interactor.detectAndSaveWorkingDomain()
+
+        assertEquals(
+            ApiDomainDetectionResult.Success(ApiDomainState("api.alador.test", "api.alador.test")),
+            result,
+        )
+        verify(exactly = 1) { preferences.saveApiDomain("api.alador.test") }
+        assertEquals(1, evictCalls)
+        assertEquals(listOf("service-kp.test", "api.alador.test"), probeCalls)
+    }
+
+    @Test
+    fun detectAndSaveWorkingDomain_returnsNotFound_whenNothingAnswers() = runTest {
+        val result = interactor.detectAndSaveWorkingDomain()
+
+        assertEquals(ApiDomainDetectionResult.NotFound, result)
+        verify(exactly = 0) { preferences.saveApiDomain(any()) }
+    }
+
+    @Test
+    fun detectAndSaveAlternativeBuiltInDomain_skipsTheCurrentDomain_whenNotPinned() = runTest {
+        reachableDomains = setOf("service-kp.test", "api.alador.test")
+
+        val result = interactor.detectAndSaveAlternativeBuiltInDomain()
+
+        assertEquals(
+            ApiDomainDetectionResult.Success(ApiDomainState("api.alador.test", "api.alador.test")),
+            result,
+        )
+        assertEquals(listOf("api.alador.test"), probeCalls)
+        verify(exactly = 1) { preferences.saveApiDomain("api.alador.test") }
     }
 }

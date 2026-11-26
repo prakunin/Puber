@@ -8,9 +8,11 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -34,7 +36,26 @@ internal class KinoPubConfigTest {
 
     @AfterEach
     fun resetOverride() {
+        KinoPubConfig.clearPinnedEndpoint()
         KinoPubConfig.setDomainOverride(null)
+    }
+
+    private val pin = ApiEndpointPreset(
+        domain = "127.0.0.1",
+        apiHost = "127.0.0.1:8080",
+        mainBaseUrl = "http://127.0.0.1:8080/v1/",
+        oauthBaseUrl = "http://127.0.0.1:8080/oauth2/",
+        extraBaseUrl = "http://127.0.0.1:8080/",
+    )
+
+    private fun assertGettersArePinned() {
+        assertEquals(pin.domain, KinoPubConfig.CURRENT_API_DOMAIN)
+        assertEquals(pin.apiHost, KinoPubConfig.CURRENT_API_HOST)
+        assertEquals(pin, KinoPubConfig.CURRENT_ENDPOINT)
+        assertEquals(pin.mainBaseUrl, KinoPubConfig.MAIN_API_BASE_URL)
+        assertEquals(pin.oauthBaseUrl, KinoPubConfig.OAUTH_BASE_URL)
+        assertEquals(pin.extraBaseUrl, KinoPubConfig.EXTRA_API_BASE_URL)
+        assertTrue(KinoPubConfig.IS_PINNED_ENDPOINT)
     }
 
     private fun expectedFor(domain: String?): ApiEndpointPreset {
@@ -123,6 +144,29 @@ internal class KinoPubConfigTest {
         KinoPubConfig.setDomainOverride(null)
         assertGettersMatch(null)
         assertNull(KinoPubConfig.CUSTOM_API_DOMAIN)
+    }
+
+    @Test
+    fun setPinnedEndpoint_pointsEveryGetterAtThePin() {
+        KinoPubConfig.setPinnedEndpoint(pin)
+        assertGettersArePinned()
+        assertNull(KinoPubConfig.CUSTOM_API_DOMAIN)
+    }
+
+    @Test
+    fun setDomainOverride_leavesTheGettersPinned_whilePinned() {
+        KinoPubConfig.setPinnedEndpoint(pin)
+        KinoPubConfig.setDomainOverride("mirror.example")
+        assertGettersArePinned()
+    }
+
+    @Test
+    fun clearPinnedEndpoint_restoresTheOverrideEndpoint() {
+        KinoPubConfig.setDomainOverride("mirror.example")
+        KinoPubConfig.setPinnedEndpoint(pin)
+        KinoPubConfig.clearPinnedEndpoint()
+        assertGettersMatch("mirror.example")
+        assertFalse(KinoPubConfig.IS_PINNED_ENDPOINT)
     }
 
     @Test

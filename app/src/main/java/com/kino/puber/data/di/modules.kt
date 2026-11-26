@@ -9,6 +9,7 @@ import com.kino.puber.core.session.SessionEventBus
 import com.kino.puber.core.startup.StartupSettled
 import com.kino.puber.core.system.ContentSharer
 import com.kino.puber.data.api.KinoPubApiClient
+import com.kino.puber.data.api.config.KinoPubConfig
 import com.kino.puber.data.api.network.EndpointReachability
 import com.kino.puber.data.cache.CachedPayloadSweeper
 import com.kino.puber.data.cache.MEDIA_CACHE_SIZE_BYTES
@@ -67,7 +68,12 @@ val apiModule = module {
     // Shared: the client is what reports a domain going quiet, the domain interactor is what acts
     // on it. Neither can see the other, so the verdict itself is the thing they hold in common.
     single { EndpointReachability() }
-    single { HttpStack.create(if (BuildConfig.DEBUG) NetworkStats::factory else null) }
+    single {
+        HttpStack.create(
+            if (BuildConfig.DEBUG) NetworkStats::factory else null,
+            useDoh = !KinoPubConfig.IS_PINNED_ENDPOINT,
+        )
+    }
     single<OkHttpClient> { get<HttpStack>().client }
     single<DnsCache> { get<HttpStack>().dnsCache }
     single(ImageHttpClientQualifier) { createImageHttpClient(get(), NetworkStats.factoryOrNull("image")) }
