@@ -108,11 +108,14 @@ One command, on one named emulator. It needs no secrets, no `.env`, no KinoPub a
 DEVICE=host.docker.internal:5555 ./tools/generate-baseline-profile.sh
 ```
 
-It runs `make baseline-profile`, which talks to a private adb server that sees only `$DEVICE`, so no other device is
-touched. The device must be an emulator with API 34 or newer: there the benchmark library resets the app in place, and
-the make target refuses anything else. The script first checks that `$DEVICE` is reachable (`adb connect` for a
-host:port serial, `get-state` is `device`), is an emulator and runs API 34 or newer; otherwise it exits 2 before
-installing anything.
+It runs `make baseline-profile`, which talks to its own private adb server on port 5039 (`BASELINE_ADB_PORT`; the target
+refuses a value equal to `ITEST_ADB_PORT` or 5037) that sees only `$DEVICE`, so no other device is touched and a
+concurrent `make itest` keeps its devices. The device must be an emulator with API 34 or newer: generation needs API 34
+or newer, where the benchmark library resets compilation in place instead of reinstalling the app, and the make target
+refuses anything else. The script first checks that `$DEVICE` is reachable (`adb connect` for a host:port serial,
+then up to 30 s of waiting for it to reach `device`, because a just-started emulator reports `offline` first), is an
+emulator and runs API 34 or newer; otherwise it exits 2 before installing anything, naming the last state seen and
+`ssh mac-emu start` after a timeout. A refusal kills no adb server.
 
 Generation drives the `instrumentation` flavor (`com.kino.puber.instrumentation`, the only variant that generates). It
 runs against an HTTPS mock the generator hosts on `127.0.0.1:18765` (`puber.baselineMockPort` in `gradle.properties`),
@@ -133,7 +136,13 @@ builds only hot methods, so rules left as `S` or `P` do not shorten startup.
 
 Generation runs against an `S`/`P`-only copy of `baseline-prof.txt`: the make target strips the `H` first, because
 the all-`H` profile embedded in the target APK coincided with `Failed to compile` flakes between journeys. A failed
-run restores the checked-in file; a successful one marks the new file `H`.
+run, Ctrl-C, TERM or hangup restores the checked-in files from the git-ignored backups `baseline-prof.txt.bak` and
+`startup-prof.txt.bak` (the plugin's merge rewrites both; a startup profile that did not exist is kept as the marker
+`startup-prof.txt.none.bak` and removed again); a successful run marks the new `baseline-prof.txt` `H`. Backups left by
+a killed run (SIGKILL included) are restored with a notice at the next start, which discards a generation that
+finished just before the kill; they are dropped as out of date only when `baseline-prof.txt` exists, is non-empty and has no
+method rule without `H`; otherwise (missing, empty, or a rule without `H`) both backups are restored. A Gradle daemon outlives its killed client and can still write the outputs after the restore, so
+let it finish before the next run.
 
 The mock's TLS material and media are committed output of two recipes; rerun them only to replace the files:
 
