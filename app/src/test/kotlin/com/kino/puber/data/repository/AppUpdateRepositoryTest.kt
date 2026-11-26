@@ -30,7 +30,7 @@ class AppUpdateRepositoryTest {
             name = "puber-v1.5.0.apk.sha256",
             browserDownloadUrl = "https://github.com/prakunin/Puber/releases/download/v1.5.0/puber-v1.5.0.apk.sha256",
         )
-        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.success(
             release(
                 tagName = "v1.5.0",
                 name = "Puber 1.5.0",
@@ -66,7 +66,7 @@ class AppUpdateRepositoryTest {
             browserDownloadUrl = "https://example.com/package.apk",
             contentType = "application/vnd.android.package-archive",
         )
-        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.success(
             release(tagName = "1.5.0", assets = listOf(genericApkAsset, packageApkAsset))
         )
 
@@ -77,7 +77,7 @@ class AppUpdateRepositoryTest {
 
     @Test
     fun getAvailableUpdate_returnsNull_whenLatestReleaseIsNotNewer() = runTest {
-        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.success(
             release(tagName = "1.4.0", assets = listOf(releaseAsset(name = "puber.apk")))
         )
 
@@ -85,7 +85,7 @@ class AppUpdateRepositoryTest {
 
         assertNull(equalResult.getOrThrow())
 
-        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.success(
             release(tagName = "1.3.9", assets = listOf(releaseAsset(name = "puber.apk")))
         )
 
@@ -105,7 +105,7 @@ class AppUpdateRepositoryTest {
         )
 
         unusableReleases.forEach { release ->
-            coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.success(release)
+            coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.success(release)
 
             val result = repository.getAvailableUpdate(currentVersionName = "1.4.0")
 
@@ -118,13 +118,34 @@ class AppUpdateRepositoryTest {
         val result = repository.getAvailableUpdate(currentVersionName = "dev-build")
 
         assertNull(result.getOrThrow())
-        coVerify(exactly = 0) { apiClient.getLatestGitHubRelease(any(), any()) }
+        coVerify(exactly = 0) { apiClient.getLatestGitHubRelease(any(), any(), any()) }
+    }
+
+    @Test
+    fun getAvailableUpdate_asksTheGitHubApiOrigin_byDefault() = runTest {
+        coEvery { apiClient.getLatestGitHubRelease(any(), any(), any()) } returns
+            Result.success(release(tagName = "1.4.0"))
+
+        repository.getAvailableUpdate(currentVersionName = "1.4.0")
+
+        coVerify { apiClient.getLatestGitHubRelease("prakunin", "Puber", "https://api.github.com") }
+    }
+
+    @Test
+    fun getAvailableUpdate_asksTheGivenOrigin_whenBaseUrlGiven() = runTest {
+        coEvery { apiClient.getLatestGitHubRelease(any(), any(), any()) } returns
+            Result.success(release(tagName = "1.4.0"))
+
+        AppUpdateRepository(apiClient, "https://127.0.0.1:18765/github")
+            .getAvailableUpdate(currentVersionName = "1.4.0")
+
+        coVerify { apiClient.getLatestGitHubRelease("prakunin", "Puber", "https://127.0.0.1:18765/github") }
     }
 
     @Test
     fun getAvailableUpdate_returnsFailure_whenApiFails() = runTest {
         val exception = IOException("Network error")
-        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber") } returns Result.failure(exception)
+        coEvery { apiClient.getLatestGitHubRelease("prakunin", "Puber", any()) } returns Result.failure(exception)
 
         val result = repository.getAvailableUpdate(currentVersionName = "1.4.0")
 

@@ -17,13 +17,11 @@ android {
 
     flavorDimensions += "buildType"
     productFlavors {
-        create("dev") {
+        create("instrumentation") {
             dimension = "buildType"
-            testInstrumentationRunnerArguments["targetAppId"] = "com.kino.puber.stage"
-        }
-        create("prod") {
-            dimension = "buildType"
-            testInstrumentationRunnerArguments["targetAppId"] = "com.kino.puber"
+            testInstrumentationRunnerArguments["targetAppId"] = "com.kino.puber.instrumentation"
+            testInstrumentationRunnerArguments["baselineMockPort"] =
+                providers.gradleProperty("puber.baselineMockPort").get()
         }
     }
 
@@ -43,4 +41,7 @@ dependencies {
     implementation(libs.androidx.test.ext.junit)
     implementation(libs.androidx.uiautomator)
     implementation(libs.androidx.test.runner)
+    implementation(libs.mockwebserver3)
+    implementation(libs.okhttp.tls)
+    implementation(libs.okhttp.doh)
 }

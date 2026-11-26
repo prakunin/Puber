@@ -28,9 +28,10 @@ import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * With an endpoint pinned, the interactor's seven mutators must leave it alone: no probe, no
- * preference write, no cache clear. The probe answers true for every endpoint, so a mutator
- * missing its guard would switch away from the pin.
+ * With an endpoint pinned, the six mutators other than `autoResolveWorkingDomain` must leave it
+ * alone: no probe, no preference write, no cache clear. The walk probes the pin and nothing else.
+ * The probe answers [probeAnswer] for every endpoint (true by default), so a mutator missing its
+ * guard would switch away from the pin.
  */
 internal class ApiDomainInteractorPinnedEndpointTest {
 
@@ -62,12 +63,13 @@ internal class ApiDomainInteractorPinnedEndpointTest {
     private val detailsPrefetcher = mockk<DetailsPrefetcher>(relaxed = true)
     private val probeCalls = mutableListOf<String>()
     private var evictCalls = 0
+    private var probeAnswer = true
     private val interactor = ApiDomainInteractor(
         preferences = preferences,
         contentCache = contentCache,
         probe = EndpointProbe { endpoint ->
             probeCalls += endpoint.domain
-            true
+            probeAnswer
         },
         reachability = EndpointReachability(),
         detailsPrefetcher = detailsPrefetcher,
@@ -140,22 +142,38 @@ internal class ApiDomainInteractorPinnedEndpointTest {
         assertNothingTouched()
     }
 
+    private fun assertOnlyThePinWasProbed() {
+        assertEquals(listOf(pin.domain), probeCalls)
+        probeCalls.clear()
+        assertNothingTouched()
+    }
+
     @Test
-    fun autoResolveWorkingDomain_probesNothing_whenPinned() = runBlocking {
+    fun autoResolveWorkingDomain_probesOnlyThePin_whenPinned() = runBlocking {
         val result = interactor.autoResolveWorkingDomain()
 
         assertEquals(
             ApiDomainAutoResolveResult.Success(interactor.getState(), changed = false),
             result,
         )
-        assertNothingTouched()
+        assertOnlyThePinWasProbed()
+    }
+
+    @Test
+    fun autoResolveWorkingDomain_returnsNotFound_whenThePinDoesNotAnswer() = runBlocking {
+        probeAnswer = false
+
+        val result = interactor.autoResolveWorkingDomain()
+
+        assertEquals(ApiDomainAutoResolveResult.NotFound, result)
+        assertOnlyThePinWasProbed()
     }
 
     /** Real time on purpose: under runTest the virtual timeout fires at withContext(Dispatchers.IO). */
     @Test
     fun autoResolveWorkingDomain_leavesNoWalkInFlight_whenPinned() = runBlocking {
         interactor.autoResolveWorkingDomain()
-        assertNothingTouched()
+        assertOnlyThePinWasProbed()
 
         KinoPubConfig.clearPinnedEndpoint()
         val result = withTimeout(5.seconds) { interactor.autoResolveWorkingDomain() }

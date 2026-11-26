@@ -100,6 +100,7 @@ import okhttp3.Cache
 import okhttp3.OkHttpClient
 import java.io.File
 
+internal const val GITHUB_API_BASE_URL = "https://api.github.com"
 
 // Deliberately left whole for now: at over three times the 600-line budget this wants splitting
 // into per-area clients (content, bookmarks, device, updates), which is its own change.
@@ -963,8 +964,12 @@ class KinoPubApiClient(
 
     // App update API
 
-    suspend fun getLatestGitHubRelease(owner: String, repo: String): Result<GitHubReleaseResponse> = thirdPartyApiCall {
-        httpClient.get("https://api.github.com/repos/$owner/$repo/releases/latest") {
+    suspend fun getLatestGitHubRelease(
+        owner: String,
+        repo: String,
+        apiBaseUrl: String = GITHUB_API_BASE_URL,
+    ): Result<GitHubReleaseResponse> = thirdPartyApiCall {
+        httpClient.get("${apiBaseUrl.trimEnd('/')}/repos/$owner/$repo/releases/latest") {
             headers {
                 append("Accept", "application/vnd.github+json")
             }

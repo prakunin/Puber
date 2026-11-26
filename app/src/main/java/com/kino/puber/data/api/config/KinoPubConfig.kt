@@ -1,6 +1,7 @@
 package com.kino.puber.data.api.config
 
 import android.util.Base64
+import com.kino.puber.data.api.network.DohResolver
 
 data class ApiEndpointPreset(
     val domain: String,
@@ -24,6 +25,9 @@ object KinoPubConfig {
 
     @Volatile
     private var pinnedEndpoint: ApiEndpointPreset? = null
+
+    @Volatile
+    private var pinnedResolver: DohResolver? = null
 
     private val defaultEndpoint: ApiEndpointPreset by lazy {
         val apiHost = "api.$defaultDomain"
@@ -61,6 +65,9 @@ object KinoPubConfig {
     val CURRENT_ENDPOINT: ApiEndpointPreset get() = activeEndpoint
     val CUSTOM_API_DOMAIN: String? get() = snapshot?.override
     val IS_PINNED_ENDPOINT: Boolean get() = pinnedEndpoint != null
+
+    /** The DNS-over-HTTPS resolver of the app client: Google's, or the pin's own, null for system DNS. */
+    val DNS_RESOLVER: DohResolver? get() = if (pinnedEndpoint != null) pinnedResolver else DohResolver.GOOGLE
     val BUILT_IN_ENDPOINTS: List<ApiEndpointPreset> by lazy {
         listOf(defaultEndpoint, aladorEndpoint, legacyCdnEndpoint)
     }
@@ -79,14 +86,17 @@ object KinoPubConfig {
 
     /**
      * Pins every endpoint getter to [endpoint], whatever the domain override says, until cleared.
+     * [resolver] is the DNS-over-HTTPS resolver of the pinned app client; null keeps system DNS.
      * A seam with no production caller until hermetic-baseline-generation wires it.
      */
-    fun setPinnedEndpoint(endpoint: ApiEndpointPreset) {
+    fun setPinnedEndpoint(endpoint: ApiEndpointPreset, resolver: DohResolver? = null) {
+        pinnedResolver = resolver
         pinnedEndpoint = endpoint
     }
 
     fun clearPinnedEndpoint() {
         pinnedEndpoint = null
+        pinnedResolver = null
     }
 
     private fun resolveEndpoint(domain: String): ApiEndpointPreset {

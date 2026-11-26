@@ -102,23 +102,31 @@ Refresh before every release whose diff touches startup, Home, Details or the pl
 release. Regenerating installs a build on a device, drives it, and rewrites files that are checked in - ask before
 starting it, and never fold it into an unrelated change.
 
-One command, on one named emulator (the dev flavor, `com.kino.puber.stage`, is the only one that generates). Take
-`PUBER_CLIENT_SECRET`, `PUBER_API_DOMAIN` and `TMDB_READ_ACCESS_TOKEN` from the main checkout's `.env` into that
-command's environment only:
+One command, on one named emulator. It needs no secrets, no `.env`, no KinoPub account and no login on the device:
 
 ```bash
 DEVICE=host.docker.internal:5555 ./tools/generate-baseline-profile.sh
 ```
 
 It runs `make baseline-profile`, which talks to a private adb server that sees only `$DEVICE`, so no other device is
-touched. The device must be an emulator with API 34 or newer: there the benchmark library resets the app in place and
-keeps its data, and the make target refuses anything else.
+touched. The device must be an emulator with API 34 or newer: there the benchmark library resets the app in place, and
+the make target refuses anything else. The script first checks that `$DEVICE` is reachable (`adb connect` for a
+host:port serial, `get-state` is `device`), is an emulator and runs API 34 or newer; otherwise it exits 2 before
+installing anything.
 
-The script first checks that `$DEVICE` is reachable (`adb connect` for a host:port serial, `get-state` is `device`),
-is an emulator and runs API 34 or newer; otherwise it exits 2 before installing anything.
-
-The playback journey opens the player on the first Home item and leaves it, which saves a watch position: every
-generation writes one position to the paired KinoPub account. Run it on an account where that is acceptable.
+Generation drives the `instrumentation` flavor (`com.kino.puber.instrumentation`, the only variant that generates). It
+runs against an HTTPS mock the generator hosts on `127.0.0.1:18765` (`puber.baselineMockPort` in `gradle.properties`),
+with seeded synthetic tokens in the real token store and a network config that trusts only the mock's test root. The
+app resolves `api.baseline.test` through DNS-over-HTTPS served by the mock (`dns.baseline.test`, bootstrap `127.0.0.1`),
+probes the pinned endpoint, runs the update check against the mock's `/github` route and publishes one TV home program,
+so the production cold-start paths stay in the profile. An egress blocker allows the mock by IP and those two test hosts
+on the mock port and refuses every other host, journaling the attempt, so nothing reaches KinoPub, TMDB or any other
+server. Before each iteration the target is killed and its databases and caches are dropped; after it, the generator
+checks that the target's egress journal is empty, that the mock saw no unknown route and that every required route was
+hit (the per-iteration `PuberGen` lines in the logcat file the script prints). A late check (`PuberGen` `late after=`
+lines) repeats the journal and unknown-route test before each generator test after the first and after the last one.
+Any violation fails the run. A route the app now requests and the mock lacks is added to the route table in
+`BaselineMockBackend.kt`; the check is never loosened.
 
 The refresh marks every method rule in `baseline-prof.txt` hot (`H`): on API 29 the `speed-profile` compile
 builds only hot methods, so rules left as `S` or `P` do not shorten startup.
@@ -127,10 +135,14 @@ Generation runs against an `S`/`P`-only copy of `baseline-prof.txt`: the make ta
 the all-`H` profile embedded in the target APK coincided with `Failed to compile` flakes between journeys. A failed
 run restores the checked-in file; a successful one marks the new file `H`.
 
-`com.kino.puber.stage` must be paired once. If it is not, the script installs `devNonMinifiedRelease` over the existing
-one with `tools/android-apk-install-preserve` (app data kept), starts it and waits while you enter the code. A failed
-install stops the script; it never uninstalls or clears data. Generation never writes tokens. The auth provider is not
-packaged in `prodRelease`.
+The mock's TLS material and media are committed output of two recipes; rerun them only to replace the files:
+
+| Recipe | Writes | Expiry |
+|---|---|---|
+| `tools/make-baseline-mock-cert.sh` | `app/src/instrumentation/res/raw/baseline_mock_ca.pem`, `baselineprofile/src/main/assets/baseline/tls/leaf-test-only.pem` (leaf SANs `IP:127.0.0.1`, `DNS:api.baseline.test`, `DNS:dns.baseline.test`) | both valid 2020-01-01 to 2051-01-01 (notBefore far in the past: the emulator clock can lag the host) |
+| `tools/make-baseline-mock-media.sh <dir>` (needs ffmpeg) | `baselineprofile/src/main/assets/baseline/media/` | none |
+
+`StartupBenchmarks` targets `com.kino.puber.instrumentation` without a mock; the run `startup-benchmark-entry` owns it.
 
 ## Verification
 

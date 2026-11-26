@@ -6,6 +6,7 @@ import android.util.Base64
 import android.util.Log
 import com.kino.puber.data.api.config.ApiEndpointPreset
 import com.kino.puber.data.api.config.KinoPubConfig
+import com.kino.puber.data.api.network.DohResolver
 import com.kino.puber.data.api.network.HttpStack
 import com.kino.puber.data.repository.ICryptoPreferenceRepository
 import io.mockk.every
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -68,17 +70,41 @@ internal class ApiModulePinnedEndpointTest {
         }
     }
 
+    private val pin = ApiEndpointPreset(
+        domain = "127.0.0.1",
+        apiHost = "127.0.0.1:8080",
+        mainBaseUrl = "http://127.0.0.1:8080/v1/",
+        oauthBaseUrl = "http://127.0.0.1:8080/oauth2/",
+        extraBaseUrl = "http://127.0.0.1:8080/",
+    )
+
+    @Test
+    fun unpinnedEndpoint_buildsTheAppClientWithDoh(@TempDir cacheDir: Path) {
+        val application = startApiModule(cacheDir)
+        try {
+            assertTrue(application.koin.get<OkHttpClient>().dns is DnsOverHttps)
+        } finally {
+            application.close()
+        }
+    }
+
+    @Test
+    fun pinnedEndpointWithResolver_buildsTheAppClientWithDoh(@TempDir cacheDir: Path) {
+        KinoPubConfig.setPinnedEndpoint(
+            pin,
+            DohResolver("https://dns.baseline.test:18765/dns-query", listOf("127.0.0.1")),
+        )
+        val application = startApiModule(cacheDir)
+        try {
+            assertTrue(application.koin.get<OkHttpClient>().dns is DnsOverHttps)
+        } finally {
+            application.close()
+        }
+    }
+
     @Test
     fun pinnedEndpoint_buildsTheAppClientWithoutDoh(@TempDir cacheDir: Path) {
-        KinoPubConfig.setPinnedEndpoint(
-            ApiEndpointPreset(
-                domain = "127.0.0.1",
-                apiHost = "127.0.0.1:8080",
-                mainBaseUrl = "http://127.0.0.1:8080/v1/",
-                oauthBaseUrl = "http://127.0.0.1:8080/oauth2/",
-                extraBaseUrl = "http://127.0.0.1:8080/",
-            ),
-        )
+        KinoPubConfig.setPinnedEndpoint(pin)
         val application = startApiModule(cacheDir)
         try {
             val koin = application.koin
