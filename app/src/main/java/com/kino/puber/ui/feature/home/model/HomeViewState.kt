@@ -34,6 +34,7 @@ internal sealed interface HomeViewState {
 
     data class Error(
         val message: String,
+        val showMirrorAction: Boolean = true,
         override val apiDomainDialog: ApiDomainDialogState? = null,
     ) : HomeViewState
 }

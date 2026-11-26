@@ -95,6 +95,7 @@ internal fun DeviceSettingsContent(
         when (state) {
             is DeviceSettingsState.Error -> ErrorView(
                 error = state.error,
+                showMirrorAction = state.showMirrorAction,
                 onRetry = { onAction(CommonAction.RetryClicked) },
                 onConfigureApiDomain = { onAction(DeviceSettingsActions.OpenApiDomainDialog) },
             )
@@ -130,6 +131,7 @@ private fun LoadingView() {
 @Composable
 private fun ErrorView(
     error: String,
+    showMirrorAction: Boolean,
     onRetry: () -> Unit,
     onConfigureApiDomain: () -> Unit,
 ) {
@@ -168,8 +170,10 @@ private fun ErrorView(
                 ) {
                     Text(stringResource(R.string.device_settings_retry))
                 }
-                Button(onClick = onConfigureApiDomain) {
-                    Text(stringResource(R.string.api_domain_open_action))
+                if (showMirrorAction) {
+                    Button(onClick = onConfigureApiDomain) {
+                        Text(stringResource(R.string.api_domain_open_action))
+                    }
                 }
             }
         }

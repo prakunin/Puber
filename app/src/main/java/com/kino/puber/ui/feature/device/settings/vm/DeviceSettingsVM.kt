@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.device.settings.vm
 
 import com.kino.puber.R
+import com.kino.puber.core.error.ApiError
 import com.kino.puber.core.error.ErrorEntity
 import com.kino.puber.core.error.ErrorHandler
 import com.kino.puber.core.model.AppLanguage
@@ -200,7 +201,8 @@ internal class DeviceSettingsVM(
                         )
                     )
                 } else {
-                    throw IllegalStateException(currentDevice.exceptionOrNull())
+                    throw currentDevice.exceptionOrNull() as? ApiError.Unauthorized
+                        ?: IllegalStateException(currentDevice.exceptionOrNull())
                 }
             }
         }
@@ -258,7 +260,14 @@ internal class DeviceSettingsVM(
     override fun dispatchError(error: ErrorEntity) {
         val currentState = stateValue.state
         if (currentState !is DeviceSettingsState.Success) {
-            updateViewState(stateValue.copy(state = DeviceSettingsState.Error(error.message)))
+            updateViewState(
+                stateValue.copy(
+                    state = DeviceSettingsState.Error(
+                        error = error.message,
+                        showMirrorAction = error.code != ErrorEntity.CODE_UNAUTHORIZED,
+                    )
+                )
+            )
         }
         showMessage(error.message)
     }

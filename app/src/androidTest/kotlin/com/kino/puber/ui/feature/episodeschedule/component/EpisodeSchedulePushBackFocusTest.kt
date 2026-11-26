@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.kino.puber.core.di.LocalPuberKoinScope
+import com.kino.puber.core.session.SessionEndReason
 import com.kino.puber.core.ui.navigation.AppLauncher
 import com.kino.puber.core.ui.navigation.AppRouter
 import com.kino.puber.core.ui.navigation.PuberScreen
@@ -118,7 +119,7 @@ private object ProbeNavigationHost {
 }
 
 private object ProbeScreens : Screens {
-    override fun auth(): PuberScreen = unsupported()
+    override fun auth(sessionEndReason: SessionEndReason?): PuberScreen = unsupported()
 
     override fun main(): PuberScreen = unsupported()
 
