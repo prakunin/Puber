@@ -9,7 +9,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -19,8 +18,8 @@ import org.junit.runner.RunWith
  * Stream A answers its playlist request with a malformed body that is released by a gate, so the
  * parse failure (not retried, mapped to `NEXT_URL`) is reported only after the gate opens. A
  * failure or error event after `switchStream(B)` is the "reproduced" branch: the controller
- * reported A's failure against the stream the viewer already left, and the finding goes to the
- * `player-callback-gate` run. Each case fixes a different ordering:
+ * reported A's failure against the stream the viewer already left; the case guards the
+ * `PlaybackCallbackGate` fix. Each case fixes a different ordering:
  *
  * - [delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched]: control; without the switch the
  *   same route must fail, otherwise the probes pass for nothing.
@@ -29,6 +28,9 @@ import org.junit.runner.RunWith
  * - [switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream]: A's error is parsed and
  *   queued on the main looper before the switch runs in the same main-thread turn (queued-error
  *   window); the case asserts the player did deliver that error, so it cannot pass unexercised.
+ * - [switchStreamToFailingStream_reportsOneFailureWithoutRePrepare]: B itself fails after the
+ *   switch; the controller must feed B's load start into the gate, otherwise the first real error
+ *   is answered by one extra prepare (a second request to B) before it is reported.
  */
 @RunWith(AndroidJUnit4::class)
 internal class PlaybackControllerStaleCallbackTest {
@@ -81,7 +83,6 @@ internal class PlaybackControllerStaleCallbackTest {
         assertNoFailureAfter(mark)
     }
 
-    @Ignore("player-callback-gate: stale failure queued before switchStream is attributed to the new stream; see docs/testing/player-playback.md")
     @Test
     fun switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream() {
         val gate = harness.newGate()
@@ -109,6 +110,40 @@ internal class PlaybackControllerStaleCallbackTest {
             probe.error.get(),
         )
         assertNoFailureAfter(mark)
+    }
+
+    @Test
+    fun switchStreamToFailingStream_reportsOneFailureWithoutRePrepare() {
+        harness.useMediaRoutes(
+            extra = listOf(
+                harness.server.route(
+                    id = "stream-b-malformed",
+                    path = FAILING_B_PATH,
+                    response = HermeticTestServer.text(
+                        body = "not a playlist",
+                        contentType = PlaybackControllerHarness.HLS_CONTENT_TYPE,
+                    ),
+                ),
+            ),
+        )
+        val probe = harness.prepare(HEALTHY_A_PATH)
+        harness.awaitReady(probe)
+        val mark = harness.events.mark()
+
+        harness.onMain { harness.controller.switchStream(harness.stream(FAILING_B_PATH), null) }
+
+        harness.awaitCondition("stream B failure is reported") {
+            harness.events.since(mark).any { it is PlaybackEvent.StreamFailure }
+        }
+        Thread.sleep(SETTLE_MS)
+        val failures = harness.events.since(mark).filterIsInstance<PlaybackEvent.StreamFailure>()
+        assertEquals("Expected exactly one failure; events=${harness.events.since(mark)}", 1, failures.size)
+        assertEquals(harness.url(FAILING_B_PATH), failures.single().url)
+        assertEquals(
+            "B's real error must be reported without a re-prepare; ${harness.diagnostics()}",
+            1,
+            harness.server.requestJournal.entries.count { it.path == FAILING_B_PATH },
+        )
     }
 
     private fun assertNoFailureAfter(mark: Int) {
@@ -151,6 +186,8 @@ internal class PlaybackControllerStaleCallbackTest {
     private companion object {
         const val STREAM_A_PATH = "/a/master.m3u8"
         const val STREAM_B_PATH = "/media/progressive.mp4"
+        const val HEALTHY_A_PATH = "/media/progressive.mp4"
+        const val FAILING_B_PATH = "/b/malformed.m3u8"
         const val SETTLE_MS = 1_000L
         const val PARSE_WAIT_MS = 500L
         const val AWAIT_MS = 5_000L
