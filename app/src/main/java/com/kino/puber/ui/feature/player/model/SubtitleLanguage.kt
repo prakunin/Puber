@@ -18,8 +18,8 @@ internal fun knownLanguageOrNull(language: String?): String? {
 
 /**
  * The language Media3 should prefer for a subtitle row: [knownLanguageOrNull], or "" when the row
- * names no language. "" makes Media3 prefer no track, so an undetermined row without an override
- * shows nothing rather than an arbitrary "und" track.
+ * names no language. "" prefers no language, so no track is picked by language match; Media3's
+ * default or forced track selection may still apply.
  */
 internal fun preferredTextLanguage(language: String?): String = knownLanguageOrNull(language).orEmpty()
 

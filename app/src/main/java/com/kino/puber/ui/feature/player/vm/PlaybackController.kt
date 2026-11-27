@@ -897,7 +897,8 @@ internal class PlaybackController(
         // No positional fallback: on HLS the text tracks come from the manifest, whose order has
         // nothing to do with the API list, so "API row N is track N" picked the wrong subtitle.
         // Without a target the override stays unset and the preferred language chooses instead; an
-        // undetermined or blank row has none, so it shows no subtitles.
+        // undetermined or blank row prefers no language, so Media3's default or forced selection
+        // may still apply.
         val target = subtitleTrackSelector.select(track, textGroups.toPlayerTextTracks())
         val targetGroup = target?.let { textGroups.getOrNull(it.groupIndex) }
         val builder = player.trackSelectionParameters
