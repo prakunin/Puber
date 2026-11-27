@@ -1962,10 +1962,20 @@ internal class PlayerVM(
         } else {
             interactor.getPreferredSubtitlePreference(params.itemId)
         }
+        // A placeholder row ("Track N") says nothing about the dubbing, so it must not replace the stored one.
+        val keepStoredAudio = audioTrack?.isFallbackLabel == true
         interactor.saveTrackPreferences(
             itemId = params.itemId,
-            audioLang = audioTrack?.language?.takeIf { it.isNotEmpty() },
-            audioLabel = audioTrack?.label?.takeIf { it.isNotEmpty() },
+            audioLang = if (keepStoredAudio) {
+                interactor.getPreferredAudioLang(params.itemId)
+            } else {
+                audioTrack?.language?.takeIf { it.isNotEmpty() }
+            },
+            audioLabel = if (keepStoredAudio) {
+                interactor.getPreferredAudioLabel(params.itemId)
+            } else {
+                audioTrack?.label?.takeIf { it.isNotEmpty() }
+            },
             subtitle = subtitle,
         )
     }
