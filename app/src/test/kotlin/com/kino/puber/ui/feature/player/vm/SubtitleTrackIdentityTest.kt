@@ -1,6 +1,7 @@
 package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
+import com.kino.puber.ui.feature.player.model.preferredTextLanguage
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -85,6 +86,20 @@ internal class SubtitleTrackIdentityTest {
     fun knownLanguageOrNull_keepsRealLanguagesVerbatim() {
         listOf("ru", "rus", "en-US", "ai", "undefined").forEach {
             assertEquals(it, knownLanguageOrNull(it))
+        }
+    }
+
+    @Test
+    fun preferredTextLanguage_isEmpty_forUndeterminedAndBlank() {
+        listOf("und", "UND", "und-Latn", "", " ", null).forEach {
+            assertEquals("", preferredTextLanguage(it), "input: $it")
+        }
+    }
+
+    @Test
+    fun preferredTextLanguage_keepsKnownLanguage() {
+        listOf("ru", "rus", "en-US", "ai").forEach {
+            assertEquals(it, preferredTextLanguage(it), "input: $it")
         }
     }
 
