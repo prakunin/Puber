@@ -19,17 +19,21 @@ internal object BaselineInstrumentationEnvironment {
     /** The HTTP/2 mock server: DNS-over-HTTPS and the update check. */
     fun mockH2Origin(): String = "https://$MOCK_HOST:${BuildConfig.BASELINE_MOCK_H2_PORT}"
 
+    /** The HTTPS loopback server of the player device tests (`:player-test-fixtures`). */
+    fun playerFixtureOrigin(): String = "https://$MOCK_HOST:${BuildConfig.PLAYER_FIXTURE_PORT}"
+
     fun journalDirectory(context: Context): File = File(context.noBackupFilesDir, JOURNAL_DIRECTORY)
 
     /**
-     * The four origins the app may reach: the HTTP/1.1 server (the mock by IP and the API test host)
-     * and the HTTP/2 server (the mock by IP and the DNS-over-HTTPS test host).
+     * The five origins the app may reach: the HTTP/1.1 server (the mock by IP and the API test host),
+     * the HTTP/2 server (the mock by IP and the DNS-over-HTTPS test host) and the player fixture server.
      */
     fun allowedOrigins(): Set<String> = setOf(
         mockOrigin(),
         "https://$API_HOST:${BuildConfig.BASELINE_MOCK_PORT}",
         mockH2Origin(),
         "https://$DNS_HOST:${BuildConfig.BASELINE_MOCK_H2_PORT}",
+        playerFixtureOrigin(),
     )
 
     fun configure(context: Context) = configure(journalDirectory(context))

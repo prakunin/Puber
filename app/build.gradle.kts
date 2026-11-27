@@ -245,6 +245,7 @@ android {
             buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"\"")
             buildConfigField("int", "BASELINE_MOCK_PORT", providers.gradleProperty("puber.baselineMockPort").get())
             buildConfigField("int", "BASELINE_MOCK_H2_PORT", providers.gradleProperty("puber.baselineMockH2Port").get())
+            buildConfigField("int", "PLAYER_FIXTURE_PORT", providers.gradleProperty("puber.playerFixturePort").get())
         }
     }
 
@@ -442,6 +443,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.coroutines.test)
+    "androidTestInstrumentationImplementation"(project(":player-test-fixtures"))
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 

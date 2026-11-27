@@ -77,6 +77,16 @@ class BaselineNetworkBlockerTest {
     }
 
     @Test
+    fun select_returnsNoProxy_whenOriginIsPlayerFixture() {
+        val (selector, journal) = blocker()
+
+        val proxies = selector.select(URI("https://127.0.0.1:${BuildConfig.PLAYER_FIXTURE_PORT}/hls/master.m3u8"))
+
+        assertEquals(listOf(Proxy.NO_PROXY), proxies)
+        assertEquals(emptyList<String>(), journal.snapshot())
+    }
+
+    @Test
     fun select_returnsDeadProxyAndJournals_whenTestHostIsNotAllowed() {
         val (selector, journal) = blocker()
 
