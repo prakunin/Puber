@@ -139,9 +139,11 @@ internal class PlayerUIMapperTest {
 
     private fun unknownLabel() = resources.getString(R.string.player_audio_language_unknown)
 
+    private fun xAudio(lang: String?) = Audio(id = 1, lang = lang, author = AudioAuthor(id = 1, title = "X"))
+
     @Test
     fun mapAudioTracks_nullLanguageUsesLocalizedUnknownWithAuthor() {
-        val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = null, author = AudioAuthor(id = 1, title = "X"))))
+        val rows = mapper.mapAudioTracks(listOf(xAudio(null)))
 
         assertEquals(listOf(AudioTrackUIState(index = 0, label = "${unknownLabel()} · X", language = "")), rows)
     }
@@ -151,7 +153,7 @@ internal class PlayerUIMapperTest {
         val expected = AudioTrackUIState(index = 0, label = "${unknownLabel()} · X", language = "")
 
         listOf("", "und").forEach { lang ->
-            val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = lang, author = AudioAuthor(id = 1, title = "X"))))
+            val rows = mapper.mapAudioTracks(listOf(xAudio(lang)))
 
             assertEquals(listOf(expected), rows, "lang=$lang")
         }
