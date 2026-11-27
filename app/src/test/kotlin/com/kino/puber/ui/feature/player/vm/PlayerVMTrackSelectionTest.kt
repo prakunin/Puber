@@ -37,6 +37,7 @@ import org.junit.jupiter.api.extension.RegisterExtension
  * `startPositionUpdates()` loop forever → OOM.
  * Without `runTest`, the infinite loop stays suspended at its first `delay()` — harmless.
  */
+@Suppress("LargeClass")
 internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     companion object {
