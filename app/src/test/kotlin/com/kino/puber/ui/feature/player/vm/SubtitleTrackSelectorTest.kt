@@ -106,6 +106,14 @@ internal class SubtitleTrackSelectorTest {
     }
 
     @Test
+    fun select_doesNotMatchByLanguage_whenBothAreUndetermined() {
+        val row = SubtitleTrackUIState(label = "und", language = "und", url = "")
+        val candidates = listOf(PlayerTextTrack("", 0, 0, language = "und"))
+
+        assertNull(selector.select(row, candidates))
+    }
+
+    @Test
     fun select_rejectsReusedCoordinatesAndIds_withDifferentLanguage() {
         val row = manifestTrack(
             groupId = "reused-group",
@@ -147,6 +155,47 @@ internal class SubtitleTrackSelectorTest {
         )
 
         assertNull(selector.select(row, candidates))
+    }
+
+    @Test
+    fun select_resolvesManifestRowTakingRenditionLanguage_toItsUntaggedCandidate() {
+        val row = SubtitleTrackUIState(
+            label = "",
+            language = "ru",
+            url = "",
+            playerTrackId = "sub-1",
+            playerTrackGroupId = "0:sub-1",
+            playerTrackIndex = 0,
+        )
+        val candidates = listOf(
+            PlayerTextTrack("0:sub-1", 0, 0, formatId = "sub-1", language = null),
+            PlayerTextTrack("1:0", 1, 0, formatId = "1:k1.srt", language = "ru"),
+        )
+
+        assertEquals(candidates[0], selector.select(row, candidates))
+    }
+
+    @Test
+    fun select_doesNotPickUntaggedCandidateByLanguage_forTaggedRow() {
+        val row = SubtitleTrackUIState(label = "", language = "ru", url = "")
+
+        assertNull(selector.select(row, listOf(PlayerTextTrack("0", 0, 0, language = null))))
+    }
+
+    @Test
+    fun select_resolvesUndeterminedApiRow_toItsUntaggedSideLoad() {
+        val row = SubtitleTrackUIState(
+            label = "",
+            language = "und",
+            url = "https://api.test/subtitles/k2.srt",
+            playerTrackId = "k2.srt",
+        )
+        val candidates = listOf(
+            PlayerTextTrack("1:0", 0, 0, formatId = "1:k1.srt", formatLabel = "k1.srt", language = null),
+            PlayerTextTrack("2:0", 1, 0, formatId = "2:k2.srt", formatLabel = "k2.srt", language = null),
+        )
+
+        assertEquals(candidates[1], selector.select(row, candidates))
     }
 
     private fun sideLoads() = listOf(

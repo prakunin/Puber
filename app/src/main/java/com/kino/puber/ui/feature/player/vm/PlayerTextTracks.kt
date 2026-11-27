@@ -7,6 +7,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
+import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 
 /**
@@ -43,7 +44,7 @@ private fun buildSubtitleRow(
     // SubtitleLabeler builds every visible label once the full row list is known.
     return SubtitleTrackUIState(
         label = "",
-        language = format.language ?: renditionFormat?.language.orEmpty(),
+        language = knownLanguageOrNull(format.language) ?: knownLanguageOrNull(renditionFormat?.language).orEmpty(),
         url = "",
         isForced = flags and C.SELECTION_FLAG_FORCED != 0,
         descriptiveLabel = format.label ?: renditionFormat?.label,
@@ -84,7 +85,7 @@ internal fun List<Tracks.Group>.toPlayerTextTracks(): List<PlayerTextTrack> =
                 trackIndex = trackIndex,
                 formatId = format.id,
                 formatLabel = format.label,
-                language = format.language,
+                language = knownLanguageOrNull(format.language),
                 isForced = (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0,
             )
         }

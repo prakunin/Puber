@@ -73,6 +73,11 @@ internal class SubtitleLabelerTest {
     }
 
     @Test
+    fun apply_undeterminedLanguageWithoutLabel_readsAsUnknownOrdinal() {
+        assertEquals(listOf("Субтитры 1"), labels(sub("und")))
+    }
+
+    @Test
     fun composedLabel_usesTheSameSeparatorAsTheVariantString() {
         val ru = variantFormat("src/main/res/values/player.xml")
         val en = variantFormat("src/main/res/values-en/strings.xml")

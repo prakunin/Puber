@@ -171,6 +171,22 @@ internal class PlaybackControllerNetworkTracksTest {
     }
 
     @Test
+    fun progressiveUndeterminedAudio_reportsLocalizedFallbackRow() {
+        harness.useMediaRoutes(required = setOf("progressive"))
+        val probe = harness.prepare("/media/progressive.mp4")
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("the controller reported its audio rows") {
+            harness.events.all.any { it is PlaybackEvent.Tracks }
+        }
+        val row = harness.events.all.filterIsInstance<PlaybackEvent.Tracks>().first().audio.first()
+        assertEquals(harness.targetContext.getString(R.string.player_audio_track_fallback, 1), row.label)
+        assertTrue(row.isFallbackLabel)
+        assertEquals("", row.language)
+        assertTrue(probe.error.get() == null)
+    }
+
+    @Test
     fun hlsSwitch_preservesPositionIntentTracks_andLastStreamWins() {
         val lowPath = "/media/hls/quality-low.m3u8"
         val highPath = "/media/hls/quality-high.m3u8"

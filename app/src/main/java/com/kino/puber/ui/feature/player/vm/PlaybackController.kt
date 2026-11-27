@@ -47,6 +47,7 @@ import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
+import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -902,7 +903,7 @@ internal class PlaybackController(
             .buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setPreferredTextLanguage(track.language)
+            .setPreferredTextLanguage(knownLanguageOrNull(track.language).orEmpty())
         if (target != null && targetGroup != null) {
             builder.setOverrideForType(
                 TrackSelectionOverride(targetGroup.mediaTrackGroup, target.trackIndex),

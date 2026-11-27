@@ -121,6 +121,21 @@ internal class PlayerTextTracksTest {
     }
 
     @Test
+    fun manifestRow_undeterminedFormatLanguage_takesRenditionLanguage() {
+        val rendition = rendition(
+            "https://cdn.test/subtitles/rus.srt/index.m3u8",
+            format("subs:1", language = "rus"),
+        )
+        val rows = buildSubtitleRows(
+            listOf(group("0:subs:1", format("0:subs:1", language = "und"))),
+            listOf(rendition),
+            merged = true,
+        )
+
+        assertEquals("ru", rows.single().language)
+    }
+
+    @Test
     fun manifestRow_fallsBackToLabelAndLanguage_butNotWhenAmbiguous() {
         val first = rendition("https://cdn.test/a/index.m3u8", format("a", language = "ru", label = "Russian"))
         val second = rendition("https://cdn.test/b/index.m3u8", format("b", language = "ru", label = "Russian"))
@@ -177,6 +192,13 @@ internal class PlayerTextTracksTest {
         assertEquals(listOf(0, 1), tracks.map { it.groupIndex })
         assertEquals(listOf(false, true), tracks.map { it.isForced })
         assertEquals("English", tracks[0].formatLabel)
+    }
+
+    @Test
+    fun toPlayerTextTracks_undeterminedLanguage_isNull() {
+        val tracks = listOf(group("g0", format("t", language = "und"))).toPlayerTextTracks()
+
+        assertNull(tracks.single().language)
     }
 
     @Test

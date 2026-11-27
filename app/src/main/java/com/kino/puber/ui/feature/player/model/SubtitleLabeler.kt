@@ -39,9 +39,8 @@ internal class SubtitleLabeler(
         }
         val descriptiveLabel = track.readableDescriptiveLabel()
         val sourceLabel = track.sourceDescriptiveLabel()
-        val rawLanguageLabel = track.language
-            .trim()
-            .takeIf { it.isNotEmpty() }
+        val rawLanguageLabel = knownLanguageOrNull(track.language)
+            ?.trim()
             ?.uppercase(Locale.ROOT)
         return languageLabel
             ?: descriptiveLabel

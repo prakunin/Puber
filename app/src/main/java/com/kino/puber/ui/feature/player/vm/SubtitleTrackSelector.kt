@@ -2,6 +2,7 @@ package com.kino.puber.ui.feature.player.vm
 
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
+import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
 import com.kino.puber.ui.feature.player.model.readableDescriptiveLabel
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 
@@ -52,8 +53,11 @@ internal class SubtitleTrackSelector {
     private fun PlayerTextTrack.isSemanticallyCompatibleWith(
         track: SubtitleTrackUIState,
     ): Boolean {
-        val languageMatches = track.language.isBlank() ||
-            language?.let { sameSubtitleLanguage(it, track.language) } == true
+        // An undetermined row language is no language; an untagged candidate is left to the
+        // identity matchers (matchByLanguage still requires a tagged candidate).
+        val languageMatches = knownLanguageOrNull(track.language) == null ||
+            language == null ||
+            sameSubtitleLanguage(language, track.language)
         val forcedMatches = track.isForced == null || isForced == track.isForced
         val preferredLabel = track.readableDescriptiveLabel()?.normalizedSubtitleLabel()
         val candidateLabel = formatLabel?.normalizedSubtitleLabel()
@@ -107,7 +111,7 @@ internal class SubtitleTrackSelector {
         track: SubtitleTrackUIState,
         candidates: List<PlayerTextTrack>,
     ): PlayerTextTrack? {
-        if (track.language.isEmpty()) return null
+        if (knownLanguageOrNull(track.language) == null) return null
         return candidates
             .filter { candidate ->
                 candidate.language?.let { sameSubtitleLanguage(it, track.language) } == true
