@@ -92,14 +92,16 @@ jobs:
       - run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testProdDebugUnitTest
+        run: ./gradlew testProdDebugUnitTest :player-test-fixtures:testDebugUnitTest :app:compileInstrumentationDebugAndroidTestKotlin
 
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results
-          path: app/build/reports/tests/
+          path: |
+            app/build/reports/tests/
+            player-test-fixtures/build/reports/tests/
 
   build:
     name: Build
