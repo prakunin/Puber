@@ -16,20 +16,27 @@ internal object BaselineInstrumentationEnvironment {
 
     fun mockOrigin(): String = "https://$MOCK_HOST:${BuildConfig.BASELINE_MOCK_PORT}"
 
+    /** The HTTP/2 mock server: DNS-over-HTTPS and the update check. */
+    fun mockH2Origin(): String = "https://$MOCK_HOST:${BuildConfig.BASELINE_MOCK_H2_PORT}"
+
     fun journalDirectory(context: Context): File = File(context.noBackupFilesDir, JOURNAL_DIRECTORY)
 
-    /** The three origins the app may reach: the mock by IP, and its API and DNS-over-HTTPS test hosts. */
+    /**
+     * The four origins the app may reach: the HTTP/1.1 server (the mock by IP and the API test host)
+     * and the HTTP/2 server (the mock by IP and the DNS-over-HTTPS test host).
+     */
     fun allowedOrigins(): Set<String> = setOf(
         mockOrigin(),
         "https://$API_HOST:${BuildConfig.BASELINE_MOCK_PORT}",
-        "https://$DNS_HOST:${BuildConfig.BASELINE_MOCK_PORT}",
+        mockH2Origin(),
+        "https://$DNS_HOST:${BuildConfig.BASELINE_MOCK_H2_PORT}",
     )
 
     fun configure(context: Context) = configure(journalDirectory(context))
 
     /**
-     * Pins the API to the `.test` host (resolved over DNS-over-HTTPS served by the mock, bootstrapped
-     * from 127.0.0.1) and installs the blocker. Every name resolves to the loopback mock.
+     * Pins the API to the `.test` host on the HTTP/1.1 port (resolved over DNS-over-HTTPS served by the
+     * mock on the HTTP/2 port, bootstrapped from 127.0.0.1) and installs the blocker. Every name resolves to the loopback mock.
      */
     internal fun configure(journalDir: File) {
         val port = BuildConfig.BASELINE_MOCK_PORT
@@ -42,7 +49,7 @@ internal object BaselineInstrumentationEnvironment {
                 oauthBaseUrl = "$apiOrigin/oauth2/",
                 extraBaseUrl = "$apiOrigin/",
             ),
-            DohResolver("https://$DNS_HOST:$port/dns-query", listOf(MOCK_HOST)),
+            DohResolver("https://$DNS_HOST:${BuildConfig.BASELINE_MOCK_H2_PORT}/dns-query", listOf(MOCK_HOST)),
         )
         BaselineNetworkBlocker.install(journalDir, allowedOrigins())
     }

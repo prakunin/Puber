@@ -244,6 +244,7 @@ android {
             buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"\"")
             buildConfigField("String", "API_DOMAIN_OVERRIDE", "\"\"")
             buildConfigField("int", "BASELINE_MOCK_PORT", providers.gradleProperty("puber.baselineMockPort").get())
+            buildConfigField("int", "BASELINE_MOCK_H2_PORT", providers.gradleProperty("puber.baselineMockH2Port").get())
         }
     }
 

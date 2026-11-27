@@ -2,11 +2,17 @@ package com.kino.puber.baselineprofile
 
 import android.content.Context
 import java.io.Closeable
+import java.io.IOException
 import java.net.InetAddress
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import okhttp3.Protocol
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import okio.Buffer
@@ -14,27 +20,37 @@ import okio.Buffer
 /**
  * A route-based HTTPS backend for the baseline profile journeys.
  *
- * The server is owned by the generator process, so the target application can be killed between
- * iterations without taking down the mock or its request record. A request that matches no route
- * is answered with 404 and recorded; verification fails on any such request.
+ * Two servers are owned by the generator process, so the target application can be killed between
+ * iterations without taking down the mock or its request record. The HTTP/1.1 server (`port`)
+ * serves the API, images and the stream like the real API host; the HTTP/2 server (`h2Port`)
+ * serves DNS-over-HTTPS and the update check like the real DoH and GitHub hosts. A request that
+ * matches no route of its server is answered with 404 and recorded; verification fails on any such
+ * request.
  */
 class BaselineMockBackend(
     private val port: Int,
+    private val h2Port: Int,
     private val fixtures: BaselineFixtures,
     private val leaf: HeldCertificate,
 ) : Closeable {
 
-    private val server = MockWebServer()
+    private val h1Server = MockWebServer().apply { protocols = listOf(Protocol.HTTP_1_1) }
+    private val h2Server = MockWebServer()
     private val lock = Any()
     private var activeScenario = BaselineScenario.Startup
     private var activeRoutes: List<BaselineMockRoute> = emptyList()
     private val matchedCounts = linkedMapOf<BaselineMockRoute, Int>()
     private val unknownRequests = mutableListOf<BaselineRequest>()
     private var started = false
+    private var dispatching = BaselineMockServer.H1
 
-    /** The bound port; differs from the constructor argument only when that is 0. */
+    /** The bound port of the HTTP/1.1 server; differs from the constructor argument only when that is 0. */
     val boundPort: Int
-        get() = server.port
+        get() = h1Server.port
+
+    /** The bound port of the HTTP/2 server; differs from the constructor argument only when that is 0. */
+    val boundH2Port: Int
+        get() = h2Server.port
 
     /** Number of requests seen since the last reset, matched or not. */
     val requestCount: Int
@@ -43,9 +59,18 @@ class BaselineMockBackend(
     fun start() {
         synchronized(lock) {
             check(!started) { "BaselineMockBackend is already started" }
-            server.useHttps(HandshakeCertificates.Builder().heldCertificate(leaf).build().sslSocketFactory())
-            server.dispatcher = routeDispatcher()
-            server.start(InetAddress.getByName(LOOPBACK), port)
+            val socketFactory = HandshakeCertificates.Builder().heldCertificate(leaf).build().sslSocketFactory()
+            h1Server.useHttps(socketFactory)
+            h2Server.useHttps(socketFactory)
+            h1Server.dispatcher = routeDispatcher(BaselineMockServer.H1)
+            h2Server.dispatcher = routeDispatcher(BaselineMockServer.H2)
+            h1Server.start(InetAddress.getByName(LOOPBACK), port)
+            try {
+                h2Server.start(InetAddress.getByName(LOOPBACK), h2Port)
+            } catch (error: IOException) {
+                h1Server.close()
+                throw error
+            }
             started = true
             resetTest()
         }
@@ -89,18 +114,23 @@ class BaselineMockBackend(
         synchronized(lock) {
             if (!started) return
             started = false
-            server.close()
+            try {
+                h1Server.close()
+            } finally {
+                h2Server.close()
+            }
         }
     }
 
-    private fun routeDispatcher() = object : Dispatcher() {
+    private fun routeDispatcher(server: BaselineMockServer) = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse = synchronized(lock) {
-            val route = activeRoutes.firstOrNull { it.matches(request) }
+            val route = activeRoutes.firstOrNull { it.server == server && it.matches(request) }
             if (route == null) {
                 unknownRequests += BaselineRequest.from(request)
                 return textResponse(HTTP_NOT_FOUND, JSON, """{"error":"unknown baseline route"}""")
             }
             matchedCounts[route] = (matchedCounts[route] ?: 0) + 1
+            dispatching = server
             route.respond(request)
         }
     }
@@ -109,6 +139,10 @@ class BaselineMockBackend(
      * The route table. Every request one of the journeys makes is listed here; a request that is
      * not listed is a violation to be added as a route, never a reason to loosen verification.
      * Routes with `required = true` must be hit for an iteration to count as having run.
+     * `/v1/items/2` is the never-played series everywhere but in Playback, where the generic item route
+     * answers it with the movie the player opens. Every other id is
+     * the plain movie: its empty bookmarks send the details screen to `get-item-folders` (required in
+     * Browse), which lists the watch-later folder and so fills the bookmark icon, and the movie Playback plays is never watched or bookmarked.
      */
     @Suppress("LongMethod")
     private fun routesFor(scenario: BaselineScenario): List<BaselineMockRoute> {
@@ -117,12 +151,14 @@ class BaselineMockBackend(
             path: String,
             method: String = "GET",
             required: Boolean = false,
+            server: BaselineMockServer = BaselineMockServer.H1,
             respond: (RecordedRequest) -> MockResponse,
         ) {
-            routes += BaselineMockRoute(method, Regex(path), path, required, respond)
+            routes += BaselineMockRoute(method, Regex(path), path, required, server, respond)
         }
 
-        fun json(body: String): (RecordedRequest) -> MockResponse = { textResponse(HTTP_OK, JSON, body) }
+        fun json(body: String): (RecordedRequest) -> MockResponse =
+            { textResponse(HTTP_OK, JSON, body, chunked = chunkedBodies()) }
 
         fun media(name: String, contentType: String): (RecordedRequest) -> MockResponse =
             { binaryResponse(contentType, fixtures.media(name)) }
@@ -138,7 +174,7 @@ class BaselineMockBackend(
         route("/v1/watching/toggle", respond = json(fixtures.json("ok")))
         route("/v1/bookmarks", respond = json(fixtures.json("bookmarks")))
         route("/v1/bookmarks/\\d+", respond = json(fixtures.json("bookmark_items")))
-        route("/v1/bookmarks/get-item-folders", respond = json(fixtures.json("empty_bookmark_folders")))
+        route("/v1/bookmarks/get-item-folders", required = browse, respond = json(fixtures.json("bookmark_folders")))
         route("/v1/collections", respond = json(fixtures.json("collections")))
         route("/v1/genres", respond = json(fixtures.json("genres")))
         route("/v1/items/hot", required = home, respond = json(fixtures.json("items")))
@@ -150,12 +186,18 @@ class BaselineMockBackend(
         route("/v1/device/info", respond = json(fixtures.json("device_info")))
         route("/v1/device/notify", method = "POST", respond = json(fixtures.json("ok")))
         route("/v1/items/similar", required = browse, respond = json(fixtures.json("similar")))
+        if (!playback) route("/v1/items/2", required = browse, respond = json(fixtures.json("item_serial")))
         route("/v1/items/\\d+", required = browse || playback) { request ->
             val id = request.url.encodedPath.substringAfterLast('/')
-            textResponse(HTTP_OK, JSON, fixtures.json("item").replace(ID_PLACEHOLDER, id))
+            textResponse(HTTP_OK, JSON, fixtures.json("item").replace(ID_PLACEHOLDER, id), chunked = chunkedBodies())
         }
-        route("/github/repos/[^/]+/[^/]+/releases/latest", required = home, respond = json(fixtures.json("github_release")))
-        route("/dns-query", method = "POST", required = home, respond = ::dnsResponse)
+        route(
+            "/github/repos/[^/]+/[^/]+/releases/latest",
+            required = home,
+            server = BaselineMockServer.H2,
+            respond = json(fixtures.json("github_release")),
+        )
+        route("/dns-query", method = "POST", required = home, server = BaselineMockServer.H2, respond = ::dnsResponse)
         route("/oauth2/device", method = "POST", respond = json(fixtures.json("token")))
         route("/media/(poster|wide)\\.jpg", required = browse) { request ->
             binaryResponse(JPEG, fixtures.media(request.url.encodedPath.substringAfterLast('/')))
@@ -210,17 +252,24 @@ class BaselineMockBackend(
         return binaryResponse(DNS_MESSAGE, body.readByteArray())
     }
 
-    private fun textResponse(code: Int, contentType: String, body: String): MockResponse =
+    private fun textResponse(code: Int, contentType: String, body: String, chunked: Boolean = false): MockResponse =
         MockResponse.Builder()
             .code(code)
             .addHeader("Content-Type", contentType)
-            .body(body)
+            .addHeader("Date", httpDate())
+            .apply { if (chunked) chunkedBody(body, JSON_CHUNK_BYTES) else body(body) }
             .build()
+
+    /** JSON bodies are chunked on the HTTP/1.1 server only; set by the dispatcher, read inside its lock. */
+    private fun chunkedBodies(): Boolean = dispatching == BaselineMockServer.H1
+
+    private fun httpDate(): String = HTTP_DATE.format(ZonedDateTime.now(ZoneOffset.UTC))
 
     private fun binaryResponse(contentType: String, bytes: ByteArray): MockResponse =
         MockResponse.Builder()
             .code(HTTP_OK)
             .addHeader("Content-Type", contentType)
+            .addHeader("Date", httpDate())
             .body(Buffer().write(bytes))
             .build()
 
@@ -229,6 +278,7 @@ class BaselineMockBackend(
         const val HTTP_OK = 200
         const val HTTP_BAD_REQUEST = 400
         const val HTTP_NOT_FOUND = 404
+        const val JSON_CHUNK_BYTES = 1024
         const val ID_PLACEHOLDER = "{{ID}}"
         const val JSON = "application/json; charset=utf-8"
         const val JPEG = "image/jpeg"
@@ -247,11 +297,19 @@ class BaselineMockBackend(
         const val IPV4_LOOPBACK_FIRST: Byte = 127
         const val BYTE_MASK = 0xFF
         const val BYTE_BITS = 8
+        val HTTP_DATE: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US).withZone(ZoneOffset.UTC)
         val BASELINE_HOSTS = setOf("api.baseline.test", "dns.baseline.test")
 
         /** The HTTPS-record name (RFC 9460) the app asks for next to the address of a host on a non-default port. */
         val HTTPS_RR_PREFIX = Regex("^_\\d+\\._https\\.")
     }
+}
+
+/** Which of the two mock servers answers a route: HTTP/1.1 (API, images, stream) or HTTP/2 (DoH, GitHub). */
+enum class BaselineMockServer {
+    H1,
+    H2,
 }
 
 enum class BaselineScenario {
@@ -266,6 +324,7 @@ class BaselineMockRoute(
     val path: Regex,
     val pathText: String,
     val required: Boolean,
+    val server: BaselineMockServer,
     val respond: (RecordedRequest) -> MockResponse,
 ) {
     val description: String
@@ -299,7 +358,8 @@ data class BaselineVerification(
 
 /**
  * Bodies served by the mock: JSON fixtures with `{{MOCK}}` already replaced by the mock origin,
- * and the binary media. Fixtures carry no real image, media, trailer or metadata-provider URL.
+ * and the binary media. Fixtures carry no real image, media or metadata-provider URL and no `imdb` or
+ * `trailer` key; season and subtitle data lives only in `item_serial`, the never-played series.
  */
 class BaselineFixtures(
     private val jsonBodies: Map<String, String>,
@@ -316,16 +376,23 @@ class BaselineFixtures(
             check(stray == null) { "Baseline fixture $name holds a URL outside the mock origin: $stray" }
             val key = BANNED_KEY.find(body)?.value
             check(key == null) { "Baseline fixture $name carries a banned key: $key" }
+            if (name != SERIES_FIXTURE) {
+                val seriesKey = SERIES_ONLY_KEY.find(body)?.value
+                check(seriesKey == null) { "Baseline fixture $name carries $seriesKey, allowed only in $SERIES_FIXTURE" }
+            }
         }
     }
 
     companion object {
         private val NAMES = listOf(
             "items", "item", "similar", "collections", "bookmarks", "bookmark_items",
-            "empty_bookmark_folders", "genres", "empty", "token", "history", "ok", "device_info", "github_release",
+            "bookmark_folders", "genres", "empty", "token", "history", "ok", "device_info", "github_release",
+            "item_serial",
         )
         private val REMOTE_URL = Regex("(?i)https?://[^\"\\s]*")
-        private val BANNED_KEY = Regex("\"(imdb|trailer|subtitles|seasons)\"")
+        private val BANNED_KEY = Regex("\"(imdb|trailer)\"")
+        private val SERIES_ONLY_KEY = Regex("\"(seasons|subtitles)\"")
+        private const val SERIES_FIXTURE = "item_serial"
 
         fun from(context: Context, origin: String): BaselineFixtures {
             fun read(name: String): String =
