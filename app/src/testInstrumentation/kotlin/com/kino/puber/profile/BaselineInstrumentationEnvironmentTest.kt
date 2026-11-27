@@ -74,6 +74,7 @@ class BaselineInstrumentationEnvironmentTest {
                 "https://api.baseline.test:$h1",
                 "https://127.0.0.1:$h2",
                 "https://dns.baseline.test:$h2",
+                "https://127.0.0.1:${BuildConfig.PLAYER_FIXTURE_PORT}",
             ),
             BaselineInstrumentationEnvironment.allowedOrigins(),
         )
