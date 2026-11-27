@@ -97,6 +97,10 @@ class BaselineProfileGenerator {
             device.waitForIdle()
         }
 
+        // Rest on the card past the prefetcher's neighbour dwell (DetailsPrefetcher, 750 ms) so the
+        // neighbours' details are warmed on every iteration, as for a user who pauses before OK.
+        Thread.sleep(NEIGHBOUR_DWELL_WAIT_MS)
+
         // SELECT → DetailsScreen
         device.pressDPadCenter()
         device.waitForIdle()
@@ -230,6 +234,7 @@ class BaselineProfileGenerator {
 
         private const val DEFAULT_MAX_ITERATIONS = 15
         private const val REVEAL_CAP_WAIT_MS = 3_000L
+        private const val NEIGHBOUR_DWELL_WAIT_MS = 1_500L
         // Rail order after Home: Search, Favourites, History, Movies, Series, 4K (TabType, enabled tabs).
         private val RAIL_TITLE_RES = listOf(
             "main_tabs_search",

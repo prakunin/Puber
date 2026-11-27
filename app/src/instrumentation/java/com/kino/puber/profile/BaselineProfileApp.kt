@@ -23,7 +23,7 @@ internal class BaselineProfileApp : PuberApp() {
     override fun runtimeModules(): List<Module> = listOf(
         module {
             single<IAppUpdateRepository> {
-                AppUpdateRepository(get(), BaselineInstrumentationEnvironment.mockOrigin() + "/github")
+                AppUpdateRepository(get(), BaselineInstrumentationEnvironment.mockH2Origin() + "/github")
             }
         }
     )

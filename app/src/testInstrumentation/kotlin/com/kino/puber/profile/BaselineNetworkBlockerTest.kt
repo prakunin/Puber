@@ -1,5 +1,6 @@
 package com.kino.puber.profile
 
+import com.kino.puber.BuildConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -14,11 +15,10 @@ class BaselineNetworkBlockerTest {
     @TempDir
     lateinit var dir: File
 
-    private val allowedOrigins = setOf(
-        "https://127.0.0.1:18765",
-        "https://api.baseline.test:18765",
-        "https://dns.baseline.test:18765",
-    )
+    private val allowedOrigins = BaselineInstrumentationEnvironment.allowedOrigins()
+    private val h1 = BuildConfig.BASELINE_MOCK_PORT
+    private val h2 = BuildConfig.BASELINE_MOCK_H2_PORT
+    private val other = maxOf(h1, h2) + 1
 
     private fun blocker(journal: BaselineNetworkJournal = BaselineNetworkJournal(dir)) =
         BaselineNetworkBlocker.selector(allowedOrigins, journal) to journal
@@ -46,19 +46,21 @@ class BaselineNetworkBlockerTest {
     fun select_returnsDeadProxyAndJournals_whenLoopbackPortDiffers() {
         val (selector, journal) = blocker()
 
-        val proxies = selector.select(URI("https://127.0.0.1:18766/v1/items"))
+        val proxies = selector.select(URI("https://127.0.0.1:$other/v1/items"))
 
         assertDeadProxy(proxies)
-        assertEquals(listOf("https://127.0.0.1:18766/v1/items"), journal.snapshot())
+        assertEquals(listOf("https://127.0.0.1:$other/v1/items"), journal.snapshot())
     }
 
     @Test
     fun select_returnsNoProxy_whenOriginIsMock() {
         val (selector, journal) = blocker()
 
-        val proxies = selector.select(URI("https://127.0.0.1:18765/v1/items/hot"))
+        val onH1 = selector.select(URI("https://127.0.0.1:$h1/v1/items/hot"))
+        val onH2 = selector.select(URI("https://127.0.0.1:$h2/github/repos/o/r/releases/latest"))
 
-        assertEquals(listOf(Proxy.NO_PROXY), proxies)
+        assertEquals(listOf(Proxy.NO_PROXY), onH1)
+        assertEquals(listOf(Proxy.NO_PROXY), onH2)
         assertEquals(emptyList<String>(), journal.snapshot())
     }
 
@@ -66,8 +68,8 @@ class BaselineNetworkBlockerTest {
     fun select_returnsNoProxy_whenOriginIsApiOrDnsTestHost() {
         val (selector, journal) = blocker()
 
-        val api = selector.select(URI("https://api.baseline.test:18765/v1/items/hot"))
-        val dns = selector.select(URI("https://dns.baseline.test:18765/dns-query"))
+        val api = selector.select(URI("https://api.baseline.test:$h1/v1/items/hot"))
+        val dns = selector.select(URI("https://dns.baseline.test:$h2/dns-query"))
 
         assertEquals(listOf(Proxy.NO_PROXY), api)
         assertEquals(listOf(Proxy.NO_PROXY), dns)
@@ -78,20 +80,35 @@ class BaselineNetworkBlockerTest {
     fun select_returnsDeadProxyAndJournals_whenTestHostIsNotAllowed() {
         val (selector, journal) = blocker()
 
-        val proxies = selector.select(URI("https://other.baseline.test:18765/x"))
+        val proxies = selector.select(URI("https://other.baseline.test:$h1/x"))
 
         assertDeadProxy(proxies)
-        assertEquals(listOf("https://other.baseline.test:18765/x"), journal.snapshot())
+        assertEquals(listOf("https://other.baseline.test:$h1/x"), journal.snapshot())
     }
 
     @Test
     fun select_returnsDeadProxyAndJournals_whenAllowedTestHostPortDiffers() {
         val (selector, journal) = blocker()
 
-        val proxies = selector.select(URI("https://api.baseline.test:18766/x"))
+        val proxies = selector.select(URI("https://api.baseline.test:$other/x"))
 
         assertDeadProxy(proxies)
-        assertEquals(listOf("https://api.baseline.test:18766/x"), journal.snapshot())
+        assertEquals(listOf("https://api.baseline.test:$other/x"), journal.snapshot())
+    }
+
+    @Test
+    fun select_returnsDeadProxyAndJournals_whenApiOnH2OrDnsOnH1() {
+        val (selector, journal) = blocker()
+
+        val api = selector.select(URI("https://api.baseline.test:$h2/x"))
+        val dns = selector.select(URI("https://dns.baseline.test:$h1/dns-query"))
+
+        assertDeadProxy(api)
+        assertDeadProxy(dns)
+        assertEquals(
+            listOf("https://api.baseline.test:$h2/x", "https://dns.baseline.test:$h1/dns-query"),
+            journal.snapshot(),
+        )
     }
 
     @Test

@@ -19,12 +19,16 @@ internal object BaselineProfileTestControl {
         val port = arguments.getString(ARG_MOCK_PORT)
             ?.toIntOrNull()
             ?: error("$ARG_MOCK_PORT instrumentation argument is required")
+        val h2Port = arguments.getString(ARG_MOCK_H2_PORT)
+            ?.toIntOrNull()
+            ?: error("$ARG_MOCK_H2_PORT instrumentation argument is required")
         val context = InstrumentationRegistry.getInstrumentation().context
         val leaf = HeldCertificate.decode(
             context.assets.open(LEAF_ASSET).bufferedReader().use { it.readText() }
         )
         return BaselineMockBackend(
             port = port,
+            h2Port = h2Port,
             fixtures = BaselineFixtures.from(context, "https://127.0.0.1:$port"),
             leaf = leaf,
         )
@@ -116,6 +120,7 @@ internal object BaselineProfileTestControl {
 
     private const val LOG_TAG = "PuberGen"
     private const val ARG_MOCK_PORT = "baselineMockPort"
+    private const val ARG_MOCK_H2_PORT = "baselineMockH2Port"
     private const val LEAF_ASSET = "baseline/tls/leaf-test-only.pem"
     private const val CONTROL_RECEIVER = "com.kino.puber.profile.BaselineProfileControlReceiver"
     private const val ACTION_CLEAR = "com.kino.puber.profile.CLEAR"

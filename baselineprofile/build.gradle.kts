@@ -22,6 +22,8 @@ android {
             testInstrumentationRunnerArguments["targetAppId"] = "com.kino.puber.instrumentation"
             testInstrumentationRunnerArguments["baselineMockPort"] =
                 providers.gradleProperty("puber.baselineMockPort").get()
+            testInstrumentationRunnerArguments["baselineMockH2Port"] =
+                providers.gradleProperty("puber.baselineMockH2Port").get()
         }
     }
 

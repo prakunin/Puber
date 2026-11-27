@@ -11,8 +11,9 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 
 /**
- * Refuses every connection except to the allowed origins (the mock by IP and its API and DNS test
- * hosts): any other URI gets a dead proxy and is written to a file journal that survives a process
+ * Refuses every connection except to the allowed origins
+ * ([BaselineInstrumentationEnvironment.allowedOrigins]: each test host only on its own mock server's
+ * port): any other URI gets a dead proxy and is written to a file journal that survives a process
  * restart.
  */
 internal object BaselineNetworkBlocker {
