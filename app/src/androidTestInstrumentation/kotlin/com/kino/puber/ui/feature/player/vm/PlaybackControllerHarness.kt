@@ -136,6 +136,7 @@ internal class PlaybackControllerHarness : Closeable {
     val networkJournal = BaselineNetworkJournal(BaselineInstrumentationEnvironment.journalDirectory(targetContext))
     val server = PlayerTestControl()
     val events = RecordingCallback()
+    val closedResponses = ClosedResponseSignals()
 
     private val cacheDirectory = targetContext.cacheDir.resolve("player-device-${UUID.randomUUID()}")
     private val gates = CopyOnWriteArrayList<CountDownLatch>()
@@ -148,7 +149,7 @@ internal class PlaybackControllerHarness : Closeable {
     // Built after the app started, so the client takes the network blocker as its ProxySelector.
     val controller = PlaybackController(
         context = targetContext,
-        okHttpClient = server.newClient(),
+        okHttpClient = server.newClient(closedResponses),
         mediaCache = cache,
         playerPreferencesRepository = PlayerPreferencesRepository(targetContext),
     )
