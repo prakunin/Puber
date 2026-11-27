@@ -1,0 +1,18 @@
+LENS: tests  ROUND: 2  BASE: cb7fcd45
+### F1 [minor] The `setPreferredTextLanguage` change in `PlaybackController` has no test, and the reason given for it is doubtful
+- Where: /home/dev/orca/workspaces/Puber/player-audio-und-label/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackController.kt:906
+- Problem: `applySubtitleTrackSelection` now passes `knownLanguageOrNull(track.language).orEmpty()` where it used to pass `track.language`. No unit test or instrumented test asserts `preferredTextLanguages`. A grep for `preferredTextLanguages` and `setPreferredTextLanguage` across `app/src/test` and `app/src/androidTest` finds nothing. Putting the old line back would leave the whole suite green. The plan's fix note lists no red run for this line. The emulator `PlaybackControllerNetworkTracksTest` run (13 cases) that it cites does not cover it either. Triage #2 justified the change by saying `setPreferredTextLanguage("und")` selects nothing. From memory, Media3's `getFormatLanguageScore` returns its top score when the preferred language equals `format.language`, so "und" would match a track tagged "und". If that holds, the change removes a fallback that worked when the selector found no target, and nothing would catch it.
+- Failure scenario: an API row with lang "und" where `SubtitleTrackSelector.select` returns null, for example when the identity matchers find two candidates or none. Base: the preferred language "und" picks the side-load tagged "und". Head: the preferred language is "" and no subtitle shows. No test tells these two outcomes apart.
+- Fix: move the preferred-language choice into a pure helper (row to preferred text language) and unit-test "und", "" and "ru". Or add a `PlaybackControllerNetworkTracksTest` case that selects an "und" row and asserts `trackSelectionParameters.preferredTextLanguages`. Record the red run in the plan either way. If the Media3 "und"-matches-"und" behaviour holds, also check whether the change is wanted at all.
+
+Other checks on the incremental diff (3fab644b..d1ed06ad):
+- Tracing the base code confirms both new P0 tests are red there, as the plan records:
+  - `select_resolvesManifestRowTakingRenditionLanguage_toItsUntaggedCandidate`: the old filter dropped the null-language candidate, and `matchByLanguage` then returned `candidates[1]`.
+  - `select_resolvesUndeterminedApiRow_toItsUntaggedSideLoad`: the old filter dropped every candidate.
+- `select_doesNotPickUntaggedCandidateByLanguage_forTaggedRow` is marked `guard` in the plan, which is correct.
+- The row shape in the first test matches what `buildSubtitleRow` in `PlayerTextTracks.kt` produces: `playerTrackId` from the source id, the group id, the track index, and the language from the rendition.
+- The diff removes no assertions. The existing test `select_doesNotMatchByLanguage_whenBothAreUndetermined` still holds.
+- Touched tests run with `./tools/agentw :app:testDevDebugUnitTest --tests 'com.kino.puber.ui.feature.player.*'`: BUILD SUCCESSFUL, but Gradle marked the task UP-TO-DATE, so the results come from the implementer's run at 14:43 on the same sources, not a fresh run. Results: `SubtitleTrackSelectorTest` 18 tests, 0 failures; `PlayerTextTracksTest` 14 tests, 0 failures; 0 of the 49 result files have a failure.
+
+### Unproven
+- /home/dev/orca/workspaces/Puber/player-audio-und-label/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackController.kt:906 - an "und" row with no selector target in real data. It becomes real if an item has two "und" side-loads with the same file identity, or a side-load whose `formatId` and `formatLabel` do not match the API url.

@@ -1,0 +1,7 @@
+CODEX: ran: review, adversarial (incremental range 3fab644b..d1ed06ad)
+CONFIRMED:
+- none
+REJECTED:
+- [P2] SubtitleTrackSelector.kt:58-60: a tagged and an untagged side-load that share a normalized identity key make `matchBySourceIdentity` ambiguous, so the exact override stays unset. Unproven. Side-loads are keyed by distinct file names (k1.srt, k2.srt), and a tagged and an untagged candidate with the same identity would mean the same file loaded twice. Nothing in the code or the spec produces that state. If it did happen, the fall-through to the next matcher is the selector's documented behaviour, not a new defect.
+- [medium] SubtitleTrackSelector.kt:44-66: untagged candidates bypass the reused-track-ID guard, so a stale row could install an override on an unrelated untagged subtitle after a track refresh. Unproven. It needs a refresh that reuses the same format ID or group/index for a different untagged track, with a label and forced flag that don't distinguish the two. Nothing shows the player doing that, because side-load ids come from the source file name and the merged group id. Allowing an untagged candidate for a tagged row is the point of the fix: the new test `select_resolvesManifestRowTakingRenditionLanguage_toItsUntaggedCandidate` covers the HLS case, and the language guard cannot apply there. Codex's suggested remedy (carry the rendition language into the candidate) is a design change for a speculative case. The missing regression test is not a defect.
+VERDICT: clean
