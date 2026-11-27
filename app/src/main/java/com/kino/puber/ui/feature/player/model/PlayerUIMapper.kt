@@ -20,15 +20,17 @@ internal class PlayerUIMapper(
 
     fun mapAudioTracks(audios: List<Audio>?): List<AudioTrackUIState> {
         return audios?.mapIndexed { index, audio ->
+            val language = knownLanguageOrNull(audio.lang)
+            val title = audio.author?.title ?: audio.type?.title
             val label = buildString {
-                append(audio.lang ?: "Unknown")
-                audio.author?.title?.let { append(" · $it") }
-                    ?: audio.type?.title?.let { append(" · $it") }
+                append(language ?: resources.getString(R.string.player_audio_language_unknown))
+                title?.let { append(" · $it") }
             }
             AudioTrackUIState(
                 index = index,
                 label = label,
-                language = audio.lang ?: "",
+                language = language.orEmpty(),
+                isFallbackLabel = language == null && title == null,
             )
         } ?: emptyList()
     }
