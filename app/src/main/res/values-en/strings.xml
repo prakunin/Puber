@@ -299,6 +299,7 @@
     <string name="player_subtitle_ai_generated">AI-generated</string>
     <string name="player_subtitle_forced">forced</string>
     <string name="player_subtitle_unknown">Subtitles %1$d</string>
+    <string name="player_audio_track_fallback">Track %1$d</string>
     <string name="player_subtitle_size">Aa Size</string>
     <string name="player_subtitle_size_small">Small</string>
     <string name="player_subtitle_size_medium">Medium</string>

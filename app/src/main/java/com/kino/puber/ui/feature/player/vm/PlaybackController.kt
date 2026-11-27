@@ -423,8 +423,9 @@ internal class PlaybackController(
         )
         val trackSelector = DefaultTrackSelector(context, adaptiveTrackSelectionFactory).apply {
             parameters = buildUponParameters()
-                .setExceedVideoConstraintsIfNecessary(false)
+                .setExceedVideoConstraintsIfNecessary(true)
                 .setExceedRendererCapabilitiesIfNecessary(false)
+                .applyVideoCap(stream.videoCap, this@PlaybackController.context)
                 // The picker starts at Off; only an explicit or restored choice enables text. Without
                 // this an HLS rendition marked DEFAULT or FORCED shows under an Off picker, on the
                 // first start and again after every rebuild of the player.
@@ -540,7 +541,7 @@ internal class PlaybackController(
         // it would be read as belonging to the new one.
         videoRenderDiagnostics.reset()
 
-        player.trackSelectionParameters = savedTrackParams
+        player.trackSelectionParameters = savedTrackParams.buildUpon().applyVideoCap(stream.videoCap, context).build()
         player.prepare()
         player.playWhenReady = wasPlaying
         seekStallRecovery.onStreamSwitched(player)
@@ -868,14 +869,8 @@ internal class PlaybackController(
         val textGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
         if (audioGroups.isEmpty() && textGroups.isEmpty()) return
 
-        val audioTracks = audioGroups.mapIndexed { index, group ->
-            val format = group.getTrackFormat(0)
-            val label = format.label ?: format.language ?: "Track ${index + 1}"
-            AudioTrackUIState(
-                index = index,
-                label = label,
-                language = format.language ?: "",
-            )
+        val audioTracks = buildAudioRows(audioGroups.map { it.getTrackFormat(0) }) { n ->
+            context.getString(R.string.player_audio_track_fallback, n)
         }
         val selectedIndex = audioGroups.indexOfFirst { it.isSelected }.coerceAtLeast(0)
         val subtitleRows = when (subtitleReportKind(currentStreamType, currentItemHasSideLoads, textGroups.size)) {

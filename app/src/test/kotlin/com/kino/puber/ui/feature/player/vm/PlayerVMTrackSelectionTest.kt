@@ -34,6 +34,8 @@ import org.junit.jupiter.api.extension.RegisterExtension
 internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     companion object {
+        private const val STORED_AUDIO_LABEL = "01. Дубляж (RUS)"
+
         @JvmField
         @RegisterExtension
         val mainDispatcher = MainDispatcherExtension()
@@ -97,6 +99,35 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
     fun selectTrack_savesLangToPrefs() {
         startedVM().onAction(PlayerAction.SelectAudioTrack(1))
         verify { interactor.saveTrackPreferences(42, "rus", any(), SubtitlePreference.NONE) }
+    }
+
+    @Test
+    fun selectAudioTrack_fallbackRow_keepsStoredAudioPreference() {
+        val vm = startedWithFallbackAudioRow()
+
+        vm.onAction(PlayerAction.SelectAudioTrack(0))
+
+        verify { interactor.saveTrackPreferences(42, "rus", STORED_AUDIO_LABEL, any()) }
+    }
+
+    @Test
+    fun selectSubtitle_whileAudioRowIsFallback_keepsStoredAudioPreference() {
+        val vm = startedWithFallbackAudioRow()
+
+        vm.onAction(PlayerAction.SelectSubtitle(1))
+
+        verify { interactor.saveTrackPreferences(42, "rus", STORED_AUDIO_LABEL, any()) }
+    }
+
+    private fun startedWithFallbackAudioRow(): PlayerVM {
+        every { interactor.getPreferredAudioLang(42) } returns "rus"
+        every { interactor.getPreferredAudioLabel(42) } returns STORED_AUDIO_LABEL
+        val vm = startedVM()
+        callbackSlot.captured.onTracksUpdated(
+            listOf(AudioTrackUIState(0, "Track 1", "", isFallbackLabel = true)),
+            0,
+        )
+        return vm
     }
 
     // endregion

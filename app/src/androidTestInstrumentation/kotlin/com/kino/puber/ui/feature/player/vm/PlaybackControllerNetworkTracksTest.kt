@@ -2,8 +2,11 @@ package com.kino.puber.ui.feature.player.vm
 
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kino.puber.R
 import com.kino.puber.data.api.models.SubtitleLink
+import com.kino.puber.domain.interactor.player.VideoSizeCap
 import com.kino.puber.playertestfixtures.FixtureId
 import com.kino.puber.playertestfixtures.server.HermeticTestServer
 import com.kino.puber.playertestfixtures.server.ResponseOutcome
@@ -104,6 +107,67 @@ internal class PlaybackControllerNetworkTracksTest {
         harness.awaitReady(probe)
         assertTrue(probe.error.get() == null)
         assertEquals(0, harness.server.requestJournal.unknownRequests.size)
+    }
+
+    @Test
+    fun hlsVideoCap_switchStreamReplacesCap() {
+        val master = "/media/hls/master.m3u8"
+        harness.server.reset(harness.commonHlsRoutes())
+        val probe = harness.prepare(master, videoCap = VideoSizeCap(640, 360))
+        val defaultViewport = DefaultTrackSelector.Parameters.Builder(harness.targetContext).build()
+            .let { it.viewportWidth to it.viewportHeight }
+
+        harness.awaitReady(probe)
+        // The 360 variant is also where ABR starts without a cap, so the parameters carry the proof.
+        harness.awaitCondition("prepare applied the 640x360 cap without a viewport trim") {
+            maxVideoSize() == (640 to 360) && forceHighestSupportedBitrate() &&
+                viewportSize() == (Int.MAX_VALUE to Int.MAX_VALUE)
+        }
+        harness.awaitCondition("360 variant selected under the 640x360 cap") { selectedVideoHeight() == 360 }
+
+        // A device whose default viewport is already unbounded cannot show the trim being cleared.
+        harness.playerRead { setViewport(100, 100) }
+        harness.onMain { harness.controller.switchStream(harness.stream(master, VideoSizeCap(1280, 720)), null) }
+        harness.awaitCondition("720 variant selected after switching to the 1280x720 cap") {
+            playbackState() == Player.STATE_READY && selectedVideoHeight() == 720 &&
+                viewportSize() == (Int.MAX_VALUE to Int.MAX_VALUE)
+        }
+
+        harness.onMain { harness.controller.switchStream(harness.stream(master), null) }
+        harness.awaitCondition("cap lifted by an uncapped switch") {
+            maxVideoSize() == (Int.MAX_VALUE to Int.MAX_VALUE) && !forceHighestSupportedBitrate() &&
+                viewportSize() == defaultViewport
+        }
+        assertEquals(0, harness.server.requestJournal.unknownRequests.size)
+        assertTrue(probe.error.get() == null)
+    }
+
+    @Test
+    fun hlsVideoCap_belowEveryVariant_stillSelectsVideo() {
+        harness.server.reset(harness.commonHlsRoutes())
+        val probe = harness.prepare("/media/hls/master.m3u8", videoCap = VideoSizeCap(320, 180))
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("prepare applied the 320x180 cap") { maxVideoSize() == (320 to 180) }
+        harness.awaitCondition("a video variant is selected although the cap excludes all") {
+            selectedVideoHeight() == 360
+        }
+        assertTrue(probe.error.get() == null)
+    }
+
+    @Test
+    fun unlabelledAudio_reportsLocalizedFallbackRowMarkedAsFallback() {
+        harness.server.reset(harness.commonHlsRoutes())
+        val probe = harness.prepare("/media/hls/audio_english.m3u8")
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("the controller reported its audio rows") {
+            harness.events.all.any { it is PlaybackEvent.Tracks }
+        }
+        val row = harness.events.all.filterIsInstance<PlaybackEvent.Tracks>().first().audio.single()
+        assertEquals(harness.targetContext.getString(R.string.player_audio_track_fallback, 1), row.label)
+        assertTrue(row.isFallbackLabel)
+        assertTrue(probe.error.get() == null)
     }
 
     @Test

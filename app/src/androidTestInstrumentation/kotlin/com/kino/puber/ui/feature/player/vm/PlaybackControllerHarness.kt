@@ -12,6 +12,7 @@ import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
+import com.kino.puber.domain.interactor.player.VideoSizeCap
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.playertestfixtures.FixtureId
 import com.kino.puber.playertestfixtures.PlayerTestFixtures
@@ -187,9 +188,10 @@ internal class PlaybackControllerHarness : Closeable {
         return if (query.isEmpty()) base else "$base?$query"
     }
 
-    fun stream(pathAndQuery: String): StreamCandidate = StreamCandidate(
+    fun stream(pathAndQuery: String, videoCap: VideoSizeCap? = null): StreamCandidate = StreamCandidate(
         url = url(pathAndQuery),
         type = if (pathAndQuery.substringBefore('?').endsWith(".m3u8")) StreamType.HLS else StreamType.PROGRESSIVE,
+        videoCap = videoCap,
     )
 
     fun fixtureBytes(path: String): ByteArray = PlayerTestFixtures.openPath(path, testContext).use { it.readBytes() }
@@ -202,11 +204,12 @@ internal class PlaybackControllerHarness : Closeable {
         pathAndQuery: String,
         subtitles: List<SubtitleLink>? = null,
         startPosition: Long? = 0L,
+        videoCap: VideoSizeCap? = null,
     ): PlayerProbe {
         val probe = PlayerProbe()
         onMain {
             controller.prepare(
-                stream = stream(pathAndQuery),
+                stream = stream(pathAndQuery, videoCap),
                 subtitles = subtitles,
                 startPosition = startPosition,
                 bufferPreset = BufferPreset.SMALL,

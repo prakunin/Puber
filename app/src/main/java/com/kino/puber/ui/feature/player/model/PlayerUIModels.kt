@@ -21,6 +21,8 @@ internal data class AudioTrackUIState(
     val index: Int,
     val label: String,
     val language: String,
+    /** The label is a localized placeholder, not a name from the manifest, so it must not be stored as a preference. */
+    val isFallbackLabel: Boolean = false,
 )
 
 @Immutable

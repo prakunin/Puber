@@ -29,6 +29,27 @@ internal fun PlaybackController.selectedAudioLanguage(): String? =
         ?.getTrackFormat(0)
         ?.language
 
+internal fun PlaybackController.selectedVideoHeight(): Int? =
+    player?.currentTracks?.groups
+        ?.filter { it.type == C.TRACK_TYPE_VIDEO }
+        ?.firstNotNullOfOrNull { group ->
+            (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it).height }
+        }
+
+internal fun PlaybackController.maxVideoSize(): Pair<Int, Int>? =
+    player?.trackSelectionParameters?.let { it.maxVideoWidth to it.maxVideoHeight }
+
+internal fun PlaybackController.viewportSize(): Pair<Int, Int>? =
+    player?.trackSelectionParameters?.let { it.viewportWidth to it.viewportHeight }
+
+internal fun PlaybackController.setViewport(width: Int, height: Int) {
+    val player = player ?: return
+    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setViewportSize(width, height, true).build()
+}
+
+internal fun PlaybackController.forceHighestSupportedBitrate(): Boolean =
+    player?.trackSelectionParameters?.forceHighestSupportedBitrate == true
+
 internal fun PlaybackController.selectedTextTrack(): Boolean =
     player?.currentTracks?.groups
         ?.filter { it.type == C.TRACK_TYPE_TEXT }
