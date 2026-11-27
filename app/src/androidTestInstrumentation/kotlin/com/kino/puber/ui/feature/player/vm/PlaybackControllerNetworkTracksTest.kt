@@ -5,6 +5,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kino.puber.R
+import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.domain.interactor.player.VideoSizeCap
 import com.kino.puber.playertestfixtures.FixtureId
@@ -168,9 +169,31 @@ internal class PlaybackControllerNetworkTracksTest {
             harness.events.all.any { it is PlaybackEvent.Tracks }
         }
         val row = harness.events.all.filterIsInstance<PlaybackEvent.Tracks>().first().audio.single()
-        assertEquals(harness.targetContext.getString(R.string.player_audio_track_fallback, 1), row.label)
+        assertEquals(harness.resources.getString(R.string.player_audio_track_fallback, 1), row.label)
         assertTrue(row.isFallbackLabel)
         assertTrue(probe.error.get() == null)
+    }
+
+    @Test
+    fun unlabelledAudio_usesInjectedResourceProviderForFallbackLabel() {
+        val real = harness.resources
+        val marker = "injected-fallback-label"
+        val stub = object : ResourceProvider by real {
+            override fun getString(resId: Int, vararg arg: Any): String =
+                if (resId == R.string.player_audio_track_fallback) marker else real.getString(resId, *arg)
+        }
+        harness.close()
+        harness = PlaybackControllerHarness(resources = stub)
+        harness.server.reset(harness.commonHlsRoutes())
+        val probe = harness.prepare("/media/hls/audio_english.m3u8")
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("the controller reported its audio rows") {
+            harness.events.all.any { it is PlaybackEvent.Tracks }
+        }
+        val row = harness.events.all.filterIsInstance<PlaybackEvent.Tracks>().first().audio.single()
+        assertEquals(marker, row.label)
+        assertTrue(row.isFallbackLabel)
     }
 
     @Test
@@ -183,7 +206,7 @@ internal class PlaybackControllerNetworkTracksTest {
             harness.events.all.any { it is PlaybackEvent.Tracks }
         }
         val row = harness.events.all.filterIsInstance<PlaybackEvent.Tracks>().first().audio.first()
-        assertEquals(harness.targetContext.getString(R.string.player_audio_track_fallback, 1), row.label)
+        assertEquals(harness.resources.getString(R.string.player_audio_track_fallback, 1), row.label)
         assertTrue(row.isFallbackLabel)
         assertEquals("", row.language)
         assertTrue(probe.error.get() == null)
