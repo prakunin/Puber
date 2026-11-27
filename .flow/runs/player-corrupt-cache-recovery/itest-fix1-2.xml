@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="3" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T19:20:07" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" tests="3" failures="0" errors="0" skipped="0" time="1.651" timestamp="2026-11-27T19:20:07" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="emptyCache_loadsNormally_andCorruptOwnedEntryRecoversWithoutPoisoningNextScenario" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.977" />
+    <testcase name="releaseDuringBlockedLoad_closesRequests" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.123" />
+    <testcase name="boundedPreparePlaySeekReleaseLoop_leavesNoActiveRequests" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.551" />
+  </testsuite>
+</testsuites>
