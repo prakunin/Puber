@@ -1,0 +1,210 @@
+./tools/agentw assembleInstrumentationDebug
+agentw: worktree detected → GRADLE_USER_HOME=/home/dev/.gradle-agents
+agentw: acquiring lock /home/dev/.gradle-agents/.build.lock
+> Task :buildSrc:checkKotlinCompilerVersion
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preInstrumentationDebugBuild UP-TO-DATE
+> Task :app:mergeInstrumentationDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateInstrumentationDebugBuildConfig UP-TO-DATE
+> Task :app:generateInstrumentationDebugResValues UP-TO-DATE
+> Task :app:generateInstrumentationDebugResources UP-TO-DATE
+> Task :app:packageInstrumentationDebugResources UP-TO-DATE
+> Task :app:processInstrumentationDebugNavigationResources UP-TO-DATE
+> Task :app:parseInstrumentationDebugLocalResources UP-TO-DATE
+> Task :app:generateInstrumentationDebugRFile UP-TO-DATE
+> Task :app:kspInstrumentationDebugKotlin UP-TO-DATE
+> Task :app:compileInstrumentationDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileInstrumentationDebug UP-TO-DATE
+> Task :app:compileInstrumentationDebugJavaWithJavac UP-TO-DATE
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:generateInstrumentationDebugAssets UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAssets UP-TO-DATE
+> Task :app:compressInstrumentationDebugAssets UP-TO-DATE
+> Task :app:generateInstrumentationDebugGlobalSynthetics UP-TO-DATE
+> Task :app:l8DexDesugarLibInstrumentationDebug UP-TO-DATE
+> Task :app:checkInstrumentationDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarInstrumentationDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexInstrumentationDebug UP-TO-DATE
+> Task :app:compressInstrumentationDebugJavaRes UP-TO-DATE
+> Task :app:mergeInstrumentationDebugJavaResource UP-TO-DATE
+> Task :app:mergeLibDexInstrumentationDebug UP-TO-DATE
+> Task :app:checkInstrumentationDebugAarMetadata UP-TO-DATE
+> Task :app:mapInstrumentationDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileInstrumentationDebugNavigationResources UP-TO-DATE
+> Task :app:mergeInstrumentationDebugResources UP-TO-DATE
+> Task :app:createInstrumentationDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksInstrumentationDebug UP-TO-DATE
+> Task :app:processInstrumentationDebugMainManifest UP-TO-DATE
+> Task :app:processInstrumentationDebugManifest UP-TO-DATE
+> Task :app:processInstrumentationDebugManifestForPackage UP-TO-DATE
+> Task :app:processInstrumentationDebugResources UP-TO-DATE
+> Task :app:dexBuilderInstrumentationDebug UP-TO-DATE
+> Task :app:mergeProjectDexInstrumentationDebug UP-TO-DATE
+> Task :app:mergeInstrumentationDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeInstrumentationDebugNativeLibs UP-TO-DATE
+> Task :app:stripInstrumentationDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningInstrumentationDebug UP-TO-DATE
+> Task :app:writeInstrumentationDebugAppMetadata UP-TO-DATE
+> Task :app:writeInstrumentationDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageInstrumentationDebug UP-TO-DATE
+> Task :app:createInstrumentationDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleInstrumentationDebug UP-TO-DATE
+
+[Incubating] Problems report is available at: file:///home/dev/orca/workspaces/Puber/player-hermetic-fixtures/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.9.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1s
+44 actionable tasks: 1 executed, 43 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.9.1/userguide/configuration_cache_enabling.html
+instrumented run sees:
+host.docker.internal:5555	device
+
+ANDROID_ADB_SERVER_PORT=5038 ./tools/agentw :app:connectedInstrumentationDebugAndroidTest \
+	-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+	-Pandroid.testInstrumentationRunnerArguments.class=com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest,com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest,com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest,com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest \
+	; status=$?; ANDROID_ADB_SERVER_PORT=5038 /usr/bin/adb kill-server >/dev/null 2>&1; exit $status
+agentw: worktree detected → GRADLE_USER_HOME=/home/dev/.gradle-agents
+agentw: acquiring lock /home/dev/.gradle-agents/.build.lock
+> Task :buildSrc:checkKotlinCompilerVersion
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preInstrumentationDebugBuild UP-TO-DATE
+> Task :app:generateInstrumentationDebugBuildConfig UP-TO-DATE
+> Task :app:generateInstrumentationDebugResValues UP-TO-DATE
+> Task :app:generateInstrumentationDebugResources UP-TO-DATE
+> Task :app:packageInstrumentationDebugResources UP-TO-DATE
+> Task :app:processInstrumentationDebugNavigationResources UP-TO-DATE
+> Task :app:parseInstrumentationDebugLocalResources UP-TO-DATE
+> Task :app:generateInstrumentationDebugRFile UP-TO-DATE
+> Task :app:kspInstrumentationDebugKotlin UP-TO-DATE
+> Task :app:compileInstrumentationDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileInstrumentationDebug UP-TO-DATE
+> Task :app:compileInstrumentationDebugJavaWithJavac UP-TO-DATE
+> Task :app:checkInstrumentationDebugAarMetadata UP-TO-DATE
+> Task :app:mapInstrumentationDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileInstrumentationDebugNavigationResources UP-TO-DATE
+> Task :app:mergeInstrumentationDebugResources UP-TO-DATE
+> Task :app:createInstrumentationDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksInstrumentationDebug UP-TO-DATE
+> Task :app:processInstrumentationDebugMainManifest UP-TO-DATE
+> Task :app:processInstrumentationDebugManifest UP-TO-DATE
+> Task :app:processInstrumentationDebugManifestForPackage UP-TO-DATE
+> Task :app:processInstrumentationDebugResources UP-TO-DATE
+> Task :app:bundleInstrumentationDebugClassesToCompileJar UP-TO-DATE
+> Task :app:preInstrumentationDebugAndroidTestBuild SKIPPED
+> Task :player-test-fixtures:preBuild UP-TO-DATE
+> Task :player-test-fixtures:preDebugBuild UP-TO-DATE
+> Task :player-test-fixtures:extractDeepLinksDebug UP-TO-DATE
+> Task :player-test-fixtures:processDebugManifest UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestManifest UP-TO-DATE
+> Task :app:processInstrumentationDebugAndroidTestManifest UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestBuildConfig UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestResValues UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestResources UP-TO-DATE
+> Task :app:packageInstrumentationDebugAndroidTestResources UP-TO-DATE
+> Task :app:processInstrumentationDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :app:parseInstrumentationDebugAndroidTestLocalResources UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestRFile UP-TO-DATE
+> Task :player-test-fixtures:generateDebugResources UP-TO-DATE
+> Task :player-test-fixtures:packageDebugResources UP-TO-DATE
+> Task :player-test-fixtures:processDebugNavigationResources UP-TO-DATE
+> Task :player-test-fixtures:parseDebugLocalResources UP-TO-DATE
+> Task :player-test-fixtures:generateDebugRFile UP-TO-DATE
+> Task :player-test-fixtures:compileDebugKotlin UP-TO-DATE
+> Task :player-test-fixtures:javaPreCompileDebug UP-TO-DATE
+> Task :player-test-fixtures:compileDebugJavaWithJavac NO-SOURCE
+> Task :player-test-fixtures:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:kspInstrumentationDebugAndroidTestKotlin UP-TO-DATE
+> Task :app:compileInstrumentationDebugAndroidTestKotlin UP-TO-DATE
+> Task :app:javaPreCompileInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:compileInstrumentationDebugAndroidTestJavaWithJavac UP-TO-DATE
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:generateInstrumentationDebugAssets UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAssets UP-TO-DATE
+> Task :app:compressInstrumentationDebugAssets UP-TO-DATE
+> Task :app:generateInstrumentationDebugGlobalSynthetics UP-TO-DATE
+> Task :app:l8DexDesugarLibInstrumentationDebug UP-TO-DATE
+> Task :app:checkInstrumentationDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarInstrumentationDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexInstrumentationDebug UP-TO-DATE
+> Task :app:compressInstrumentationDebugJavaRes UP-TO-DATE
+> Task :app:mergeInstrumentationDebugJavaResource UP-TO-DATE
+> Task :app:mergeLibDexInstrumentationDebug UP-TO-DATE
+> Task :app:dexBuilderInstrumentationDebug UP-TO-DATE
+> Task :app:mergeProjectDexInstrumentationDebug UP-TO-DATE
+> Task :app:mergeInstrumentationDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeInstrumentationDebugNativeLibs UP-TO-DATE
+> Task :app:stripInstrumentationDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningInstrumentationDebug UP-TO-DATE
+> Task :app:writeInstrumentationDebugAppMetadata UP-TO-DATE
+> Task :app:writeInstrumentationDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageInstrumentationDebug UP-TO-DATE
+> Task :app:createInstrumentationDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:copyRoomSchemasToAndroidTestAssetsInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestAssets UP-TO-DATE
+> Task :player-test-fixtures:generateDebugAssets UP-TO-DATE
+> Task :player-test-fixtures:mergeDebugAssets UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestAssets UP-TO-DATE
+> Task :app:compressInstrumentationDebugAndroidTestAssets UP-TO-DATE
+> Task :app:generateInstrumentationDebugAndroidTestGlobalSynthetics UP-TO-DATE
+> Task :app:checkInstrumentationDebugAndroidTestDuplicateClasses UP-TO-DATE
+> Task :app:desugarInstrumentationDebugAndroidTestFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:compressInstrumentationDebugAndroidTestJavaRes UP-TO-DATE
+> Task :player-test-fixtures:compressDebugJavaRes UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestJavaResource UP-TO-DATE
+> Task :player-test-fixtures:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :player-test-fixtures:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkInstrumentationDebugAndroidTestAarMetadata UP-TO-DATE
+> Task :app:mergeLibDexInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:mapInstrumentationDebugAndroidTestSourceSetPaths UP-TO-DATE
+> Task :app:compileInstrumentationDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestResources UP-TO-DATE
+> Task :player-test-fixtures:mapDebugSourceSetPaths UP-TO-DATE
+> Task :player-test-fixtures:compileDebugLibraryResources UP-TO-DATE
+> Task :app:processInstrumentationDebugAndroidTestResources UP-TO-DATE
+> Task :app:dexBuilderInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:mergeProjectDexInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestJniLibFolders UP-TO-DATE
+> Task :player-test-fixtures:mergeDebugJniLibFolders UP-TO-DATE
+> Task :player-test-fixtures:mergeDebugNativeLibs NO-SOURCE
+> Task :player-test-fixtures:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :app:mergeInstrumentationDebugAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripInstrumentationDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :app:validateSigningInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:writeInstrumentationDebugAndroidTestSigningConfigVersions UP-TO-DATE
+> Task :app:packageInstrumentationDebugAndroidTest UP-TO-DATE
+> Task :app:createInstrumentationDebugAndroidTestApkListingFileRedirect UP-TO-DATE
+
+> Task :app:connectedInstrumentationDebugAndroidTest
+Running tests on devices: sdk_google_atv64_arm64 - 16
+
+[Incubating] Problems report is available at: file:///home/dev/orca/workspaces/Puber/player-hermetic-fixtures/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.9.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 3s
+99 actionable tasks: 2 executed, 97 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.9.1/userguide/configuration_cache_enabling.html

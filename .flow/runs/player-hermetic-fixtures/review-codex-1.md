@@ -1,0 +1,11 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] player-test-fixtures/src/main/kotlin/com/kino/puber/playertestfixtures/server/HermeticTestServer.kt:149-169 - `dispatch()` assigns the route occurrence inside `journal.begin()` but reads `journal.matchedCount(route.id)` after the server lock is released. Two concurrent requests to the same sequence route can both read occurrence 2. The first scripted response, such as a fault, is then skipped and the second is served twice. Only same-route concurrency triggers it, and the current tests don't do that. The fix is small: return the occurrence from `begin()`.
+- [minor] app/src/androidTestInstrumentation/kotlin/com/kino/puber/ui/feature/player/vm/PlaybackControllerDeviceTest.kt:62-65 - `hlsVod_reachesReadyAdvancesAndEnds` requires a request for `/media/hls/video_360.m3u8`. The master advertises both 360p (800 kbps) and 720p (1.5 Mbps). A device whose initial bandwidth estimate selects 720p reaches READY and ENDED but fails the assertion. This is device-dependent. It passed 10 of 10 runs on the emulator, and the evidence file records no TV-box run. The fix is to accept either `video_*.m3u8`.
+- [minor] app/src/androidTestInstrumentation/kotlin/com/kino/puber/ui/feature/player/vm/PlaybackControllerStaleCallbackTest.kt:59-79 - The probe switches to B, then releases A's gate. It can't show that A's failure was already queued at the switch. If the switch cancels A's load before the body is parsed, the test passes without exercising the stale-callback race. The control test proves only that the malformed body fails when there is no switch. The AC-5 evidence should say it covers load-cancellation only. I did not check the spec's exact AC-5 wording.
+REJECTED:
+- Journal eviction after 256 entries leaves `active` stuck (HermeticRequestJournal.kt:54-59) - unproven.
+- Eviction can hide an unknown request from `assertNoUnknownRequests()` (HermeticRequestJournal.kt:85-92) - unproven.
+- 720p segments encoded with `-level 3.0` (generate-player-test-fixtures.sh:98-99) - unproven; fixtures play to ENDED in all runs.
+- A failed harness constructor leaks the cache and client (PlaybackControllerHarness.kt:135-159) - unproven; diagnostics only.
+VERDICT: changes needed

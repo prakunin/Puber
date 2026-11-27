@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="19" failures="2" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T10:24:51" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" tests="5" failures="1" errors="0" skipped="0" time="15.508" timestamp="2026-11-27T10:24:51" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="progressivePlayback_controlsAndStartPositionUseRealPlayerEvents" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" time="6.130">
+      <failure>java.lang.AssertionError: Gave up waiting for queue to shut down
+	at mockwebserver3.MockWebServer.close(MockWebServer.kt:414)
+	at com.kino.puber.playertestfixtures.server.HermeticTestServer.close(HermeticTestServer.kt:142)
+	at com.kino.puber.ui.feature.player.vm.PlayerTestControl.close(PlayerTestControl.kt:111)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.close$lambda$5(PlaybackControllerHarness.kt:296)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness$$ExternalSyntheticLambda12.invoke(D8$$SyntheticClass:0)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.close$step(PlaybackControllerHarness.kt:286)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.close(PlaybackControllerHarness.kt:296)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest.tearDown(PlaybackControllerDeviceTest.kt:29)
+</failure>
+    </testcase>
+    <testcase name="hlsVod_reachesReadyAdvancesAndEnds" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" time="4.757" />
+    <testcase name="unexpectedLoopbackRequest_failsClosedWithBoundedDiagnostics" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" time="0.119" />
+    <testcase name="progressiveMp4_reachesReadyAdvancesAndEnds" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" time="4.359" />
+    <testcase name="awaitCondition_failsClosedWhenConditionRemainsFalse" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerDeviceTest" time="0.143" />
+  </testsuite>
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" tests="9" failures="1" errors="0" skipped="0" time="14.868" timestamp="2026-11-27T10:24:51" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="hlsDelayedAndInterruptedSegment_enterBufferingThenRecover" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.370" />
+    <testcase name="hlsPreparation_exposesCodecTracksBeforeTheFirstMediaChunkCompletes" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.558" />
+    <testcase name="playerMediaNetworkIsolation_rejectsExternalRedirect" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="4.152">
+      <failure>java.lang.AssertionError: expected:&lt;[https://media.invalid:443/x]&gt; but was:&lt;[https://media.invalid:443/]&gt;
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest.playerMediaNetworkIsolation_rejectsExternalRedirect(PlaybackControllerNetworkTracksTest.kt:336)
+</failure>
+    </testcase>
+    <testcase name="hlsTracks_selectsAudioAndSubtitle_observesCueAndDisablesText" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.274" />
+    <testcase name="hlsVariant400_fallsBackToTheHealthyVariant" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.671" />
+    <testcase name="hlsSwitch_preservesPositionIntentTracks_andLastStreamWins" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.217" />
+    <testcase name="hls404AndMalformedPlaylist_failWithoutUnboundedRetry" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="4.539" />
+    <testcase name="progressiveSwitch_restoresSelectedSubtitleAndPausedIntent" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.434" />
+    <testcase name="hlsVariant502_fallsBackToTheHealthyVariant" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.653" />
+  </testsuite>
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" tests="3" failures="0" errors="0" skipped="0" time="1.173" timestamp="2026-11-27T10:24:51" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="emptyCache_loadsNormally_andCorruptOwnedEntryRecoversWithoutPoisoningNextScenario" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.554" />
+    <testcase name="releaseDuringBlockedLoad_closesRequests" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.077" />
+    <testcase name="boundedPreparePlaySeekReleaseLoop_leavesNoActiveRequests" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerResourcesTest" time="0.542" />
+  </testsuite>
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" tests="2" failures="0" errors="0" skipped="0" time="3.502" timestamp="2026-11-27T10:24:51" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.182" />
+    <testcase name="switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="3.320" />
+  </testsuite>
+</testsuites>

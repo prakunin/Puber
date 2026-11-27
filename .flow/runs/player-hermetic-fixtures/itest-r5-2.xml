@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="1" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T10:45:15" hostname="localhost">
+  <testsuite name="android-test" tests="1" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T10:45:15" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="testRunFailed" classname="android-test" time="0.000">
+      <failure>Test run failed to complete. No test results</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
