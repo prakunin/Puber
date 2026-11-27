@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="4" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T16:55:04" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" tests="4" failures="1" errors="0" skipped="0" time="3.808" timestamp="2026-11-27T16:55:04" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="switchStreamToFailingStream_reportsOneFailureWithoutRePrepare" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.592" />
+    <testcase name="delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.201" />
+    <testcase name="switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.333" />
+    <testcase name="switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.682">
+      <failure>java.lang.IllegalStateException: stream A response was not closed in 500 ms; events=[State(isPlaying=false, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0)], requests=[RequestEntry(id=1, method=GET, path=/a/master.m3u8, queryKeys=[], headers={}, range=null, routeId=stream-a, outcome=Completed(status=200))]
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest.switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream$lambda$1(PlaybackControllerStaleCallbackTest.kt:100)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest$$ExternalSyntheticLambda10.invoke(D8$$SyntheticClass:0)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.onMain$lambda$0(PlaybackControllerHarness.kt:176)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness$$ExternalSyntheticLambda1.run(D8$$SyntheticClass:0)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:524)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2616)
+	at android.os.Handler.handleCallback(Handler.java:995)
+	at android.os.Handler.dispatchMessage(Handler.java:103)
+	at android.os.Looper.loopOnce(Looper.java:248)
+	at android.os.Looper.loop(Looper.java:338)
+	at android.app.ActivityThread.main(ActivityThread.java:9067)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:932)
+</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

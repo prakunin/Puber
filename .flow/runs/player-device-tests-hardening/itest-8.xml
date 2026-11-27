@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="4" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T16:55:41" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" tests="4" failures="1" errors="0" skipped="0" time="4.658" timestamp="2026-11-27T16:55:41" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="switchStreamToFailingStream_reportsOneFailureWithoutRePrepare" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.798" />
+    <testcase name="delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.188" />
+    <testcase name="switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.326" />
+    <testcase name="switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.346">
+      <failure>java.lang.AssertionError: A's error never reached the player, so the queued-failure window was not exercised; events=[State(isPlaying=false, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0), Tracks(audio=[AudioTrackUIState(index=0, label=Track 1, language=, isFallbackLabel=true)], selectedIndex=0, subtitles=null), State(isPlaying=true, isBuffering=false, position=0), Tracks(audio=[AudioTrackUIState(index=0, label=Track 1, language=, isFallbackLabel=true)], selectedIndex=0, subtitles=null), StreamReady(url=https://127.0.0.1:18768/media/progressive.mp4), State(isPlaying=true, isBuffering=false, position=0)], requests=[RequestEntry(id=1, method=GET, path=/a/master.m3u8, queryKeys=[], headers={}, range=null, routeId=stream-a, outcome=Completed(status=200)), RequestEntry(id=2, method=GET, path=/media/progressive.mp4, queryKeys=[], headers={}, range=null, routeId=progressive, outcome=Completed(status=200))]
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertNotNull(Assert.java:713)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest.switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream(PlaybackControllerStaleCallbackTest.kt:110)
+</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

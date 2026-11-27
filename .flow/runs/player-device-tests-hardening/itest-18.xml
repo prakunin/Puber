@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="13" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T16:59:43" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" tests="13" failures="1" errors="0" skipped="0" time="32.079" timestamp="2026-11-27T16:59:43" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="hlsDelayedAndInterruptedSegment_enterBufferingThenRecover" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.676" />
+    <testcase name="hlsPreparation_exposesCodecTracksBeforeTheFirstMediaChunkCompletes" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="15.166">
+      <failure>java.lang.AssertionError: first HLS media chunks are blocked: condition stayed false for 15000 ms; events=[State(isPlaying=false, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0), Tracks(audio=[AudioTrackUIState(index=0, label=English, language=en, isFallbackLabel=false), AudioTrackUIState(index=1, label=Español, language=es, isFallbackLabel=false)], selectedIndex=0, subtitles=[])], requests=[RequestEntry(id=2, method=GET, path=/media/hls/video_360.m3u8, queryKeys=[], headers={}, range=null, routeId=hls/video_360.m3u8, outcome=Completed(status=200)), RequestEntry(id=3, method=GET, path=/media/hls/video_720.m3u8, queryKeys=[], headers={}, range=null, routeId=hls/video_720.m3u8, outcome=Completed(status=200)), RequestEntry(id=4, method=GET, path=/media/hls/audio_english.m3u8, queryKeys=[], headers={}, range=null, routeId=hls/audio_english.m3u8, outcome=Completed(status=200)), RequestEntry(id=5, method=GET, path=/media/hls/video_720_000.ts, queryKeys=[], headers={}, range=null, routeId=video_720_000.ts, outcome=Completed(status=200)), RequestEntry(id=6, method=GET, path=/media/hls/audio_english_000.ts, queryKeys=[], headers={}, range=null, routeId=chunkless-audio-gate, outcome=Completed(status=599)), RequestEntry(id=7, method=GET, path=/media/hls/video_720_001.ts, queryKeys=[], headers={}, range=null, routeId=video_720_001.ts, outcome=Completed(status=200)), RequestEntry(id=8, method=GET, path=/media/hls/audio_english_000.ts, queryKeys=[], headers={}, range=null, routeId=chunkless-audio-gate, outcome=null), RequestEntry(id=9, method=GET, path=/media/hls/audio_english_000.ts, queryKeys=[], headers={}, range=null, routeId=chunkless-audio-gate, outcome=null)]
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.awaitCondition(PlaybackControllerHarness.kt:236)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.awaitCondition$default(PlaybackControllerHarness.kt:225)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest.hlsPreparation_exposesCodecTracksBeforeTheFirstMediaChunkCompletes(PlaybackControllerNetworkTracksTest.kt:97)
+</failure>
+    </testcase>
+    <testcase name="hlsVideoCap_belowEveryVariant_stillSelectsVideo" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.592" />
+    <testcase name="playerMediaNetworkIsolation_rejectsExternalRedirect" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="4.225" />
+    <testcase name="hlsTracks_selectsAudioAndSubtitle_observesCueAndDisablesText" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.153" />
+    <testcase name="hlsVariant400_fallsBackToTheHealthyVariant" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.651" />
+    <testcase name="hlsSwitch_preservesPositionIntentTracks_andLastStreamWins" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.224" />
+    <testcase name="hls404AndMalformedPlaylist_failWithoutUnboundedRetry" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="4.620" />
+    <testcase name="progressiveUndeterminedAudio_reportsLocalizedFallbackRow" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.268" />
+    <testcase name="progressiveSwitch_restoresSelectedSubtitleAndPausedIntent" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.351" />
+    <testcase name="unlabelledAudio_reportsLocalizedFallbackRowMarkedAsFallback" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.393" />
+    <testcase name="hlsVariant502_fallsBackToTheHealthyVariant" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="0.650" />
+    <testcase name="hlsVideoCap_switchStreamReplacesCap" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerNetworkTracksTest" time="1.110" />
+  </testsuite>
+</testsuites>
