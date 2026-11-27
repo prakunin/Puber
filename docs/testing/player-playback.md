@@ -8,7 +8,7 @@ synthetic media served from loopback. They need no KinoPub credentials, backend 
 | Layer | Entry point | What it proves |
 |---|---|---|
 | Fixture integrity (JVM) | `./tools/agentw :player-test-fixtures:testDebugUnitTest` | The committed bytes match `SHA256SUMS`; the hermetic server answers ranges, redirects, sequences, delays, truncation and HTTPS deterministically. Also runs in `.github/workflows/pr-checks.yml`. |
-| Controller on a device | `PlaybackControllerDeviceTest`, `PlaybackControllerNetworkTracksTest`, `PlaybackControllerResourcesTest`, `PlaybackControllerStaleCallbackTest`, package `com.kino.puber.ui.feature.player.vm` (source set `androidTestInstrumentation`) | The real controller loads MP4 and HLS, selects tracks and cues, falls back on faulty variants, releases cleanly, and reports no failure for a load cancelled by a stream switch. A failure already queued before `switchStream` is still reported against the new stream; that case reproduces the defect and is tracked in `player-callback-gate`. |
+| Controller on a device | `PlaybackControllerDeviceTest`, `PlaybackControllerNetworkTracksTest`, `PlaybackControllerResourcesTest`, `PlaybackControllerStaleCallbackTest`, package `com.kino.puber.ui.feature.player.vm` (source set `androidTestInstrumentation`) | The real controller loads MP4 and HLS, selects tracks and cues, falls back on faulty variants, releases cleanly, and reports no failure for a load cancelled by a stream switch. A failure queued before `switchStream` is neither reported against the new stream nor stops it loading. |
 
 ## Run
 
@@ -54,13 +54,13 @@ cd player-test-fixtures/src/main/assets/player-fixtures && sha256sum -c SHA256SU
 ## Stale-callback probe
 
 `PlaybackControllerStaleCallbackTest` holds a stream's malformed playlist behind a gate. A failure or error event after
-`switchStream(B)` is the "reproduced" result and goes to the `player-callback-gate` run. Each case fixes one ordering:
+`switchStream(B)` is a regression, fixed by run `player-callback-gate` (`PlaybackCallbackGate`). Each case fixes one ordering:
 
 | Case | Ordering it covers |
 |---|---|
 | `delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched` | Control: without the switch the failure must be reported, otherwise the probes prove nothing |
 | `switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream` | The switch runs first; A's loader is cancelled before its body is parsed, so A's error normally never exists |
-| `switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream` | A's error is parsed and queued on the main looper, then `switchStream(B)` runs in the same main-thread turn; the case also asserts the player delivered that error, so it cannot pass without reaching the window. Reproduces the defect (A's failure is reported against B's URL, B is never requested); `@Ignore`d until run `player-callback-gate` |
+| `switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream` | A's error is parsed and queued on the main looper, then `switchStream(B)` runs in the same main-thread turn; the case also asserts the player delivered that error, so it cannot pass without reaching the window. Passes; guards the stale-error re-prepare in `PlaybackController.switchStream` |
 
 ## Upstream cases
 
