@@ -10,6 +10,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -34,9 +35,10 @@ internal class PlaybackControllerResourcesTest {
     }
 
     /**
-     * The corrupt-entry outcome (ready or failed) is not asserted: only that a terminal outcome is
-     * reached and the next scenario is not poisoned. Recovery from a corrupt cache entry is covered
-     * by run `player-corrupt-cache-recovery`.
+     * A cache span holding non-media bytes is read without a data-source error, so the cache is not
+     * bypassed and the extractor fails: the controller reports `StreamFailure(NEXT_URL)` for that url
+     * (the VM then fails over to the next candidate) and no terminal `Error`. The next scenario, run
+     * after the resource is removed, loads cleanly.
      */
     @Test
     fun emptyCache_loadsNormally_andCorruptOwnedEntryRecoversWithoutPoisoningNextScenario() {
@@ -54,10 +56,28 @@ internal class PlaybackControllerResourcesTest {
         harness.cache.removeResource(url)
         writeCorruptCacheEntry(url)
         harness.useMediaRoutes()
+        val mark = harness.events.mark()
         val corrupt = harness.prepare(path)
-        // A malformed container fails with "Source error".
-        harness.awaitCondition("corrupt-cache outcome") { corrupt.sawReady || corrupt.error.get() != null }
+        harness.awaitCondition("corrupt-cache failure") { corrupt.error.get() != null }
+        harness.awaitCondition("corrupt-cache StreamFailure") {
+            harness.events.since(mark).any { it is PlaybackEvent.StreamFailure }
+        }
+        val corruptEvents = harness.events.since(mark)
+        assertTrue(
+            "Corrupt entry should fail over with NEXT_URL for its url: $corruptEvents",
+            corruptEvents.any {
+                it is PlaybackEvent.StreamFailure &&
+                    it.recovery == PlaybackControl.StreamRecovery.NEXT_URL &&
+                    it.url == url
+            },
+        )
+        assertFalse("Corrupt entry should not reach READY", corrupt.sawReady)
         releaseAndDrain()
+        val drainedEvents = harness.events.since(mark)
+        assertTrue(
+            "Corrupt entry should not report a terminal Error, even after drain: $drainedEvents",
+            drainedEvents.none { it is PlaybackEvent.Error },
+        )
 
         harness.cache.removeResource(url)
         assertTrue(harness.cache.getCachedSpans(url).isEmpty())
