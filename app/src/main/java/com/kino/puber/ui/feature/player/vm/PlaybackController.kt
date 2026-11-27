@@ -173,6 +173,8 @@ internal class PlaybackController(
     private val mediaItemFactory = PlaybackMediaItemFactory()
     private val subtitleTrackSelector = SubtitleTrackSelector()
     private var currentStreamUrl: String? = null
+    private val gate = PlaybackCallbackGate()
+    private var sessionListener: SessionListener? = null
     private var currentStreamType: StreamType? = null
     private var currentItemHasSideLoads = false
     private var effectiveStreamSource: String? = null
@@ -211,63 +213,84 @@ internal class PlaybackController(
     override val bufferedPosition: Long get() = exoPlayer?.bufferedPosition ?: 0L
     override val playbackSpeed: Float get() = exoPlayer?.playbackParameters?.speed ?: 1f
     
-    private val playerListener = object : Player.Listener {
+    private inner class SessionListener(
+        private val session: PlaybackCallbackGate.Session,
+    ) : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            notifyPlaybackState()
+            gate.dispatch(session) { notifyPlaybackState() }
         }
 
         // onIsPlayingChanged stays silent while the player is stalled or suppressed, so these two
         // report the transitions it misses.
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-            if (!playWhenReady) seekStallRecovery.cancel()
-            notifyPlaybackState()
+            gate.dispatch(session) {
+                if (!playWhenReady) seekStallRecovery.cancel()
+                notifyPlaybackState()
+            }
         }
 
         override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
-            notifyPlaybackState()
+            gate.dispatch(session) { notifyPlaybackState() }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            when (playbackState) {
-                Player.STATE_ENDED -> {
-                    seekStallRecovery.cancel()
-                    notifyPlaybackState()
-                    callback?.onPlaybackEnded()
+            gate.dispatch(session) { url ->
+                when (playbackState) {
+                    Player.STATE_ENDED -> {
+                        seekStallRecovery.cancel()
+                        notifyPlaybackState()
+                        callback?.onPlaybackEnded()
+                    }
+                    Player.STATE_READY -> {
+                        seekStallRecovery.cancel()
+                        notifyPlaybackState()
+                        notifyTracksUpdated()
+                        callback?.onStreamReady(url)
+                    }
+                    Player.STATE_BUFFERING -> notifyPlaybackState()
+                    else -> {}
                 }
-                Player.STATE_READY -> {
-                    seekStallRecovery.cancel()
-                    notifyPlaybackState()
-                    notifyTracksUpdated()
-                    callback?.onStreamReady(currentStreamUrl.orEmpty())
-                }
-                Player.STATE_BUFFERING -> notifyPlaybackState()
-                else -> {}
             }
         }
 
         override fun onTracksChanged(tracks: Tracks) {
-            notifyTracksUpdated()
-            applyPendingSubtitleSelection()
+            gate.dispatch(session) {
+                notifyTracksUpdated()
+                applyPendingSubtitleSelection()
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             val cause = error.cause
             val message = error.localizedMessage ?: context.getString(R.string.player_error_playback)
             val recovery = cause.streamRecovery()
-            when {
-                cause is BehindLiveWindowException -> recoverBehindLiveWindow()
-                cause.isAc3DecoderInitializationException() -> disableAc3AndRetry()
-                recovery != null -> callback?.onStreamFailure(
-                    message = message,
-                    recovery = recovery,
-                    streamUrl = currentStreamUrl.orEmpty(),
-                )
-                else -> {
-                    seekStallRecovery.cancel()
-                    callback?.onError(message)
-                }
-            }
+            gate.routeError(
+                session,
+                reprepare = { exoPlayer?.prepare() },
+                report = { url ->
+                    when {
+                        cause is BehindLiveWindowException -> recoverBehindLiveWindow()
+                        cause.isAc3DecoderInitializationException() -> disableAc3AndRetry()
+                        recovery != null -> callback?.onStreamFailure(
+                            message = message,
+                            recovery = recovery,
+                            streamUrl = url,
+                        )
+                        else -> {
+                            seekStallRecovery.cancel()
+                            callback?.onError(message)
+                        }
+                    }
+                },
+            )
         }
+    }
+
+    private fun bindSession(player: ExoPlayer, streamUrl: String, fromSwitch: Boolean) {
+        sessionListener?.let(player::removeListener)
+        val listener = SessionListener(gate.beginSession(streamUrl, fromSwitch))
+        player.addListener(listener)
+        sessionListener = listener
     }
 
     private val analyticsListener = object : AnalyticsListener {
@@ -277,6 +300,7 @@ internal class PlaybackController(
             mediaLoadData: MediaLoadData,
             retryAttempt: Int,
         ) {
+            gate.onLoadStarted(loadEventInfo.dataSpec.uri.toString())
             updateEffectiveStreamSource(loadEventInfo.uri.host, mediaLoadData)
         }
 
@@ -425,13 +449,13 @@ internal class PlaybackController(
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .build()
             .apply {
-                addListener(playerListener)
                 addAnalyticsListener(analyticsListener)
             }
         exoPlayer = player
         videoRenderDiagnostics.reset()
 
         val spec = mediaItemFactory.spec(stream, subtitles)
+        bindSession(player, stream.url, fromSwitch = false)
         player.setMediaItem(mediaItemFactory.build(spec))
         currentStreamUrl = stream.url
         currentStreamType = stream.type
@@ -470,17 +494,6 @@ internal class PlaybackController(
             .build()
     }
 
-    /**
-     * Points the player at another URL for the media it is already playing, at the position it
-     * already reached.
-     *
-     * Deliberately no `stop()`: that drops the player to idle and takes `DefaultLoadControl` with
-     * it, which resets the allocator and — because the allocator trims on reset — hands the whole
-     * pooled buffer back to the heap to be re-allocated a moment later. The buffered media itself
-     * cannot survive a source swap either way, but the pool can, and giving it up costs a GC pause
-     * at the one moment playback has nothing in reserve. Handing the position to `setMediaItem`
-     * rather than seeking afterwards saves a second buffering round-trip on top.
-     */
     private fun createMediaSourceFactory(
         dataSourceFactory: DataSource.Factory,
     ): DefaultMediaSourceFactory {
@@ -496,6 +509,20 @@ internal class PlaybackController(
             .setExperimentalEnableHagcPlayback(playerPreferencesRepository.hagcPlaybackEnabled)
     }
 
+    /**
+     * Points the player at another URL for the media it is already playing, at the position it
+     * already reached.
+     *
+     * Deliberately no `stop()`: that drops the player to idle and takes `DefaultLoadControl` with
+     * it, which resets the allocator and — because the allocator trims on reset — hands the whole
+     * pooled buffer back to the heap to be re-allocated a moment later. The buffered media itself
+     * cannot survive a source swap either way, but the pool can, and giving it up costs a GC pause
+     * at the one moment playback has nothing in reserve. Handing the position to `setMediaItem`
+     * rather than seeking afterwards saves a second buffering round-trip on top.
+     *
+     * An error of the previous stream that surfaces after the switch is dropped and answered with
+     * one `prepare()`, which loads this stream at the saved position.
+     */
     override fun switchStream(stream: StreamCandidate, subtitles: List<SubtitleLink>?) {
         val player = exoPlayer ?: return
         val savedPosition = player.currentPosition
@@ -503,6 +530,7 @@ internal class PlaybackController(
         val savedTrackParams = player.trackSelectionParameters
 
         val spec = mediaItemFactory.spec(stream, subtitles)
+        bindSession(player, stream.url, fromSwitch = true)
         player.setMediaItem(mediaItemFactory.build(spec), savedPosition)
         currentStreamUrl = stream.url
         currentStreamType = stream.type
@@ -583,9 +611,11 @@ internal class PlaybackController(
         cancelWarmUp()
         exoPlayer?.let { player ->
             player.removeAnalyticsListener(analyticsListener)
-            player.removeListener(playerListener)
+            sessionListener?.let(player::removeListener)
             player.release()
         }
+        gate.invalidate()
+        sessionListener = null
         exoPlayer = null
         trackSelector = null
         currentStreamUrl = null
