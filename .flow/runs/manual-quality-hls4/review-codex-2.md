@@ -1,0 +1,6 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/androidTestInstrumentation/kotlin/com/kino/puber/ui/feature/player/vm/PlaybackControllerNetworkTracksTest.kt:117-140 (with the `viewportSize()` helper in PlaybackControllerReads.kt:42) - The "cap lifted by an uncapped switch" check compares `viewportWidth` and `viewportHeight` with `defaultViewport`. In Media3, `clearViewportSizeConstraints()` and `setViewportSizeToPhysicalDisplaySize(context, true)` both leave those dimensions at `Int.MAX_VALUE`. The selector reads `isViewportSizeLimitedByPhysicalDisplaySize`, which neither the test nor the helper reads. Scenario: someone deletes `setViewportSizeToPhysicalDisplaySize` from the Auto branch of `applyVideoCap`. The test still passes, and Auto after a manual pick no longer trims variants to the display. The manual-cap assertions have the same gap, because they cannot tell whether `clearViewportSizeConstraints` ran. The production code is correct. The test guard is too weak. Fix: add a read of the flag and assert it is false after the capped prepare and the capped switch, then true after the uncapped switch.
+REJECTED:
+- None. Both Codex runs reported this same gap, and the adversarial run found nothing else.
+VERDICT: changes needed (one minor test-strength gap, no production defect)

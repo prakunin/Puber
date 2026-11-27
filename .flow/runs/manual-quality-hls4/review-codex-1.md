@@ -1,0 +1,9 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/main/java/com/kino/puber/ui/feature/player/vm/VideoCapParameters.kt:11-13 - `applyVideoCap` sets only `setMaxVideoSize` and never clears Media3's default physical-display viewport constraint. If hls4 is a shared multi-variant master, picking 2160p on a 1080p TV can play 1080p. The picker would still show 2160p. Before this change the per-quality hls URL held a single variant, so the viewport never trimmed it. Fix: call `setViewportSizeToPhysicalDisplaySize(false)` or `clearViewportSizeConstraints()` when a cap is applied, and restore the default on Auto. I could not check this against the box: the spec marks hls4 structure as unverified and the device evidence does not mention a viewport.
+REJECTED:
+- hls4 returning 401/403 before and after the link refresh strands a playable quality, because hls and http are never tried (high) - unproven. The same hls4-first order already applies to Auto in the base, and nothing shows hls4 being rejected while hls works. `PlayerVM.onStreamFailure` also advances candidates on `NEXT_URL` errors.
+- A quality switch can revert the viewer's dubbing and persist the wrong audio choice when two masters expose unequal TrackGroups (medium) - unproven. It needs hls4 masters to differ per quality, and nothing shows they do. AC-4 and AC-9 cover the audio row and the preference guard.
+- A master without a `RESOLUTION` attribute pins its highest-bitrate variant even when 480p is picked (P2) - unproven. No evidence that the API serves hls4 masters without RESOLUTION. It would only affect the cap, and playback would still succeed.
+- The fallback audio label should come from `ResourceProvider`, not `Context.getString` (P3) - the spec's design table (row 97) chose a lambda with `Context` on purpose. The controller has no `ResourceProvider`, and the pure builder is tested through `FakeResourceProvider`.
+VERDICT: changes needed

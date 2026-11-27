@@ -1,0 +1,8 @@
+LENS: blind  ROUND: 1  BASE: 0823528b
+
+No findings.
+
+### Unproven
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt:250 The manual-quality cap uses the API's `VideoFile.h`/`w`, but the variant is chosen from the `RESOLUTION` values in the hls4 master playlist. If the master gives a larger height for the same quality (say file `h=716`, variant `1280x720`), the cap rules that variant out. A lower variant still fits, so `forceHighestSupportedBitrate` plays it without telling the user, and `setExceedVideoConstraintsIfNecessary(true)` never comes into play. This becomes real only if a KinoPub hls4 master is found whose variant heights don't match the file list's `h`.
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/ui/feature/player/vm/VideoCapParameters.kt:12 If an hls4 master lists variants without `RESOLUTION`, Media3 sees `Format.NO_VALUE` and lets every variant through the max-size check. `forceHighestSupportedBitrate` then picks the highest variant, whatever manual quality was chosen. This becomes real only if a real hls4 master turns up without `RESOLUTION` on its variants.
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlayerVM.kt:1966 When the user deliberately picks a placeholder row ("Track 2"), the change keeps the old stored audio preference and does not save the pick. That looks intended. It would only matter if some stream offers just placeholder rows and the user expects the pick to be remembered.

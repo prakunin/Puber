@@ -1,0 +1,8 @@
+LENS: edge  ROUND: 1  BASE: 0823528b
+
+No findings.
+
+### Unproven
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt:250 — the API's nominal `w`/`h` could be slightly smaller than the manifest `RESOLUTION` of the variant the user picked. Examples: a 1-2 px rounding gap such as API 534 against a 536 variant, or DCI 4096 wide against API 3840. The cap would then skip that variant and pin the next lower one. On the box the gap goes the other way (API 720p, variant 1280x534, PASS). This becomes real only if an item's API `w`/`h` is ever below its variant `RESOLUTION`, and the box's request log at human pace can show that.
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/domain/interactor/player/PlayerInteractor.kt:250 — if `h == 0` (or `w == 0`), the code builds `VideoSizeCap(w, 0)`. Every variant then goes over the cap, `setExceedVideoConstraintsIfNecessary(true)` takes the lowest one, and force-highest keeps it there, so a manual pick plays the worst quality. This becomes real only if the API returns a zero size for a file. No such data has been seen.
+- /home/dev/orca/workspaces/Puber/manual-quality-hls4/app/src/main/java/com/kino/puber/ui/feature/player/vm/PlaybackController.kt:544 — `switchStream` keeps the old stream's audio `TrackSelectionOverride`, now from an Auto hls4 stream to a manual hls4 stream. If the `TrackGroup` ids differ between the two playlists, the override is quietly ignored and the default dubbing plays. The picker stays honest, because it reads `isSelected`. M5 on the box showed UKR still checked, but nobody listened to the audio. This becomes real if a capture after Auto (UKR) -> 720p plays RUS.
