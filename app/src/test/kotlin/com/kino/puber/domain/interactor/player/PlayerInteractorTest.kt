@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
+@Suppress("LargeClass")
 class PlayerInteractorTest {
 
     private val api = mockk<KinoPubApiClient>()
@@ -299,6 +300,8 @@ class PlayerInteractorTest {
                     hls = "https://cdn/video.m3u8",
                     hls4 = "https://cdn/video-hls4.m3u8",
                 ),
+                w = 1920,
+                h = 1080,
             ),
         )
 
@@ -313,7 +316,7 @@ class PlayerInteractorTest {
     }
 
     @Test
-    fun selectStreamCandidates_manual_prefersSelectedQualityHls() {
+    fun selectStreamCandidates_manual_prefersSelectedQualityHls4() {
         val files = listOf(
             VideoFile(
                 url = VideoUrl(
@@ -323,6 +326,8 @@ class PlayerInteractorTest {
                 ),
                 quality = "1080p",
                 qualityId = 4,
+                w = 1920,
+                h = 1080,
             ),
             VideoFile(
                 url = VideoUrl(hls = "https://cdn/720.m3u8"),
@@ -330,14 +335,102 @@ class PlayerInteractorTest {
                 qualityId = 3,
             ),
         )
+        val cap = VideoSizeCap(1920, 1080)
 
         assertEquals(
             listOf(
-                StreamCandidate("https://cdn/1080.m3u8", StreamType.HLS),
-                StreamCandidate("https://cdn/1080-hls4.m3u8", StreamType.HLS),
+                StreamCandidate("https://cdn/1080-hls4.m3u8", StreamType.HLS, cap),
+                StreamCandidate("https://cdn/1080.m3u8", StreamType.HLS, cap),
                 StreamCandidate("https://cdn/1080.mp4", StreamType.PROGRESSIVE),
             ),
             interactor.selectStreamCandidates(files, qualityIndex = 1),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_manualWithSurround_keepsVideoCap() {
+        every { playerPreferencesRepository.preferSurroundAudio } returns true
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(
+                    hls = "https://cdn/1080.m3u8",
+                    hls4 = "https://cdn/1080-hls4.m3u8",
+                ),
+                quality = "1080p",
+                qualityId = 4,
+                w = 1920,
+                h = 1080,
+            ),
+        )
+        val cap = VideoSizeCap(1920, 1080)
+
+        assertEquals(
+            listOf(
+                StreamCandidate("https://cdn/1080-hls4.m3u8?ac3default=1", StreamType.HLS, cap),
+                StreamCandidate("https://cdn/1080.m3u8?ac3default=1", StreamType.HLS, cap),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 1),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_manualFileWithoutWidth_capsHeightOnly() {
+        val files = listOf(
+            VideoFile(url = VideoUrl(hls4 = "https://cdn/720-hls4.m3u8"), quality = "720p", h = 720),
+        )
+
+        assertEquals(
+            listOf(
+                StreamCandidate(
+                    "https://cdn/720-hls4.m3u8",
+                    StreamType.HLS,
+                    VideoSizeCap(Int.MAX_VALUE, 720),
+                ),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 1),
+        )
+    }
+
+    @Test
+    fun selectStreamCandidates_manualFileWithoutHeight_hasNoCap() {
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(hls = "https://cdn/v.m3u8", hls4 = "https://cdn/v-hls4.m3u8"),
+                quality = "720p",
+                w = 1280,
+            ),
+        )
+
+        val candidates = interactor.selectStreamCandidates(files, qualityIndex = 1)
+
+        assertEquals(2, candidates.size)
+        assertEquals(listOf(null, null), candidates.map { it.videoCap })
+    }
+
+    @Test
+    fun selectStreamCandidates_manualIndexOutOfRange_capsFallbackFile() {
+        val files = listOf(
+            VideoFile(
+                url = VideoUrl(hls4 = "https://cdn/first-hls4.m3u8"),
+                quality = "480p",
+                qualityId = 2,
+                w = 854,
+                h = 480,
+            ),
+            VideoFile(
+                url = VideoUrl(hls4 = "https://cdn/second-hls4.m3u8"),
+                quality = "1080p",
+                qualityId = 4,
+                w = 1920,
+                h = 1080,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                StreamCandidate("https://cdn/first-hls4.m3u8", StreamType.HLS, VideoSizeCap(854, 480)),
+            ),
+            interactor.selectStreamCandidates(files, qualityIndex = 9),
         )
     }
 

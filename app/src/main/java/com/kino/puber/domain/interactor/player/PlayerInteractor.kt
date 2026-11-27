@@ -23,9 +23,12 @@ internal enum class StreamType {
     PROGRESSIVE,
 }
 
+internal data class VideoSizeCap(val width: Int, val height: Int)
+
 internal data class StreamCandidate(
     val url: String,
     val type: StreamType,
+    val videoCap: VideoSizeCap? = null,
 )
 
 private fun VideoFile.hasUsableStreamUrl(): Boolean {
@@ -242,10 +245,12 @@ internal class PlayerInteractor(
     private fun manualStreamCandidates(files: List<VideoFile>, qualityIndex: Int): List<StreamCandidate> {
         val uniqueFiles = files.distinctBy { it.quality ?: "${it.h}p" }
             .sortedByDescending { it.qualityId ?: 0 }
-        val url = (uniqueFiles.getOrNull(qualityIndex - 1) ?: files.first()).url
+        val file = uniqueFiles.getOrNull(qualityIndex - 1) ?: files.first()
+        val url = file.url
+        val cap = file.h?.let { VideoSizeCap(file.w ?: Int.MAX_VALUE, it) }
         return buildList {
-            url?.hls?.let { add(StreamCandidate(it, StreamType.HLS)) }
-            url?.hls4?.let { add(StreamCandidate(it, StreamType.HLS)) }
+            url?.hls4?.let { add(StreamCandidate(it, StreamType.HLS, cap)) }
+            url?.hls?.let { add(StreamCandidate(it, StreamType.HLS, cap)) }
             url?.http?.let { add(StreamCandidate(it, StreamType.PROGRESSIVE)) }
         }
     }
