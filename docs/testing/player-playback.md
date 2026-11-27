@@ -72,8 +72,8 @@ when the intended row is gone the VM sends the Off row.
 
 | Test | Pins |
 |---|---|
-| `PlaybackControllerNetworkTracksTest.qualitySwitch_missingSubtitleLanguage_staysOffAtReusedCoordinates` | English manifest subtitle selected, the new master has only a Spanish rendition (DEFAULT=NO) at the same coordinates: no text track selected, no Spanish VTT request |
-| `PlaybackControllerNetworkTracksTest.qualitySwitch_sameManifestSubtitle_reselectsByIdentity` | The same English rendition in the new master is selected again without another `selectSubtitle` call |
+| `PlaybackControllerNetworkTracksTest.qualitySwitch_missingSubtitleLanguage_staysOffAtReusedCoordinates` | English manifest subtitle selected, the new master has only a Spanish rendition (DEFAULT=NO) at the same coordinates: no text track selected, no Spanish VTT request, held over a 1 s settle window |
+| `PlaybackControllerNetworkTracksTest.qualitySwitch_sameManifestSubtitle_staysSelected` | The same English subtitle stays selected across the switch, without another `selectSubtitle` call |
 | `PlayerVMTrackSelectionTest.selectQuality_withSubtitleRowMissingFromNewReport_sendsOffRow` | The intended row is missing from the report after `SelectQuality`: the Off row is shown and sent |
 | `PlayerVMTrackSelectionTest.selectQuality_withIdenticalRows_keepsSubtitleWithoutResending` | Identical rows after `SelectQuality`: the row stays selected and `selectSubtitle` is not called again |
 

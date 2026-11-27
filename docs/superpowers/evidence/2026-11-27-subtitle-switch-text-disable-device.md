@@ -13,7 +13,7 @@ Observed: BUILD SUCCESSFUL, result XML tests=16 failures=0 errors=0 skipped=0 (2
 | AC | Test | Expected | Observed | Result |
 |---|---|---|---|---|
 | AC-1 | qualitySwitch_missingSubtitleLanguage_staysOffAtReusedCoordinates | No text track selected after the switch, no Spanish VTT request | testcase present in the XML, no failure | PASS |
-| AC-2 | qualitySwitch_sameManifestSubtitle_reselectsByIdentity | English text track selected again without another selectSubtitle call | testcase present in the XML, no failure | PASS |
+| AC-2 | qualitySwitch_sameManifestSubtitle_staysSelected | English subtitle stays selected across the switch without another selectSubtitle call | testcase present in the XML, no failure | PASS |
 
 ## Unit run (forced rerun)
 

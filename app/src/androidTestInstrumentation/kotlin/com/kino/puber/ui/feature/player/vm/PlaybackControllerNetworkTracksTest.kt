@@ -349,13 +349,17 @@ internal class PlaybackControllerNetworkTracksTest {
             currentMediaPath() == highPath && playbackState() == Player.STATE_READY && "es" in textTrackLanguages()
         }
 
-        assertFalse(harness.playerRead { selectedTextTrack() })
-        assertTrue(harness.server.requestJournal.entries.none { it.path == "/media/hls/sub_es.vtt" })
+        val settleEnd = System.nanoTime() + NEGATIVE_SETTLE_MS * 1_000_000L
+        do {
+            assertFalse(harness.playerRead { selectedTextTrack() })
+            assertTrue(harness.server.requestJournal.entries.none { it.path == "/media/hls/sub_es.vtt" })
+            Thread.sleep(NEGATIVE_POLL_MS)
+        } while (System.nanoTime() < settleEnd)
         assertEquals(0, harness.server.requestJournal.unknownRequests.size)
     }
 
     @Test
-    fun qualitySwitch_sameManifestSubtitle_reselectsByIdentity() {
+    fun qualitySwitch_sameManifestSubtitle_staysSelected() {
         val lowPath = "/media/hls/quality-low.m3u8"
         val highPath = "/media/hls/quality-high.m3u8"
         harness.server.reset(
@@ -386,7 +390,7 @@ internal class PlaybackControllerNetworkTracksTest {
         harness.onMain { harness.controller.selectSubtitle(manifestEnglishRow()) }
         harness.awaitCondition("English manifest subtitle selected") { !textTracksDisabled() && selectedTextTrack() }
 
-        // No second selectSubtitle: the controller's pending row carries the choice across the switch.
+        // No second selectSubtitle: the same English subtitle stays selected across the switch.
         harness.onMain { harness.controller.switchStream(harness.stream(highPath), null) }
         harness.awaitCondition("the English text track is selected again on the new source") {
             currentMediaPath() == highPath && playbackState() == Player.STATE_READY &&
@@ -608,5 +612,7 @@ internal class PlaybackControllerNetworkTracksTest {
     private companion object {
         const val CUE_TEXT = "Synthetic player fixture cue"
         const val REDIRECT_TIMEOUT_MS = 40_000L
+        const val NEGATIVE_SETTLE_MS = 1_000L
+        const val NEGATIVE_POLL_MS = 100L
     }
 }
