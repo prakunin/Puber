@@ -56,6 +56,27 @@ internal class PlayerAudioTracksTest {
     }
 
     @Test
+    fun buildAudioRows_undeterminedLanguage_usesFallbackString() {
+        val rows = rows(format("und"), format("UND"), format("und-Latn"))
+
+        assertEquals(
+            listOf(1, 2, 3).map { fake.getString(R.string.player_audio_track_fallback, it) },
+            rows.map { it.label },
+        )
+        assertTrue(rows.all { it.isFallbackLabel })
+        assertEquals(listOf("", "", ""), rows.map { it.language })
+    }
+
+    @Test
+    fun buildAudioRows_labelledUndeterminedLanguage_keepsLabelWithoutLanguage() {
+        val row = rows(format("und", "English")).single()
+
+        assertEquals("English", row.label)
+        assertFalse(row.isFallbackLabel)
+        assertEquals("", row.language)
+    }
+
+    @Test
     fun buildAudioRows_labelThenLanguage_keepsManifestName() {
         val rows = rows(format("en", "English"), format("es"), format())
 

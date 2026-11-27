@@ -1,5 +1,9 @@
 package com.kino.puber.ui.feature.player.vm
 
+import android.text.TextUtils
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
+import com.kino.puber.R
 import com.kino.puber.domain.interactor.player.StreamCandidate
 import com.kino.puber.domain.interactor.player.StreamType
 import com.kino.puber.domain.model.BufferPreset
@@ -14,6 +18,8 @@ import com.kino.puber.util.MainDispatcherExtension
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.mockk.verifyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -117,6 +123,40 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         vm.onAction(PlayerAction.SelectSubtitle(1))
 
         verify { interactor.saveTrackPreferences(42, "rus", STORED_AUDIO_LABEL, any()) }
+    }
+
+    @Test
+    fun selectAudioTrack_undeterminedRowFromPlayer_keepsStoredAudioPreference() {
+        val vm = startedWithUndeterminedAudioRow()
+
+        vm.onAction(PlayerAction.SelectAudioTrack(0))
+
+        verify { interactor.saveTrackPreferences(42, "rus", STORED_AUDIO_LABEL, any()) }
+    }
+
+    @Test
+    fun selectSubtitle_whileAudioRowIsUndetermined_keepsStoredAudioPreference() {
+        val vm = startedWithUndeterminedAudioRow()
+
+        vm.onAction(PlayerAction.SelectSubtitle(1))
+
+        verify { interactor.saveTrackPreferences(42, "rus", STORED_AUDIO_LABEL, any()) }
+    }
+
+    private fun startedWithUndeterminedAudioRow(): PlayerVM {
+        every { interactor.getPreferredAudioLang(42) } returns "rus"
+        every { interactor.getPreferredAudioLabel(42) } returns STORED_AUDIO_LABEL
+        val vm = startedVM()
+        // `Format` normalises a language through `Util`, which calls the android-only `TextUtils`.
+        val format = try {
+            mockkStatic(TextUtils::class)
+            every { TextUtils.isEmpty(any()) } answers { firstArg<CharSequence?>().isNullOrEmpty() }
+            Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).setLanguage("und").build()
+        } finally {
+            unmockkStatic(TextUtils::class)
+        }
+        callbackSlot.captured.onTracksUpdated(buildAudioRows(listOf(format)) { n -> "Track $n" }, 0)
+        return vm
     }
 
     private fun startedWithFallbackAudioRow(): PlayerVM {

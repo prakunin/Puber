@@ -1,8 +1,10 @@
 package com.kino.puber.ui.feature.player.vm
 
+import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -63,6 +65,27 @@ internal class SubtitleTrackIdentityTest {
         assertTrue(sameSubtitleLanguage("ru", "rus"))
         assertFalse(sameSubtitleLanguage("ru", "en"))
         assertFalse(sameSubtitleLanguage("", ""))
+    }
+
+    @Test
+    fun sameSubtitleLanguage_rejectsUndetermined() {
+        assertFalse(sameSubtitleLanguage("und", "und"))
+        assertFalse(sameSubtitleLanguage("und", "UND"))
+        assertFalse(sameSubtitleLanguage("und", "ru"))
+    }
+
+    @Test
+    fun knownLanguageOrNull_treatsUndeterminedAsUnknown() {
+        listOf(null, "", " ", "und", "UND", " und ", "und-Latn", "und_US").forEach {
+            assertNull(knownLanguageOrNull(it), "input: $it")
+        }
+    }
+
+    @Test
+    fun knownLanguageOrNull_keepsRealLanguagesVerbatim() {
+        listOf("ru", "rus", "en-US", "ai", "undefined").forEach {
+            assertEquals(it, knownLanguageOrNull(it))
+        }
     }
 
     @Test
