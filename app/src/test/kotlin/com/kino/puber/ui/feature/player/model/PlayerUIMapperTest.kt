@@ -152,7 +152,7 @@ internal class PlayerUIMapperTest {
     fun mapAudioTracks_blankOrUndLanguageIsTreatedAsUnknown() {
         val expected = AudioTrackUIState(index = 0, label = "${unknownLabel()} · X", language = "")
 
-        listOf("", "und").forEach { lang ->
+        listOf("", " ", "und", "UND", "und-Latn").forEach { lang ->
             val rows = mapper.mapAudioTracks(listOf(xAudio(lang)))
 
             assertEquals(listOf(expected), rows, "lang=$lang")
@@ -183,6 +183,14 @@ internal class PlayerUIMapperTest {
         val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = "rus", author = AudioAuthor(id = 1, title = "X"))))
 
         assertEquals(listOf(AudioTrackUIState(index = 0, label = "rus · X", language = "rus")), rows)
+    }
+
+    @Test
+    fun mapAudioTracks_knownLanguageWithoutTitleIsNotFallbackLabel() {
+        val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = "rus")))
+
+        val expected = AudioTrackUIState(index = 0, label = "rus", language = "rus", isFallbackLabel = false)
+        assertEquals(listOf(expected), rows)
     }
 
     private fun subtitleLinks() = listOf(
