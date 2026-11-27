@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="4" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T11:48:11" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" tests="4" failures="1" errors="0" skipped="0" time="5.267" timestamp="2026-11-27T11:48:11" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="switchStreamToFailingStream_reportsOneFailureWithoutRePrepare" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.856">
+      <failure>java.lang.AssertionError: B's real error must be reported without a re-prepare; events=[State(isPlaying=true, isBuffering=false, position=0), Tracks(audio=[AudioTrackUIState(index=0, label=und, language=und)], selectedIndex=0, subtitles=null), StreamReady(url=https://127.0.0.1:18768/media/progressive.mp4), State(isPlaying=true, isBuffering=false, position=0), State(isPlaying=true, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0), StreamFailure(message=Source error, recovery=NEXT_URL, url=https://127.0.0.1:18768/b/malformed.m3u8)], requests=[RequestEntry(id=1, method=GET, path=/media/progressive.mp4, queryKeys=[], headers={}, range=null, routeId=progressive, outcome=Completed(status=200)), RequestEntry(id=2, method=GET, path=/b/malformed.m3u8, queryKeys=[], headers={}, range=null, routeId=stream-b-malformed, outcome=Completed(status=200)), RequestEntry(id=3, method=GET, path=/b/malformed.m3u8, queryKeys=[], headers={}, range=null, routeId=stream-b-malformed, outcome=Completed(status=200))] expected:&lt;1&gt; but was:&lt;2&gt;
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest.switchStreamToFailingStream_reportsOneFailureWithoutRePrepare(PlaybackControllerStaleCallbackTest.kt:142)
+</failure>
+    </testcase>
+    <testcase name="delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.191" />
+    <testcase name="switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.376" />
+    <testcase name="switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.844" />
+  </testsuite>
+</testsuites>

@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="3" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-11-27T11:27:18" hostname="localhost">
+  <testsuite name="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" tests="3" failures="1" errors="0" skipped="0" time="17.620" timestamp="2026-11-27T11:27:18" hostname="localhost">
+    <properties>
+      <property name="device" value="host.docker.internal_5555" />
+    </properties>
+    <testcase name="delayedFailure_reportsStreamFailure_whenStreamIsNotSwitched" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="0.300" />
+    <testcase name="switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="1.629" />
+    <testcase name="switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream" classname="com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest" time="15.691">
+      <failure>java.lang.AssertionError: stream B is ready: condition stayed false for 15000 ms; events=[State(isPlaying=false, isBuffering=true, position=0), State(isPlaying=true, isBuffering=true, position=0), StreamFailure(message=Source error, recovery=NEXT_URL, url=https://127.0.0.1:18768/media/progressive.mp4)], requests=[RequestEntry(id=1, method=GET, path=/a/master.m3u8, queryKeys=[], headers={}, range=null, routeId=stream-a, outcome=Completed(status=200))]
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.awaitCondition(PlaybackControllerHarness.kt:232)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerHarness.awaitCondition$default(PlaybackControllerHarness.kt:221)
+	at com.kino.puber.ui.feature.player.vm.PlaybackControllerStaleCallbackTest.switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream(PlaybackControllerStaleCallbackTest.kt:100)
+</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
