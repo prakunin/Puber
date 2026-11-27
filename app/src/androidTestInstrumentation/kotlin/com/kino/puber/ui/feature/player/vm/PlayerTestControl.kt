@@ -7,12 +7,20 @@ import com.kino.puber.playertestfixtures.server.HermeticTestServer
 import com.kino.puber.playertestfixtures.server.QueryMatchMode
 import com.kino.puber.playertestfixtures.server.ResponsePlan
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import mockwebserver3.RecordedRequest
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
+import okio.BufferedSource
+import okio.ForwardingSource
+import okio.buffer
 
 /**
  * Instrumentation-owned lifecycle boundary for the common hermetic player
@@ -77,10 +85,11 @@ internal class PlayerTestControl(
      * can drop its keep-alive connections: an idle pooled socket keeps a MockWebServer connection
      * task running, and the server then gives up waiting for its queue to shut down.
      */
-    fun newClient(): OkHttpClient {
+    fun newClient(interceptor: Interceptor? = null): OkHttpClient {
         val trust = HandshakeCertificates.Builder().addTrustedCertificate(held.certificate).build()
         return OkHttpClient.Builder()
             .sslSocketFactory(trust.sslSocketFactory(), trust.trustManager)
+            .apply { interceptor?.let(::addInterceptor) }
             .build()
             .also { clients += it }
     }
@@ -127,5 +136,48 @@ internal class PlayerTestControl(
         const val LOOPBACK_HOST = "127.0.0.1"
         const val DEFAULT_QUIESCENCE_TIMEOUT_SECONDS = 10L
         const val DEFAULT_MAX_DIAGNOSTIC_REQUESTS = 12
+    }
+}
+
+/**
+ * Raises one latch per request path when the consumer closes that response body, which the loader
+ * normally does once it is done with the playlist. Any close counts, so it is a bound on parsing,
+ * not proof of it. Starting a request for a path replaces that path's latch, so an earlier close of
+ * the same path does not satisfy a later wait. An interceptor, not an `EventListener`:
+ * debug builds of the controller replace the client's event listener factory. A response of
+ * another path never raises the latch.
+ */
+internal class ClosedResponseSignals : Interceptor {
+    private val latches = ConcurrentHashMap<String, CountDownLatch>()
+
+    fun awaitClosed(path: String, timeoutMs: Long): Boolean =
+        latch(path).await(timeoutMs, TimeUnit.MILLISECONDS)
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val path = chain.request().url.encodedPath
+        latches[path] = CountDownLatch(1)
+        val response = chain.proceed(chain.request())
+        val body = response.body
+        return response.newBuilder().body(SignalingBody(body, path)).build()
+    }
+
+    private fun latch(path: String) = latches.computeIfAbsent(path) { CountDownLatch(1) }
+
+    private inner class SignalingBody(private val delegate: ResponseBody, private val path: String) : ResponseBody() {
+        private val signalingSource = object : ForwardingSource(delegate.source()) {
+            override fun close() {
+                try {
+                    super.close()
+                } finally {
+                    latch(path).countDown()
+                }
+            }
+        }.buffer()
+
+        override fun contentType() = delegate.contentType()
+
+        override fun contentLength() = delegate.contentLength()
+
+        override fun source(): BufferedSource = signalingSource
     }
 }

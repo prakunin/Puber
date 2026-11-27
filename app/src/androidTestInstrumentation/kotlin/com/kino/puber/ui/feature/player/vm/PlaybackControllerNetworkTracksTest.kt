@@ -85,18 +85,21 @@ internal class PlaybackControllerNetworkTracksTest {
         harness.server.reset(
             harness.commonHlsRoutes(
                 extraRoutes = listOf(
-                    gatedSegment("chunkless-video-gate", "video_720_000.ts", gate),
+                    gatedSegment("chunkless-video-gate", "video_360_000.ts", gate),
                     gatedSegment("chunkless-audio-gate", "audio_english_000.ts", gate),
                 ),
             ),
         )
-        val probe = harness.prepare("/media/hls/master.m3u8")
+        // A single-variant master: with the multi-variant one ABR starts on an ungated 360p variant.
+        val probe = harness.prepare("/media/hls/quality-low.m3u8")
 
         try {
-            harness.awaitCondition("first HLS media chunks are blocked") { harness.server.activeRequestCount > 0 }
+            harness.awaitCondition("first HLS media chunks are blocked") {
+                pending("chunkless-video-gate") && pending("chunkless-audio-gate")
+            }
             harness.awaitCondition("chunkless HLS preparation exposes CODECS tracks") {
                 val trackTypes = player?.currentTracks?.groups?.map { it.type }.orEmpty()
-                harness.server.activeRequestCount > 0 &&
+                pending("chunkless-video-gate") && pending("chunkless-audio-gate") &&
                     C.TRACK_TYPE_VIDEO in trackTypes &&
                     C.TRACK_TYPE_AUDIO in trackTypes
             }
@@ -328,9 +331,10 @@ internal class PlaybackControllerNetworkTracksTest {
             ),
         )
         val delayedProbe = harness.prepare("/media/hls/quality-low.m3u8")
-        harness.awaitCondition("delayed segment enters BUFFERING") {
-            Player.STATE_BUFFERING in delayedProbe.stateEvents ||
-                playbackState() == Player.STATE_BUFFERING
+        // BUFFERING alone is set by prepare() before any segment request, so the segment must also be pending.
+        harness.awaitCondition("delayed segment is pending while the player is BUFFERING") {
+            pending("delayed-segment") &&
+                (Player.STATE_BUFFERING in delayedProbe.stateEvents || playbackState() == Player.STATE_BUFFERING)
         }
 
         gate.countDown()
@@ -421,6 +425,10 @@ internal class PlaybackControllerNetworkTracksTest {
             harness.networkJournal.clear()
         }
     }
+
+    /** True while a request of route [routeId] has reached the server and has no outcome yet. */
+    private fun pending(routeId: String): Boolean =
+        harness.server.requestJournal.entries.any { it.routeId == routeId && it.outcome == null }
 
     private fun gatedSegment(id: String, filename: String, gate: CountDownLatch) =
         harness.server.route(
