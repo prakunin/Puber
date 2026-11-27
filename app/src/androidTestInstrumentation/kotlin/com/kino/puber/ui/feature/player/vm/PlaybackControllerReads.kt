@@ -55,6 +55,13 @@ internal fun PlaybackController.selectedTextTrack(): Boolean =
         ?.filter { it.type == C.TRACK_TYPE_TEXT }
         ?.any { it.isSelected } == true
 
+internal fun PlaybackController.textTrackLanguages(): Set<String?> =
+    player?.currentTracks?.groups
+        ?.filter { it.type == C.TRACK_TYPE_TEXT }
+        ?.map { it.getTrackFormat(0).language }
+        ?.toSet()
+        .orEmpty()
+
 internal fun PlaybackController.textTracksDisabled(): Boolean =
     player?.trackSelectionParameters?.disabledTrackTypes?.contains(C.TRACK_TYPE_TEXT) == true
 

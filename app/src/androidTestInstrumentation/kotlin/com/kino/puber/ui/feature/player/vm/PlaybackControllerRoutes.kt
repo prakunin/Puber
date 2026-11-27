@@ -23,6 +23,52 @@ internal fun singleVariantMaster(videoPlaylist: String): String =
     $videoPlaylist
     """.trimIndent()
 
+/** A master whose only subtitle rendition is [subtitleName] ([language], DEFAULT=NO, manifest-only) at [uri]. */
+internal fun subtitleVariantMaster(
+    videoPlaylist: String,
+    subtitleName: String,
+    language: String,
+    uri: String,
+): String =
+    """
+    #EXTM3U
+    #EXT-X-VERSION:3
+    #EXT-X-INDEPENDENT-SEGMENTS
+    #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio_english.m3u8"
+    #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Español",LANGUAGE="es",DEFAULT=NO,AUTOSELECT=YES,URI="audio_spanish.m3u8"
+    #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="$subtitleName",LANGUAGE="$language",DEFAULT=NO,AUTOSELECT=NO,URI="$uri"
+    #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360,CODECS="avc1.42c01e,mp4a.40.2",AUDIO="audio",SUBTITLES="subs"
+    $videoPlaylist
+    """.trimIndent()
+
+/** The manifest-only subtitle routes of [subtitleVariantMaster]: its playlist at `/media/hls/sub_<language>.m3u8` and its VTT. */
+internal fun PlaybackControllerHarness.manifestSubtitleRoutes(language: String, cueText: String): List<HermeticRoute> = listOf(
+    server.route(
+        id = "sub-$language-playlist",
+        path = "/media/hls/sub_$language.m3u8",
+        response = hlsText(
+            """
+            #EXTM3U
+            #EXT-X-VERSION:3
+            #EXT-X-TARGETDURATION:10
+            #EXT-X-MEDIA-SEQUENCE:0
+            #EXT-X-PLAYLIST-TYPE:VOD
+            #EXTINF:10.0,
+            sub_$language.vtt
+            #EXT-X-ENDLIST
+            """.trimIndent(),
+        ),
+    ),
+    server.route(
+        id = "sub-$language-vtt",
+        path = "/media/hls/sub_$language.vtt",
+        response = HermeticTestServer.text(
+            body = "WEBVTT\n\n00:00:00.000 --> 00:00:09.000\n$cueText\n",
+            contentType = "text/vtt",
+        ),
+    ),
+)
+
 private fun PlaybackControllerHarness.hlsText(body: String): ResponsePlan =
     HermeticTestServer.text(body = body, contentType = HLS_CONTENT_TYPE)
 

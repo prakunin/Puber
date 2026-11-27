@@ -312,6 +312,98 @@ internal class PlaybackControllerNetworkTracksTest {
     }
 
     @Test
+    fun qualitySwitch_missingSubtitleLanguage_staysOffAtReusedCoordinates() {
+        val lowPath = "/media/hls/quality-low.m3u8"
+        val highPath = "/media/hls/quality-high.m3u8"
+        harness.server.reset(
+            harness.commonHlsRoutes(
+                extraRoutes = harness.manifestSubtitleRoutes("en", "Hello") +
+                    harness.manifestSubtitleRoutes("es", "Hola") +
+                    harness.server.route(
+                        id = "quality-low",
+                        path = lowPath,
+                        response = HermeticTestServer.text(
+                            body = subtitleVariantMaster("video_360.m3u8", "English", "en", "sub_en.m3u8"),
+                            contentType = PlaybackControllerHarness.HLS_CONTENT_TYPE,
+                        ),
+                    ) +
+                    harness.server.route(
+                        id = "quality-high",
+                        path = highPath,
+                        response = HermeticTestServer.text(
+                            body = subtitleVariantMaster("video_720.m3u8", "Español", "es", "sub_es.m3u8"),
+                            contentType = PlaybackControllerHarness.HLS_CONTENT_TYPE,
+                        ),
+                    ),
+            ),
+        )
+        val probe = harness.prepare(lowPath)
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("the English manifest rendition is exposed") { "en" in textTrackLanguages() }
+        harness.onMain { harness.controller.selectSubtitle(manifestEnglishRow()) }
+        harness.awaitCondition("English manifest subtitle selected") { !textTracksDisabled() && selectedTextTrack() }
+
+        harness.onMain { harness.controller.switchStream(harness.stream(highPath), null) }
+        harness.awaitCondition("the Spanish rendition of the new source is exposed") {
+            currentMediaPath() == highPath && playbackState() == Player.STATE_READY && "es" in textTrackLanguages()
+        }
+
+        assertFalse(harness.playerRead { selectedTextTrack() })
+        assertTrue(harness.server.requestJournal.entries.none { it.path == "/media/hls/sub_es.vtt" })
+        assertEquals(0, harness.server.requestJournal.unknownRequests.size)
+    }
+
+    @Test
+    fun qualitySwitch_sameManifestSubtitle_reselectsByIdentity() {
+        val lowPath = "/media/hls/quality-low.m3u8"
+        val highPath = "/media/hls/quality-high.m3u8"
+        harness.server.reset(
+            harness.commonHlsRoutes(
+                extraRoutes = harness.manifestSubtitleRoutes("en", "Hello") +
+                    harness.server.route(
+                        id = "quality-low",
+                        path = lowPath,
+                        response = HermeticTestServer.text(
+                            body = subtitleVariantMaster("video_360.m3u8", "English", "en", "sub_en.m3u8"),
+                            contentType = PlaybackControllerHarness.HLS_CONTENT_TYPE,
+                        ),
+                    ) +
+                    harness.server.route(
+                        id = "quality-high",
+                        path = highPath,
+                        response = HermeticTestServer.text(
+                            body = subtitleVariantMaster("video_720.m3u8", "English", "en", "sub_en.m3u8"),
+                            contentType = PlaybackControllerHarness.HLS_CONTENT_TYPE,
+                        ),
+                    ),
+            ),
+        )
+        val probe = harness.prepare(lowPath)
+
+        harness.awaitReady(probe)
+        harness.awaitCondition("the English manifest rendition is exposed") { "en" in textTrackLanguages() }
+        harness.onMain { harness.controller.selectSubtitle(manifestEnglishRow()) }
+        harness.awaitCondition("English manifest subtitle selected") { !textTracksDisabled() && selectedTextTrack() }
+
+        // No second selectSubtitle: the controller's pending row carries the choice across the switch.
+        harness.onMain { harness.controller.switchStream(harness.stream(highPath), null) }
+        harness.awaitCondition("the English text track is selected again on the new source") {
+            currentMediaPath() == highPath && playbackState() == Player.STATE_READY &&
+                !textTracksDisabled() && selectedTextTrack()
+        }
+        assertEquals(0, harness.server.requestJournal.unknownRequests.size)
+    }
+
+    private fun manifestEnglishRow() = SubtitleTrackUIState(
+        label = "English",
+        language = "en",
+        url = "",
+        playerTrackId = "subs:English",
+        fromManifest = true,
+    )
+
+    @Test
     fun hls404AndMalformedPlaylist_failWithoutUnboundedRetry() {
         val notFound = runPlaylistFailure(
             path = "/media/fault-404.m3u8",

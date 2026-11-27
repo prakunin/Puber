@@ -62,6 +62,21 @@ cd player-test-fixtures/src/main/assets/player-fixtures && sha256sum -c SHA256SU
 | `switchStreamBeforeDelayedFailure_reportsNoFailureForPreviousStream` | The switch runs first; A's loader is cancelled before its body is parsed, so A's error normally never exists |
 | `switchStreamAfterQueuedFailure_reportsNoFailureForPreviousStream` | A's error is parsed and queued on the main looper, then `switchStream(B)` runs in the same main-thread turn; the case also asserts the player delivered that error, so it cannot pass without reaching the window. Passes; guards the stale-error re-prepare in `PlaybackController.switchStream` |
 
+## Subtitle carry-over on a quality switch
+
+The fork keeps the subtitle choice across `switchStream` by decision of run `subtitle-switch-text-disable`: it does not
+disable text before `setMediaItem` as upstream does (the expectations before `7d5addd2`). The old text parameters stay
+applied, and the controller's pending row is re-applied on the first track report of the new source through
+`SubtitleTrackSelector`, which never matches by position. A wrong-language rendition at reused coordinates is not shown;
+when the intended row is gone the VM sends the Off row.
+
+| Test | Pins |
+|---|---|
+| `PlaybackControllerNetworkTracksTest.qualitySwitch_missingSubtitleLanguage_staysOffAtReusedCoordinates` | English manifest subtitle selected, the new master has only a Spanish rendition (DEFAULT=NO) at the same coordinates: no text track selected, no Spanish VTT request |
+| `PlaybackControllerNetworkTracksTest.qualitySwitch_sameManifestSubtitle_reselectsByIdentity` | The same English rendition in the new master is selected again without another `selectSubtitle` call |
+| `PlayerVMTrackSelectionTest.selectQuality_withSubtitleRowMissingFromNewReport_sendsOffRow` | The intended row is missing from the report after `SelectQuality`: the Off row is shown and sent |
+| `PlayerVMTrackSelectionTest.selectQuality_withIdenticalRows_keepsSubtitleWithoutResending` | Identical rows after `SelectQuality`: the row stays selected and `selectSubtitle` is not called again |
+
 ## Upstream cases
 
 Upstream is commit `1d3ec39e`. Kaspresso, `ActivityScenario` and `PlayerView` are not part of this port; those cases
