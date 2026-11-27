@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.player.vm
 
+import com.kino.puber.ui.feature.player.model.AUDIO_LABEL_SEPARATOR
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
@@ -235,7 +236,7 @@ internal class AudioTrackPreferenceResolver {
     }
 
     private fun String.titleAfterSeparator(): String? =
-        substringAfter(LABEL_SEPARATOR, "").trim().takeIf { it.isNotEmpty() }
+        substringAfter(AUDIO_LABEL_SEPARATOR, "").trim().takeIf { it.isNotEmpty() }
 
     private fun String.withoutNumberPrefix(): String {
         return replace(NUMBER_PREFIX_REGEX, "")
@@ -243,7 +244,6 @@ internal class AudioTrackPreferenceResolver {
 
     private companion object {
         const val NO_MATCH = -1
-        const val LABEL_SEPARATOR = " · "
         val NUMBER_PREFIX_REGEX = Regex("""^\d+\.\s*""")
     }
 }

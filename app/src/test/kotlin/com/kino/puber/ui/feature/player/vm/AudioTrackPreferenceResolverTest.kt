@@ -17,9 +17,9 @@ internal class AudioTrackPreferenceResolverTest {
 
     @Test
     fun findAudioTrackIndex_exactLabel_wins() {
-        val rows = listOf(audio(0, "A", "ru"), audio(1, "B", "ru"))
+        val rows = listOf(audio(0, "01. X"), audio(1, "02. X"))
 
-        assertEquals(1, findAudio(rows, "B", null))
+        assertEquals(1, findAudio(rows, "02. X", null))
     }
 
     @Test
