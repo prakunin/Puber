@@ -123,6 +123,7 @@ check:
 # itself, and a run three minutes long is long enough for that to happen.
 ITEST_ADB_PORT ?= 5038
 ITEST_ADB = ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(ADB)
+ITEST_RESULTS = app/build/outputs/androidTest-results/connected
 
 # Baseline profile generation has its own adb server, so it never touches the one itest uses.
 BASELINE_ADB_PORT ?= 5039
@@ -135,10 +136,25 @@ itest: require-device build
 	@$(ITEST_ADB) disconnect >/dev/null 2>&1 || true
 	@$(ITEST_ADB) connect $(DEVICE) >/dev/null
 	@echo "instrumented run sees:"; $(ITEST_ADB) devices | sed -n '2,$$p'
+	rm -rf $(ITEST_RESULTS)
+	@# AGP ends the task with BUILD SUCCESSFUL when the instrumentation process dies before reporting a test,
+	@# writing one synthetic testRunFailed case; so a zero exit is only trusted after reading the XML. The
+	@# results dir is cleared first so a report from an earlier run cannot stand in for this one.
 	ANDROID_ADB_SERVER_PORT=$(ITEST_ADB_PORT) $(GRADLE) :app:connected$(VARIANT)AndroidTest \
 		-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
 		$(if $(TESTS),-Pandroid.testInstrumentationRunnerArguments.class=$(TESTS),) \
-		; status=$$?; $(ITEST_ADB) kill-server >/dev/null 2>&1; exit $$status
+		; status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		xmls=$$(find $(ITEST_RESULTS) -name '*.xml' 2>/dev/null | wc -l); \
+		if [ $$xmls -eq 0 ]; then \
+			echo "itest failed: Gradle succeeded but wrote no test results under $(ITEST_RESULTS)"; status=1; \
+		elif [ -n "$$(find $(ITEST_RESULTS) -name '*.xml' -exec grep -l '<testcase[^>]*name="testRunFailed"' {} + 2>/dev/null)" ]; then \
+			echo "itest failed: incomplete run, the report holds testRunFailed (the instrumentation process died before reporting tests)"; status=1; \
+		elif [ "$$(find $(ITEST_RESULTS) -name '*.xml' -exec cat {} + | grep -c '<testcase ')" -eq 0 ]; then \
+			echo "itest failed: no tests ran (does TESTS=$(TESTS) match anything?)"; status=1; \
+		fi; \
+	fi; \
+	$(ITEST_ADB) kill-server >/dev/null 2>&1; exit $$status
 
 # Baseline profile generation drives the app through UiAutomator on a device, so it gets its own
 # private adb server on BASELINE_ADB_PORT: a concurrent itest on ITEST_ADB_PORT keeps its devices.

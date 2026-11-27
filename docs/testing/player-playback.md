@@ -38,7 +38,7 @@ server that knows only `<serial>`.
 
 ## Exit code
 
-`make itest` can exit 0 on an incomplete run (`testRunFailed` in the XML), tracked as run `itest-incomplete-run-green`; check the JUnit XML test count.
+`make itest` reads the JUnit XML after a Gradle exit 0 and fails when no XML was written, when it holds the synthetic `testRunFailed` case (an incomplete run), or when it holds no test case (for example a `TESTS=` filter that matches nothing).
 
 ## Fixtures
 
