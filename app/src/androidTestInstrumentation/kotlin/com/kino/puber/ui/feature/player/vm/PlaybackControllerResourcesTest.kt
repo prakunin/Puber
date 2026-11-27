@@ -33,6 +33,11 @@ internal class PlaybackControllerResourcesTest {
         if (::harness.isInitialized) harness.close()
     }
 
+    /**
+     * The corrupt-entry outcome (ready or failed) is not asserted: only that a terminal outcome is
+     * reached and the next scenario is not poisoned. Recovery from a corrupt cache entry is covered
+     * by run `player-corrupt-cache-recovery`.
+     */
     @Test
     fun emptyCache_loadsNormally_andCorruptOwnedEntryRecoversWithoutPoisoningNextScenario() {
         val path = "/media/progressive.mp4"
@@ -50,11 +55,12 @@ internal class PlaybackControllerResourcesTest {
         writeCorruptCacheEntry(url)
         harness.useMediaRoutes()
         val corrupt = harness.prepare(path)
-        // Only a terminal outcome is asserted: a malformed container fails with "Source error" (see player-corrupt-cache-recovery).
+        // A malformed container fails with "Source error".
         harness.awaitCondition("corrupt-cache outcome") { corrupt.sawReady || corrupt.error.get() != null }
         releaseAndDrain()
 
         harness.cache.removeResource(url)
+        assertTrue(harness.cache.getCachedSpans(url).isEmpty())
         harness.useMediaRoutes()
         val clean = harness.prepare(path)
         harness.awaitReady(clean)
