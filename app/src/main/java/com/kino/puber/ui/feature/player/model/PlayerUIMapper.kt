@@ -13,6 +13,9 @@ import com.kino.puber.data.preferences.NavigationPreferencesRepository
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.vm.sideLoadable
 
+/** Joins the language and the title in an audio track label; the resolver splits saved labels on it. */
+internal const val AUDIO_LABEL_SEPARATOR = " · "
+
 internal class PlayerUIMapper(
     private val resources: ResourceProvider,
     private val navigationPreferencesRepository: NavigationPreferencesRepository? = null,
@@ -24,7 +27,7 @@ internal class PlayerUIMapper(
             val title = audio.author?.title ?: audio.type?.title
             val label = buildString {
                 append(language ?: resources.getString(R.string.player_audio_language_unknown))
-                title?.let { append(" · $it") }
+                title?.let { append("$AUDIO_LABEL_SEPARATOR$it") }
             }
             AudioTrackUIState(
                 index = index,
