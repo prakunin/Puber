@@ -3,6 +3,7 @@ package com.kino.puber.ui.feature.player.vm
 import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
+import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
 import com.kino.puber.ui.feature.player.model.readableDescriptiveLabel
 import com.kino.puber.ui.feature.player.model.sameSubtitleLanguage
 
@@ -16,6 +17,7 @@ internal class AudioTrackPreferenceResolver {
         val matchers = listOf(
             { exactLabelMatch(tracks, preferredLabel) },
             { normalizedLabelMatch(tracks, preferredLabel) },
+            { unknownLanguageTitleMatch(tracks, preferredLabel, preferredLang) },
             { voiceTypeAndLanguageMatch(tracks, preferredLabel, preferredLang) },
             { languageMatch(tracks, preferredLang) },
         )
@@ -190,6 +192,21 @@ internal class AudioTrackPreferenceResolver {
         return tracks.indexOfFirst { it.label.withoutNumberPrefix() == coreLabel }
     }
 
+    /**
+     * A saved label of a row with no language starts with a localized placeholder, so it misses
+     * after a locale change or an update. Compare only the title after the separator, and only
+     * against rows with no language.
+     */
+    private fun unknownLanguageTitleMatch(
+        tracks: List<AudioTrackUIState>,
+        preferredLabel: String?,
+        preferredLang: String?,
+    ): Int {
+        if (preferredLabel == null || knownLanguageOrNull(preferredLang) != null) return NO_MATCH
+        val title = preferredLabel.titleAfterSeparator() ?: return NO_MATCH
+        return tracks.indexOfFirst { it.language.isEmpty() && it.label.titleAfterSeparator() == title }
+    }
+
     private fun voiceTypeAndLanguageMatch(
         tracks: List<AudioTrackUIState>,
         preferredLabel: String?,
@@ -217,12 +234,16 @@ internal class AudioTrackPreferenceResolver {
         return withoutLang.substringBefore(". ").trim().takeIf { it.isNotEmpty() }
     }
 
+    private fun String.titleAfterSeparator(): String? =
+        substringAfter(LABEL_SEPARATOR, "").trim().takeIf { it.isNotEmpty() }
+
     private fun String.withoutNumberPrefix(): String {
         return replace(NUMBER_PREFIX_REGEX, "")
     }
 
     private companion object {
         const val NO_MATCH = -1
+        const val LABEL_SEPARATOR = " · "
         val NUMBER_PREFIX_REGEX = Regex("""^\d+\.\s*""")
     }
 }

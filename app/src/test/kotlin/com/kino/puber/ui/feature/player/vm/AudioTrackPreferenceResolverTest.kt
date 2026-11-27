@@ -1,5 +1,6 @@
 package com.kino.puber.ui.feature.player.vm
 
+import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -7,6 +8,102 @@ import org.junit.jupiter.api.Test
 internal class AudioTrackPreferenceResolverTest {
 
     private val resolver = AudioTrackPreferenceResolver()
+
+    private fun audio(index: Int, label: String, language: String = "") =
+        AudioTrackUIState(index = index, label = label, language = language)
+
+    private fun findAudio(rows: List<AudioTrackUIState>, label: String?, lang: String?) =
+        resolver.findAudioTrackIndex(rows, label, lang)
+
+    @Test
+    fun findAudioTrackIndex_exactLabel_wins() {
+        val rows = listOf(audio(0, "A", "ru"), audio(1, "B", "ru"))
+
+        assertEquals(1, findAudio(rows, "B", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_numberedPrefixLabel_matchesNormalized() {
+        val rows = listOf(audio(0, "01. Дубляж"), audio(1, "05. Оригинал"))
+
+        assertEquals(1, findAudio(rows, "03. Оригинал", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_voiceTypeAndLanguage_matches() {
+        val rows = listOf(
+            audio(0, "01. Дубляж. Foo (RUS)", "ru"),
+            audio(1, "05. Многоголосый. Other (RUS)", "ru"),
+        )
+
+        assertEquals(1, findAudio(rows, "03. Многоголосый. Red Head (RUS)", "ru"))
+    }
+
+    @Test
+    fun findAudioTrackIndex_languageOnly_matches() {
+        val rows = listOf(audio(0, "A", "ru"), audio(1, "B", "en"))
+
+        assertEquals(1, findAudio(rows, "Zzz", "en"))
+    }
+
+    @Test
+    fun findAudioTrackIndex_knownStoredLanguage_titleMatchDoesNotApply() {
+        val rows = listOf(audio(0, "Язык не указан · X"), audio(1, "ru · B", "ru"))
+
+        assertEquals(1, findAudio(rows, "Unknown · X", "ru"))
+    }
+
+    @Test
+    fun findAudioTrackIndex_noSeparator_noMatch() {
+        val rows = listOf(audio(0, "Язык не указан"), audio(1, "B", "ru"))
+
+        assertEquals(-1, findAudio(rows, "Unknown language", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_emptyTitle_noMatch() {
+        val rows = listOf(audio(0, "Язык не указан · "), audio(1, "B", "ru"))
+
+        assertEquals(-1, findAudio(rows, "Unknown language · ", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_titleAbsentFromEmptyLanguageRows_noMatch() {
+        val rows = listOf(audio(0, "Язык не указан · Y"), audio(1, "ru · X", "ru"))
+
+        assertEquals(-1, findAudio(rows, "Unknown language · X", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_unknownLanguageLabelStoredUnderEnglish_matchesRussianRow() {
+        val rows = listOf(audio(0, "ru · A", "ru"), audio(1, "Язык не указан · X"), audio(2, "ru · X", "ru"))
+
+        assertEquals(1, findAudio(rows, "Unknown language · X", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_unknownLanguageLabelStoredUnderRussian_matchesEnglishRow() {
+        val rows = listOf(audio(0, "en · A", "en"), audio(1, "Unknown language · X"))
+
+        assertEquals(1, findAudio(rows, "Язык не указан · X", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_legacyUnknownLabelWithNullLang_matchesRow() {
+        assertEquals(0, findAudio(listOf(audio(0, "Язык не указан · X")), "Unknown · X", null))
+    }
+
+    @Test
+    fun findAudioTrackIndex_legacyUndLabelWithUndLang_matchesRow() {
+        assertEquals(0, findAudio(listOf(audio(0, "Язык не указан · X")), "und · X", "und"))
+    }
+
+    @Test
+    fun findAudioTrackIndex_unknownLanguage_sharedTitle_firstRowWins() {
+        val rows = listOf(audio(0, "Unknown language · X"), audio(1, "Язык не указан · X"))
+
+        assertEquals(0, findAudio(rows, "Unknown · X", null))
+    }
 
     private val off = SubtitleTrackUIState(label = "Off", language = "", url = "")
 
