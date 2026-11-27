@@ -16,6 +16,13 @@ internal fun knownLanguageOrNull(language: String?): String? {
     return language.takeUnless { primary.isNullOrEmpty() || primary == UNDETERMINED_LANGUAGE }
 }
 
+/**
+ * The language Media3 should prefer for a subtitle row: [knownLanguageOrNull], or "" when the row
+ * names no language. "" makes Media3 prefer no track, so an undetermined row without an override
+ * shows nothing rather than an arbitrary "und" track.
+ */
+internal fun preferredTextLanguage(language: String?): String = knownLanguageOrNull(language).orEmpty()
+
 internal fun sameSubtitleLanguage(first: String, second: String): Boolean {
     val firstKnown = knownLanguageOrNull(first) ?: return false
     val secondKnown = knownLanguageOrNull(second) ?: return false

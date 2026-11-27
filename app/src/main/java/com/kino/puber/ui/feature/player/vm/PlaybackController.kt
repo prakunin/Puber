@@ -47,7 +47,7 @@ import com.kino.puber.ui.feature.player.model.AudioTrackUIState
 import com.kino.puber.domain.model.BufferPreset
 import com.kino.puber.ui.feature.player.model.SubtitleTrackUIState
 import com.kino.puber.ui.feature.player.model.isOff
-import com.kino.puber.ui.feature.player.model.knownLanguageOrNull
+import com.kino.puber.ui.feature.player.model.preferredTextLanguage
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -896,14 +896,15 @@ internal class PlaybackController(
         val textGroups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
         // No positional fallback: on HLS the text tracks come from the manifest, whose order has
         // nothing to do with the API list, so "API row N is track N" picked the wrong subtitle.
-        // Without a target the override stays unset and the preferred language chooses instead.
+        // Without a target the override stays unset and the preferred language chooses instead; an
+        // undetermined or blank row has none, so it shows no subtitles.
         val target = subtitleTrackSelector.select(track, textGroups.toPlayerTextTracks())
         val targetGroup = target?.let { textGroups.getOrNull(it.groupIndex) }
         val builder = player.trackSelectionParameters
             .buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setPreferredTextLanguage(knownLanguageOrNull(track.language).orEmpty())
+            .setPreferredTextLanguage(preferredTextLanguage(track.language))
         if (target != null && targetGroup != null) {
             builder.setOverrideForType(
                 TrackSelectionOverride(targetGroup.mediaTrackGroup, target.trackIndex),
