@@ -8,6 +8,8 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kino.puber.core.system.AndroidResourceProvider
+import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.repository.PlayerPreferencesRepository
 import com.kino.puber.domain.interactor.player.StreamCandidate
@@ -128,7 +130,9 @@ internal class PlayerProbe : Player.Listener {
  * throws the first failure with the rest suppressed.
  */
 @UnstableApi
-internal class PlaybackControllerHarness : Closeable {
+internal class PlaybackControllerHarness(
+    val resources: ResourceProvider = AndroidResourceProvider(InstrumentationRegistry.getInstrumentation().targetContext),
+) : Closeable {
 
     val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
     val testContext = InstrumentationRegistry.getInstrumentation().context
@@ -152,6 +156,7 @@ internal class PlaybackControllerHarness : Closeable {
         okHttpClient = server.newClient(closedResponses),
         mediaCache = cache,
         playerPreferencesRepository = PlayerPreferencesRepository(targetContext),
+        resources = resources,
     )
 
     init {

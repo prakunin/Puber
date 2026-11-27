@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kino.puber.BuildConfig
 import com.kino.puber.R
+import com.kino.puber.core.system.ResourceProvider
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.network.NetworkStats
 import com.kino.puber.data.repository.PlayerPreferencesRepository
@@ -163,6 +164,7 @@ internal class PlaybackController(
     private val okHttpClient: OkHttpClient,
     private val mediaCache: androidx.media3.datasource.cache.Cache,
     private val playerPreferencesRepository: PlayerPreferencesRepository,
+    private val resources: ResourceProvider,
 ) : PlaybackControl {
 
     private var exoPlayer: ExoPlayer? = null
@@ -190,7 +192,7 @@ internal class PlaybackController(
         streamUrl = { currentStreamUrl },
         onStalled = { streamUrl ->
             callback?.onStreamFailure(
-                message = context.getString(R.string.player_error_playback),
+                message = resources.getString(R.string.player_error_playback),
                 recovery = PlaybackControl.StreamRecovery.NEXT_URL,
                 streamUrl = streamUrl,
             )
@@ -263,7 +265,7 @@ internal class PlaybackController(
 
         override fun onPlayerError(error: PlaybackException) {
             val cause = error.cause
-            val message = error.localizedMessage ?: context.getString(R.string.player_error_playback)
+            val message = error.localizedMessage ?: resources.getString(R.string.player_error_playback)
             val recovery = cause.streamRecovery()
             gate.routeError(
                 session,
@@ -631,7 +633,7 @@ internal class PlaybackController(
 
     private fun disableAc3AndRetry() {
         if (ac3FallbackApplied) {
-            callback?.onError(context.getString(R.string.player_error_playback))
+            callback?.onError(resources.getString(R.string.player_error_playback))
             return
         }
         ac3FallbackApplied = true
@@ -871,7 +873,7 @@ internal class PlaybackController(
         if (audioGroups.isEmpty() && textGroups.isEmpty()) return
 
         val audioTracks = buildAudioRows(audioGroups.map { it.getTrackFormat(0) }) { n ->
-            context.getString(R.string.player_audio_track_fallback, n)
+            resources.getString(R.string.player_audio_track_fallback, n)
         }
         val selectedIndex = audioGroups.indexOfFirst { it.isSelected }.coerceAtLeast(0)
         val subtitleRows = when (subtitleReportKind(currentStreamType, currentItemHasSideLoads, textGroups.size)) {
