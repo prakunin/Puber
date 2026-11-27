@@ -118,12 +118,12 @@ emulator and runs API 34 or newer; otherwise it exits 2 before installing anythi
 `ssh mac-emu start` after a timeout. A refusal kills no adb server.
 
 Generation drives the `instrumentation` flavor (`com.kino.puber.instrumentation`, the only variant that generates). It
-runs against an HTTPS mock the generator hosts on `127.0.0.1:18765` (`puber.baselineMockPort` in `gradle.properties`),
+runs against an HTTPS mock the generator hosts on two loopback ports: `127.0.0.1:18765` (`puber.baselineMockPort`, HTTP/1.1: API, images, stream) and `127.0.0.1:18766` (`puber.baselineMockH2Port`, HTTP/2: DNS-over-HTTPS and `/github`), both in `gradle.properties`,
 with seeded synthetic tokens in the real token store and a network config that trusts only the mock's test root. The
-app resolves `api.baseline.test` through DNS-over-HTTPS served by the mock (`dns.baseline.test`, bootstrap `127.0.0.1`),
+app resolves `api.baseline.test` through DNS-over-HTTPS served by the mock (`dns.baseline.test` on the HTTP/2 port, bootstrap `127.0.0.1`),
 probes the pinned endpoint, runs the update check against the mock's `/github` route and publishes one TV home program,
-so the production cold-start paths stay in the profile. An egress blocker allows the mock by IP and those two test hosts
-on the mock port and refuses every other host, journaling the attempt, so nothing reaches KinoPub, TMDB or any other
+so the production cold-start paths stay in the profile. An egress blocker allows the mock by IP and each test host
+on its own server's port and refuses every other host, journaling the attempt, so nothing reaches KinoPub, TMDB or any other
 server. Before each iteration the target is killed and its databases and caches are dropped; after it, the generator
 checks that the target's egress journal is empty, that the mock saw no unknown route and that every required route was
 hit (the per-iteration `PuberGen` lines in the logcat file the script prints). A late check (`PuberGen` `late after=`

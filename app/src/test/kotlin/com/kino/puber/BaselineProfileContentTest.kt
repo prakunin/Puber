@@ -67,6 +67,31 @@ internal class BaselineProfileContentTest {
         ).forEach { assertTrue(baseline.hasRuleFor(it), "no baseline rule for $it") }
     }
 
+    @Test
+    fun baselineProfileCoversBookmarkFolderLookup() {
+        assertTrue(
+            baseline.any { "KinoPubApiClient;->getItemBookmarkFolders" in it },
+            "no rule for getItemBookmarkFolders",
+        )
+        assertTrue(
+            baseline.hasRuleFor("com/kino/puber/data/api/models/BookmarkFoldersResponse"),
+            "no rule for BookmarkFoldersResponse",
+        )
+    }
+
+    @Test
+    fun baselineProfileCoversHttp1CodecSerializerPrimitivesAndFilledIcons() {
+        listOf(
+            "okhttp3/internal/http1/Http1ExchangeCodec",
+            "okhttp3/internal/http2/Http2Connection", // guard: already in the profile at 08f50b81 (DoH, update check)
+            "kotlinx/serialization/internal/BooleanSerializer",
+            "kotlinx/serialization/internal/FloatSerializer",
+            "kotlinx/serialization/internal/DoubleSerializer",
+            "com/adamglin/phosphoricons/fill/EyeKt",
+            "com/adamglin/phosphoricons/fill/BookmarksimpleKt",
+        ).forEach { assertTrue(baseline.hasRuleFor(it), "no baseline rule for $it") }
+    }
+
     /**
      * The prod cold start the generation must keep warm: token decrypt, DNS-over-HTTPS, the endpoint
      * probe, the update check and the TV home publish. Each substring is a method (`;->`) or class a
