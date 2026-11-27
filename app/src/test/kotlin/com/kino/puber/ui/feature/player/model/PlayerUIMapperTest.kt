@@ -1,6 +1,9 @@
 package com.kino.puber.ui.feature.player.model
 
 import com.kino.puber.R
+import com.kino.puber.data.api.models.Audio
+import com.kino.puber.data.api.models.AudioAuthor
+import com.kino.puber.data.api.models.AudioType
 import com.kino.puber.data.api.models.SubtitleLink
 import com.kino.puber.data.api.models.VideoFile
 import com.kino.puber.data.api.models.VideoUrl
@@ -132,6 +135,52 @@ internal class PlayerUIMapperTest {
 
         assertEquals(listOf("", "u1"), rows.map { it.url })
         assertEquals(true, rows[0].isOff)
+    }
+
+    private fun unknownLabel() = resources.getString(R.string.player_audio_language_unknown)
+
+    @Test
+    fun mapAudioTracks_nullLanguageUsesLocalizedUnknownWithAuthor() {
+        val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = null, author = AudioAuthor(id = 1, title = "X"))))
+
+        assertEquals(listOf(AudioTrackUIState(index = 0, label = "${unknownLabel()} · X", language = "")), rows)
+    }
+
+    @Test
+    fun mapAudioTracks_blankOrUndLanguageIsTreatedAsUnknown() {
+        val expected = AudioTrackUIState(index = 0, label = "${unknownLabel()} · X", language = "")
+
+        listOf("", "und").forEach { lang ->
+            val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = lang, author = AudioAuthor(id = 1, title = "X"))))
+
+            assertEquals(listOf(expected), rows, "lang=$lang")
+        }
+    }
+
+    @Test
+    fun mapAudioTracks_nullLanguageFallsBackToTypeTitle() {
+        val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = null, type = AudioType(id = 1, title = "Дубляж"))))
+
+        assertEquals(listOf(AudioTrackUIState(index = 0, label = "${unknownLabel()} · Дубляж", language = "")), rows)
+    }
+
+    @Test
+    fun mapAudioTracks_noLanguageAndNoTitlesIsFallbackLabel() {
+        val expected = AudioTrackUIState(index = 0, label = unknownLabel(), language = "", isFallbackLabel = true)
+
+        val audios = listOf(
+            Audio(id = 1, lang = null),
+            Audio(id = 1, lang = null, author = AudioAuthor(id = 1), type = AudioType(id = 1)),
+        )
+
+        audios.forEach { assertEquals(listOf(expected), mapper.mapAudioTracks(listOf(it))) }
+    }
+
+    @Test
+    fun mapAudioTracks_keepsKnownLanguageAndAuthor() {
+        val rows = mapper.mapAudioTracks(listOf(Audio(id = 1, lang = "rus", author = AudioAuthor(id = 1, title = "X"))))
+
+        assertEquals(listOf(AudioTrackUIState(index = 0, label = "rus · X", language = "rus")), rows)
     }
 
     private fun subtitleLinks() = listOf(
