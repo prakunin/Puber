@@ -1,0 +1,36 @@
+agentw: worktree detected → GRADLE_USER_HOME=/home/dev/.gradle-agents
+agentw: acquiring lock /home/dev/.gradle-agents/.build.lock
+> Task :buildSrc:checkKotlinCompilerVersion
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :app
+The Configuration.setVisible(boolean) method has been deprecated. This is scheduled to be removed in Gradle 11. Consult the upgrading guide for further information: https://docs.gradle.org/9.9.3/userguide/upgrading_version_9.html#deprecate-visible-property
+Using a Project object as a dependency notation has been deprecated. This will fail with an error in Gradle 10. Please use the project(String) method on DependencyHandler or the createProjectDependency(String) method on DependencyFactory instead. Consult the upgrading guide for further information: https://docs.gradle.org/9.9.3/userguide/upgrading_version_9.html#dependency_project_notation
+
+> Task :help
+
+Welcome to Gradle 9.9.3.
+
+To run a build, run gradlew <task> ...
+
+To see a list of available tasks, run gradlew tasks
+
+To see more detail about a task, run gradlew help --task <task>
+
+To see a list of command-line options, run gradlew --help
+
+For more detail on using Gradle, see https://docs.gradle.org/9.9.3/userguide/command_line_interface.html
+
+For troubleshooting, visit https://help.gradle.org
+
+[Incubating] Problems report is available at: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 1s
+4 actionable tasks: 2 executed, 2 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.9.3/userguide/configuration_cache_enabling.html

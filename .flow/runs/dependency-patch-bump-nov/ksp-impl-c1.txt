@@ -1,0 +1,16 @@
+## devDebug
+kotlin/com/kino/puber/data/db/CachedPayloadDao_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_2_3_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_3_4_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_4_5_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_Impl.kt
+kotlin/com/kino/puber/data/db/WatchStateDao_Impl.kt
+kotlin/com/kino/puber/data/db/WatchStateSyncDao_Impl.kt
+## prodRelease
+kotlin/com/kino/puber/data/db/CachedPayloadDao_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_2_3_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_3_4_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_AutoMigration_4_5_Impl.kt
+kotlin/com/kino/puber/data/db/PuberDatabase_Impl.kt
+kotlin/com/kino/puber/data/db/WatchStateDao_Impl.kt
+kotlin/com/kino/puber/data/db/WatchStateSyncDao_Impl.kt

@@ -1,0 +1,188 @@
+agentw: worktree detected → GRADLE_USER_HOME=/home/dev/.gradle-agents
+agentw: acquiring lock /home/dev/.gradle-agents/.build.lock
+> Task :buildSrc:checkKotlinCompilerVersion
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDevDebugBuild UP-TO-DATE
+> Task :app:generateDevDebugBuildConfig UP-TO-DATE
+> Task :app:generateDevDebugResValues UP-TO-DATE
+> Task :app:generateDevDebugResources UP-TO-DATE
+> Task :app:packageDevDebugResources UP-TO-DATE
+> Task :app:processDevDebugNavigationResources UP-TO-DATE
+> Task :app:parseDevDebugLocalResources UP-TO-DATE
+> Task :app:generateDevDebugRFile UP-TO-DATE
+> Task :app:kspDevDebugKotlin UP-TO-DATE
+> Task :app:compileDevDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDevDebug UP-TO-DATE
+> Task :app:compileDevDebugJavaWithJavac UP-TO-DATE
+> Task :app:checkDevDebugAarMetadata UP-TO-DATE
+> Task :app:mapDevDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileDevDebugNavigationResources UP-TO-DATE
+> Task :app:mergeDevDebugResources UP-TO-DATE
+> Task :app:createDevDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDevDebug UP-TO-DATE
+> Task :app:processDevDebugMainManifest UP-TO-DATE
+> Task :app:processDevDebugManifest UP-TO-DATE
+> Task :app:processDevDebugManifestForPackage UP-TO-DATE
+> Task :app:processDevDebugResources UP-TO-DATE
+> Task :app:bundleDevDebugClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleDevDebugClassesToCompileJar UP-TO-DATE
+> Task :app:kspDevDebugUnitTestKotlin UP-TO-DATE
+> Task :app:preDevDebugUnitTestBuild UP-TO-DATE
+> Task :app:compileDevDebugUnitTestKotlin UP-TO-DATE
+> Task :app:javaPreCompileDevDebugUnitTest UP-TO-DATE
+> Task :app:compileDevDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:preInstrumentationDebugBuild UP-TO-DATE
+> Task :app:generateInstrumentationDebugBuildConfig
+> Task :app:generateInstrumentationDebugResValues
+> Task :app:generateInstrumentationDebugResources
+> Task :app:packageInstrumentationDebugResources
+> Task :app:processInstrumentationDebugNavigationResources
+> Task :app:javaPreCompileInstrumentationDebug
+> Task :app:mapInstrumentationDebugSourceSetPaths
+> Task :app:parseInstrumentationDebugLocalResources
+> Task :app:compileInstrumentationDebugNavigationResources
+> Task :app:checkInstrumentationDebugAarMetadata
+> Task :app:generateInstrumentationDebugRFile
+> Task :app:createInstrumentationDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksInstrumentationDebug
+> Task :app:mergeInstrumentationDebugResources
+> Task :app:processInstrumentationDebugMainManifest
+> Task :app:processInstrumentationDebugManifest
+> Task :app:preInstrumentationDebugUnitTestBuild UP-TO-DATE
+> Task :app:processInstrumentationDebugManifestForPackage
+> Task :app:javaPreCompileInstrumentationDebugUnitTest
+> Task :app:compressDevDebugJavaRes UP-TO-DATE
+> Task :app:compressDevDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:extractDevDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:koverFindJar UP-TO-DATE
+> Task :app:testDevDebugUnitTest UP-TO-DATE
+> Task :player-test-fixtures:preBuild UP-TO-DATE
+> Task :player-test-fixtures:preDebugBuild UP-TO-DATE
+> Task :player-test-fixtures:generateDebugResources UP-TO-DATE
+> Task :player-test-fixtures:packageDebugResources UP-TO-DATE
+> Task :player-test-fixtures:processDebugNavigationResources UP-TO-DATE
+> Task :player-test-fixtures:parseDebugLocalResources UP-TO-DATE
+> Task :player-test-fixtures:generateDebugRFile UP-TO-DATE
+> Task :player-test-fixtures:compileDebugKotlin UP-TO-DATE
+> Task :player-test-fixtures:javaPreCompileDebug UP-TO-DATE
+> Task :player-test-fixtures:compileDebugJavaWithJavac NO-SOURCE
+> Task :player-test-fixtures:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :player-test-fixtures:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :player-test-fixtures:preDebugUnitTestBuild UP-TO-DATE
+> Task :player-test-fixtures:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :player-test-fixtures:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :player-test-fixtures:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :player-test-fixtures:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :player-test-fixtures:compressDebugJavaRes UP-TO-DATE
+> Task :player-test-fixtures:compressDebugUnitTestJavaRes UP-TO-DATE
+> Task :player-test-fixtures:extractDebugUnitTestJavaRes UP-TO-DATE
+> Task :player-test-fixtures:testDebugUnitTest UP-TO-DATE
+> Task :app:processInstrumentationDebugResources
+> Task :app:kspInstrumentationDebugKotlin
+
+> Task :app:detektDevDebug
+There were 80 compiler errors found during analysis. This affects accuracy of reporting.
+Run detekt CLI with --debug or set `detekt { debug = true }` in Gradle to see the error messages.
+
+> Task :app:detektDevDebugUnitTest
+There were 7 compiler errors found during analysis. This affects accuracy of reporting.
+Run detekt CLI with --debug or set `detekt { debug = true }` in Gradle to see the error messages.
+
+> Task :app:detektAll
+> Task :app:preDevDebugAndroidTestBuild SKIPPED
+> Task :app:generateDevDebugAndroidTestResValues
+
+> Task :app:compileInstrumentationDebugKotlin
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/main/java/com/kino/puber/data/api/KtorPlugins.kt:106:30 'suspend fun ByteReadChannel.readRemaining(max: Long): Source' is deprecated. Use readBuffer(Long).
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/main/java/com/kino/puber/ui/feature/player/vm/VideoCapParameters.kt:23:9 'fun setViewportSizeToPhysicalDisplaySize(p0: Context, p1: Boolean): TrackSelectionParameters.Builder' is deprecated. Deprecated in Java.
+
+> Task :app:generateDevDebugAndroidTestLintModel
+> Task :app:compileInstrumentationDebugJavaWithJavac
+> Task :app:extractProguardFiles
+> Task :app:bundleInstrumentationDebugClassesToCompileJar
+> Task :app:generateDevDebugLintReportModel
+> Task :app:kspInstrumentationDebugUnitTestKotlin
+> Task :app:generateDevDebugUnitTestLintModel
+> Task :app:compressInstrumentationDebugJavaRes
+> Task :app:bundleInstrumentationDebugClassesToRuntimeJar
+
+> Task :app:compileInstrumentationDebugUnitTestKotlin
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/startup/AppStartupTest.kt:109:100 Expression is unused.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/AllocationProbe.kt:10:37 'val id: Long' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeTest.kt:103:48 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeTest.kt:117:48 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeTest.kt:126:48 'static field TRIM_MEMORY_MODERATE: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeTest.kt:160:48 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeTest.kt:167:48 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/MemoryProbeThreadTest.kt:36:48 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/telemetry/TelemetrySinkTest.kt:157:79 Call uses reflection API which is not found in compilation classpath. Make sure you have kotlin-reflect.jar in the classpath.
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/core/ui/uikit/component/details/VideoDetailsPosterStateTest.kt:82:29 This declaration needs opt-in. Its usage should be marked with '@coil3.annotation.ExperimentalCoilApi' or '@OptIn(coil3.annotation.ExperimentalCoilApi::class)'
+w: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/src/test/kotlin/com/kino/puber/ui/feature/player/vm/VideoCapParametersTest.kt:35:54 'static field DEFAULT_WITHOUT_CONTEXT: TrackSelectionParameters' is deprecated. Deprecated in Java.
+
+> Task :app:detektInstrumentationDebug
+There were 80 compiler errors found during analysis. This affects accuracy of reporting.
+Run detekt CLI with --debug or set `detekt { debug = true }` in Gradle to see the error messages.
+
+> Task :app:compileInstrumentationDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:compressInstrumentationDebugUnitTestJavaRes
+> Task :app:extractInstrumentationDebugUnitTestJavaRes
+> Task :app:lintAnalyzeDevDebug
+> Task :app:lintAnalyzeDevDebugAndroidTest
+> Task :app:lintAnalyzeDevDebugUnitTest
+> Task :app:testInstrumentationDebugUnitTest
+> Task :player-test-fixtures:checkDebugAarMetadata
+> Task :player-test-fixtures:extractDebugAnnotations
+> Task :player-test-fixtures:extractDeepLinksForAarDebug
+> Task :player-test-fixtures:generateDebugAssets UP-TO-DATE
+> Task :player-test-fixtures:mergeDebugAssets
+> Task :player-test-fixtures:mergeDebugGeneratedProguardFiles
+> Task :player-test-fixtures:mergeDebugConsumerProguardFiles
+> Task :player-test-fixtures:prepareDebugArtProfile
+> Task :player-test-fixtures:prepareLintJarForPublish
+> Task :player-test-fixtures:processDebugManifest
+> Task :app:preInstrumentationDebugAndroidTestBuild SKIPPED
+> Task :app:generateInstrumentationDebugAndroidTestResValues
+> Task :player-test-fixtures:writeDebugAarMetadata
+> Task :player-test-fixtures:mergeDebugJavaResource
+> Task :player-test-fixtures:createFullJarDebug
+> Task :player-test-fixtures:syncDebugLibJars
+> Task :player-test-fixtures:bundleDebugLocalLintAar
+> Task :player-test-fixtures:writeDebugLintModelMetadata
+> Task :app:generateInstrumentationDebugLintReportModel
+> Task :app:generateInstrumentationDebugAndroidTestLintModel
+> Task :app:generateInstrumentationDebugUnitTestLintModel
+> Task :app:lintAnalyzeInstrumentationDebug
+> Task :app:lintAnalyzeInstrumentationDebugAndroidTest
+> Task :app:lintAnalyzeInstrumentationDebugUnitTest
+
+> Task :app:lintReportDevDebug
+Wrote HTML report to file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/build/reports/lint-results-devDebug.html
+Wrote SARIF report to file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/build/reports/lint-results-devDebug.sarif
+
+> Task :app:lintDevDebug
+
+> Task :app:lintReportInstrumentationDebug
+Wrote HTML report to file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/build/reports/lint-results-instrumentationDebug.html
+Wrote SARIF report to file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/app/build/reports/lint-results-instrumentationDebug.sarif
+
+> Task :app:lintInstrumentationDebug
+
+[Incubating] Problems report is available at: file:///home/dev/orca/workspaces/Puber/dependency-patch-bump-nov/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.9.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 5m 36s
+117 actionable tasks: 68 executed, 49 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.9.3/userguide/configuration_cache_enabling.html
