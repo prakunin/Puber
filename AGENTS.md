@@ -69,6 +69,10 @@ Hard rules that stay project rules (details below and in `.flow/roles/`):
 - Dependency versions come from `gradle/libs.versions.toml`; do not hardcode
   them.
 - Detekt configuration lives under `config/detekt/`.
+- The Gradle build cache is on (`org.gradle.caching=true`), shared by worktrees
+  through `GRADLE_USER_HOME`; add `--no-build-cache` to bypass it, for example
+  when diagnosing a flaky test. Unit tests that read project files must declare
+  them as inputs in `app/build.gradle.kts`.
 - Worktrees are Orca-managed: create them from the Orca app or with
   `orca worktree create`. Do not add one by hand with `git worktree add`.
 - Orca runs `scripts.setup` from `orca.yaml` on worktree creation, which calls
