@@ -34,10 +34,16 @@ internal class PlayerVMSeekBurstTest : PlayerVMTestFixture() {
 
     private var position = 0L
 
+    /** The controller reports every real seek to the VM once the player has taken it. */
+    private fun landSeek(target: Long) {
+        position = target
+        callbackSlot.captured.onSeekPerformed()
+    }
+
     private fun playingAt(from: Long, segments: List<SkipSegment> = emptyList()) {
         position = from
         every { playbackController.currentPosition } answers { position }
-        every { playbackController.seekTo(any()) } answers { position = firstArg() }
+        every { playbackController.seekTo(any()) } answers { landSeek(firstArg()) }
         every { skipSegmentInteractor.findActiveSegment(any(), any(), any()) } answers {
             segments.firstOrNull {
                 position >= it.startMs - PlayerCountdowns.PROMPT_LEAD_IN_MS && position < it.endMs!!
@@ -47,7 +53,6 @@ internal class PlayerVMSeekBurstTest : PlayerVMTestFixture() {
 
     private fun TestScope.seek(vm: PlayerVM, action: PlayerAction = PlayerAction.SeekForward) {
         vm.onAction(action)
-        callbackSlot.captured.onSeekPerformed()
         runCurrent()
     }
 
@@ -81,7 +86,7 @@ internal class PlayerVMSeekBurstTest : PlayerVMTestFixture() {
     fun aSeekBurstIntoTheCreditsLeadInRaisesNoNextEpisodePromptUntilItEnds() =
         runTest(mainDispatcher.dispatcher.scheduler) {
             playingAt(from = 100_000)
-            every { playbackController.seekTo(any()) } answers { position = 2_380_000L }
+            every { playbackController.seekTo(any()) } answers { landSeek(2_380_000L) }
             val vm = startedVM()
 
             seek(vm)
@@ -100,7 +105,7 @@ internal class PlayerVMSeekBurstTest : PlayerVMTestFixture() {
                 from = 100_000,
                 segments = listOf(SkipSegment(SkipSegmentType.INTRO, startMs = 30_000, endMs = 60_000)),
             )
-            every { playbackController.seekTo(any()) } answers { position = 40_000L }
+            every { playbackController.seekTo(any()) } answers { landSeek(40_000L) }
             val vm = startedVM()
 
             seek(vm, PlayerAction.SeekBackward)
@@ -178,11 +183,36 @@ internal class PlayerVMSeekBurstTest : PlayerVMTestFixture() {
             assertEquals(SkipSegmentType.INTRO, contentState(vm).activeSkipSegment?.type)
 
             vm.onAction(PlayerAction.SkipSegmentClicked)
-            callbackSlot.captured.onSeekPerformed()
             runCurrent()
             wait(PlayerCountdowns.TICK_MS)
 
             assertEquals(SkipSegmentType.RECAP, contentState(vm).activeSkipSegment?.type)
             vm.testCancelScope()
+        }
+    @Test
+    fun aHeldKeyKeepsThePromptDownAndTheTrailingSeekStartsNoCountdown() =
+        runTest(mainDispatcher.dispatcher.scheduler) {
+            playingAt(
+                from = 20_000,
+                segments = listOf(SkipSegment(SkipSegmentType.INTRO, startMs = 30_000, endMs = 2_000_000)),
+            )
+            val vm = startedVM()
+            try {
+                repeat(20) {
+                    wait(50)
+                    seek(vm)
+                    assertNull(contentState(vm).activeSkipSegment)
+                }
+                wait(BURST_WINDOW_MS - 1)
+                assertNull(contentState(vm).activeSkipSegment)
+
+                wait(1 + PlayerCountdowns.TICK_MS)
+                val prompt = contentState(vm).activeSkipSegment
+                assertNotNull(prompt)
+                wait(PlayerCountdowns.TICK_MS * 2)
+                assertEquals(prompt, contentState(vm).activeSkipSegment)
+            } finally {
+                vm.testCancelScope()
+            }
         }
 }

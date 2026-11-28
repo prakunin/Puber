@@ -16,12 +16,10 @@ class SeekHandlerTest {
 
     @Test
     fun rapidConsecutiveCalls_incrementsStep() {
-        // With default timeout, the first call resets (lastSeekTime=0, so elapsed > 1500ms).
-        // Subsequent calls within ~ms are within timeout, so they increment stepIndex.
         val handler = SeekHandler()
-        val first = handler.nextStep()   // resets to 0, returns steps[0] = 10
-        val second = handler.nextStep()  // increments to 1, returns steps[1] = 10
-        val third = handler.nextStep()   // increments to 2, returns steps[2] = 20
+        val first = handler.nextStep()   // returns steps[0] = 10
+        val second = handler.nextStep()  // returns steps[1] = 10
+        val third = handler.nextStep()   // returns steps[2] = 20
         assertEquals(10, first)
         assertEquals(10, second)
         assertEquals(20, third)
@@ -31,7 +29,7 @@ class SeekHandlerTest {
     @Test
     fun maxStep_clampsAtLastValue() {
         val steps = intArrayOf(10, 10, 20, 30, 60, 60)
-        val handler = SeekHandler(steps = steps, resetTimeoutMs = Long.MAX_VALUE)
+        val handler = SeekHandler(steps = steps)
         // Exhaust all index advances.
         repeat(steps.size + 5) { handler.nextStep() }
         // The next call must still return the last step value.
@@ -39,22 +37,8 @@ class SeekHandlerTest {
     }
 
     @Test
-    fun callAfterTimeout_resetsToFirstStep() {
-        // resetTimeoutMs = 0 means any positive elapsed time triggers a reset,
-        // so two back-to-back calls always see a timeout between them without sleeping.
-        val handler = SeekHandler(resetTimeoutMs = 0L)
-        handler.nextStep() // warm-up; advances stepIndex if no reset, but with 0 ms timeout
-        // Because resetTimeoutMs == 0, even 1 ms later counts as "timed out".
-        // Spin briefly to ensure at least 1 ms has passed.
-        val start = System.currentTimeMillis()
-        while (System.currentTimeMillis() == start) { /* busy-wait < 1 ms */ }
-        val result = handler.nextStep()
-        assertEquals(10, result)
-    }
-
-    @Test
-    fun reset_resetsIndexAndTime() {
-        val handler = SeekHandler(resetTimeoutMs = Long.MAX_VALUE)
+    fun reset_resetsIndex() {
+        val handler = SeekHandler()
         // Advance the index several times.
         repeat(4) { handler.nextStep() }
         // After reset the next call must return the first step.

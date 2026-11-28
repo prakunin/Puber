@@ -16,24 +16,17 @@ private val DEFAULT_SEEK_STEPS_SECONDS = intArrayOf(
 
 internal class SeekHandler(
     private val steps: IntArray = DEFAULT_SEEK_STEPS_SECONDS,
-    private val resetTimeoutMs: Long = DEFAULT_SEEK_RESET_TIMEOUT_MS,
 ) {
-    private var lastSeekTime = 0L
     private var stepIndex = 0
 
+    /** Returns the current step, then moves the ladder up; [reset] starts it over. */
     fun nextStep(): Int {
-        val now = System.currentTimeMillis()
-        if (now - lastSeekTime > resetTimeoutMs) {
-            stepIndex = 0
-        } else if (stepIndex < steps.size - 1) {
-            stepIndex++
-        }
-        lastSeekTime = now
-        return steps[stepIndex]
+        val step = steps[stepIndex]
+        if (stepIndex < steps.size - 1) stepIndex++
+        return step
     }
 
     fun reset() {
         stepIndex = 0
-        lastSeekTime = 0L
     }
 }
