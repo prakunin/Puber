@@ -468,4 +468,11 @@ baselineProfile {
 tasks.withType<Test> {
     useJUnitPlatform()
     maxHeapSize = "2g"
+    // Tests read these project files; declaring them keeps UP-TO-DATE and build-cache results honest.
+    inputs.files(
+        layout.projectDirectory.file("proguard-rules.pro"),
+        layout.projectDirectory.dir("src/main"),
+        layout.projectDirectory.dir("src/instrumentation"),
+        rootProject.layout.projectDirectory.dir("baselineprofile/src/main/assets/baseline"),
+    ).withPropertyName("projectFilesReadByTests").withPathSensitivity(PathSensitivity.RELATIVE)
 }
