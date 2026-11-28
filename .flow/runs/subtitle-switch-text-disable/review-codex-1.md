@@ -1,0 +1,6 @@
+CODEX: ran: review (adversarial pass not requested for size S)
+CONFIRMED:
+- [minor] /home/dev/orca/workspaces/Puber/subtitle-switch-text-disable/app/src/androidTestInstrumentation/kotlin/com/kino/puber/ui/feature/player/vm/PlaybackControllerNetworkTracksTest.kt:~373-400 - `qualitySwitch_sameManifestSubtitle_reselectsByIdentity` can pass without the pending-row reselection it names and its comment claims. - Both masters expose an identical English group. `switchStream` (`PlaybackController.kt:535`, `:549`) reapplies `savedTrackParams` with text enabled, the old `TrackSelectionOverride` and the preferred language "en". Delete the pending-row reapplication and the old override or the preferred language still selects English on the new source, so the test stays green. It guards less than AC-2 and its name imply. Fix: make the high-quality fixture so the old override cannot match (for example a different group shape or an extra rendition) and language alone cannot pick the rendition, then assert that specific rendition is selected. Alternatively rename the test and drop the comment's claim.
+REJECTED:
+- None. Codex raised one finding.
+VERDICT: changes needed (one minor test-strength issue; production sources are unchanged and Codex found no defect in them)
