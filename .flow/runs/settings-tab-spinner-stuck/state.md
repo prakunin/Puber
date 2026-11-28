@@ -1,7 +1,7 @@
 ---
 slug: settings-tab-spinner-stuck
 title: "Settings tab showed a spinner forever late in a long session (after Show all / Details / player); fresh after force-stop; not reproduced, not compared with base"
-stage: idea
+stage: dropped
 size:
 tracks: []
 kind: bug
@@ -14,7 +14,7 @@ rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-10-17
 migrated:
-updated: 2026-10-17
+updated: 2026-11-28
 ---
 
 ## Next
@@ -27,6 +27,8 @@ triage with /task:run settings-tab-spinner-stuck
 ## Decisions
 | Date | Decision | By |
 |------|----------|----|
+| 2026-11-28 | Dropped: never reproduced, no comparison with base; reopen as a new run if it shows up again | owner |
 
 ## Log
 - 2026-10-17 created (stage idea) as a deferred finding of telemetry-tab-host-back-label: qa-report.md Defect 2 (observation, not attributed).
+- 2026-11-28 stage dropped (owner): not reproduced
