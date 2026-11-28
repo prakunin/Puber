@@ -22,7 +22,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.R as Media3UiR
@@ -61,6 +63,7 @@ internal fun TrailerPreviewPlayer(
     }
     val exoPlayer = remember {
         ExoPlayer.Builder(context)
+            .setLoadControl(buildTrailerPreviewLoadControl())
             .build()
             .apply {
                 setAudioAttributes(
@@ -171,3 +174,37 @@ private fun PlayerView.updateContentGravity(alignContentToTop: Boolean) {
         contentFrame.layoutParams = params.apply { gravity = targetGravity }
     }
 }
+
+/** Buffer sizes of the panel trailer preview: a short clip needs far less than the streaming defaults. */
+internal data class TrailerPreviewBufferParams(
+    val minBufferMs: Int,
+    val maxBufferMs: Int,
+    val bufferForPlaybackMs: Int,
+    val bufferForPlaybackAfterRebufferMs: Int,
+    val targetBufferBytes: Int,
+    val prioritizeTimeOverSize: Boolean,
+)
+
+internal val TRAILER_PREVIEW_BUFFER = TrailerPreviewBufferParams(
+    minBufferMs = 10_000,
+    maxBufferMs = 15_000,
+    bufferForPlaybackMs = 1_000,
+    bufferForPlaybackAfterRebufferMs = 2_000,
+    targetBufferBytes = 12 * 1024 * 1024,
+    prioritizeTimeOverSize = false,
+)
+
+@OptIn(UnstableApi::class)
+internal fun buildTrailerPreviewLoadControl(
+    params: TrailerPreviewBufferParams = TRAILER_PREVIEW_BUFFER,
+): DefaultLoadControl = DefaultLoadControl.Builder()
+    .setAllocator(DefaultAllocator(/* trimOnReset = */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+    .setBufferDurationsMs(
+        params.minBufferMs,
+        params.maxBufferMs,
+        params.bufferForPlaybackMs,
+        params.bufferForPlaybackAfterRebufferMs,
+    )
+    .setTargetBufferBytes(params.targetBufferBytes)
+    .setPrioritizeTimeOverSizeThresholds(params.prioritizeTimeOverSize)
+    .build()
