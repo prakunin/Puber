@@ -1,0 +1,8 @@
+CODEX: ran: review, adversarial
+CONFIRMED:
+- [minor] app/src/androidTest/kotlin/com/kino/puber/data/db/WatchStateDaoTest.kt:187-210 - The control and the atomicity test use different write cadences. The control pauses 200 ms between commits. The atomicity test writes back to back inside `transactions().run`. Scenario: someone removes the outer transaction. Room's invalidation tracker then coalesces the unpaced commits and emits only the final set. The atomicity test passes, the paced control also passes, and the pair no longer shows that the transaction is what holds the partial list back. Fix: pace the writes identically in both tests, for example `delay(PAUSE_MILLIS)` inside the transaction as well, so the transaction is the only difference. Better, check on the box that bypassing the wrapper turns the atomicity test red. This is test strength only. No production code is affected.
+REJECTED:
+- The control may fail on a busy device because the collector misses both partial states - unproven. 200 ms pauses are well above Room's invalidation latency, and no evidence of a miss exists. The run on the box (qa-device) will show it.
+- The helper snapshots emissions right after `cancel()` and may drop a callback already in flight - it does not hold. `delay(SETTLE_MILLIS)` (1 s) runs before the cancel, so the flow has settled.
+- Drive observer work through a test-controlled Room query context or a deterministic transaction probe - this is a redesign beyond the ACs. The repository unit tests already cover the transaction scope, so it is not a defect in the change.
+VERDICT: changes needed (minor only; the conductor may accept it by verifying the mutation on the box)

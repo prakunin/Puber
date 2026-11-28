@@ -1,0 +1,9 @@
+LENS: blind  ROUND: 1  BASE: 8c3117ea
+### F1 [minor] The instrumented test wraps the writes in its own transaction, so it never checks the repository change
+- Where: app/src/androidTest/kotlin/com/kino/puber/data/db/WatchStateDaoTest.kt:200 (`markInProgressInOneTransactionEmitsNoPartialList`)
+- Problem: The test does not call `WatchStateRepository.recordInProgress`. It opens `database.transactions().run { ... }` itself and calls `dao.markInProgress` three times inside it. So it only shows that Room's `withWriteTransaction` sends one invalidation per transaction. That is library behaviour and was already true on base. The production change is moving the loop in `WatchStateRepository.recordInProgress` (WatchStateRepository.kt:325-338) into `transaction.run`, and this test never touches that code.
+- Failure scenario: Someone reverts `recordInProgress` to the old per-item loop with no transaction. The test still opens its own transaction, so it stays green. Observers of `observeAll()` (the "hide watched" filter) would again get partial lists during a sync pass, and this test would not catch it. The JVM test `recordInProgress_runsTheWholeListInOneTransaction` does catch that revert. That makes this test a duplicate that looks like coverage of a real-SQLite guarantee but cannot fail for the code under change.
+- Fix: Build a `WatchStateRepository` on the real `database.transactions()`, `watchStateDao()` and sync DAO. Call `repository.recordInProgress(items)` while collecting `observeAll()`, and assert there is no partial emission. Otherwise, drop the test or rename it to say it pins Room's coalescing, not the repository.
+
+### Unproven
+- app/src/main/java/com/kino/puber/data/repository/WatchStateRepository.kt:327 A very large `movies` list would hold the SQLite write lock for the whole batch and block other writers. Nothing shows the watching-movies list from `api.getWatchingMovies()` gets big enough for that to matter.

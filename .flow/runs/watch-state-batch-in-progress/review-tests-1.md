@@ -1,0 +1,18 @@
+LENS: tests  ROUND: 1  BASE: 8c3117ea
+### F1 [minor] Nothing shows the AC-4 instrumented test can fail, so its PASS does not prove invalidation is deferred
+- Where: app/src/androidTest/kotlin/com/kino/puber/data/db/WatchStateDaoTest.kt:186-212 (`markInProgressInOneTransactionEmitsNoPartialList`)
+- Problem: The test design says this test passes on base too. No control run exists with the same three `dao.markInProgress` calls made outside `database.transactions().run { }`. Room's `observeAll` flow is driven by the InvalidationTracker, which refreshes asynchronously and drops intermediate notifications. Three back-to-back inner commits on an in-memory database can therefore produce a single emission holding all three ids even with no outer transaction. Then neither assertion (`none { non-empty proper subset }`, `last() == ids`) can go red. The spec's Risks table rests the "invalidation is delivered after the outer commit" question on this test, and qa-report records AC-4 PASS (itest 12/12). Nothing shows that the test can tell batched writes from unbatched ones.
+- Failure scenario: suppose Room delivered one invalidation per nested `@Transaction` commit (the exact risk named in the spec). The three inner commits finish within one tracker refresh, so the collector still sees only `{}` and then `{21,22,23}`. The test passes and AC-4 reports a guarantee it never checked.
+- Fix: add a sibling control case in the same class: the same three `markInProgress` calls without the outer `run`, with a suspension point between them (for example a short `delay` or awaiting each emission). Assert that it does see a partial set. Or record, in the Implementation record or the qa evidence, a one-off run of that variant showing partial emissions. If no partial emission can be produced even without the outer transaction, reword AC-4 in the spec as a nesting smoke test ("nested `@Transaction` inside `withWriteTransaction` neither throws nor deadlocks") rather than evidence about partial lists.
+
+### Unproven
+- app/src/test/kotlin/com/kino/puber/data/repository/WatchStateRepositoryTest.kt:702 `recording.runs` is never reset after repository construction, only `calls` is. The test would break loudly, not pass silently, if repository init ever opened a transaction in `eagerScope`. It matters only if init starts using `transaction.run`, and the current code shows no such caller.
+
+Notes on the rest of the review:
+- **Suite state:** I ran `check.full` at HEAD 1beafa9c and it exited 0. Gradle reused the unit results from 07:16, built from unchanged sources: `WatchStateRepositoryTest` ran 53 tests with 0 failures and 0 skipped, including the two new tests and `recordInProgress_marksBareItemsUnfinishedWithoutLosingProgress`. Both tooling scripts passed.
+- **Red runs:** the Implementation record shows both P0 red tests failing on unchanged code: AC-1 on `runs` (expected 1, was 0) and AC-2 on the `syncDao.get` entry in the call log. Reading the base code confirms both would fail there.
+- **AC-1:** the test would also go red if the loop were split into one transaction per item (runs would be 3) or if `currentGeneration()` moved back outside the transaction (`syncDao.get` would be logged with `false`).
+- **AC-3:** the diff leaves that test unchanged.
+- **Production binding:** `modules.kt:133` binds `PuberDatabase.transactions()`, not `Direct`, so the unit seam matches what production uses.
+- **AC-5:** device evidence is at `/home/dev/orca/workspaces/Puber/watch-state-batch-in-progress/docs/superpowers/evidence/2026-11-28-watch-state-batch-in-progress-device.md`.
+- **AC coverage:** every AC has a test or a documented manual check.
