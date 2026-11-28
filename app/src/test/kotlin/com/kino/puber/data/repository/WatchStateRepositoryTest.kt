@@ -38,8 +38,9 @@ class WatchStateRepositoryTest {
     /** Enough chunks that "one change per chunk" and "one per walk" cannot be confused. */
     private val chunksInAWalk = 3
 
-    private val dao = FakeWatchStateDao()
-    private val syncDao = FakeWatchStateSyncDao()
+    private val recording = RecordingTransaction()
+    private val dao = FakeWatchStateDao(recording)
+    private val syncDao = FakeWatchStateSyncDao(recording)
     private var now = 42L
     private var windowNow = 42L
 
@@ -56,10 +57,11 @@ class WatchStateRepositoryTest {
     private fun repository(
         scope: CoroutineScope,
         awaitStartupSettled: suspend () -> Unit = {},
+        transaction: DatabaseTransaction = DatabaseTransaction.Direct,
     ) = WatchStateRepository(
         dao = dao,
         syncDao = syncDao,
-        transaction = DatabaseTransaction.Direct,
+        transaction = transaction,
         clock = { now },
         windowClock = { windowNow },
         scope = scope,
@@ -696,6 +698,33 @@ class WatchStateRepositoryTest {
     }
 
     @Test
+    fun recordInProgress_runsTheWholeListInOneTransaction() = runTest {
+        val repository = repository(eagerScope(), transaction = recording)
+        recording.calls.clear()
+
+        repository.recordInProgress(
+            listOf(1, 2, 3).map { Item(id = it, title = "Movie $it", type = ItemType.MOVIE) }
+        )
+
+        assertEquals(1, recording.runs)
+        assertEquals(
+            listOf("syncDao.get" to true) + List(3) { "markInProgress" to true },
+            recording.calls,
+        )
+    }
+
+    @Test
+    fun recordInProgress_withAnEmptyListOpensNoTransactionAndTouchesNoDao() = runTest {
+        val repository = repository(eagerScope(), transaction = recording)
+        recording.calls.clear()
+
+        repository.recordInProgress(emptyList())
+
+        assertEquals(0, recording.runs)
+        assertTrue(recording.calls.isEmpty())
+    }
+
+    @Test
     fun recordFromHistory_marksAFinishedMovieAndKeepsAPartialOne() = runTest {
         val repository = repository(eagerScope())
 
@@ -1092,11 +1121,32 @@ class WatchStateRepositoryTest {
     )
 }
 
+/** Counts `run` calls and logs each fake DAO call with whether it happened inside one. */
+private class RecordingTransaction : DatabaseTransaction {
+    var runs = 0
+    var active = false
+    val calls = mutableListOf<Pair<String, Boolean>>()
+
+    fun record(call: String) {
+        calls += call to active
+    }
+
+    override suspend fun <T> run(block: suspend () -> T): T {
+        runs++
+        active = true
+        try {
+            return block()
+        } finally {
+            active = false
+        }
+    }
+}
+
 /**
  * In-memory stand-in for the Room DAO. The `is_local_pending` guard lives in SQL and is exercised
  * by the instrumented database test, not here.
  */
-private class FakeWatchStateDao : WatchStateDao() {
+private class FakeWatchStateDao(private val recorder: RecordingTransaction) : WatchStateDao() {
 
     val rows = MutableStateFlow<List<WatchStateEntity>>(emptyList())
 
@@ -1228,6 +1278,7 @@ private class FakeWatchStateDao : WatchStateDao() {
         isSeriesLike: Boolean,
         updatedAt: Long,
     ) {
+        recorder.record("markInProgress")
         val existing = rows.value.find { it.itemId == itemId }
         if (existing?.isLocalPending == true) return
         if (existing != null && updatedAt < existing.updatedAt) return
@@ -1271,13 +1322,16 @@ private class FakeWatchStateDao : WatchStateDao() {
     }
 }
 
-private class FakeWatchStateSyncDao : WatchStateSyncDao {
+private class FakeWatchStateSyncDao(private val recorder: RecordingTransaction) : WatchStateSyncDao {
 
     private val row = MutableStateFlow<WatchStateSyncEntity?>(null)
 
     override fun observe(id: Int): Flow<WatchStateSyncEntity?> = row
 
-    override suspend fun get(id: Int): WatchStateSyncEntity? = row.value
+    override suspend fun get(id: Int): WatchStateSyncEntity? {
+        recorder.record("syncDao.get")
+        return row.value
+    }
 
     override suspend fun upsert(entity: WatchStateSyncEntity) {
         row.value = entity

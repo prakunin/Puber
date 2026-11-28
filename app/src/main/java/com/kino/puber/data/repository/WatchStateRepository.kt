@@ -323,14 +323,17 @@ class WatchStateRepository(
      * started and not finished — which is enough to keep it out of a "hide watched" filter.
      */
     suspend fun recordInProgress(items: List<Item>, observedAt: Long = clock()) {
-        val generation = currentGeneration()
-        items.forEach { item ->
-            dao.markInProgress(
-                generation = generation,
-                itemId = item.id,
-                isSeriesLike = item.type.isSeriesLike(),
-                updatedAt = observedAt,
-            )
+        if (items.isEmpty()) return
+        transaction.run {
+            val generation = currentGeneration()
+            items.forEach { item ->
+                dao.markInProgress(
+                    generation = generation,
+                    itemId = item.id,
+                    isSeriesLike = item.type.isSeriesLike(),
+                    updatedAt = observedAt,
+                )
+            }
         }
     }
 
