@@ -2,6 +2,7 @@ package com.kino.puber.data.db
 
 import android.content.Context
 import androidx.room3.testing.MigrationTestHelper
+import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.sqlite.execSQL
@@ -133,6 +134,58 @@ class PuberDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun productionBuilderOpensTheFileInWalWithNormalSync() = runTest {
+        val database = PuberDatabase.create(context, name = TEST_DB)
+        try {
+            val (mode, sync) = database.useWriterConnection { connection ->
+                val mode = connection.usePrepared("PRAGMA journal_mode") { st ->
+                    st.step()
+                    st.getText(0)
+                }
+                val sync = connection.usePrepared("PRAGMA synchronous") { st ->
+                    st.step()
+                    st.getLong(0)
+                }
+                mode to sync
+            }
+            assertEquals("wal", mode.lowercase())
+            assertEquals(SYNCHRONOUS_NORMAL, sync)
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun productionBuilderSwitchesARollbackJournalFileToWal() = runTest {
+        helper.createDatabase(5).close()
+        // The helper's Room pool may keep WAL connections open, so the file is rewritten on a fresh
+        // connection of its own, then the header proves the file really is a rollback-journal one.
+        AndroidSQLiteDriver().open(file.path).use { it.execSQL("PRAGMA journal_mode = TRUNCATE") }
+        assertEquals(ROLLBACK_HEADER_VERSION to ROLLBACK_HEADER_VERSION, headerVersions())
+
+        val database = PuberDatabase.create(context, name = TEST_DB)
+        try {
+            val mode = database.useWriterConnection { connection ->
+                connection.usePrepared("PRAGMA journal_mode") { st ->
+                    st.step()
+                    st.getText(0)
+                }
+            }
+            assertEquals("wal", mode.lowercase())
+        } finally {
+            database.close()
+        }
+
+        // Header bytes 18 and 19 are the file format write and read versions: 2 means WAL.
+        assertEquals(WAL_HEADER_VERSION to WAL_HEADER_VERSION, headerVersions())
+    }
+
+    private fun headerVersions(): Pair<Int, Int> = file.inputStream().use { stream ->
+        stream.skip(HEADER_VERSIONS_OFFSET)
+        stream.read() to stream.read()
+    }
+
     private fun insertSyncRow(connection: SQLiteConnection, walkDone: Int, resumePage: Int) {
         connection.execSQL(
             "INSERT INTO watch_state_sync (id, last_sync_at, history_newest_seen, " +
@@ -167,6 +220,10 @@ class PuberDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test.db"
+        const val SYNCHRONOUS_NORMAL = 1L
+        const val HEADER_VERSIONS_OFFSET = 18L
+        const val WAL_HEADER_VERSION = 2
+        const val ROLLBACK_HEADER_VERSION = 1
         val LEGACY_KEYS = listOf(
             "home:hot", "item:7", "similar:7", "section:popular", "watchlist:subscribed", "history:1",
         )

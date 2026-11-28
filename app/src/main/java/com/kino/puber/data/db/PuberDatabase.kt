@@ -39,6 +39,10 @@ abstract class PuberDatabase : RoomDatabase() {
                 // this database has always run on, so the migration changes no query behaviour.
                 .setDriver(AndroidSQLiteDriver())
                 .setQueryCoroutineContext(Dispatchers.IO)
+                // Explicit WAL overrides the TRUNCATE + synchronous FULL that AUTOMATIC picks on low-RAM devices.
+                // WAL runs with synchronous NORMAL, so after a power cut the last commits can roll back;
+                // acceptable here, other devices already run this way.
+                .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 // The whole database is a rebuildable index over server state, so throwing away a
                 // schema we cannot migrate costs one sync, not user data.
                 .fallbackToDestructiveMigration(dropAllTables = true)
