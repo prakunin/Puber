@@ -17,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Runs the hand-written statements against real SQLite.
@@ -183,6 +184,39 @@ class WatchStateDaoTest {
     }
 
     @Test
+    fun markInProgressInOneTransactionEmitsNoPartialList() = runTest {
+        val ids = setOf(21, 22, 23)
+
+        val emissions = collectWhile {
+            database.transactions().run {
+                ids.forEach { markInProgress(it) }
+            }
+        }
+
+        assertTrue(emissions.none { it.isNotEmpty() && ids.containsAll(it) && it != ids })
+        assertEquals(ids, emissions.last())
+    }
+
+    /**
+     * Control case of the test above: the same writes as separate commits, paused between, must show
+     * a partial list. Without it a pass of the test above would not prove that the outer transaction
+     * is what holds the invalidation back.
+     */
+    @Test
+    fun markInProgressInSeparateCommitsEmitsAPartialList() = runTest {
+        val ids = setOf(31, 32, 33)
+
+        val emissions = collectWhile {
+            ids.forEach {
+                markInProgress(it)
+                delay(PAUSE_MILLIS)
+            }
+        }
+
+        assertTrue(emissions.any { it.isNotEmpty() && ids.containsAll(it) && it != ids })
+    }
+
+    @Test
     fun pruningDropsOlderPassesButKeepsPendingMarks() = runTest {
         dao.upsertAllFromServer(
             listOf(serverRow(itemId = 8, isFullyWatched = true, updatedAt = 100).copy(generation = 1))
@@ -212,7 +246,29 @@ class WatchStateDaoTest {
 
     private companion object {
         const val SETTLE_MILLIS = 1_000L
+        const val PAUSE_MILLIS = 200L
     }
+
+    private suspend fun markInProgress(itemId: Int) =
+        dao.markInProgress(generation = 1, itemId = itemId, isSeriesLike = false, updatedAt = 100)
+
+    /** Runs [writes] while collecting every item-id set `observeAll` emits, then lets the flow settle. */
+    private suspend fun collectWhile(writes: suspend () -> Unit): List<Set<Int>> =
+        withContext(Dispatchers.Default) {
+            val seen = CopyOnWriteArrayList<Set<Int>>()
+            val first = CompletableDeferred<Unit>()
+            val collector = async {
+                dao.observeAll().collect { rows ->
+                    seen += rows.map { it.itemId }.toSet()
+                    first.complete(Unit)
+                }
+            }
+            first.await()
+            writes()
+            delay(SETTLE_MILLIS)
+            collector.cancel()
+            seen.toList()
+        }
 
     @Test
     fun raiseHistoryNewestSeenNeverLowersTheMark() = runTest {
