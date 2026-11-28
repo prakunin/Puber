@@ -37,6 +37,7 @@ import org.junit.jupiter.api.extension.RegisterExtension
  * `startPositionUpdates()` loop forever → OOM.
  * Without `runTest`, the infinite loop stays suspended at its first `delay()` — harmless.
  */
+@Suppress("LargeClass")
 internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
 
     companion object {
@@ -809,6 +810,36 @@ internal class PlayerVMTrackSelectionTest : PlayerVMTestFixture() {
         val vm = startedVM()
         vm.onAction(PlayerAction.SelectQuality(0))
         verify(exactly = 0) { playbackController.switchStream(any(), any()) }
+    }
+
+    @Test
+    fun selectQuality_withSubtitleRowMissingFromNewReport_sendsOffRow() {
+        val vm = startedVM()
+        report(hlsRowsForFixture() + manifest("en", "subs:English"))
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.language == "en" }))
+
+        vm.onAction(PlayerAction.SelectQuality(1))
+        clearMocks(playbackController, answers = false)
+        report(hlsRowsForFixture())
+
+        assertTrue(contentState(vm).let { it.subtitleTracks[it.selectedSubtitleIndex].isOff })
+        verify(exactly = 1) { playbackController.selectSubtitle(match { it.isOff }) }
+        verify(exactly = 1) { playbackController.selectSubtitle(any()) }
+    }
+
+    @Test
+    fun selectQuality_withIdenticalRows_keepsSubtitleWithoutResending() {
+        val vm = startedVM()
+        val rows = hlsRowsForFixture() + manifest("en", "subs:English")
+        report(rows)
+        vm.onAction(PlayerAction.SelectSubtitle(rowIndex(vm) { it.language == "en" }))
+
+        vm.onAction(PlayerAction.SelectQuality(1))
+        clearMocks(playbackController, answers = false)
+        report(rows)
+
+        assertEquals("en", contentState(vm).let { it.subtitleTracks[it.selectedSubtitleIndex].language })
+        verify(exactly = 0) { playbackController.selectSubtitle(any()) }
     }
 
     // endregion
