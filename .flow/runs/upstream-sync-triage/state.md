@@ -6,7 +6,7 @@ size: L
 tracks: []
 kind: refactor
 branch: upstream-sync-triage
-worktree: /home/user1/orca/workspaces/Puber/upstream-sync-triage
+worktree:
 base:
 spec: docs/superpowers/specs/2026-10-11-upstream-sync-triage-design.md
 plan: docs/superpowers/plans/2026-10-11-upstream-sync-triage.md
@@ -14,7 +14,7 @@ rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-10-11
 migrated: 2026-10-12
-updated: 2026-10-15
+updated: 2026-11-28
 ---
 
 ## Next
@@ -35,3 +35,5 @@ updated: 2026-10-15
 - worktree files: reviews/2026-10-11-upstream-sync-triage.md, evidence/2026-10-11-upstream-sync-triage-device.md
 - 2026-10-12 migrated from the former board file (board stage `impl` -> `impl`); the board row Notes are copied verbatim into ## Next
 - 2026-10-15 owner (via subtitle-restore-model triage): prioritise P6-A (player hermetic fixtures) now that subtitle-upstream-port is done; run subtitle-switch-text-disable waits for it.
+- 2026-11-26 upstream re-checked up to 47f89dab (2026-11-18): 17 new commits, all `.kent/` tooling, nothing to take. Open ports moved to their own runs: diagnostics-transport-label (P3), main-dead-code-leftovers (P2 rest), ci-workflow-hardening (P1), hermetic-baseline-profiles (P5), player-hermetic-fixtures (P6). This branch is now only a source for cherry-picks.
+- 2026-11-28 worktree field cleared: /home/user1/orca/workspaces/Puber/upstream-sync-triage was on the previous host and does not exist here; branch upstream-sync-triage is kept locally; /task:run creates a new Orca worktree on resume

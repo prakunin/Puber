@@ -6,7 +6,7 @@ size:
 tracks: []
 kind: idea
 branch: player-overlays-port
-worktree: /home/user1/orca/workspaces/Puber/player-overlays-port
+worktree:
 base:
 spec:
 plan:
@@ -14,7 +14,7 @@ rounds: {verify: 0, review: 0, judge: 0}
 blocked_by: []
 created: 2026-09-26
 migrated: 2026-10-12
-updated: 2026-10-12
+updated: 2026-11-28
 ---
 
 ## Next
@@ -32,3 +32,4 @@ Moved out of the main checkout as 92a9441d. Error, resume, episode row and chips
 - 2026-09-26 created on the board (stage impl)
 - 2026-10-12 migrated from the former board file (board stage `impl` -> `impl`); the board row Notes are copied verbatim into ## Next
 - 2026-10-14 deferred from subtitle-upstream-port review round 1 (triage-1.md #7, ux-designer): the settings side panel with 11 rows (Subtitles page, 9 API languages) reaches 1 dp from the top and bottom edges (PlayerSidePanel.kt:112-124, no safe-area inset); record a vertical inset or max height with scrolling when the side-panel scene is dialled.
+- 2026-11-28 worktree field cleared: /home/user1/orca/workspaces/Puber/player-overlays-port was on the previous host and does not exist here; branch player-overlays-port is kept locally; /task:run creates a new Orca worktree on resume
