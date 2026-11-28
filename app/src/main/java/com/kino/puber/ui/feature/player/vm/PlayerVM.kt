@@ -152,6 +152,8 @@ internal class PlayerVM(
     private var dismissedSegmentJob: Job? = null
     private var prefetchJob: Job? = null
     private var seekBurstJob: Job? = null
+    private var seekThrottleJob: Job? = null
+    private var pendingSeekTarget: Long? = null
     private var prefetchedEpisode: Pair<Int, Int>? = null
 
     private var segments: List<SkipSegment> = emptyList()
@@ -453,6 +455,7 @@ internal class PlayerVM(
             candidates = interactor.selectStreamCandidates(media.files, qualityIndex),
             refreshAttempted = false,
         ) ?: return false
+        commitPendingSeek()
         playbackController.switchStream(streamUrl, media.subtitles)
         return true
     }
@@ -473,6 +476,7 @@ internal class PlayerVM(
         val nextIndex = streamCandidateIndex + 1
         val streamUrl = streamCandidates.getOrNull(nextIndex) ?: return false
         streamCandidateIndex = nextIndex
+        commitPendingSeek()
         playbackController.switchStream(streamUrl, media.subtitles)
         return true
     }
@@ -525,6 +529,7 @@ internal class PlayerVM(
                         ),
                     ),
                 )
+                commitPendingSeek()
                 playbackController.switchStream(streamUrl, refreshedMedia.subtitles)
             } catch (error: CancellationException) {
                 throw error
@@ -656,8 +661,8 @@ internal class PlayerVM(
             is PlayerAction.TogglePlayPause -> togglePlayPause()
             is PlayerAction.OkPressed -> onOkPressed()
             is PlayerAction.OkReleased -> onOkReleased()
-            is PlayerAction.SeekForward -> seekForward()
-            is PlayerAction.SeekBackward -> seekBackward()
+            is PlayerAction.SeekForward -> seekBy(isForward = true)
+            is PlayerAction.SeekBackward -> seekBy(isForward = false)
             is PlayerAction.ShowControls -> showControls(action.focusTarget)
             is PlayerAction.HideControls -> hideControls()
             is PlayerAction.ResetControlsTimer -> scheduleControlsHide()
@@ -730,28 +735,60 @@ internal class PlayerVM(
         seekBurstJob = launch { delay(DEFAULT_SEEK_RESET_TIMEOUT_MS) }
     }
 
-    private fun seekForward() {
+    /** Steps from the pending target while a hold runs, so every press builds on the one before. */
+    private fun seekBy(isForward: Boolean) {
+        if (seekBurstJob?.isActive != true) seekHandler.reset()
         startSeekBurst()
         val step = seekHandler.nextStep()
-        val newPosition = (playbackController.currentPosition + step * 1000L).coerceAtMost(playbackController.duration)
-        playbackController.seekTo(newPosition)
-        updateContent { copy(currentPosition = newPosition) }
-        showSeekIndicator(isForward = true, stepSeconds = step, targetPosition = newPosition)
+        val base = pendingSeekTarget ?: playbackController.currentPosition
+        val target = if (isForward) {
+            (base + step * 1000L).coerceAtMost(playbackController.duration)
+        } else {
+            (base - step * 1000L).coerceAtLeast(0)
+        }
+        requestSeek(target)
+        showSeekIndicator(isForward, step, target)
     }
 
-    private fun seekBackward() {
-        startSeekBurst()
-        val step = seekHandler.nextStep()
-        val newPosition = (playbackController.currentPosition - step * 1000L).coerceAtLeast(0)
-        playbackController.seekTo(newPosition)
-        updateContent { copy(currentPosition = newPosition) }
-        showSeekIndicator(isForward = false, stepSeconds = step, targetPosition = newPosition)
+    /**
+     * Seeks at once when no window is open, otherwise keeps only the latest target for the
+     * trailing seek at the window's end. Each real seek opens the next window.
+     */
+    private fun requestSeek(target: Long) {
+        if (seekThrottleJob?.isActive == true) {
+            pendingSeekTarget = target
+            return
+        }
+        playbackController.seekTo(target)
+        seekThrottleJob = launch {
+            while (isActive) {
+                delay(SEEK_THROTTLE_WINDOW_MS)
+                val next = pendingSeekTarget ?: break
+                pendingSeekTarget = null
+                playbackController.seekTo(next)
+            }
+        }
+    }
+
+    /** Lands the target a held key has not sought to yet, before something reads the player position. */
+    private fun commitPendingSeek() {
+        val target = pendingSeekTarget ?: return
+        pendingSeekTarget = null
+        playbackController.seekTo(target)
+    }
+
+    /** Forgets the hold: the target no longer applies, or the media it meant is gone. */
+    private fun dropPendingSeek() {
+        seekThrottleJob?.cancel()
+        seekThrottleJob = null
+        pendingSeekTarget = null
     }
 
     private fun showSeekIndicator(isForward: Boolean, stepSeconds: Int, targetPosition: Long) {
         val offsetText = mapper.formatSeekOffset(isForward, stepSeconds)
         updateContent {
             copy(
+                currentPosition = targetPosition,
                 seekIndicator = SeekIndicatorState(
                     isForward = isForward,
                     offsetText = offsetText,
@@ -1028,6 +1065,7 @@ internal class PlayerVM(
      * marked as restored and therefore never applied.
      */
     private fun resetMediaSession() {
+        dropPendingSeek()
         countdownJob?.cancel()
         countdownJob = null
         skipCountdownJob?.cancel()
@@ -1387,6 +1425,12 @@ internal class PlayerVM(
     }
 
     private fun onPlaybackEnded() {
+        // A held key's target is still waiting for its trailing seek; landing it moves playback
+        // away from the end, so the end is not the end of what the viewer is doing.
+        if (pendingSeekTarget != null) {
+            commitPendingSeek()
+            return
+        }
         autoMarkCurrentAsWatched()
         val state = stateValue as? PlayerViewState.Content ?: return
         val content = state.content
@@ -1473,6 +1517,7 @@ internal class PlayerVM(
         } else {
             savedPosition
         }
+        dropPendingSeek()
         playbackController.seekTo(position)
         playbackController.play()
         updateContent {
@@ -1482,6 +1527,7 @@ internal class PlayerVM(
     }
 
     private fun startFromBeginning() {
+        dropPendingSeek()
         playbackController.seekTo(0)
         playbackController.play()
         updateContent {
@@ -1584,7 +1630,7 @@ internal class PlayerVM(
                     if (isAnythingShowingPosition(content, settingsPanelOpen, isBuffering)) {
                         updateContent {
                             copy(
-                                currentPosition = playbackController.currentPosition,
+                                currentPosition = pendingSeekTarget ?: playbackController.currentPosition,
                                 duration = playbackController.duration,
                                 bufferedPosition = playbackController.bufferedPosition,
                                 debugInfo = readDebugInfo(settingsPanelOpen),
@@ -1860,6 +1906,7 @@ internal class PlayerVM(
     private fun performSkipSegment() {
         val state = (stateValue as? PlayerViewState.Content)?.content ?: return
         val skipState = state.activeSkipSegment ?: return
+        dropPendingSeek()
 
         if (skipState.type == SkipSegmentType.CREDITS && !state.isMovie && state.hasNextEpisode) {
             autoMarkCurrentAsWatched()
@@ -1898,7 +1945,7 @@ internal class PlayerVM(
     private fun saveCurrentPosition() {
         val media = currentMedia ?: return
         val videoNumber = media.videoNumber ?: return
-        val timeSeconds = (playbackController.currentPosition / 1000).toInt()
+        val timeSeconds = ((pendingSeekTarget ?: playbackController.currentPosition) / 1000).toInt()
         queuedProgressSaves[media.token.key] = ProgressSave(
             key = media.token.key,
             videoNumber = videoNumber,
@@ -2038,6 +2085,7 @@ internal class PlayerVM(
         countdownJob?.cancel()
         skipCountdownJob?.cancel()
         saveCurrentPosition()
+        dropPendingSeek()
         closeJob = launch {
             awaitPendingMutations()
             backgroundFlushJob?.join()
@@ -2052,6 +2100,7 @@ internal class PlayerVM(
     fun getExoPlayer(): ExoPlayer? = (playbackController as? PlaybackController)?.player
 
     override fun onCleared() {
+        dropPendingSeek()
         playbackController.release()
         progressTracker.stopSync()
         controlsHideJob?.cancel()
@@ -2067,6 +2116,7 @@ internal class PlayerVM(
         /** Idle time before the controls bar or the Episodes row goes away. */
         const val CONTROLS_HIDE_DELAY_MS = 6_000L
         const val SEEK_INDICATOR_HIDE_DELAY_MS = 1500L
+        const val SEEK_THROTTLE_WINDOW_MS = 250L
         const val PROGRESS_SYNC_INTERVAL_MS = 30_000L
         const val POSITION_UPDATE_INTERVAL_MS = 500L
         const val AUTO_MARK_WATCHED_THRESHOLD = 0.10
